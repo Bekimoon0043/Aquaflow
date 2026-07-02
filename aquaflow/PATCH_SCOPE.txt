@@ -1,0 +1,18 @@
+AquaFlow Studio Phase-1 Stabilization Patch
+
+Scope of this patch:
+- Fixed backend audio route syntax/runtime blocker in api/routes/audio.py
+- Confirmed devices API returns backend device registry
+- Confirmed protocols API root/status routes exist
+- Confirmed show play/stop routes invoke live engine
+- Improved emergency-stop blackout behavior in engine/network_scanner.py
+- Added recording capture support in engine/show_engine.py and wired it from backend/main.py
+- Added timeline toolbar actions in frontend (Add Track, Quantize, AI Generate)
+- Added timeline store actions in frontend/src/store/showStore.js
+- Added transport seek back/forward in frontend/src/components/TopBar.jsx
+- Added Windows install/start scripts: install.cmd, start-backend.cmd, start-frontend.cmd, start-all.cmd
+- Frontend API config centralized in frontend/src/config.js
+
+Important:
+This patch is a phase-1 control-path stabilization patch, not a complete enterprise release.
+It focuses on startup integrity, device listing, transport behavior, playback control path, and safety-related control flow.

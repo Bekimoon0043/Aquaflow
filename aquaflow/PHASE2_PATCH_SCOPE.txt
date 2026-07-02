@@ -1,0 +1,24 @@
+Phase 2 – Interaction Activation Patch
+
+Goal
+Eliminate silent UI no-op behavior by wiring visible controls to real state updates, backend calls, or actionable operator feedback.
+
+Scope included
+1. TopBar menu actions now execute meaningful behavior instead of only closing menus.
+2. Transport controls immediately update local playback UI while still sending backend messages.
+3. Node Editor toolbar now supports Select / Connect / Pan modes and Add Node.
+4. Node Editor connection workflow is enabled for output-port to input-port wiring.
+5. Device panel quick scan now performs a real backend scan request.
+6. Device panel Add button now creates a local placeholder device entry.
+7. Inspector device actions now call backend endpoints for test, identify, and emergency stop.
+8. Inspector AI tab now calls the pattern-generation endpoint and can apply generated clips to a track.
+9. Device discovery scan now reports real failures instead of silently masking them with demo results, unless explicitly enabled for development.
+10. Store device merge logic now preserves more backend fields and supports grid/snap toggles.
+
+Not included in this patch
+- Full drag-to-connect preview line rendering
+- Complete undo/redo system
+- Persistent device CRUD backend
+- Full timeline clip editing
+- Real layout persistence
+- Production hardware validation

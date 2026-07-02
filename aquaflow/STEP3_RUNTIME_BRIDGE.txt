@@ -1,0 +1,41 @@
+AquaFlow Step 3 - Runtime Service Contract and Compiler Bridge
+=============================================================
+
+Purpose
+-------
+Introduce the first executable bridge between the current AquaFlow prototype
+and the future native runtime architecture.
+
+What this step adds
+-------------------
+- Backend service layer for canonical package compilation.
+- Backend API router for runtime bridge endpoints.
+- Export of current snapshots and saved shows to canonical .luxshow payloads.
+- Runtime session generation from current editor/backend payloads.
+- Deployment bundle preview generation for future native runtime handoff.
+
+Design intent
+-------------
+1. Preserve current editor/backend behavior.
+2. Add new /api/runtime endpoints without replacing existing routes.
+3. Route all bridge logic through backend/services/compiler_bridge.py.
+4. Use Step 2 canonical schema/contracts as the source of truth.
+5. Keep deployment preview non-destructive and additive.
+
+Primary endpoints
+-----------------
+- GET  /api/runtime/status
+- GET  /api/runtime/snapshot/current
+- POST /api/runtime/compile/snapshot
+- POST /api/runtime/compile/saved-show
+- GET  /api/runtime/export/{show_id}/canonical
+- POST /api/runtime/session/snapshot
+- POST /api/runtime/deploy/preview
+
+Validation
+----------
+A dedicated validation script confirms:
+- imports compile
+- current snapshot can be converted to canonical package
+- runtime session can be generated and validated
+- compile report and deployment preview both succeed

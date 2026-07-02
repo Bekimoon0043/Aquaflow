@@ -1,0 +1,17 @@
+AquaFlow Step 7 — Hardening, QA, and release finalization
+
+Implemented in this patch:
+- Hardened frontend runtime endpoint selection in frontend/src/config.js.
+- Added support for browser/runtime overrides and same-host backend inference.
+- Improved backend connection banner with exact configured backend and health URL.
+- Hardened backend CORS handling for localhost and 127.0.0.1 across common dev ports.
+- Expanded backend /api/health payload with runtime config details.
+- Updated Windows startup scripts to use uvicorn reliably and self-create frontend .env.local defaults.
+- Added verify-install.cmd for post-install build and syntax validation.
+- Refreshed README to reflect the completed Step 6/7/8 feature set and final runbook.
+
+Verification target for this step:
+- Frontend build succeeds.
+- Backend Python syntax check succeeds.
+- Backend health endpoint responds with enriched config.
+- Step 8 UI continues working after hardening changes.

@@ -1,0 +1,22 @@
+{
+  "name": "deployment-builder",
+  "status": "step4-defined",
+  "input": [
+    "canonical luxshow package",
+    "runtime session payload",
+    "deployment bundle manifest"
+  ],
+  "output": [
+    "persisted bundle directory",
+    "canonical.luxshow.json",
+    "runtime-session.json",
+    "compile-report.json",
+    "deployment-bundle.json",
+    "manifest.json"
+  ],
+  "target_directory": "backend/compiled/{bundle_id}/",
+  "notes": [
+    "This is the persistent artifact handoff layer before native runtime deployment.",
+    "The current implementation stores JSON artifacts for inspection and later packaging."
+  ]
+}

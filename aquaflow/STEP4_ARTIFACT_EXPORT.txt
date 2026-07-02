@@ -1,0 +1,33 @@
+AquaFlow Step 4 - Artifact Export and Deployment Persistence
+============================================================
+
+Purpose
+-------
+Turn the Step 3 runtime bridge from an in-memory preview into a persistent
+artifact pipeline that can save compiled outputs to disk for review,
+deployment, and later native runtime handoff.
+
+What this step adds
+-------------------
+- Persistent compiled artifact storage under backend/compiled/
+- Service helper for saving canonical packages, runtime sessions, bundle manifests,
+  and compile reports
+- Runtime API endpoints to compile-and-save snapshot or saved-show artifacts
+- Runtime API endpoints to list bundles and fetch saved manifests/artifacts
+- Deployment-builder contract scaffold update for persistent bundle output
+
+Primary endpoints
+-----------------
+- GET  /api/runtime/artifacts/list
+- POST /api/runtime/artifacts/compile/snapshot
+- POST /api/runtime/artifacts/compile/saved-show
+- GET  /api/runtime/artifacts/{bundle_id}/manifest
+- GET  /api/runtime/artifacts/{bundle_id}/canonical
+- GET  /api/runtime/artifacts/{bundle_id}/session
+- GET  /api/runtime/artifacts/{bundle_id}/report
+- GET  /api/runtime/artifacts/{bundle_id}/bundle
+
+Validation
+----------
+The validation script confirms that a sample snapshot can be compiled,
+persisted to backend/compiled/, listed, and reloaded successfully.

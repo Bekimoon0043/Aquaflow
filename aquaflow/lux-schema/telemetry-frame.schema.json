@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luxcon.example/schemas/telemetry-frame.schema.json",
+  "title": "Telemetry Frame",
+  "type": "object",
+  "required": ["timestamp", "transport", "playhead_ms", "device_summary", "runtime_health"],
+  "properties": {
+    "timestamp": { "type": "string" },
+    "transport": { "type": "string" },
+    "playhead_ms": { "type": "integer" },
+    "device_summary": {
+      "type": "object",
+      "required": ["total", "online", "offline", "warn"],
+      "properties": {
+        "total": { "type": "integer" },
+        "online": { "type": "integer" },
+        "offline": { "type": "integer" },
+        "warn": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "runtime_health": {
+      "type": "object",
+      "required": ["nominal_fps", "loop_jitter_us", "queue_depth", "fault_count", "safety_permit"],
+      "properties": {
+        "nominal_fps": { "type": "integer" },
+        "loop_jitter_us": { "type": "integer" },
+        "queue_depth": { "type": "integer" },
+        "fault_count": { "type": "integer" },
+        "safety_permit": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

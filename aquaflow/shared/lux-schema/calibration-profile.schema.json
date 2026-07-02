@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luxcon.example/schemas/calibration-profile.schema.json",
+  "title": "Calibration Profile",
+  "type": "object",
+  "required": ["profile_id", "venue", "devices"],
+  "properties": {
+    "profile_id": { "type": "string" },
+    "venue": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "wind_bias": { "type": "number" },
+        "water_quality": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["device_id", "corrections"],
+        "properties": {
+          "device_id": { "type": "string" },
+          "corrections": { "type": "object", "additionalProperties": true },
+          "measured_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

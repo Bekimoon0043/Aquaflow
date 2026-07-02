@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luxcon.example/schemas/device.schema.json",
+  "title": "Lux Device",
+  "type": "object",
+  "required": ["id", "kind", "protocol", "address", "capabilities", "safety"],
+  "properties": {
+    "id": { "type": "string" },
+    "kind": { "type": "string" },
+    "protocol": {
+      "type": "string",
+      "enum": ["dmx512", "artnet", "sacn", "modbus_tcp", "modbus_rtu", "opc_ua", "midi", "osc", "timecode", "smpte", "ndi", "mqtt"]
+    },
+    "address": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "unit_id": { "type": "integer" },
+        "universe": { "type": "integer" },
+        "channel": { "type": "integer" },
+        "topic": { "type": "string" }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "safety": {
+      "type": "object",
+      "required": ["default_state"],
+      "properties": {
+        "default_state": { "type": "string" },
+        "max_speed": { "type": "number" },
+        "requires_pressure_ok": { "type": "boolean" },
+        "requires_water_ok": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

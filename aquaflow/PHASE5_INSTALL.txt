@@ -1,0 +1,15 @@
+Phase 5 Install
+===============
+
+1. Extract the phase 5 patch into a temporary folder.
+2. Copy the patch files into the AquaFlow project root, allowing overwrite.
+3. Run: npm --prefix frontend install
+4. Restart both servers:
+   - frontend: npm --prefix frontend run dev
+   - backend:  py -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+5. Verify:
+   - Ctrl+Z / Ctrl+Y works on clip edits
+   - dragging a clip is undone in a single step
+   - dragging a node is undone in a single step
+   - Undo / Redo buttons appear in the top bar and timeline
+   - status bar shows Undo / Redo counts

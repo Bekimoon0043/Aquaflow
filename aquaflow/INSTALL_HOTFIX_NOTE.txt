@@ -1,0 +1,9 @@
+Install hotfix applied:
+- Increased pip timeout/retry behavior in install.cmd
+- Removed librosa from core requirements to prevent soundfile/librosa install blocking the core control-path setup
+- Added backend/requirements-audio.txt for optional later audio feature installation
+
+Recommended install flow:
+1) Run install.cmd
+2) Verify backend + frontend start correctly
+3) Only later, if needed, install optional audio extras from backend/requirements-audio.txt

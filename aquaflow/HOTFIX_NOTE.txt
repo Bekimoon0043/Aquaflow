@@ -1,0 +1,19 @@
+AquaFlow Step 7 verification hotfix
+
+This hotfix fixes the installer appearing to hang at:
+[5/5] Verifying backend syntax...
+
+Cause:
+- The previous script recursively compiled every Python file under backend, including the entire .venv directory.
+- That can take a very long time and looks stuck.
+
+Fix:
+- Added backend/verify_backend_syntax.py to verify only AquaFlow project Python files.
+- Updated install.cmd and verify-install.cmd to use that focused verifier.
+- Included current start-backend.cmd, start-frontend.cmd, and start-all.cmd as known-good launchers.
+
+After copying this patch:
+1. Press Ctrl+C if install.cmd is still hanging.
+2. Copy these files into the AquaFlow project root.
+3. Run install.cmd again.
+4. Start with start-all.cmd or run backend/frontend separately.

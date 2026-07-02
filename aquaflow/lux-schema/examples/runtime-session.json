@@ -1,0 +1,26 @@
+{
+  "session_id": "session-001",
+  "mode": "live",
+  "transport": "armed",
+  "bundle_id": "bundle-001",
+  "sync": {
+    "source": "ptp",
+    "locked": true,
+    "offset_us": 120
+  },
+  "safety": {
+    "state": "armed",
+    "permit_live": true,
+    "active_faults": []
+  },
+  "commands": [
+    {
+      "command_id": "cmd-001",
+      "timestamp_us": 1000000,
+      "device_id": "pump-01",
+      "action": "set_speed",
+      "value": 0.75,
+      "safety_class": "normal"
+    }
+  ]
+}

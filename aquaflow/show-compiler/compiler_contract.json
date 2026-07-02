@@ -1,0 +1,39 @@
+{
+  "name": "show-compiler",
+  "status": "step2-defined",
+  "input": [
+    ".aqua",
+    ".luxshow",
+    ".luxscene",
+    ".luxpreset"
+  ],
+  "output": [
+    "canonical luxshow package",
+    "compiled deployment bundle",
+    "resolved runtime command stream",
+    "validation report"
+  ],
+  "schema_dependencies": [
+    "shared/lux-schema/show-package.schema.json",
+    "shared/lux-schema/device.schema.json",
+    "shared/lux-schema/track.schema.json",
+    "shared/lux-schema/runtime-command.schema.json",
+    "shared/lux-schema/runtime-session.schema.json",
+    "shared/lux-schema/deployment-bundle.schema.json"
+  ],
+  "compile_stages": [
+    "legacy_payload_ingest",
+    "canonical_schema_validation",
+    "dependency_resolution",
+    "device_binding",
+    "timing_normalization",
+    "safety_rule_expansion",
+    "runtime_command_generation",
+    "deployment_bundle_build",
+    "signature_generation"
+  ],
+  "notes": [
+    "Current AquaFlow .aqua files remain supported through backend/schema_adapter.py",
+    "Live runtime must consume compiled canonical payloads rather than raw editor state"
+  ]
+}
