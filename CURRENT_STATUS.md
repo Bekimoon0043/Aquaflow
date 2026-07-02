@@ -28,8 +28,9 @@ so "working" below means "built and correctly wired," not "confirmed live."
 
 ## 2. Verified findings (2026-07-02)
 
-- **Frontend builds green.** Vite production build succeeds. One **pre-existing** non-fatal
-  warning remains: duplicate `groupId` key in `PoolGeometryDesigner.jsx:1446` (see Known Issues).
+- **Frontend builds green and warning-free.** Vite production build succeeds; the previous
+  duplicate `groupId` esbuild warning was fixed today (see §3). Only the informational
+  chunk-size (>500 kB) note remains.
 - **Backend is well past the README.** `backend/main.py` wires safety kernel, runtime
   transport, diagnostics, phase6/7/9 routes, pattern routes, show-programmer, and license
   routes; `pattern_routes` is imported at module load and `protocol_bus.update_dmx_map` is
@@ -56,6 +57,10 @@ so "working" below means "built and correctly wired," not "confirmed live."
   (`buildGroupsFromFixtures`, formerly `PatternDesignerPanel.jsx:84`) through it, removing
   the ad-hoc `?? fixture.z ??` fallback that let the 2D top view and 3D view place the same
   nozzle in different spots. Uses `??` so an explicit `0` coordinate is respected.
+- **Duplicate `groupId` key removed.** `PoolGeometryDesigner.jsx` set `groupId` twice in the
+  same fixture object literal (lines 1441 and 1446); the redundant second assignment was
+  removed. Values were identical, so no behavior change — the frontend build is now
+  warning-free apart from the chunk-size note.
 
 ---
 
@@ -65,7 +70,7 @@ so "working" below means "built and correctly wired," not "confirmed live."
 |---|---|---|
 | Studio shell / panel routing (`App.jsx`) | ✅ Built | 17 panels mounted |
 | Node editor, Timeline, Inspector | ✅ Built | |
-| Pool Geometry Designer | ◑ Built, 1 warning | duplicate `groupId` key (Known Issues) |
+| Pool Geometry Designer | ✅ Built | duplicate `groupId` key fixed 2026-07-02 |
 | Pattern Designer + Nozzle Map | ✅ Built | axis conversion now centralized |
 | 3D Preview (`FountainScene_v6`) | ✅ Built | driven by `fixturesToNozzleConfigs` |
 | Fixture library + type resolver | ✅ Built | `fixtureTypeResolver.js` v2 = single source |
@@ -90,23 +95,22 @@ Legend: ✅ built & wired · ◑ partial / needs work · (runtime behavior unver
    carries `timelineTracks` but not `fixtures`/`groups`; the engineering model lives only in
    the frontend `engineeringStore`. Works via client-side projection, but the backend cannot
    independently rebuild a show from fixtures (matters for headless / deployed runtime).
-2. **Duplicate `groupId` object key** in `PoolGeometryDesigner.jsx:1446` — esbuild warning,
-   last write wins; verify the intended value and remove the duplicate.
-3. **License gate not enforced in the UI.** Backend license engine/routes exist; `main.jsx`
+2. **License gate not enforced in the UI.** Backend license engine/routes exist; `main.jsx`
    renders `<App/>` directly with no gate. **Deferred to a later phase by decision.**
-4. **~45 TODO / placeholder / mock markers across 25 files** — heaviest in `plc_engine.py`
+3. **~45 TODO / placeholder / mock markers across 25 files** — heaviest in `plc_engine.py`
    (5) and `services/runtime_bridge.py` (4).
-5. **No automated test suite.** Only author scripts `validate_step2/3/4_contracts.py` and
+4. **No automated test suite.** Only author scripts `validate_step2/3/4_contracts.py` and
    `verify_backend_syntax.py`. Highest risk for a hardware-driving, safety-relevant system.
-6. **Large JS bundle** (~1.5 MB / ~397 kB gzip, single chunk). Consider code-splitting.
-7. **Runtime not yet verified this pass** — no end-to-end backend+frontend smoke test on record.
+5. **Large JS bundle** (~1.5 MB / ~397 kB gzip, single chunk). Consider code-splitting.
+6. **Runtime not yet verified this pass** — no end-to-end backend+frontend smoke test on record.
+
+_Resolved 2026-07-02: duplicate `groupId` key in `PoolGeometryDesigner.jsx` (was esbuild warning)._
 
 ---
 
 ## 6. Recommended next actions by team
 
 **Frontend**
-- Remove the duplicate `groupId` key in `PoolGeometryDesigner.jsx:1446`.
 - Audit remaining coordinate math (`deviceGroupSelector`, runtime graph) for any other
   ad-hoc axis fallbacks; route through `fixturePlanCoords`.
 - Begin code-splitting to bring the main chunk under the 500 kB warning threshold.

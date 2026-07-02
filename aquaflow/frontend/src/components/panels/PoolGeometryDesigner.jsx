@@ -1443,7 +1443,6 @@ setFixtures(prev => [...prev, {
   zone: depthZone,
   rotation: 0,
   engineering: getDefaultEngineering(fixtureType),
-     groupId: getDefaultGroupId(fixtureType),
 }]);
     } else if(tool === "rectangle" || tool === "polyline" && poolType === "freeform") {
       setDrawingFreeform(true);
