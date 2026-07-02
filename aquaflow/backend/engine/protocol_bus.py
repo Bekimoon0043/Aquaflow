@@ -236,6 +236,10 @@ class ProtocolBus:
         self._device_map: dict[str, str] = {}  # device_id → driver_key
         self._dmx_state: dict[int, dict[int, int]] = {}  # universe → {channel: value}
         self._dmx_map: list[dict] = []  # fixtureId → universe/channel mapping from Pattern Designer
+        # Fixture-aware Modbus routing: device_id → {host, port, unit, register}
+        # derived from designed fixtures via configure_from_fixtures().
+        self._fixture_registers: dict[str, dict] = {}
+        self._fixtures_loaded = False
         self._running = False
 
     async def start(self):
@@ -285,6 +289,64 @@ class ProtocolBus:
                 return True
         return False
 
+    def configure_from_fixtures(self, registry) -> dict:
+        """
+        Configure routing from a DeviceRegistry built from designed fixtures.
+
+        Populates the DMX map (fixtureId → universe/channel) and the Modbus
+        fixture-register map (device_id → host/port/register) so that playback
+        addresses the *designed* hardware instead of only the seed devices.
+
+        The registry uses a 1-indexed universe convention; Art-Net output here is
+        0-indexed, so universes are shifted by one on the way out.
+        """
+        try:
+            devices = registry.all_devices()
+        except AttributeError:
+            return {"dmx": 0, "modbus": 0}
+
+        self._fixture_registers = {}
+        dmx_entries: dict[str, dict] = {m.get("fixtureId"): m for m in self._dmx_map}
+
+        dmx_count = 0
+        for d in devices:
+            proto = getattr(d.protocol, "value", str(d.protocol))
+            if proto in ("dmx", "artnet", "sacn"):
+                dmx_entries[d.device_id] = {
+                    "fixtureId": d.device_id,
+                    "universe": max(0, int(d.dmx_universe) - 1),
+                    "channel": int(d.dmx_channel),
+                }
+                self._device_map[d.device_id] = "artnet"
+                dmx_count += 1
+            elif proto == "modbus":
+                key = f"modbus:{d.plc_host}"
+                self._fixture_registers[d.device_id] = {
+                    "host": d.plc_host,
+                    "port": int(d.plc_port or 502),
+                    "unit": int(d.plc_unit_id or 1),
+                    "register": int(d.plc_register or 0x0001),
+                }
+                self._device_map[d.device_id] = key
+
+        self._dmx_map = list(dmx_entries.values())
+        self._fixtures_loaded = True
+        logger.info(
+            f"Protocol bus configured from {len(devices)} designed fixtures "
+            f"({dmx_count} DMX, {len(self._fixture_registers)} Modbus)"
+        )
+        return {"dmx": dmx_count, "modbus": len(self._fixture_registers)}
+
+    async def _ensure_modbus_driver(self, host: str, port: int = 502) -> ProtocolDriver:
+        """Return a Modbus driver for host, creating/connecting it once (cached)."""
+        key = f"modbus:{host}"
+        driver = self._drivers.get(key)
+        if driver is None:
+            driver = ModbusTCPDriver(host, port or 502)
+            await driver.connect()  # may fail (offline) — send() then no-ops safely
+            self._drivers[key] = driver
+        return driver
+
     async def send_batch(self, commands: list[dict]):
         """Route a batch of commands to appropriate drivers"""
         for cmd in commands:
@@ -328,6 +390,18 @@ class ProtocolBus:
 
         # ── Modbus (pumps, valves, flame) ─────────────────────────────────────
         if device_type in ("pump", "valve", "flame", "flame_units"):
+            # Fixture-aware path: route to the designed fixture's PLC host+register.
+            fx = self._fixture_registers.get(device_id)
+            if fx:
+                driver = await self._ensure_modbus_driver(fx["host"], fx.get("port", 502))
+                value = int(max(0.0, min(1.0, intensity)) * 10000)
+                await driver.send({"register": fx.get("register", 0x0001), "value": value})
+                logger.debug(
+                    f"Modbus(fixture) → {device_id} host={fx['host']} "
+                    f"reg={fx.get('register')} intensity={intensity:.2f} val={value}"
+                )
+                return
+
             driver_key = self._device_map.get(device_id)
             driver = self._drivers.get(driver_key) if driver_key else None
 
@@ -473,6 +547,8 @@ class ProtocolBus:
             "dmx_map_count": len(self._dmx_map),
             "dmx_universe_count": len(self._dmx_state),
             "device_map_count": len(self._device_map),
+            "fixture_register_count": len(self._fixture_registers),
+            "fixtures_loaded": self._fixtures_loaded,
         }
 _protocol_bus: Optional[ProtocolBus] = None
 

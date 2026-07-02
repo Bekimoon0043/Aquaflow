@@ -8,6 +8,7 @@ from pathlib import Path
 from engine.show_engine import ShowEngine
 from engine.device_manager import DeviceManager
 from engine.protocol_bus import ProtocolBus
+from services.fixture_registry_bridge import build_registry_from_fixtures
 
 BASE_DIR = Path(__file__).parent
 SHOWS_DIR = BASE_DIR / "shows"
@@ -36,4 +37,21 @@ def load_saved_show(show_id: str) -> dict | None:
 
 def apply_show_payload(payload: dict) -> dict:
     show_engine.load_show(payload)
+
+    # Fixture-aware routing: derive a hardware address registry from the designed
+    # fixtures and configure the protocol bus so playback drives the real designed
+    # devices (not just the seed devices). Wrapped defensively so a malformed
+    # fixture payload can never block show loading.
+    try:
+        registry, warnings = build_registry_from_fixtures(
+            show_engine.fixtures, show_engine.groups
+        )
+        summary = registry.to_dict()
+        summary["warnings"] = warnings
+        show_engine.device_registry_summary = summary
+        if hasattr(protocol_bus, "configure_from_fixtures"):
+            protocol_bus.configure_from_fixtures(registry)
+    except Exception as exc:  # pragma: no cover - defensive
+        show_engine.device_registry_summary = {"error": str(exc), "device_count": 0}
+
     return show_engine.get_state()

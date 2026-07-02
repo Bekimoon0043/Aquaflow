@@ -54,6 +54,11 @@ class ShowEngine:
         self.nodes: dict = {}
         self.connections: list = []
         self.timeline_tracks: list = []
+        # Fixture-aware runtime model (Stage 1, Priority 1): the designed
+        # engineering fixtures + control groups that a real show is built from.
+        self.fixtures: list = []
+        self.groups: list = []
+        self.device_registry_summary: dict = {}
 
     def _bump_revision(self):
         self._revision += 1
@@ -98,6 +103,13 @@ class ShowEngine:
         self.connections = payload.get("connections", [])
         self.timeline_tracks = payload.get("timelineTracks", payload.get("tracks", [])) or []
         self.runtime_devices = payload.get("devices", self.runtime_devices) or []
+        # Fixture-aware: accept designed fixtures (frontend sends them as
+        # `fixtures`, or as `engineeringFixtures` from the show store) and their
+        # control groups. Groups are derived from fixture groupIds when absent.
+        self.fixtures = payload.get("fixtures", payload.get("engineeringFixtures", self.fixtures)) or []
+        self.groups = payload.get("groups", self.groups) or []
+        if not self.groups and self.fixtures:
+            self.groups = self._derive_groups(self.fixtures)
         self._recording_buffer = []
 
         inferred_duration = max(
@@ -121,6 +133,21 @@ class ShowEngine:
             self.show_state.state = PlaybackState.STOPPED
 
         self._bump_revision()
+
+    def _derive_groups(self, fixtures: list) -> list:
+        """Derive control groups from fixture groupIds when none are supplied."""
+        groups: dict = {}
+        for fx in fixtures:
+            if not isinstance(fx, dict):
+                continue
+            gid = fx.get("groupId") or "ungrouped"
+            g = groups.setdefault(gid, {"id": gid, "label": gid, "type": None, "memberIds": []})
+            fid = fx.get("id")
+            if fid:
+                g["memberIds"].append(fid)
+            if g["type"] is None:
+                g["type"] = fx.get("type")
+        return list(groups.values())
 
     def set_bpm(self, bpm: float):
         self.show_state.bpm = float(bpm)
@@ -444,6 +471,7 @@ class ShowEngine:
             "duration": self.show_state.duration,
             "loop": self.show_state.loop,
             "track_count": len(self.timeline_tracks),
+            "fixture_count": len(self.fixtures),
             "show_id": self.current_show.get("id"),
             "show_name": self.current_show.get("name"),
             "revision": self._revision,
@@ -461,6 +489,9 @@ class ShowEngine:
             "connections": self.connections,
             "timelineTracks": self.timeline_tracks,
             "devices": self.runtime_devices,
+            "fixtures": self.fixtures,
+            "groups": self.groups,
+            "deviceRegistry": self.device_registry_summary,
             "ui": {
                 "timelineZoom": 4,
                 "showGrid": True,

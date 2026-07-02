@@ -11,6 +11,7 @@ export function useServerShowSync() {
     connections: s.connections,
     timelineTracks: s.timelineTracks,
     devices: s.devices,
+    engineeringFixtures: s.engineeringFixtures,
     timelineZoom: s.timelineZoom,
     showGrid: s.showGrid,
     snapToGrid: s.snapToGrid,

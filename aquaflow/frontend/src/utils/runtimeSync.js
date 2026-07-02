@@ -15,6 +15,10 @@ export function buildRuntimePayload(source = {}) {
     connections: Array.isArray(source.connections) ? source.connections : [],
     timelineTracks: Array.isArray(source.timelineTracks) ? source.timelineTracks : (Array.isArray(source.tracks) ? source.tracks : []),
     devices: Array.isArray(source.devices) ? source.devices : [],
+    // Fixture-aware backend: forward the designed engineering fixtures so the
+    // runtime can build its hardware address registry and drive real fixtures.
+    fixtures: Array.isArray(source.fixtures) ? source.fixtures : (Array.isArray(source.engineeringFixtures) ? source.engineeringFixtures : []),
+    groups: Array.isArray(source.groups) ? source.groups : [],
     ui: {
       timelineZoom: Number(source.timelineZoom ?? ui.timelineZoom ?? 4),
       showGrid: Boolean(source.showGrid ?? ui.showGrid ?? true),
