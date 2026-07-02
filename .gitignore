@@ -1,7 +1,40 @@
-node_modules/ 
-__pycache__/ 
-*.pyc 
-.env 
-backend/dist/ 
-backend/build/ 
-backend.zip 
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+.env.local
+*.env.local
+
+# Build output / artifacts
+dist/
+build/
+*.spec
+*.exe
+*.zip
+
+# Runtime-generated data
+**/data/audio/
+**/data/ai_learning/
+compiled/
+diagnostics/
+**/data/show_programs/*.json
+
+# Logs & scratch dumps
+*.log
+*_log.txt
+*_compile_log.txt
+*_import_test.txt
+frontend_bundle.txt
+
+# Audio / media
+*.mp3
+
+# Licenses (issued/generated) and internal tooling
+**/license/active_license.json
+**/license/license_generator_BETA.py
+licenses/
