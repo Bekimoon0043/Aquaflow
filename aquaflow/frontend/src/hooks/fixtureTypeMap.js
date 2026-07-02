@@ -188,6 +188,27 @@ function getDefault() {
 }
 
 /**
+ * fixturePlanCoords(fixture) → { x, z }
+ *
+ * CANONICAL AXIS CONVENTION — single source of truth for the whole app:
+ *   Engineering / plan space : (x, y)            — y is the depth axis
+ *   3D / world space         : (x, height, z)    — z is the depth axis (z === engineering y)
+ *   Nozzle Map (top view)    : (x, y)            — its y is the depth axis (=== engineering y)
+ *
+ * Every consumer (3D scene, Pattern Designer groups, Nozzle Map) MUST derive the
+ * depth coordinate through this helper so the 2D top view and the 3D view can never
+ * disagree. Do NOT re-introduce ad-hoc `?? fixture.z ??` fallbacks: `z` is a *derived*
+ * world coordinate, so reading it back as a source re-introduces drift between views.
+ * Uses `??` (not `||`) so an explicit 0 coordinate is respected.
+ */
+export function fixturePlanCoords(fixture) {
+  const f = fixture || {};
+  const x = f.x ?? f.position?.x ?? 0;
+  const z = f.y ?? f.position?.y ?? 0; // engineering Y → plan / 3D depth axis
+  return { x, z };
+}
+
+/**
  * Convert engineering fixture array to FountainScene_v6 nozzle config array.
  * This is the main translation function called by useEngineeringSync.
  */
@@ -198,12 +219,14 @@ export function fixturesToNozzleConfigs(fixtures) {
   fixtures.forEach(f => {
     const map = resolveFixtureType(f.type);
 
+    const { x: planX, z: planZ } = fixturePlanCoords(f);
+
     if (map.isLight) {
       lightConfigs.push({
         id:        f.id,
-        x:         f.x || 0,
+        x:         planX,
         y:         0,
-        z:         f.y || 0, // Engineering uses Y for depth-axis, 3D uses Z
+        z:         planZ, // Engineering uses Y for depth-axis, 3D uses Z (see fixturePlanCoords)
         // Use fixture-configured color if set, else fall back to library default
         color:     f.color || f.params?.color || f.engineering?.color || map.color,
         intensity: (f.engineering?.wattage ? f.engineering.wattage / 18.0 : map.intensity),
@@ -220,9 +243,9 @@ export function fixturesToNozzleConfigs(fixtures) {
       nozzleConfigs.push({
         id:       f.id,
         type:     map.nozzleType,
-        // Engineering Y axis = 3D Z axis (plan view)
-        x:        f.x || 0,
-        z:        f.y || 0,
+        // Engineering Y axis = 3D Z axis (plan view) — via canonical fixturePlanCoords
+        x:        planX,
+        z:        planZ,
         rotation: f.rotation || 0,
         tiltX:    map.tiltX  || 0,
         tiltZ:    map.tiltZ  || 0,

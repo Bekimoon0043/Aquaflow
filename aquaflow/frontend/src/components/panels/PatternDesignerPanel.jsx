@@ -14,7 +14,7 @@ import useEngineeringStore from "../../store/engineeringStore";
 import { API_BASE_URL } from "../../config";
 import NozzleMap from "./NozzleMap";
 import { DEFAULT_DEVICE_GROUPS } from "../../utils/deviceGroupSelector";
-import { resolveFixtureGroup } from "../../hooks/fixtureTypeMap";
+import { resolveFixtureGroup, fixturePlanCoords } from "../../hooks/fixtureTypeMap";
 
 const API        = `${API_BASE_URL}/devices`;
 const PATTERN_API = API_BASE_URL; // base for /api/patterns, /api/dmx-map, etc.
@@ -78,10 +78,13 @@ function buildGroupsFromFixtures(fixtures, devices) {
       const group = groupMap[groupId];
       if (!group) return;
 
+      // Canonical engineering(x,y) → plan/3D(x,z) conversion; single source of
+      // truth shared with fixturesToNozzleConfigs and the Nozzle Map top view.
+      const { x, z } = fixturePlanCoords(fixture);
       group.nozzles.push({
         id: fixture.id || `fixture-${index}`,
-        x: fixture.x ?? fixture.position?.x ?? 0,
-        z: fixture.y ?? fixture.z ?? fixture.position?.y ?? 0,
+        x,
+        z,
         type: fixture.type || fixture.nozzleType || "jet_3d",
         groupId,
       });
