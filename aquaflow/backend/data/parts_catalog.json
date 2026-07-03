@@ -1,0 +1,34 @@
+{
+  "parts": {
+    "pipe:PVC:DN50": {"manufacturer": "Georg Fischer", "part_number": "GF-PVC-DN50",
+      "supplier": "GF Piping Systems", "unit_cost": 6.4, "notes": "PN16 PVC-U"},
+    "pipe:PVC:DN80": {"manufacturer": "Georg Fischer", "part_number": "GF-PVC-DN80",
+      "supplier": "GF Piping Systems", "unit_cost": 11.2, "notes": "PN16 PVC-U"},
+    "pipe:PVC:DN100": {"manufacturer": "Georg Fischer", "part_number": "GF-PVC-DN100",
+      "supplier": "GF Piping Systems", "unit_cost": 15.8, "notes": "PN16 PVC-U"},
+    "pipe:PVC:DN150": {"manufacturer": "Georg Fischer", "part_number": "GF-PVC-DN150",
+      "supplier": "GF Piping Systems", "unit_cost": 28.5, "notes": "PN16 PVC-U"},
+    "pipe:PVC:DN200": {"manufacturer": "Georg Fischer", "part_number": "GF-PVC-DN200",
+      "supplier": "GF Piping Systems", "unit_cost": 44.0, "notes": "PN16 PVC-U"},
+
+    "pump": {"manufacturer": "Grundfos", "part_number": "CR-GEN",
+      "supplier": "Grundfos Distribution", "unit_cost": 1850.0, "notes": "Vertical multistage pump"},
+
+    "valve:control_valve": {"manufacturer": "Belimo", "part_number": "BEL-CV-GEN",
+      "supplier": "Belimo Americas", "unit_cost": 420.0, "notes": "Characterised control valve"},
+    "valve:gate_valve": {"manufacturer": "AVK", "part_number": "AVK-GATE-GEN",
+      "supplier": "AVK Valves", "unit_cost": 180.0, "notes": "Resilient-seat gate valve"},
+
+    "instrument:PT": {"manufacturer": "WIKA", "part_number": "WIKA-PT-GEN",
+      "supplier": "WIKA Instruments", "unit_cost": 240.0, "notes": "Pressure transmitter 4-20mA"},
+    "instrument:FT": {"manufacturer": "Endress+Hauser", "part_number": "EH-FT-GEN",
+      "supplier": "Endress+Hauser", "unit_cost": 1100.0, "notes": "Electromagnetic flow meter"},
+
+    "nozzle:AF-GEYSER-25": {"manufacturer": "AquaFlow", "part_number": "AF-GEYSER-25",
+      "supplier": "AquaFlow Parts", "unit_cost": 95.0, "notes": "Foaming geyser jet DN25"},
+    "nozzle:AF-CROWN-15": {"manufacturer": "AquaFlow", "part_number": "AF-CROWN-15",
+      "supplier": "AquaFlow Parts", "unit_cost": 62.0, "notes": "Crown ring nozzle DN15"},
+    "nozzle:OASE-FOAM-30": {"manufacturer": "OASE", "part_number": "OASE-FOAM-30",
+      "supplier": "OASE GmbH", "unit_cost": 138.0, "notes": "Foam jet 30"}
+  }
+}

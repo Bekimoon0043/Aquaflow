@@ -11,6 +11,9 @@ numpy>=1.26.0
 # Test harness (AQ-S1-009) — backend contract + e2e playback smoke suite
 pytest>=8.0.0
 httpx>=0.27.0
+# Test-only: independent reader that validates the BOM .xlsx export (AQ-S2-009).
+# The BOM generator itself has a self-contained xlsx writer and needs no runtime dep.
+openpyxl>=3.1.0
 # Optional advanced audio analysis (install later if needed)
 # librosa>=0.10.0
 # Optional: for full AI

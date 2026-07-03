@@ -1,9 +1,26 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 2 — AQ-S2-007 Automatic P&ID Generator complete: auto ISA-5.1 symbols, printable SVG/HTML output, and revision tracking.
+**Summary:** Stage 2 — AQ-S2-009 Automatic BOM Generator complete: auto quantities, catalog supplier references, and a dependency-free Excel export.
 
 ## Completed
+- **AQ-S2-009 Automatic BOM Generator — DONE on `main` (Stage 2).**
+  - New [services/bom_generator.py](aquaflow/backend/services/bom_generator.py): rolls a design
+    (equipment, pipes, nozzles, valves, fittings, instruments — or a hydraulic network) into a
+    costed bill of materials.
+  - **Quantities generated automatically** — identical items counted, pipe runs summed by
+    diameter/material, nozzles grouped by model.
+  - **Supplier references supported** — each line enriched with manufacturer / part number /
+    supplier / unit cost from [data/parts_catalog.json](aquaflow/backend/data/parts_catalog.json)
+    + the nozzle DB; per-line and category cost roll-ups.
+  - **Excel export supported** — a **self-contained minimal XLSX writer** (zip of OOXML, no runtime
+    dependency) plus CSV/JSON; the `.xlsx` reads back cleanly in openpyxl (independent verifier).
+  - API: `POST /api/bom/generate` and `/from-network` (`?format=json|csv|xlsx`, xlsx downloads)
+    ([bom_routes.py](aquaflow/backend/api/routes/bom_routes.py)), wired in main.py.
+  - **Verification: 19/19** ([validate_bom_generator.py](aquaflow/backend/validate_bom_generator.py))
+    incl. openpyxl read-back and hand-calc totals; **8 pytest cases**
+    ([test_bom_generator.py](aquaflow/backend/tests/test_bom_generator.py)) → backend pytest now **58 passing**.
+
 - **AQ-S2-007 Automatic P&ID Generator — DONE on `main` (Stage 2).**
   - New [services/pid_generator.py](aquaflow/backend/services/pid_generator.py): builds a printable
     P&ID from an equipment model or straight from a hydraulic network.
