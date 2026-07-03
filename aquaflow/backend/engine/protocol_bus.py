@@ -40,12 +40,24 @@ class ArtNetDriver(ProtocolDriver):
     PORT = 6454
     ARTNET_HEADER = b"Art-Net\x00"
 
+    # Art-Net addresses a 15-bit universe space (0–32767). Buffers are allocated
+    # lazily per universe so a show can drive far more than the legacy 4.
+    MAX_UNIVERSE = 32767
+
     def __init__(self, target_ip: str = "255.255.255.255"):
         self.target_ip = target_ip
         self._sock: Optional[socket.socket] = None
         self._connected = False
-        # 512 channels per universe, up to 256 universes
-        self._universes: dict[int, bytearray] = {i: bytearray(512) for i in range(4)}
+        # 512 channels per universe, allocated on demand for any universe used.
+        self._universes: dict[int, bytearray] = {}
+
+    def _buffer_for(self, universe: int) -> bytearray:
+        """Return the 512-byte frame for a universe, creating it on first use."""
+        buf = self._universes.get(universe)
+        if buf is None:
+            buf = bytearray(512)
+            self._universes[universe] = buf
+        return buf
 
     async def connect(self) -> bool:
         try:
@@ -66,10 +78,14 @@ class ArtNetDriver(ProtocolDriver):
 
     async def send(self, data: dict) -> bool:
         """Send DMX universe data via Art-Net"""
-        universe = data.get("universe", 0)
+        universe = int(data.get("universe", 0))
         channels = data.get("channels", {})  # {channel_idx: value 0-255}
 
-        buf = self._universes[universe % 4]
+        if universe < 0 or universe > self.MAX_UNIVERSE:
+            logger.warning(f"Art-Net universe {universe} out of range 0-{self.MAX_UNIVERSE}; dropping frame")
+            return False
+
+        buf = self._buffer_for(universe)
         for ch, val in channels.items():
             if 0 <= ch < 512:
                 buf[ch] = max(0, min(255, int(val)))

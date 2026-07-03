@@ -77,9 +77,11 @@ def _analyze_audio(job_id: str, file_path: Path):
             y, sr = librosa.load(str(file_path), sr=None, mono=True, duration=300)
             duration = float(librosa.get_duration(y=y, sr=sr))
 
-            # BPM + beat frames
+            # BPM + beat frames. librosa >= 0.10 returns tempo as a numpy array,
+            # so unwrap the scalar defensively (float() on an ndarray raises on
+            # numpy 2.x and would otherwise dump us into the estimated fallback).
             tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
-            bpm = float(tempo)
+            bpm = float(np.atleast_1d(tempo)[0])
             beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
 
             # Spectral features
@@ -92,26 +94,34 @@ def _analyze_audio(job_id: str, file_path: Path):
             key_names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
             key = key_names[int(np.argmax(chroma_mean))]
 
-            # Energy profile (normalized, 200 points)
+            # Energy profile (normalized, 200 points). Guard the divisor: a silent
+            # (all-zero) profile has max 0, which would raise ZeroDivisionError and
+            # wrongly drop the whole real analysis into the estimate fallback.
             hop = max(1, len(rms) // 200)
             energy_profile = [float(v) for v in rms[::hop][:200]]
-            max_e = max(energy_profile) if energy_profile else 1
+            max_e = max(energy_profile) or 1
             energy_profile = [v / max_e for v in energy_profile]
 
             # Bass profile (low frequency energy)
             y_bass = librosa.effects.harmonic(y)
             rms_bass = librosa.feature.rms(y=y_bass)[0]
             bass_profile = [float(v) for v in rms_bass[::hop][:200]]
-            max_b = max(bass_profile) if bass_profile else 1
+            max_b = max(bass_profile) or 1
             bass_profile = [v / max_b for v in bass_profile]
 
-            # Sections (structural segmentation)
-            mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-            import sklearn.preprocessing
-            mfcc_n = sklearn.preprocessing.normalize(mfcc, axis=1)
-            bounds = librosa.segment.agglomerative(mfcc_n.T, k=min(8, max(3, int(duration / 30))))
-            bound_times = librosa.frames_to_time(bounds, sr=sr).tolist()
+            # Sections (structural segmentation). Isolated so a segmentation/sklearn
+            # failure falls back to an even time-split instead of discarding the
+            # real BPM/beats we already computed above.
             section_labels = ["intro","verse","chorus","verse","chorus","bridge","chorus","outro"]
+            try:
+                mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+                import sklearn.preprocessing
+                mfcc_n = sklearn.preprocessing.normalize(mfcc, axis=1)
+                bounds = librosa.segment.agglomerative(mfcc_n.T, k=min(8, max(3, int(duration / 30))))
+                bound_times = librosa.frames_to_time(bounds, sr=sr).tolist()
+            except Exception:
+                n = min(8, max(3, int(duration / 30)))
+                bound_times = [round(i * duration / n, 3) for i in range(n)]
             sections = []
             for i, t in enumerate(bound_times):
                 end = bound_times[i+1] if i+1 < len(bound_times) else duration

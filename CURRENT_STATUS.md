@@ -1,9 +1,21 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** AQ-S1-003 complete — hardware address conflicts now block a show before it runs and are surfaced to the operator.
+**Summary:** AQ-S1-005 complete — Art-Net now drives far more than 4 universes and real audio files drive beat markers via the librosa/numpy path.
 
 ## Completed
+- **AQ-S1-005 Multi-universe + audio end-to-end — DONE on `main`.**
+  - Art-Net `ArtNetDriver` no longer wraps universes at `% 4`; buffers are allocated
+    on demand across the full 15-bit space (0–32767), with out-of-range frames rejected
+    ([protocol_bus.py:37](aquaflow/backend/engine/protocol_bus.py#L37)).
+  - Audio route hardened so the **real** librosa/numpy path is actually taken:
+    tempo unwrapped for numpy 2.x (`np.atleast_1d(tempo)[0]`), profile normalizers
+    guarded against divide-by-zero, and section segmentation isolated so a
+    sklearn/segmentation hiccup can no longer discard real BPM/beats
+    ([audio.py](aquaflow/backend/api/routes/audio.py)).
+  - numpy 2.4.5 / librosa 0.11.0 / soundfile / scikit-learn 1.8.0 all present and exercised.
+  - **Validation harness: 18 / 18 PASS** ([validate_multiuniverse_audio.py](aquaflow/backend/validate_multiuniverse_audio.py)) — 8 live universes with no aliasing + a generated 120 BPM click track analysed to real beats (confidence 0.92, BPM ≈ 117).
+
 - **AQ-S1-003 Hardware conflict detection — DONE on `main`.**
   - `ShowEngine.get_hardware_conflicts()` derives duplicate/overflow addresses from the
     DeviceRegistry validation computed at show-apply time
@@ -39,11 +51,12 @@
 - Chief Architect roadmap preserved in [aquaflow/docs/MASTER_ROADMAP_ChatGPT_v1.0.txt](aquaflow/docs/MASTER_ROADMAP_ChatGPT_v1.0.txt).
 
 ## Next session starts with
-**AQ-S1-002 — Automatic DMX address assignment.** Dependencies (AQ-S1-001, AQ-S1-003)
-satisfied. Acceptance criteria: all fixtures get a unique DMX universe/channel · no manual
-patching required · conflicts flagged automatically. Foundation already exists in
+**AQ-S1-002 — Automatic DMX address assignment.** Dependencies (AQ-S1-001, AQ-S1-003,
+AQ-S1-005) satisfied. Acceptance criteria: all fixtures get a unique DMX universe/channel ·
+no manual patching required · conflicts flagged automatically. Foundation already exists in
 `fixture_registry_bridge.build_registry_from_fixtures()` (auto-assigns DMX + Modbus and
-returns collision warnings, now surfaced by AQ-S1-003) — this task extends that into the UI + WS surface.
+returns collision warnings, surfaced by AQ-S1-003; multi-universe output unblocked by
+AQ-S1-005) — this task extends that into the UI + WS surface.
 
 ## Standing workflow
 Defined in [CLAUDE.md](CLAUDE.md): update `CURRENT_STATUS.md`, write
