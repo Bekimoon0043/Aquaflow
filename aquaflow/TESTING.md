@@ -34,9 +34,20 @@ npm install        # includes vitest
 npm test
 ```
 
-Config: [frontend/vitest.config.js](frontend/vitest.config.js). Tests in `src/utils/__tests__/`:
+Config: [frontend/vitest.config.js](frontend/vitest.config.js). Tests in `src/utils/__tests__/` and `src/data/__tests__/`:
 
 | File | Covers |
 |------|--------|
 | `fixtureTypeResolver.test.js` | The fixture-type **resolver** — normalization, runtime/group/channel mapping, safe fallback for unknown types. |
 | `runtimeSignalSelector.test.js` | The runtime-signal **projection** — `deriveRuntimeSignals` mapping timeline clips at a playhead into normalized signals (active/inactive, muted tracks, overlap max, 0..1 vs 0..100, lighting color). |
+| `data/__tests__/fixtureLibrary.test.js` | The expanded fixture library (AQ-S2-011) — 500+ fixtures, every one with hydraulic + electrical metadata, unique keys, computed currents. |
+
+## Fixture library (AQ-S2-011)
+
+The generated fixtures live in `frontend/src/data/fixture_library_expanded.json`, produced deterministically by `aquaflow/tools/generate_fixture_library.py` and merged with the curated set in `fixtureLibrary.js`. Regenerate + validate:
+
+```bash
+cd aquaflow
+python tools/generate_fixture_library.py
+python tools/validate_fixture_library.py     # 7/7 — count >=500, hydraulic + electrical metadata
+```

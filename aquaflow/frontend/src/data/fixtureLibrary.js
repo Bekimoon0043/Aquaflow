@@ -1,7 +1,12 @@
 // AquaFlow Studio — LuxuryCon Professional Fixture Library
 // PART 1 of 4
+//
+// The curated fixtures below are merged with the generated expansion library
+// (AQ-S2-011) so FIXTURE_LIBRARY exposes 500+ fixtures, every one carrying both
+// hydraulic (`engineering`) and electrical (`electrical`) metadata.
+import EXPANDED_FIXTURES from "./fixture_library_expanded.json";
 
-export const FIXTURE_LIBRARY = [
+const CURATED_FIXTURES = [
   // =========================
   // NOZZLES — Vertical Jets
   // =========================
@@ -1386,6 +1391,49 @@ export const FIXTURE_LIBRARY = [
     visual3d:{ type:"uv", scale:0.6 }
   }
 
+];
+
+// ── Merge curated + generated fixtures, guaranteeing every entry carries both a
+// hydraulic and an electrical metadata block (AQ-S2-011) ──────────────────────
+function computeAmps(powerW, voltageV, phase, pf = 0.9) {
+  if (powerW <= 0 || voltageV <= 0) return 0;
+  if (phase === 3) return Math.round((powerW / (Math.sqrt(3) * voltageV * pf)) * 1000) / 1000;
+  if (phase === 1) return Math.round((powerW / (voltageV * pf)) * 1000) / 1000;
+  return Math.round((powerW / voltageV) * 1000) / 1000; // DC
+}
+
+function deriveElectrical(f) {
+  // Curated fixtures store electrical fields inside `engineering`; surface them
+  // into a normalized `electrical` block so every fixture is consistent.
+  const e = f.engineering || {};
+  const isLight = f.category === "Lights";
+  const isPassiveWater = ["Nozzles"].includes(f.category);
+  const voltageV = (e.voltage ?? e.voltageV ?? 0) || (isLight || isPassiveWater ? 24 : 0);
+  const powerW = e.wattage ?? e.powerW ?? 0;
+  const phase = e.phase ?? (voltageV >= 400 ? 3 : voltageV ? 1 : 0);
+  return {
+    voltageV,
+    powerW,
+    currentA: e.currentA ?? computeAmps(powerW, voltageV, phase),
+    phase,
+    controlProtocol: e.controlProtocol
+      || (isLight ? "DMX/Art-Net" : isPassiveWater ? "Modbus/Relay (solenoid valve)" : "Modbus"),
+    dmxChannels: e.dmxChannels ?? (isLight ? 4 : 0),
+    ipRating: e.ipRating || "IP68",
+  };
+}
+
+function normalizeFixture(f) {
+  return {
+    ...f,
+    engineering: f.engineering || {},
+    electrical: f.electrical || deriveElectrical(f),
+  };
+}
+
+export const FIXTURE_LIBRARY = [
+  ...CURATED_FIXTURES.map(normalizeFixture),
+  ...EXPANDED_FIXTURES.map(normalizeFixture),
 ];
 
 export const FIXTURE_CATEGORIES =

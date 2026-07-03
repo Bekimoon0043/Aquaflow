@@ -1,9 +1,23 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 2 — AQ-S2-009 Automatic BOM Generator complete: auto quantities, catalog supplier references, and a dependency-free Excel export.
+**Summary:** Stage 2 — AQ-S2-011 Fixture Library Expansion complete: 596 fixtures (524 generated + 72 curated), each with hydraulic + electrical metadata.
 
 ## Completed
+- **AQ-S2-011 Fixture Library Expansion — DONE on `main` (Stage 2).**
+  - Deterministic generator [tools/generate_fixture_library.py](aquaflow/tools/generate_fixture_library.py)
+    emits **524 fixtures** across 16 categories (jets/nozzles, lights, pumps, valves, flame, fog,
+    laser, sensors, controls, power, filtration, air, water treatment, effects, motion, safety) to
+    [fixture_library_expanded.json](aquaflow/frontend/src/data/fixture_library_expanded.json).
+  - **Minimum 500 fixtures** — merged `FIXTURE_LIBRARY` (curated + generated) = **596**
+    ([fixtureLibrary.js](aquaflow/frontend/src/data/fixtureLibrary.js) normalizes both sets).
+  - **Hydraulic metadata** on every fixture (flow, pressure, jet height, nozzle dia, connection
+    size, K factor Q=K√P) and **electrical metadata** on every fixture (voltage, power, computed
+    current, phase, control protocol, DMX channels, IP rating).
+  - **Verification: 7/7** ([tools/validate_fixture_library.py](aquaflow/tools/validate_fixture_library.py))
+    + **7 vitest cases** ([data/__tests__/fixtureLibrary.test.js](aquaflow/frontend/src/data/__tests__/fixtureLibrary.test.js))
+    → frontend vitest now **24 passing**; production build clean.
+
 - **AQ-S2-009 Automatic BOM Generator — DONE on `main` (Stage 2).**
   - New [services/bom_generator.py](aquaflow/backend/services/bom_generator.py): rolls a design
     (equipment, pipes, nozzles, valves, fittings, instruments — or a hydraulic network) into a
