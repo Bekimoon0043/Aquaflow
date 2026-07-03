@@ -1,9 +1,26 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 2 — AQ-S2-013 Energy Consumption Modelling complete: kWh, annual operating cost, and peak demand from fixture loads + tariffs.
+**Summary:** Stage 3 opened — AQ-S3-001 AI Show Generator complete: text prompts + mood descriptions → playable show timelines (verified on the real ShowEngine).
 
 ## Completed
+- **AQ-S3-001 AI Show Generator — DONE on `main` (Stage 3).**
+  - New [services/ai_show_generator.py](aquaflow/backend/services/ai_show_generator.py): interprets a
+    natural-language prompt into a `ShowIntent` (mood, energy, tempo, duration, effects, palette,
+    name) and generates a timeline over a mood-shaped energy arc.
+  - **Supports text prompts** — extracts effects (flame/fog/laser/lighting/water incl. negation like
+    "no fire"), explicit BPM/duration, and a show name from free text; deterministic (seeded).
+  - **Supports mood descriptions** — a mood lexicon maps phrases ("serene zen" → calm, "high-energy
+    party" → energetic, "romantic wedding" → romantic, "epic cinematic" → dramatic, mysterious,
+    patriotic); mood sets energy, tempo, palette, and effect emphasis.
+  - **Generates playable timelines** — output is the canonical show payload (`{show, timelineTracks}`)
+    that **loads into a real `ShowEngine` and drives clips during playback** (proven in the harness).
+  - API: `POST /api/ai-show/generate` + `/interpret`, `GET /api/ai-show/moods`
+    ([ai_show_routes.py](aquaflow/backend/api/routes/ai_show_routes.py)), wired in main.py.
+  - **Verification: 22/22** ([validate_ai_show_generator.py](aquaflow/backend/validate_ai_show_generator.py))
+    incl. a real ShowEngine load→play→tick; **7 pytest cases**
+    ([test_ai_show_generator.py](aquaflow/backend/tests/test_ai_show_generator.py)) → backend pytest now **73 passing**.
+
 - **AQ-S2-013 Energy Consumption Modelling — DONE on `main` (Stage 2).**
   - New [services/energy_model.py](aquaflow/backend/services/energy_model.py): builds a load model
     (each load has power, schedule/duty or a 24-h profile) and evaluates it against a tariff.
@@ -189,7 +206,8 @@
 - Chief Architect roadmap preserved in [aquaflow/docs/MASTER_ROADMAP_ChatGPT_v1.0.txt](aquaflow/docs/MASTER_ROADMAP_ChatGPT_v1.0.txt).
 
 ## Next session starts with
-**AQ-S2-002 — Pump curve import & duty-point (Stage 2).** Depends on AQ-S2-001 (done).
+**AQ-S3-003 (next Stage 3 item) or AQ-S2-002 — Pump curve import & duty-point (Stage 2).**
+AQ-S2-002 depends on AQ-S2-001 (done).
 Acceptance: imports manufacturer pump curves · auto-calculates duty point · flags off-curve
 operation. The hydraulic solver's system head (from
 [hydraulic_solver.py](aquaflow/backend/services/hydraulic_solver.py)) provides the system curve
