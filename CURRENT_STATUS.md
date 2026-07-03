@@ -1,12 +1,29 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** AQ-S1-009 complete — automated test harness in place: pytest backend contracts + e2e playback smoke, and vitest frontend resolver + projections.
+**Summary:** Stage 2 opened — AQ-S2-001 Hydraulic Network Solver complete: flow + pressure at every node for branched, looped, and closed-loop-recirculating pipe networks.
 
 ## Completed
+- **AQ-S2-001 Hydraulic Network Solver — DONE on `main` (Stage 2).**
+  - New [services/hydraulic_solver.py](aquaflow/backend/services/hydraulic_solver.py): steady-state
+    pipe-network solver via the **Global Gradient Algorithm** (Todini-Pilati, the EPANET method) —
+    a Newton-Raphson solve of the coupled energy+continuity system on the weighted graph Laplacian,
+    so branched (tree), looped, and closed-loop recirculating topologies are handled uniformly.
+  - Computes **flow at every pipe/node** (mass conserved at every node) and **head/pressure at every
+    node** (reported in m, kPa, bar). Hazen-Williams (default) and Darcy-Weisbach head-loss models,
+    optional minor losses; topology auto-classified (independent loops via circuit rank).
+  - API: `POST /api/hydraulics/solve` ([hydraulics_routes.py](aquaflow/backend/api/routes/hydraulics_routes.py)),
+    wired in [main.py](aquaflow/backend/main.py).
+  - **Verification: 26/26** ([validate_hydraulic_solver.py](aquaflow/backend/validate_hydraulic_solver.py)) —
+    each scenario checked against an independent hand calc + conservation laws (series, branched tree,
+    symmetric loop even-split, asymmetric loop analytic split under Darcy, pump recirculation loop).
+    Also **7 pytest cases** ([test_hydraulic_solver.py](aquaflow/backend/tests/test_hydraulic_solver.py))
+    folded into the suite → backend pytest now **26 passing**.
+
+## Prior (Stage 1)
 - **AQ-S1-009 Automated test harness — DONE on `main`.**
   - **Backend pytest suite** (`backend/tests/`, config [pytest.ini](aquaflow/backend/pytest.ini)) —
-    **19 passing**: schema/runtime contracts (aqua↔canonical round-trip, `RuntimeSession`/
+    schema/runtime contracts (aqua↔canonical round-trip, `RuntimeSession`/
     `RuntimeCommand`), fixture→registry routing + conflict flagging, output-path safety gate,
     and an **end-to-end playback smoke test** ([test_e2e_playback_smoke.py](aquaflow/backend/tests/test_e2e_playback_smoke.py))
     driving the real `ShowEngine` load→play→tick→stop with a capturing bus.
@@ -79,12 +96,14 @@
 - Chief Architect roadmap preserved in [aquaflow/docs/MASTER_ROADMAP_ChatGPT_v1.0.txt](aquaflow/docs/MASTER_ROADMAP_ChatGPT_v1.0.txt).
 
 ## Next session starts with
-**AQ-S1-002 — Automatic DMX address assignment.** Dependencies (AQ-S1-001, AQ-S1-003,
-AQ-S1-005, AQ-S1-007, AQ-S1-009) satisfied. Acceptance criteria: all fixtures get a unique DMX universe/channel ·
-no manual patching required · conflicts flagged automatically. Foundation already exists in
-`fixture_registry_bridge.build_registry_from_fixtures()` (auto-assigns DMX + Modbus and
-returns collision warnings, surfaced by AQ-S1-003; multi-universe output unblocked by
-AQ-S1-005) — this task extends that into the UI + WS surface.
+**AQ-S2-002 — Pump curve import & duty-point (Stage 2).** Depends on AQ-S2-001 (done).
+Acceptance: imports manufacturer pump curves · auto-calculates duty point · flags off-curve
+operation. The hydraulic solver's system head (from
+[hydraulic_solver.py](aquaflow/backend/services/hydraulic_solver.py)) provides the system curve
+to intersect with the pump curve for the duty point.
+
+Also still open in Stage 1: **AQ-S1-002 — Automatic DMX address assignment** (foundation exists in
+`fixture_registry_bridge.build_registry_from_fixtures()`; extends into the UI + WS surface).
 
 ## Standing workflow
 Defined in [CLAUDE.md](CLAUDE.md): update `CURRENT_STATUS.md`, write

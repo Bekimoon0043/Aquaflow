@@ -16,6 +16,7 @@ from api.routes.phase6_routes import phase6_router
 from api.routes.phase7_routes import phase7_router
 from api.routes.phase9_routes import phase9_router
 from api.routes.pattern_routes import router as pattern_router
+from api.routes.hydraulics_routes import router as hydraulics_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -302,6 +303,7 @@ app.include_router(phase6_router,           prefix="/api",           tags=["Phas
 app.include_router(phase7_router,           prefix="/api",           tags=["Phase7"])
 app.include_router(phase9_router,           prefix="/api",           tags=["Phase9"])
 app.include_router(pattern_router,                                tags=["Patterns"])
+app.include_router(hydraulics_router,       prefix="/api/hydraulics", tags=["Hydraulics"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 
