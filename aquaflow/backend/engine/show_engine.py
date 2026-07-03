@@ -59,6 +59,9 @@ class ShowEngine:
         self.fixtures: list = []
         self.groups: list = []
         self.device_registry_summary: dict = {}
+        # Hardware conflict detection (Stage 1, Priority 3): the last operator-facing
+        # error, set when a show is blocked from starting due to address conflicts.
+        self.last_error: str = ""
 
     def _bump_revision(self):
         self._revision += 1
@@ -110,6 +113,7 @@ class ShowEngine:
         self.groups = payload.get("groups", self.groups) or []
         if not self.groups and self.fixtures:
             self.groups = self._derive_groups(self.fixtures)
+        self.last_error = ""  # fresh show — clear any prior conflict block
         self._recording_buffer = []
 
         inferred_duration = max(
@@ -154,15 +158,51 @@ class ShowEngine:
         self.current_show["bpm"] = float(bpm)
         self._bump_revision()
 
+    def get_hardware_conflicts(self) -> list[str]:
+        """
+        Return the list of hardware address conflicts in the designed fixtures —
+        duplicate DMX universe/channel, DMX channel overflow, or duplicate Modbus
+        registers. Empty list means the show is safe to send to hardware.
+
+        Derived from the DeviceRegistry validation the fixture-aware pipeline
+        already computes when a show is applied (device_registry_summary).
+        """
+        summary = self.device_registry_summary or {}
+        conflicts: list[str] = []
+        for msg in (summary.get("validation") or []):
+            if msg and msg not in conflicts:
+                conflicts.append(msg)
+        for w in (summary.get("warnings") or []):
+            wl = str(w).lower()
+            if ("collision" in wl or "overflow" in wl) and w not in conflicts:
+                conflicts.append(w)
+        return conflicts
+
     async def play(self):
         if self.show_state.state == PlaybackState.PLAYING:
-            return
+            return True
+        # ── Pre-flight hardware conflict check (Stage 1, Priority 3) ──────────────
+        # Refuse to start a show whose designed fixtures have duplicate/overflowing
+        # addresses — running it would drive the wrong hardware. The operator sees
+        # a clear error via get_state()/operator status and the WS log.
+        conflicts = self.get_hardware_conflicts()
+        if conflicts:
+            extra = f" (+{len(conflicts) - 5} more)" if len(conflicts) > 5 else ""
+            self.last_error = (
+                "Hardware address conflict — show blocked. "
+                "Resolve duplicate addresses before running: "
+                + "; ".join(conflicts[:5]) + extra
+            )
+            print("[BLOCKED] " + self.last_error)
+            return False
+        self.last_error = ""
         await self._cancel_playback_task()
         self._start_time = time.monotonic()
         self._start_playhead = self.show_state.playhead
         self.show_state.state = PlaybackState.PLAYING
         self._task = asyncio.create_task(self._playback_loop())
         print(f"▶  Playback started at {self.show_state.playhead:.2f}s")
+        return True
 
     async def start_recording(self):
         await self._cancel_playback_task()
@@ -475,6 +515,8 @@ class ShowEngine:
             "show_id": self.current_show.get("id"),
             "show_name": self.current_show.get("name"),
             "revision": self._revision,
+            "hardware_conflicts": self.get_hardware_conflicts(),
+            "error": self.last_error,
         }
 
     def get_snapshot(self) -> dict:

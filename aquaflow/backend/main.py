@@ -69,7 +69,17 @@ async def scheduler_start_show(slot_id: str, show_id: str):
         return
     apply_show_payload(payload)
     await show_engine.seek(0)
-    await show_engine.play()
+    started = await show_engine.play()
+    if not started:
+        # Scheduled show blocked by a hardware address conflict — do not run it.
+        if _get_ws_manager().active:
+            await broadcast_playback_state()
+            await _get_ws_manager().broadcast({
+                "type": "log",
+                "level": "error",
+                "message": f"Scheduled show '{show_id}' blocked — {show_engine.last_error or 'hardware address conflict'}",
+            })
+        return
     if _get_ws_manager().active:
         await broadcast_show_snapshot()
         await broadcast_playback_state()
@@ -367,7 +377,19 @@ async def handle_ws_message(data: dict, ws: WebSocket):
     if msg_type == "playback":
         action = data.get("action")
         if action == "play":
-            await show_engine.play()
+            started = await show_engine.play()
+            if not started and getattr(show_engine, "last_error", ""):
+                # Hardware conflict blocked the show — surface a clear error to the operator.
+                await ws_manager.broadcast({
+                    "type": "log",
+                    "level": "error",
+                    "message": show_engine.last_error,
+                })
+                await ws_manager.broadcast({
+                    "type": "hardware_conflict",
+                    "message": show_engine.last_error,
+                    "conflicts": show_engine.get_hardware_conflicts(),
+                })
         elif action == "stop":
             await show_engine.stop_playback()
         elif action == "pause":

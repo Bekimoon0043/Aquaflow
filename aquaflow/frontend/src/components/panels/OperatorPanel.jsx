@@ -117,6 +117,7 @@ export default function OperatorPanel() {
   const tc = TRANSPORT_COLORS[transport.state] || "#556677";
   const isLive    = safety.state === "LIVE" || transport.state === "PLAYING";
   const isFault   = safety.state === "FAULT" || safety.state === "EMERGENCY_STOP";
+  const hasConflicts = (status?.hardware_conflicts || []).length > 0;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px", overflow:"auto" }}>
@@ -129,6 +130,24 @@ export default function OperatorPanel() {
           {isLive ? "● LIVE" : "○ STANDBY"}
         </span>
       </div>
+
+      {/* Hardware conflict banner — duplicate/overflowing addresses block the show (AQ-S1-003) */}
+      {(status?.hardware_conflicts || []).length > 0 && (
+        <div style={{
+          flexShrink:0, background:"#2a0000", borderBottom:"2px solid #ff3300",
+          padding:"8px 12px", color:"#ff9977",
+        }}>
+          <div style={{ color:"#ff4422", fontWeight:"bold", fontSize:12, marginBottom:4 }}>
+            ⛔ HARDWARE ADDRESS CONFLICT — SHOW BLOCKED
+          </div>
+          <div style={{ color:"#ffbb99", fontSize:10, marginBottom:4 }}>
+            Resolve these duplicate addresses before the show can run:
+          </div>
+          {status.hardware_conflicts.map((c, i) => (
+            <div key={i} style={{ color:"#ff7755", fontSize:10, padding:"1px 0" }}>• {c}</div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display:"flex", gap:8, padding:8, flex:1, minHeight:0, overflow:"auto", flexWrap:"wrap" }}>
 
@@ -178,7 +197,12 @@ export default function OperatorPanel() {
             {transport.state === "IDLE" ? "↓ LOAD SHOW FIRST" : `✓ LOADED: ${transport.show_id || "—"}`}
           </button>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
-            <button onClick={()=>act("/transport/play","PLAY")}  style={btnStyle("#00ff88")}>▶ PLAY</button>
+            <button
+              onClick={()=>act("/transport/play","PLAY")}
+              disabled={hasConflicts}
+              title={hasConflicts ? "Blocked: resolve hardware address conflicts first" : "Start playback"}
+              style={{ ...btnStyle(hasConflicts ? "#663322" : "#00ff88"), cursor: hasConflicts ? "not-allowed" : "pointer", opacity: hasConflicts ? 0.5 : 1 }}
+            >▶ PLAY</button>
             <button onClick={()=>act("/transport/pause","PAUSE")} style={btnStyle("#ffcc00")}>⏸ PAUSE</button>
             <button onClick={()=>act("/transport/stop","STOP")}  style={btnStyle("#ff6644")}>⏹ STOP</button>
             <button onClick={()=>act("/transport/recover","RECOVER")} style={btnStyle("#00aaff")}>↩ RECOVER</button>

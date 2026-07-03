@@ -181,6 +181,9 @@ async def get_operator_status():
             "protocols": protocol_bus.get_status(),
             "diagnostics": diag.get_summary(),
             "recent_faults": diag.get_events(limit=5, level="error"),
+            # Hardware conflict detection (Stage 1, Priority 3): duplicate/overflowing
+            # fixture addresses that block the show from running. Empty = safe to run.
+            "hardware_conflicts": show_engine.get_hardware_conflicts(),
         }
     except Exception as e:
         raise HTTPException(500, detail=str(e))
