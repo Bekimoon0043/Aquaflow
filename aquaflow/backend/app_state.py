@@ -51,6 +51,32 @@ def apply_show_payload(payload: dict) -> dict:
         show_engine.device_registry_summary = summary
         if hasattr(protocol_bus, "configure_from_fixtures"):
             protocol_bus.configure_from_fixtures(registry)
+
+        # Safety limits in the output path (Stage 1, Priority 7): carry any
+        # per-fixture max intensity ceiling from the designed fixtures into the
+        # protocol bus so it is clamped on every emit.
+        if hasattr(protocol_bus, "set_fixture_limits"):
+            limits = {}
+            for fx in (show_engine.fixtures or []):
+                if not isinstance(fx, dict):
+                    continue
+                fid = fx.get("id") or fx.get("fixtureId")
+                if not fid:
+                    continue
+                eng = fx.get("engineering") or {}
+                cap = fx.get("maxIntensity", fx.get("max_intensity", eng.get("maxIntensity")))
+                if cap is None:
+                    continue
+                try:
+                    cap = float(cap)
+                except (TypeError, ValueError):
+                    continue
+                # Accept either a 0..1 fraction or a 0..100 percentage.
+                if cap > 1.0:
+                    cap = cap / 100.0
+                limits[str(fid)] = max(0.0, min(1.0, cap))
+            if limits:
+                protocol_bus.set_fixture_limits(limits)
     except Exception as exc:  # pragma: no cover - defensive
         show_engine.device_registry_summary = {"error": str(exc), "device_count": 0}
 

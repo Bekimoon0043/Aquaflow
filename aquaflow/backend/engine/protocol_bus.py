@@ -6,6 +6,7 @@ Supports: DMX512, Art-Net, sACN, Modbus TCP, MQTT, OPC UA, BACnet
 import asyncio
 import struct
 import socket
+import time
 from abc import ABC, abstractmethod
 from typing import Optional
 import logging
@@ -247,6 +248,11 @@ class ProtocolBus:
     """
     SUPPORTED = ["dmx", "artnet", "sacn", "modbus", "mqtt", "opcua", "bacnet"]
 
+    # Flame safety defaults (Stage 1, Priority 7). The hardware-level flame cutoff
+    # is the last line of defence regardless of what the show timeline requests.
+    FLAME_MAX_DURATION = 3.0     # max continuous on-time (seconds)
+    FLAME_GAP_RESET    = 0.5     # a command gap this long ends the current burst
+
     def __init__(self):
         self._drivers: dict[str, ProtocolDriver] = {}
         self._device_map: dict[str, str] = {}  # device_id → driver_key
@@ -257,6 +263,133 @@ class ProtocolBus:
         self._fixture_registers: dict[str, dict] = {}
         self._fixtures_loaded = False
         self._running = False
+
+        # ── Safety limits in the output path (Stage 1, Priority 7) ────────────
+        # Optional safety-kernel reference. When set, the master permit and the
+        # per-subsystem enables gate every hardware emit.
+        self._safety_kernel = None
+        # Per-fixture max intensity ceilings (device_id → 0..1). Absent = no cap.
+        self._fixture_limits: dict[str, float] = {}
+        # Global intensity ceiling applied on top of every fixture.
+        self._global_intensity_cap: float = 1.0
+        # Flame hardware-level duration enforcement.
+        self._flame_max_duration: float = self.FLAME_MAX_DURATION
+        self._flame_on_since: dict[str, float] = {}   # device_id → burst start (monotonic)
+        self._flame_last_cmd: dict[str, float] = {}   # device_id → last flame command time
+        self._flame_lockout: set = set()              # device_ids latched off after cutoff
+
+    # ── Safety-limit configuration API ────────────────────────────────────────
+    def set_safety_kernel(self, kernel) -> None:
+        """Attach the safety kernel so its permit/enables gate all output."""
+        self._safety_kernel = kernel
+        logger.info("Protocol bus: safety kernel attached to output path")
+
+    def set_fixture_limit(self, device_id: str, max_intensity: float) -> None:
+        """Set a per-fixture max intensity ceiling (0..1)."""
+        self._fixture_limits[str(device_id)] = max(0.0, min(1.0, float(max_intensity)))
+
+    def set_fixture_limits(self, limits: dict) -> None:
+        for k, v in (limits or {}).items():
+            try:
+                self.set_fixture_limit(k, v)
+            except (TypeError, ValueError):
+                continue
+
+    def set_global_intensity_cap(self, cap: float) -> None:
+        self._global_intensity_cap = max(0.0, min(1.0, float(cap)))
+
+    def configure_flame_limit(self, max_duration_s: float) -> None:
+        self._flame_max_duration = max(0.0, float(max_duration_s))
+
+    # ── The output-path safety gate ───────────────────────────────────────────
+    def _safety_gate(self, device_id, device_type: str, intensity) -> float:
+        """
+        Final safety gate applied to every command before it reaches hardware.
+
+        Returns the effective intensity to emit (0..1):
+          1. clamps to [0,1] and applies per-fixture + global intensity ceilings,
+          2. honours the safety kernel master permit + per-subsystem enables,
+          3. enforces the flame hardware-level maximum on-time.
+        """
+        try:
+            eff = float(intensity)
+        except (TypeError, ValueError):
+            eff = 0.0
+        eff = max(0.0, min(1.0, eff))
+
+        # 1) Per-fixture and global intensity ceilings.
+        cap = self._fixture_limits.get(str(device_id), 1.0)
+        eff = min(eff, cap, self._global_intensity_cap)
+
+        # 2) Safety kernel permit + per-subsystem enable.
+        kernel = self._safety_kernel
+        if kernel is not None:
+            try:
+                out = kernel.outputs
+                if not out.permit:
+                    eff = 0.0
+                else:
+                    enable = {
+                        "pump":     out.pump_enable,
+                        "valve":    out.valve_enable,
+                        "flame":    out.flame_enable,
+                        "laser":    out.laser_enable,
+                        "fog":      out.fog_enable,
+                        "lighting": out.lighting_enable,
+                    }.get(device_type, True)
+                    if not enable:
+                        eff = 0.0
+            except Exception:
+                # Kernel unreadable → fail safe for the risky subsystems.
+                if device_type in ("flame", "laser", "pump", "valve"):
+                    eff = 0.0
+
+        # 3) Flame hardware-level duration cutoff.
+        if device_type == "flame":
+            eff = self._enforce_flame_duration(device_id, eff)
+
+        return eff
+
+    def _enforce_flame_duration(self, device_id, eff: float) -> float:
+        """
+        Cut a flame off once it has been continuously on beyond the hard limit,
+        and latch it off until the show actually drops it to zero (or a command
+        gap ends the burst). This is independent of the safety kernel so it holds
+        even if no kernel is attached.
+        """
+        now = time.monotonic()
+        did = str(device_id)
+
+        last = self._flame_last_cmd.get(did)
+        self._flame_last_cmd[did] = now
+        # A gap in commands means the previous burst ended — reset burst state.
+        if last is not None and (now - last) > self.FLAME_GAP_RESET:
+            self._flame_on_since.pop(did, None)
+            self._flame_lockout.discard(did)
+
+        if eff <= 0.0:
+            self._flame_on_since.pop(did, None)
+            self._flame_lockout.discard(did)
+            return 0.0
+
+        if did in self._flame_lockout:
+            return 0.0
+
+        started = self._flame_on_since.get(did)
+        if started is None:
+            self._flame_on_since[did] = now
+            return eff
+
+        if (now - started) >= self._flame_max_duration:
+            self._flame_lockout.add(did)
+            self._flame_on_since.pop(did, None)
+            logger.warning(
+                f"Flame {did} cut off — exceeded {self._flame_max_duration:.1f}s "
+                f"hardware duration limit"
+            )
+            return 0.0
+
+        return eff
 
     async def start(self):
         self._running = True
@@ -402,7 +535,10 @@ class ProtocolBus:
     async def _route_command(self, cmd: dict):
         device_id   = cmd.get("device_id")
         device_type = self._normalize_device_type(cmd.get("type"))
-        intensity   = float(cmd.get("intensity", 0.0))
+        # Safety gate: clamp per-fixture/global intensity, honour the safety
+        # kernel permit + enables, and enforce the flame duration cutoff — the
+        # single choke point every hardware emit passes through.
+        intensity   = self._safety_gate(device_id, device_type, cmd.get("intensity", 0.0))
 
         # ── Modbus (pumps, valves, flame) ─────────────────────────────────────
         if device_type in ("pump", "valve", "flame", "flame_units"):

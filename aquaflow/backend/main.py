@@ -136,6 +136,11 @@ async def lifespan(app: FastAPI):
     safety.on_state_change(_on_safety_change)
     await safety.start()
 
+    # Wire the safety kernel into the protocol bus so its master permit and
+    # per-subsystem enables gate every hardware emit (Stage 1, Priority 7).
+    if hasattr(protocol_bus, "set_safety_kernel"):
+        protocol_bus.set_safety_kernel(safety)
+
     # ── Phase 7: Wire diagnostics to safety kernel ────────────────────────────
     diag = get_diagnostics()
     def _on_safety_change_diag(old, new):

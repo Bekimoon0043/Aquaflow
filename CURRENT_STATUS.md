@@ -1,9 +1,24 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** AQ-S1-005 complete — Art-Net now drives far more than 4 universes and real audio files drive beat markers via the librosa/numpy path.
+**Summary:** AQ-S1-007 complete — every hardware emit now passes a safety gate that clamps per-fixture intensity, enforces the flame duration cutoff, and honours the live safety kernel.
 
 ## Completed
+- **AQ-S1-007 Safety limits in output path — DONE on `main`.**
+  - `ProtocolBus._route_command` now routes every command through `_safety_gate()`,
+    the single choke point before hardware emit
+    ([protocol_bus.py](aquaflow/backend/engine/protocol_bus.py)).
+  - **Per-fixture intensity clamped:** per-fixture ceilings (`set_fixture_limit`) plus a
+    global cap are applied and clamped to [0,1]; caps are carried from designed fixtures'
+    `maxIntensity` in `apply_show_payload` ([app_state.py](aquaflow/backend/app_state.py)).
+  - **Flame duration enforced at hardware level:** `_enforce_flame_duration` cuts a flame
+    off after `FLAME_MAX_DURATION` (3 s) of continuous on-time and latches it off until the
+    show drops it to zero / a command gap ends the burst — independent of the safety kernel.
+  - **Safety kernel active during all output:** the bus is wired to the kernel at startup
+    ([main.py](aquaflow/backend/main.py)); no master permit → all output zeroed, and each
+    per-subsystem enable (pump/valve/flame/laser/fog/lighting) gates its emits.
+  - **Validation harness: 15 / 15 PASS** ([validate_safety_output_limits.py](aquaflow/backend/validate_safety_output_limits.py)).
+
 - **AQ-S1-005 Multi-universe + audio end-to-end — DONE on `main`.**
   - Art-Net `ArtNetDriver` no longer wraps universes at `% 4`; buffers are allocated
     on demand across the full 15-bit space (0–32767), with out-of-range frames rejected
@@ -52,7 +67,7 @@
 
 ## Next session starts with
 **AQ-S1-002 — Automatic DMX address assignment.** Dependencies (AQ-S1-001, AQ-S1-003,
-AQ-S1-005) satisfied. Acceptance criteria: all fixtures get a unique DMX universe/channel ·
+AQ-S1-005, AQ-S1-007) satisfied. Acceptance criteria: all fixtures get a unique DMX universe/channel ·
 no manual patching required · conflicts flagged automatically. Foundation already exists in
 `fixture_registry_bridge.build_registry_from_fixtures()` (auto-assigns DMX + Modbus and
 returns collision warnings, surfaced by AQ-S1-003; multi-universe output unblocked by
