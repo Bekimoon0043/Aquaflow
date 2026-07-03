@@ -1,9 +1,25 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 2 — AQ-S2-005 Nozzle Performance Database complete: stores K factors, sqrt(P)-domain pressure-flow interpolation, and loadable manufacturer catalogs.
+**Summary:** Stage 2 — AQ-S2-007 Automatic P&ID Generator complete: auto ISA-5.1 symbols, printable SVG/HTML output, and revision tracking.
 
 ## Completed
+- **AQ-S2-007 Automatic P&ID Generator — DONE on `main` (Stage 2).**
+  - New [services/pid_generator.py](aquaflow/backend/services/pid_generator.py): builds a printable
+    P&ID from an equipment model or straight from a hydraulic network.
+  - **Generates ISA symbols automatically** — each equipment/instrument type maps to a standard
+    ISA-5.1 symbol (centrifugal pump, valve bow-tie, vessel/reservoir, nozzle, instrument balloons
+    PT/FT/LT/…) with no manual drawing; type aliases normalized automatically.
+  - **Produces printable output** — well-formed **SVG** (validated as XML) with drawing border +
+    title block, plus a **print-ready HTML** wrapper (`@page` A3, `@media print`, `window.print()`).
+  - **Supports revision tracking** — auto-incrementing revisions (0,1,2 or A,B,C), a revision-history
+    table, and the current revision stamped into the title block.
+  - API: `POST /api/pid/generate` and `/from-network` (`?format=json|svg|html`)
+    ([pid_routes.py](aquaflow/backend/api/routes/pid_routes.py)), wired in main.py.
+  - **Verification: 25/25** ([validate_pid_generator.py](aquaflow/backend/validate_pid_generator.py))
+    (XML-parsed structure checks); **7 pytest cases**
+    ([test_pid_generator.py](aquaflow/backend/tests/test_pid_generator.py)) → backend pytest now **50 passing**.
+
 - **AQ-S2-005 Nozzle Performance Database — DONE on `main` (Stage 2).**
   - New [services/nozzle_database.py](aquaflow/backend/services/nozzle_database.py): nozzle models
     keyed by manufacturer catalog, built on the orifice law **Q = K·√P**.
