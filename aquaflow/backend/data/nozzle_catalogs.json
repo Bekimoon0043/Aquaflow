@@ -1,0 +1,65 @@
+{
+  "catalogs": [
+    {
+      "manufacturer": "AquaFlow Standard",
+      "nozzles": [
+        {
+          "id": "AF-GEYSER-25",
+          "model": "Geyser 25",
+          "nozzle_type": "jet",
+          "orifice_mm": 25,
+          "k_factor": 42.0,
+          "notes": "Foaming geyser jet. Q[L/min] = 42*sqrt(P[bar])."
+        },
+        {
+          "id": "AF-CROWN-15",
+          "model": "Crown Ring 15",
+          "nozzle_type": "ring",
+          "orifice_mm": 15,
+          "k_factor": 18.5,
+          "notes": "Crown/ring cluster nozzle."
+        },
+        {
+          "id": "AF-LAMINAR-20",
+          "model": "Laminar 20",
+          "nozzle_type": "jet",
+          "orifice_mm": 20,
+          "k_factor": 28.0,
+          "notes": "Glass-clear laminar jet."
+        }
+      ]
+    },
+    {
+      "manufacturer": "OASE",
+      "nozzles": [
+        {
+          "id": "OASE-FOAM-30",
+          "model": "Foam Jet 30",
+          "nozzle_type": "foam",
+          "orifice_mm": 30,
+          "pressure_flow_points": [
+            {"pressure": 0.5, "flow": 45.0,  "jet_height": 1.2},
+            {"pressure": 1.0, "flow": 64.0,  "jet_height": 2.1},
+            {"pressure": 2.0, "flow": 90.0,  "jet_height": 3.6},
+            {"pressure": 3.0, "flow": 110.0, "jet_height": 4.8},
+            {"pressure": 4.0, "flow": 127.0, "jet_height": 5.7}
+          ],
+          "notes": "Tabulated manufacturer pressure-flow-height curve."
+        },
+        {
+          "id": "OASE-FAN-40",
+          "model": "Fan Spray 40",
+          "nozzle_type": "fan",
+          "orifice_mm": 40,
+          "pressure_flow_points": [
+            {"pressure": 0.5, "flow": 70.0,  "jet_height": 0.8},
+            {"pressure": 1.0, "flow": 99.0,  "jet_height": 1.4},
+            {"pressure": 2.0, "flow": 140.0, "jet_height": 2.3},
+            {"pressure": 3.0, "flow": 171.0, "jet_height": 3.0}
+          ],
+          "notes": "Wide fan spray, height is low by design."
+        }
+      ]
+    }
+  ]
+}
