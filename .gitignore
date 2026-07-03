@@ -5,6 +5,15 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Virtual environments
+.venv/
+venv/
+
+# Test caches / coverage
+.pytest_cache/
+.vitest/
+coverage/
+
 # Environment files
 .env
 .env.local

@@ -1,9 +1,22 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** AQ-S1-007 complete — every hardware emit now passes a safety gate that clamps per-fixture intensity, enforces the flame duration cutoff, and honours the live safety kernel.
+**Summary:** AQ-S1-009 complete — automated test harness in place: pytest backend contracts + e2e playback smoke, and vitest frontend resolver + projections.
 
 ## Completed
+- **AQ-S1-009 Automated test harness — DONE on `main`.**
+  - **Backend pytest suite** (`backend/tests/`, config [pytest.ini](aquaflow/backend/pytest.ini)) —
+    **19 passing**: schema/runtime contracts (aqua↔canonical round-trip, `RuntimeSession`/
+    `RuntimeCommand`), fixture→registry routing + conflict flagging, output-path safety gate,
+    and an **end-to-end playback smoke test** ([test_e2e_playback_smoke.py](aquaflow/backend/tests/test_e2e_playback_smoke.py))
+    driving the real `ShowEngine` load→play→tick→stop with a capturing bus.
+  - **Frontend vitest suite** (`src/utils/__tests__/`, config [vitest.config.js](aquaflow/frontend/vitest.config.js)) —
+    **17 passing**: the fixture-type **resolver** and the runtime-signal **projection**
+    (`deriveRuntimeSignals`).
+  - Test deps added to [requirements.txt](aquaflow/backend/requirements.txt) (pytest, httpx) and
+    `package.json` (vitest); `.venv`/`.pytest_cache`/coverage gitignored; how-to in
+    [TESTING.md](aquaflow/TESTING.md).
+
 - **AQ-S1-007 Safety limits in output path — DONE on `main`.**
   - `ProtocolBus._route_command` now routes every command through `_safety_gate()`,
     the single choke point before hardware emit
@@ -67,7 +80,7 @@
 
 ## Next session starts with
 **AQ-S1-002 — Automatic DMX address assignment.** Dependencies (AQ-S1-001, AQ-S1-003,
-AQ-S1-005, AQ-S1-007) satisfied. Acceptance criteria: all fixtures get a unique DMX universe/channel ·
+AQ-S1-005, AQ-S1-007, AQ-S1-009) satisfied. Acceptance criteria: all fixtures get a unique DMX universe/channel ·
 no manual patching required · conflicts flagged automatically. Foundation already exists in
 `fixture_registry_bridge.build_registry_from_fixtures()` (auto-assigns DMX + Modbus and
 returns collision warnings, surfaced by AQ-S1-003; multi-universe output unblocked by
