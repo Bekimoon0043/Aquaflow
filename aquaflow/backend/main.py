@@ -20,6 +20,7 @@ from api.routes.hydraulics_routes import router as hydraulics_router
 from api.routes.nozzles_routes import router as nozzles_router
 from api.routes.pid_routes import router as pid_router
 from api.routes.bom_routes import router as bom_router
+from api.routes.energy_routes import router as energy_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -310,6 +311,7 @@ app.include_router(hydraulics_router,       prefix="/api/hydraulics", tags=["Hyd
 app.include_router(nozzles_router,          prefix="/api/nozzles",    tags=["Nozzles"])
 app.include_router(pid_router,              prefix="/api/pid",        tags=["P&ID"])
 app.include_router(bom_router,              prefix="/api/bom",        tags=["BOM"])
+app.include_router(energy_router,           prefix="/api/energy",     tags=["Energy"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 

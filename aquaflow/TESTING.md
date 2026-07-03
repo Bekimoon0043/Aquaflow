@@ -23,6 +23,7 @@ Config: [backend/pytest.ini](backend/pytest.ini). Tests live in `backend/tests/`
 | `test_nozzle_database.py` | Nozzle performance database (AQ-S2-005) — stores/derives K factors, sqrt(P)-domain pressure-flow interpolation with forward/inverse round-trip, manufacturer catalog loading + query. |
 | `test_pid_generator.py` | Automatic P&ID generator (AQ-S2-007) — auto-selects ISA-5.1 symbols by type, well-formed printable SVG + print-ready HTML, revision tracking, generate-from-network. |
 | `test_bom_generator.py` | Automatic BOM generator (AQ-S2-009) — auto-aggregated quantities, catalog supplier references + cost roll-up, `.xlsx` export validated by round-trip through openpyxl. |
+| `test_energy_model.py` | Energy consumption model (AQ-S2-013) — kWh (daily/annual, duty cycle, hourly profiles), annual operating cost (energy + demand + standing + CO2), peak demand (coincident sum vs non-coincident max), fixture-driven loads. |
 
 Standalone `validate_*.py` scripts in `backend/` remain as scenario harnesses; pytest is the canonical suite.
 

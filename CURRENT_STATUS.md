@@ -1,9 +1,26 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 2 — AQ-S2-011 Fixture Library Expansion complete: 596 fixtures (524 generated + 72 curated), each with hydraulic + electrical metadata.
+**Summary:** Stage 2 — AQ-S2-013 Energy Consumption Modelling complete: kWh, annual operating cost, and peak demand from fixture loads + tariffs.
 
 ## Completed
+- **AQ-S2-013 Energy Consumption Modelling — DONE on `main` (Stage 2).**
+  - New [services/energy_model.py](aquaflow/backend/services/energy_model.py): builds a load model
+    (each load has power, schedule/duty or a 24-h profile) and evaluates it against a tariff.
+  - **kWh calculated** — per-load and total daily/monthly/annual energy (`E = P·hours·duty`, or
+    `P·Σprofile`).
+  - **Annual operating cost generated** — energy charge + demand charge (peak·$/kW/mo·12) +
+    standing charge, plus annual CO₂.
+  - **Peak demand calculated** — maximum *coincident* load across the 24-h day: overlapping loads
+    sum, non-coincident profiles take the max (not the sum); optional simultaneity factor. Also
+    reports connected load, load factor, diversity factor.
+  - Pulls loads straight from fixture `electrical.powerW` (AQ-S2-011) via `model_from_fixtures`.
+    API: `POST /api/energy/model` and `/from-fixtures`
+    ([energy_routes.py](aquaflow/backend/api/routes/energy_routes.py)), wired in main.py.
+  - **Verification: 17/17** ([validate_energy_model.py](aquaflow/backend/validate_energy_model.py))
+    against independent hand-calcs; **8 pytest cases**
+    ([test_energy_model.py](aquaflow/backend/tests/test_energy_model.py)) → backend pytest now **66 passing**.
+
 - **AQ-S2-011 Fixture Library Expansion — DONE on `main` (Stage 2).**
   - Deterministic generator [tools/generate_fixture_library.py](aquaflow/tools/generate_fixture_library.py)
     emits **524 fixtures** across 16 categories (jets/nozzles, lights, pumps, valves, flame, fog,
