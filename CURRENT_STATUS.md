@@ -1,9 +1,23 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 2 opened — AQ-S2-001 Hydraulic Network Solver complete: flow + pressure at every node for branched, looped, and closed-loop-recirculating pipe networks.
+**Summary:** Stage 2 — AQ-S2-003 Pipe Sizing Engine complete (on top of AQ-S2-001 Hydraulic Solver): suggests optimal diameters and flags undersized/oversized pipes.
 
 ## Completed
+- **AQ-S2-003 Pipe Sizing Engine — DONE on `main` (Stage 2).**
+  - New [services/pipe_sizing.py](aquaflow/backend/services/pipe_sizing.py): velocity-based sizing
+    (`v = Q/A`) against a configurable [v_min, v_max, v_target] band and a standard DN catalog.
+  - **Suggests optimal diameter** — rounds the target-velocity diameter up to the next standard
+    size (velocity lands at/just below v_target, with head-loss margin).
+  - **Detects undersized** (v > v_max) and **oversized** (v < v_min) pipes, each with a suggested
+    replacement size and a clear message; limits fully configurable.
+  - Integrates with the hydraulic solver: `size_network()` solves for flows (AQ-S2-001) then sizes
+    every pipe. API: `POST /api/hydraulics/size` and `/size-network`
+    ([hydraulics_routes.py](aquaflow/backend/api/routes/hydraulics_routes.py)).
+  - **Verification: 18/18** ([validate_pipe_sizing.py](aquaflow/backend/validate_pipe_sizing.py))
+    against independent velocity hand-calcs; **8 pytest cases**
+    ([test_pipe_sizing.py](aquaflow/backend/tests/test_pipe_sizing.py)) → backend pytest now **34 passing**.
+
 - **AQ-S2-001 Hydraulic Network Solver — DONE on `main` (Stage 2).**
   - New [services/hydraulic_solver.py](aquaflow/backend/services/hydraulic_solver.py): steady-state
     pipe-network solver via the **Global Gradient Algorithm** (Todini-Pilati, the EPANET method) —
@@ -100,7 +114,8 @@
 Acceptance: imports manufacturer pump curves · auto-calculates duty point · flags off-curve
 operation. The hydraulic solver's system head (from
 [hydraulic_solver.py](aquaflow/backend/services/hydraulic_solver.py)) provides the system curve
-to intersect with the pump curve for the duty point.
+to intersect with the pump curve for the duty point. The pipe sizing engine (AQ-S2-003) is now
+available to size the network the pump feeds.
 
 Also still open in Stage 1: **AQ-S1-002 — Automatic DMX address assignment** (foundation exists in
 `fixture_registry_bridge.build_registry_from_fixtures()`; extends into the UI + WS surface).
