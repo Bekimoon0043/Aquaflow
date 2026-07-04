@@ -1,9 +1,30 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 4 — AQ-S4-003 Usage Analytics Engine complete: privacy-first anonymous usage collection, feature statistics, and adoption metrics; the UI tracks feature usage anonymously (consent-gated).
+**Summary:** Stage 4 — AQ-S4-004 Online License Portal complete: multi-seat license accounts with online activation, license transfer between machines, and seat management, built on the signed-license engine.
 
 ## Completed
+- **AQ-S4-004 Online License Portal — DONE on `main` (Stage 4).**
+  - New backend [services/license_portal.py](aquaflow/backend/services/license_portal.py) — server-side
+    multi-seat license accounts on top of the existing license engine.
+  - **Online activation supported** — `activate(key, fingerprint)` binds a machine to a free seat and
+    issues a **signed, fingerprint-bound license** (via `create_license`) that validates on that machine
+    and is rejected elsewhere; re-activating the same machine is idempotent; activation is rejected once
+    all seats are used.
+  - **License transfer supported** — `transfer(key, from_fp, to_fp)` frees the source machine's seat,
+    binds the destination, issues it a fresh license, and records the transfer history; transfer from an
+    inactive or identical machine is rejected.
+  - **Seat management supported** — `seats()` lists usage + active machines; `deactivate()` frees a seat;
+    `add_seats()`/`set_seats()` grow/shrink the pool (never below the active-seat count). Accounts persist
+    as one JSON file each.
+  - API: `POST /api/portal/accounts|activate|deactivate|transfer|seats`, `GET /api/portal/accounts/{key}|seats/{key}`
+    ([portal_routes.py](aquaflow/backend/api/routes/portal_routes.py)), wired in main.py.
+  - **Verification: 21/21** ([validate_license_portal.py](aquaflow/backend/validate_license_portal.py))
+    + **13 pytest cases** ([test_license_portal.py](aquaflow/backend/tests/test_license_portal.py)) →
+    backend pytest **329 passing** (was 316); the API was exercised end-to-end via TestClient (activate,
+    seat-limit 409, transfer, seat management). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-S4-003 Usage Analytics Engine — DONE on `main` (Stage 4).**
   - New backend [services/analytics_engine.py](aquaflow/backend/services/analytics_engine.py).
   - **Anonymous usage collected** — `track()` one-way hashes the session id and sanitises properties
