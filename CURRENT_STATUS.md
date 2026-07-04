@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-004 Cue Stack and Scene Recall complete: a pure, clock-injectable cue engine with exact scene recall, smooth crossfades, and multiple independent cue stacks.
+**Summary:** Recovery — AQ-X-005 Fault Alerting and Maintenance Log complete: an authoritative fault-alert engine with a persistent (disk-backed) maintenance log and time/recurrence-based escalation.
 
 ## Completed
+- **AQ-X-005 Fault Alerting and Maintenance Log (recovery) — DONE on `main`.**
+  - New [services/fault_alerting.py](aquaflow/backend/services/fault_alerting.py): the authoritative,
+    stateful fault-alert engine on top of the mobile monitor's alert *derivation*.
+  - **Fault alerts trigger correctly** — `raise_fault`/`clear_fault`/`acknowledge` manage a
+    de-duplicated store (re-raises count occurrences and bump severity; a cleared alert reopens), and
+    `ingest_status` folds the live safety-kernel conditions (via the shared `evaluate_alerts`) so real
+    faults raise alerts and resolved conditions clear.
+  - **Maintenance log persists** — a `MaintenanceLog` appends every raise/recur/acknowledge/clear/
+    escalation plus explicit maintenance actions (component, performed-by, downtime, notes) to a JSON
+    file on disk that reloads on startup, so the history survives a restart.
+  - **Alert escalation** — an unacknowledged alert escalates through tiers over time
+    (operator → supervisor after 60 s → on-call after 300 s, which forces critical), and a persistently
+    recurring fault escalates on occurrence count; acknowledging freezes escalation. Escalation events
+    are logged. Clock-injectable (`now` passed in) so escalation is deterministic.
+  - API: `GET /api/faults/alerts|summary|maintenance-log`, `POST /api/faults/raise|ingest|
+    maintenance-log`, `POST /api/faults/{code}/acknowledge|clear`
+    ([fault_routes.py](aquaflow/backend/api/routes/fault_routes.py)), wired in main.py.
+  - **Verification: 20/20** ([validate_fault_alerting.py](aquaflow/backend/validate_fault_alerting.py));
+    **11 pytest cases** ([test_fault_alerting.py](aquaflow/backend/tests/test_fault_alerting.py)) →
+    backend pytest now **169 passing** (was 158). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-004 Cue Stack and Scene Recall (recovery) — DONE on `main`.**
   - New [services/cue_engine.py](aquaflow/backend/services/cue_engine.py): the theatrical playback
     model on top of the timeline — `Scene` (a named snapshot of per-target levels), `Cue` (a numbered

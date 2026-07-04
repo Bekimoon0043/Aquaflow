@@ -47,3 +47,6 @@ frontend_bundle.txt
 **/license/active_license.json
 **/license/license_generator_BETA.py
 licenses/
+
+# AQ-X-005 runtime fault/maintenance log (generated at runtime)
+aquaflow/backend/data/maintenance_log.json
