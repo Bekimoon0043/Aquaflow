@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-007 Valve Authority Engine complete: correct control-valve authority, installed-characteristic distortion, flow-control recommendations, and verified integration with the hydraulic solver.
+**Summary:** Recovery — AQ-X-008 Equipment Dependency Graph complete: dependency graph generated from system data, an SVG visualization panel wired into the UI, and dependency conflicts flagged. First recovery task with frontend changes (npm run build passes).
 
 ## Completed
+- **AQ-X-008 Equipment Dependency Graph (recovery) — DONE on `main`.**
+  - **Dependency graph generated from system data** — new
+    [services/dependency_graph.py](aquaflow/backend/services/dependency_graph.py) and the mirrored
+    frontend [dependency/dependencyGraph.js](aquaflow/frontend/src/dependency/dependencyGraph.js) turn
+    designed fixtures into a directed graph: fixture / control-group / PLC-host / DMX-universe nodes,
+    with `member_of`, `controlled_by` and explicit `depends_on` edges; nodes carry a `layer` for layout.
+  - **Visual representation in UI** — new
+    [DependencyGraphPanel.jsx](aquaflow/frontend/src/components/panels/DependencyGraphPanel.jsx) renders
+    the graph as an SVG (nodes coloured by kind, edges by relationship, conflicts highlighted red) with
+    a legend + conflict list, wired into `App.jsx` and the TopBar (Devices → Dependencies).
+  - **Dependency conflicts flagged** — duplicate DMX/Modbus addresses (critical), dangling
+    dependencies, circular dependencies (DFS, no false positives on a DAG), single points of failure
+    (one controller ≥ N devices, warning), and orphaned equipment; a clean design flags nothing.
+  - API: `POST /api/dependencies/graph`
+    ([dependency_routes.py](aquaflow/backend/api/routes/dependency_routes.py)), wired in main.py.
+  - **Verification: backend 17/17** ([validate_dependency_graph.py](aquaflow/backend/validate_dependency_graph.py))
+    + **13 pytest cases** ([test_dependency_graph.py](aquaflow/backend/tests/test_dependency_graph.py)) →
+    backend pytest **218 passing** (was 205); **14 vitest cases**
+    ([dependencyGraph.test.js](aquaflow/frontend/src/dependency/__tests__/dependencyGraph.test.js)) →
+    frontend vitest **88 passing** (was 74); **`npm run build` succeeds**.
+
+
 - **AQ-X-007 Valve Authority Engine (recovery) — DONE on `main`.**
   - New [services/valve_authority.py](aquaflow/backend/services/valve_authority.py): control-valve
     authority for modulating flow control.

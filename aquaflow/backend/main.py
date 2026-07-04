@@ -33,6 +33,7 @@ from api.routes.cue_routes import router as cue_router
 from api.routes.fault_routes import router as fault_router
 from api.routes.pump_routes import router as pump_router
 from api.routes.valve_routes import router as valve_router
+from api.routes.dependency_routes import router as dependency_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -336,6 +337,7 @@ app.include_router(cue_router,              prefix="/api/cues",       tags=["Cue
 app.include_router(fault_router,            prefix="/api/faults",     tags=["Faults"])
 app.include_router(pump_router,             prefix="/api/pumps",      tags=["Pumps"])
 app.include_router(valve_router,            prefix="/api/valves",     tags=["Valves"])
+app.include_router(dependency_router,       prefix="/api/dependencies", tags=["Dependencies"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 

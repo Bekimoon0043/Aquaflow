@@ -17,6 +17,7 @@ import SchedulerPanel from "./components/panels/SchedulerPanel";
 import SafetyMonitorPanel from "./components/panels/SafetyMonitorPanel";
 import OperatorPanel from "./components/panels/OperatorPanel";
 import DiagnosticsPanel from "./components/panels/DiagnosticsPanel";
+import DependencyGraphPanel from "./components/panels/DependencyGraphPanel";
 import CompilePanel from "./components/panels/CompilePanel";
 import PresetBrowser from "./components/panels/PresetBrowser";
 import CalibrationPanel from "./components/panels/CalibrationPanel";
@@ -67,6 +68,7 @@ function StudioApp() {
             {activePanel === "safety"       && <SafetyMonitorPanel />}
             {activePanel === "operator"     && <OperatorPanel />}
             {activePanel === "diagnostics"  && <DiagnosticsPanel />}
+            {activePanel === "dependencies" && <DependencyGraphPanel />}
             {activePanel === "compile"      && <CompilePanel />}
             {activePanel === "presets"      && <PresetBrowser />}
             {activePanel === "calibration"  && <CalibrationPanel />}
