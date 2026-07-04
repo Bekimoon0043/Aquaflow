@@ -1,9 +1,30 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-012 Wind Drift Calculation Engine complete: computes spray drift from live weather, updates the fountain safety/exclusion zone in real time, and raises operator warnings in the UI when the drift breaches the keep-clear perimeter.
+**Summary:** Recovery — AQ-X-013 Beat Detection Engine complete: a lightweight numpy-only tempo/beat engine with verified BPM accuracy, sub-50 ms latency, and both recorded-buffer and live-streaming paths.
 
 ## Completed
+- **AQ-X-013 Beat Detection Engine (recovery) — DONE on `main`.**
+  - New [services/beat_detection.py](aquaflow/backend/services/beat_detection.py): a dependency-free
+    (numpy-only) tempo/beat engine, independent of the heavy offline-only librosa path in the audio
+    route.
+  - **BPM detection works correctly** — an energy-flux onset envelope + weighted autocorrelation
+    (octave-corrected toward the musical range via a log-tempo preference) estimates the tempo; verified
+    against synthesised click tracks from 90–140 BPM (within ±2 BPM), with correct beat count/spacing and
+    noise tolerance. A `generate_click_track` helper provides ground truth.
+  - **Beat detection latency under 50 ms** — the streaming `LiveBeatDetector` processes one hop per call
+    (default hop 512 @ 44.1 kHz ≈ 11.6 ms algorithmic latency) and reports each call's wall-clock time;
+    steady-state per-frame processing is ~0.1 ms (median/p95 asserted < 50 ms).
+  - **Works with live and recorded audio** — `detect_beats(samples, sr)` analyses a whole buffer;
+    `LiveBeatDetector.push(frame)` handles a real-time stream frame by frame and locks onto the tempo
+    (verified at 100 and 120 BPM).
+  - API: `POST /api/beat/detect` (recorded buffer) and `GET /api/beat/demo` (self-test on a click track)
+    ([beat_routes.py](aquaflow/backend/api/routes/beat_routes.py)), wired in main.py.
+  - **Verification: 19/19** ([validate_beat_detection.py](aquaflow/backend/validate_beat_detection.py));
+    **16 pytest cases** ([test_beat_detection.py](aquaflow/backend/tests/test_beat_detection.py)) →
+    backend pytest now **282 passing** (was 266). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-012 Wind Drift Calculation Engine (recovery) — DONE on `main`.**
   - New backend [services/wind_drift.py](aquaflow/backend/services/wind_drift.py) + mirrored frontend
     [weather/windDrift.js](aquaflow/frontend/src/weather/windDrift.js), building a safety layer on the
