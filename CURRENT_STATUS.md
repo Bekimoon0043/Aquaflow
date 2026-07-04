@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-005 Fault Alerting and Maintenance Log complete: an authoritative fault-alert engine with a persistent (disk-backed) maintenance log and time/recurrence-based escalation.
+**Summary:** Recovery — AQ-X-006 Pump Curve Engine complete: manufacturer H–Q data fit to a pump curve, correct operating-point (pump ∩ system curve) with power/efficiency, and parallel/series/variable-speed configurations.
 
 ## Completed
+- **AQ-X-006 Pump Curve Engine (recovery) — DONE on `main`.**
+  - New [services/pump_curve.py](aquaflow/backend/services/pump_curve.py): proper centrifugal-pump
+    hydraulics (SI units) — a real advance over the linear approximations flagged in the known issues.
+  - **Pump curve data integrated** — `PumpCurve.from_points` least-squares fits manufacturer H–Q (and
+    optional efficiency) points to a quadratic characteristic H(Q)=c0+c1·Q+c2·Q²; a built-in
+    `PUMP_CATALOG` (small/medium/large fountain pumps) ships real H–Q data; `flow_at_head` inverts the
+    curve; `max_flow`/`shutoff_head` derived.
+  - **Operating point calculation correct** — `operating_point` finds the true intersection of the
+    pump curve and the system curve (H_sys=static+k·Q²) by a robust bracketed root find, returns the
+    duty flow/head with hydraulic + shaft power and efficiency, and reports no-duty when the pump can't
+    overcome the static head. Cross-checked against hand-solved algebra (Q=0.1 m³/s, H=40 m).
+  - **Multiple pump configurations supported** — `PumpSystem` handles pumps in **parallel** (flows add
+    at equal head, split reported per pump) and **series** (heads add at equal flow), and `at_speed`
+    scales a curve by the **affinity laws** (Q∝N, H∝N², P∝N³).
+  - API: `GET /api/pumps/catalog`, `POST /api/pumps/operating-point`
+    ([pump_routes.py](aquaflow/backend/api/routes/pump_routes.py)), wired in main.py.
+  - **Verification: 23/23** ([validate_pump_curve.py](aquaflow/backend/validate_pump_curve.py), every
+    duty point cross-checked against algebra); **17 pytest cases**
+    ([test_pump_curve.py](aquaflow/backend/tests/test_pump_curve.py)) → backend pytest now
+    **186 passing** (was 169). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-005 Fault Alerting and Maintenance Log (recovery) — DONE on `main`.**
   - New [services/fault_alerting.py](aquaflow/backend/services/fault_alerting.py): the authoritative,
     stateful fault-alert engine on top of the mobile monitor's alert *derivation*.
