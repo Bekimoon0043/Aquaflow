@@ -1,9 +1,28 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 3 opened — AQ-S3-001 AI Show Generator complete: text prompts + mood descriptions → playable show timelines (verified on the real ShowEngine).
+**Summary:** Stage 3 — AQ-S3-003 AI Choreography Engine complete: full fixture-aware timelines, constraint enforcement, and prompt revisions.
 
 ## Completed
+- **AQ-S3-003 AI Choreography Engine — DONE on `main` (Stage 3).**
+  - New [services/choreography_engine.py](aquaflow/backend/services/choreography_engine.py): builds a
+    full show timeline from a prompt + the *designed fixtures*, and revises an existing show from a
+    follow-up prompt.
+  - **Full timelines generated** — multi-track (pump/lighting + requested effects) over a mood-shaped
+    arc; pump track covers the whole duration; output loads into a real `ShowEngine` and plays.
+  - **Fixture constraints respected** — only choreographs track types with fixtures present (a prompt
+    asking for fire with no flame fixture is skipped + warned); clip intensity clamped to each
+    fixture's `maxIntensity`; flame bursts never exceed the hardware max on-time (`FLAME_MAX_ON_TIME`,
+    with cooldown gaps).
+  - **Prompt revisions supported** — `revise_show` applies calmer/energetic intensity scaling,
+    add/remove effect tracks (honouring fixtures — can't add a laser with no laser fixture), and
+    tempo changes, with a revision history.
+  - API: `POST /api/choreography/generate` + `/revise`
+    ([choreography_routes.py](aquaflow/backend/api/routes/choreography_routes.py)), wired in main.py.
+  - **Verification: 22/22** ([validate_choreography_engine.py](aquaflow/backend/validate_choreography_engine.py))
+    incl. real ShowEngine playback; **8 pytest cases**
+    ([test_choreography_engine.py](aquaflow/backend/tests/test_choreography_engine.py)) → backend pytest now **81 passing**.
+
 - **AQ-S3-001 AI Show Generator — DONE on `main` (Stage 3).**
   - New [services/ai_show_generator.py](aquaflow/backend/services/ai_show_generator.py): interprets a
     natural-language prompt into a `ShowIntent` (mood, energy, tempo, duration, effects, palette,
