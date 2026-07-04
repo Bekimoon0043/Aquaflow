@@ -1,9 +1,27 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 3 — AQ-S3-005 Weather Simulation Engine complete: wind drift, evaporation, and visibility impact from ambient conditions.
+**Summary:** Stage 3 — AQ-S3-006 VR Walkthrough Mode complete: navigation, WebXR VR mode, and a client presentation tour, wired into the 3D preview.
 
 ## Completed
+- **AQ-S3-006 VR Walkthrough Mode — DONE on `main` (Stage 3).**
+  - New testable engine [frontend/src/walkthrough/](aquaflow/frontend/src/walkthrough) — pure,
+    framework-agnostic:
+    - **Navigation supported** — `navigation.js`: first-person movement (`firstPersonStep` with
+      heading + bounds clamp), waypoint-path interpolation for tours, look-at yaw, `NAV_MODES`.
+    - **VR mode supported** — `vrMode.js`: WebXR capability detection (`isVRSupported`) + immersive-vr
+      session options; `FountainScene` gained `renderer.xr.enabled`, `supportsVR()`, `enterVR()`,
+      `exitVR()` (real WebXR session, headset-driven camera).
+    - **Client presentation mode supported** — `presentationMode.js`: a scripted, auto-advancing,
+      captioned cinematic tour (`DEFAULT_TOUR`, `tourStepAt`, looped). `FountainScene.startPresentation`
+      cycles cinematic cameras + captions; PreviewPanel adds Present (fullscreen + caption overlay) and
+      Enter-VR buttons.
+  - Wired into [FountainScene_v6.js](aquaflow/frontend/src/components/preview/FountainScene_v6.js) and
+    [PreviewPanel_v5.jsx](aquaflow/frontend/src/components/preview/PreviewPanel_v5.jsx).
+  - **Verification: 19 vitest cases**
+    ([walkthrough.test.js](aquaflow/frontend/src/walkthrough/__tests__/walkthrough.test.js)) →
+    frontend vitest now **59 passing**; `npm run build` clean.
+
 - **AQ-S3-005 Weather Simulation Engine — DONE on `main` (Stage 3).**
   - New [services/weather_engine.py](aquaflow/backend/services/weather_engine.py): computes the three
     weather effects on an outdoor show from ambient conditions.

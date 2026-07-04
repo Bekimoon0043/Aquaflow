@@ -46,6 +46,12 @@ import * as THREE from "three";
 // Photorealistic Rendering Engine (AQ-S3-004) — single source of truth for the
 // environment presets and gravity used by the water physics below.
 import { ENVIRONMENTS as RE_ENVIRONMENTS, GRAVITY as RE_GRAVITY } from "../../rendering";
+// VR Walkthrough Engine (AQ-S3-006) — WebXR session config + guided-tour sequencing.
+import {
+  isVRSupported as WT_isVRSupported, vrSessionOptions as WT_vrSessionOptions,
+  vrReferenceSpaceType as WT_vrReferenceSpaceType, DEFAULT_TOUR as WT_DEFAULT_TOUR,
+  buildTour as WT_buildTour, tourStepAt as WT_tourStepAt,
+} from "../../walkthrough";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -1392,6 +1398,7 @@ export class FountainScene {
     this.renderer.shadowMap.type    = T.PCFSoftShadowMap;
     this.renderer.toneMapping       = T.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 2.1;
+    this.renderer.xr.enabled = true;   // VR Walkthrough (AQ-S3-006)
 
     this.scene  = new T.Scene();
     this.camera = new T.PerspectiveCamera(50, W/H, 0.1, 500);
@@ -2298,6 +2305,58 @@ export class FountainScene {
   }
   setEnvironment(env){ this.environment=env; if(this._initialized) this._applyEnvironment(); }
   setCameraMode(m)  { this.cameraMode=m; this._pathTime=0; if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true; }
+
+  // ── VR Walkthrough (AQ-S3-006) ────────────────────────────────────────────
+  /** Is an immersive-vr session available in this browser/device? */
+  async supportsVR(){ try{ return await WT_isVRSupported(); }catch(e){ return false; } }
+  /** Enter an immersive-vr walkthrough. Returns true on success. */
+  async enterVR(){
+    if(this._xrSession) return true;
+    try{
+      if(!navigator.xr) return false;
+      const session=await navigator.xr.requestSession("immersive-vr", WT_vrSessionOptions());
+      try{ this.renderer.xr.setReferenceSpaceType(WT_vrReferenceSpaceType()); }catch(e){}
+      await this.renderer.xr.setSession(session);
+      this._xrSession=session;
+      // WebXR drives its own frame loop; the headset controls the camera pose.
+      this.renderer.setAnimationLoop(()=>{
+        try{
+          const delta=Math.min(this.clock.getDelta(),0.05);
+          const elapsed=this.clock.elapsedTime||0;
+          this._update(delta, elapsed);
+          this.renderer.render(this.scene, this.camera);
+        }catch(e){}
+      });
+      session.addEventListener("end", ()=>{ this._xrSession=null; this.renderer.setAnimationLoop(null); });
+      return true;
+    }catch(e){ return false; }
+  }
+  /** Exit VR. */
+  exitVR(){ if(this._xrSession){ try{ this._xrSession.end(); }catch(e){} this._xrSession=null; } }
+
+  /** Start the guided client-presentation tour (cinematic auto-advance + captions). */
+  startPresentation(tour, onCaption){
+    this.stopPresentation();
+    this._tour = WT_buildTour(tour || WT_DEFAULT_TOUR);
+    this._presenting = true;
+    const start = (typeof performance!=="undefined"?performance.now():Date.now());
+    let lastIdx = -1;
+    const tick = ()=>{
+      if(!this._presenting) return;
+      const now = (typeof performance!=="undefined"?performance.now():Date.now());
+      const st = WT_tourStepAt(this._tour, (now-start)/1000, {loop:true});
+      if(st.index!==lastIdx){
+        lastIdx=st.index;
+        this.setCameraMode(st.step.cameraMode);
+        if(typeof onCaption==="function") onCaption(st.step.caption, st.index);
+      }
+      this._presentTimer = setTimeout(tick, 250);
+    };
+    tick();
+    return this._tour;
+  }
+  /** Stop the presentation tour. */
+  stopPresentation(){ this._presenting=false; if(this._presentTimer){ clearTimeout(this._presentTimer); this._presentTimer=null; } }
       setLightColor(hex) {
     this.lightColor = hex;
 

@@ -77,6 +77,25 @@ export default function PreviewPanel() {
   const [useDryRunPreview, setUseDryRunPreview] = useState(false);
   const [dryRunState, setDryRunState] = useState(null);
   const lastDryRunRef = useRef(null);
+
+  // VR Walkthrough (AQ-S3-006)
+  const [vrSupported, setVrSupported] = useState(false);
+  const [presenting,  setPresenting]  = useState(false);
+  const [tourCaption, setTourCaption] = useState("");
+
+  const enterVR = useCallback(() => { sceneRef.current?.enterVR?.(); }, []);
+  const togglePresentation = useCallback(() => {
+    const scene = sceneRef.current; if (!scene) return;
+    if (presenting) {
+      scene.stopPresentation?.();
+      setPresenting(false); setTourCaption("");
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    } else {
+      scene.startPresentation?.(null, (cap) => setTourCaption(cap || ""));
+      setPresenting(true);
+      containerRef.current?.requestFullscreen?.().catch(() => {});
+    }
+  }, [presenting]);
   
   // Check for dry-run session every second when mode is enabled
   useEffect(() => {
@@ -191,6 +210,8 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     });
     scene.init();
     sceneRef.current = scene;
+    // VR Walkthrough (AQ-S3-006): probe headset availability for the toolbar.
+    if (scene.supportsVR) scene.supportsVR().then(setVrSupported).catch(() => setVrSupported(false));
     const ro = new ResizeObserver(() => {
       if (!containerRef.current || !sceneRef.current) return;
       const { clientWidth:w, clientHeight:h } = containerRef.current;
@@ -254,6 +275,20 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
       {/* ── 3D Canvas ── */}
       <canvas ref={canvasRef} style={{ flex:1, display:"block", minWidth:0 }} />
 
+      {/* ── Presentation caption overlay (AQ-S3-006) ── */}
+      {presenting && tourCaption && (
+        <div style={{
+          position:"absolute", left:0, right:0, bottom:24, display:"flex", justifyContent:"center",
+          pointerEvents:"none", zIndex:20,
+        }}>
+          <div style={{
+            maxWidth:"80%", padding:"10px 18px", borderRadius:10, textAlign:"center",
+            background:"rgba(2,6,16,0.72)", color:"#eaf2ff", fontSize:15, letterSpacing:0.2,
+            border:"1px solid rgba(120,150,200,0.3)", backdropFilter:"blur(4px)",
+          }}>{tourCaption}</div>
+        </div>
+      )}
+
       {/* ── Right sidebar ── */}
       <div style={{ width:200, flexShrink:0, background:"#030812", borderLeft:"1px solid #0a2030", display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
@@ -290,6 +325,17 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
                   ...btnSm(cam===c.key), textAlign:"left", padding:"4px 6px",
                 }}>{c.icon} {c.label}</button>
               ))}
+            </div>
+
+            <div style={sectionLabel}>Walkthrough</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:3, marginBottom:10 }}>
+              <button onClick={togglePresentation} style={{ ...btnSm(presenting), textAlign:"left", padding:"4px 6px" }}>
+                {presenting ? "■ Stop presentation" : "▶ Present to client"}
+              </button>
+              <button onClick={enterVR} disabled={!vrSupported} title={vrSupported ? "Enter immersive VR" : "No VR headset detected"} style={{
+                ...btnSm(false), textAlign:"left", padding:"4px 6px",
+                opacity: vrSupported ? 1 : 0.5, cursor: vrSupported ? "pointer" : "not-allowed",
+              }}>🥽 Enter VR {vrSupported ? "" : "(unavailable)"}</button>
             </div>
 
             <div style={sectionLabel}>Quality</div>

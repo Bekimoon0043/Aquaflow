@@ -46,6 +46,7 @@ Config: [frontend/vitest.config.js](frontend/vitest.config.js). Tests in `src/ut
 | `runtimeSignalSelector.test.js` | The runtime-signal **projection** — `deriveRuntimeSignals` mapping timeline clips at a playhead into normalized signals (active/inactive, muted tracks, overlap max, 0..1 vs 0..100, lighting color). |
 | `data/__tests__/fixtureLibrary.test.js` | The expanded fixture library (AQ-S2-011) — 500+ fixtures, every one with hydraulic + electrical metadata, unique keys, computed currents. |
 | `rendering/__tests__/renderingEngine.test.js` | The Photorealistic Rendering Engine (AQ-S3-004) — water physics (projectile trajectory, apex, time-of-flight), reflections (mirror matrix + Fresnel), and scene modes incl. night; `buildRenderConfig` aggregation. |
+| `walkthrough/__tests__/walkthrough.test.js` | The VR Walkthrough Engine (AQ-S3-006) — navigation (first-person step, bounds, waypoint path, look-at), VR/WebXR capability + session config, and client-presentation tour sequencing (auto-advance, loop). |
 
 ## Fixture library (AQ-S2-011)
 
