@@ -1,9 +1,30 @@
 # AquaFlow Studio — Current Status
 
-**Date:** 2026-07-03
-**Summary:** Stage 3 — AQ-S3-010 Cloud Collaboration System complete: multi-user editing, version history, and 3-way conflict resolution.
+**Date:** 2026-07-04
+**Summary:** Recovery — AQ-X-001 Automatic DMX Address Assignment complete: conflict-free allocation for all fixture types with manual-override support.
 
 ## Completed
+- **AQ-X-001 Automatic DMX Address Assignment (recovery) — DONE on `main`.**
+  - New [services/dmx_assigner.py](aquaflow/backend/services/dmx_assigner.py): the conflict-free DMX
+    allocator that turns a set of fixtures into concrete (universe, channel) addresses.
+  - **Auto-assignment for all fixture types** — a profile/type → channel-width map (`channels_for`)
+    sizes dimmers, RGB/RGBW/RGBA, moving heads, lasers, fog/haze, pixel bars, etc.; unknown fixtures
+    fall back through a type-token guess to a safe default of 1.
+  - **Conflict-free allocation** — a channel-occupancy grid reserves every used slot, unlocked
+    fixtures are first-fit packed into the free gaps, universes roll at 512, and no two fixtures ever
+    share a channel; genuine overlaps are reported rather than silently overwritten.
+  - **Manual override** — any fixture with an explicit universe+channel (or `locked`) keeps its
+    address; everything else packs *around* it. This closes the prior gap where
+    `DeviceRegistry.auto_assign_dmx` packed from channel 1 and could land on top of a manually-pinned
+    fixture. `auto_assign_dmx` now reserves already-registered DMX devices before packing, so the
+    fixture-bridge path is conflict-free with manual addresses.
+  - API: `POST /api/dmx/auto-assign`, `GET /api/dmx/profiles`
+    ([dmx_routes.py](aquaflow/backend/api/routes/dmx_routes.py)), wired in main.py.
+  - **Verification: 24/24** ([validate_dmx_assigner.py](aquaflow/backend/validate_dmx_assigner.py));
+    **9 pytest cases** ([test_dmx_assigner.py](aquaflow/backend/tests/test_dmx_assigner.py)) →
+    backend pytest now **117 passing**. Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-S3-010 Cloud Collaboration System — DONE on `main` (Stage 3).**
   - New [services/collaboration.py](aquaflow/backend/services/collaboration.py): shared show documents
     with optimistic concurrency (`CollabDocument` + `CollaborationHub`).

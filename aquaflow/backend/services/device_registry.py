@@ -248,31 +248,44 @@ class DeviceRegistry:
         start_channel: int  = 1,
     ) -> list[str]:
         """
-        Automatically assign DMX channels to a list of devices.
-        Packs fixtures sequentially, rolls to next universe at channel 513.
+        Automatically assign conflict-free DMX addresses to ``devices`` and register
+        them.
 
-        Returns list of warnings (overflow, etc.).
+        Conflict-free means the packer honours channels already occupied by
+        DMX/Art-Net/sACN devices registered earlier — i.e. manually / explicitly
+        addressed fixtures. Those are reserved first and the incoming ``devices`` are
+        first-fit packed into the remaining free channels, rolling to the next
+        universe when one fills (AQ-X-001). Delegates to ``dmx_assigner``.
+
+        Returns a list of warnings (manual collisions, overflow, exhaustion).
         """
-        warnings = []
-        universe = start_universe
-        channel  = start_channel
+        from services.dmx_assigner import DMXFixture, assign_dmx
 
-        # Sort: largest channel count first (for tighter packing)
-        devices_sorted = sorted(devices, key=lambda d: d.dmx_channels, reverse=True)
+        incoming = {d.device_id for d in devices}
 
-        for device in devices_sorted:
-            if channel + device.dmx_channels - 1 > 512:
-                universe += 1
-                channel   = 1
-                if universe > 32768:
-                    warnings.append(f"Art-Net universe overflow: cannot assign {device.device_id}")
-                    continue
+        # Reserve already-registered DMX devices (manual/explicit addresses) as locks.
+        fixtures: list[DMXFixture] = []
+        for d in self._devices.values():
+            if d.protocol in (Protocol.DMX, Protocol.ARTNET, Protocol.SACN) and d.device_id not in incoming:
+                fixtures.append(DMXFixture(
+                    id=d.device_id, channels=d.dmx_channels, profile=d.dmx_profile,
+                    locked=True, universe=d.dmx_universe, channel=d.dmx_channel,
+                ))
 
-            device.dmx_universe = universe
-            device.dmx_channel  = channel
-            channel += device.dmx_channels
+        for d in devices:
+            fixtures.append(DMXFixture(
+                id=d.device_id, channels=d.dmx_channels, profile=d.dmx_profile, locked=False,
+            ))
 
-            self.register(device)
+        _, warnings = assign_dmx(fixtures, start_universe=start_universe, start_channel=start_channel)
+
+        placed = {f.id: f for f in fixtures}
+        for d in devices:
+            f = placed.get(d.device_id)
+            if f and f.universe:
+                d.dmx_universe = f.universe
+                d.dmx_channel  = f.channel
+            self.register(d)
 
         return warnings
 
