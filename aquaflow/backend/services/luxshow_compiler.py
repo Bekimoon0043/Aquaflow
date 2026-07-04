@@ -312,10 +312,14 @@ class LuxShowCompiler:
         safety_json  = json.dumps(safety_rules, indent=2, ensure_ascii=False)
         deploy_json  = json.dumps(deploy_config, indent=2, ensure_ascii=False)
 
-        (bundle_dir / "show.json").write_text(show_json, encoding="utf-8")
-        (bundle_dir / "devices.json").write_text(devices_json, encoding="utf-8")
-        (bundle_dir / "safety_rules.json").write_text(safety_json, encoding="utf-8")
-        (bundle_dir / "deploy.json").write_text(deploy_json, encoding="utf-8")
+        # newline="" disables platform newline translation, so the bytes on disk (and
+        # therefore inside the ZIP) match the exact strings the checksums are computed
+        # over. Without this, Windows rewrites \n → \r\n and every bundle fails its own
+        # checksum verification on-site.
+        (bundle_dir / "show.json").write_text(show_json, encoding="utf-8", newline="")
+        (bundle_dir / "devices.json").write_text(devices_json, encoding="utf-8", newline="")
+        (bundle_dir / "safety_rules.json").write_text(safety_json, encoding="utf-8", newline="")
+        (bundle_dir / "deploy.json").write_text(deploy_json, encoding="utf-8", newline="")
 
         # Build manifest with checksums
         manifest = {
@@ -345,7 +349,7 @@ class LuxShowCompiler:
             },
         }
         manifest_json = json.dumps(manifest, indent=2, ensure_ascii=False)
-        (bundle_dir / "manifest.json").write_text(manifest_json, encoding="utf-8")
+        (bundle_dir / "manifest.json").write_text(manifest_json, encoding="utf-8", newline="")
 
         # Package into .luxshow ZIP
         luxshow_path = COMPILED_DIR / f"{bundle_id}.luxshow"
@@ -358,6 +362,80 @@ class LuxShowCompiler:
 
         log.info(f"Bundle packaged: {luxshow_path} ({luxshow_path.stat().st_size} bytes)")
         return bundle_id, luxshow_path
+
+
+# ─── Bundle loader / verifier (AQ-X-003) ──────────────────────────────────────
+
+REQUIRED_MEMBERS = ["manifest.json", "show.json", "devices.json",
+                    "safety_rules.json", "deploy.json"]
+
+# Manifest checksum key → the member it covers.
+_CHECKSUM_MEMBERS = {"show": "show.json", "devices": "devices.json",
+                     "safety": "safety_rules.json", "deploy": "deploy.json"}
+
+
+def load_luxshow(path) -> dict:
+    """
+    Open and VERIFY a compiled .luxshow bundle — the inverse of the packager.
+
+    A bundle is valid only when it is a well-formed ZIP that contains every required
+    member, each member parses as JSON, and every manifest checksum matches the
+    SHA-256 of the member it covers (so tampering or corruption is detected before a
+    show ever reaches hardware). Returns a dict with `valid`, `errors`, `checksum_ok`
+    and the parsed manifest/show/devices/safety_rules/deploy.
+    """
+    path = Path(path)
+    if not path.exists():
+        return {"valid": False, "errors": [f"bundle not found: {path}"], "checksum_ok": False}
+
+    errors: list[str] = []
+    raw: dict[str, Optional[str]] = {}
+    try:
+        with zipfile.ZipFile(path) as zf:
+            bad = zf.testzip()
+            if bad is not None:
+                errors.append(f"corrupt member in ZIP: {bad}")
+            names = set(zf.namelist())
+            missing = [m for m in REQUIRED_MEMBERS if m not in names]
+            if missing:
+                errors.append(f"missing required members: {missing}")
+            for m in REQUIRED_MEMBERS:
+                raw[m] = zf.read(m).decode("utf-8") if m in names else None
+    except zipfile.BadZipFile:
+        return {"valid": False, "errors": ["not a valid ZIP / .luxshow archive"], "checksum_ok": False}
+
+    parsed: dict[str, object] = {}
+    for m, txt in raw.items():
+        if txt is None:
+            continue
+        try:
+            parsed[m] = json.loads(txt)
+        except json.JSONDecodeError:
+            errors.append(f"{m} is not valid JSON")
+
+    manifest = parsed.get("manifest.json", {}) or {}
+    checks = manifest.get("checksums", {}) if isinstance(manifest, dict) else {}
+    checksum_ok = True
+    for key, member in _CHECKSUM_MEMBERS.items():
+        txt = raw.get(member)
+        want = checks.get(key)
+        if txt is None or not want:
+            continue
+        got = hashlib.sha256(txt.encode("utf-8")).hexdigest()[:16]
+        if got != want:
+            checksum_ok = False
+            errors.append(f"checksum mismatch for {member}: manifest={want} actual={got}")
+
+    return {
+        "valid": (not errors) and checksum_ok,
+        "errors": errors,
+        "checksum_ok": checksum_ok,
+        "manifest": manifest,
+        "show": parsed.get("show.json"),
+        "devices": parsed.get("devices.json"),
+        "safety_rules": parsed.get("safety_rules.json"),
+        "deploy": parsed.get("deploy.json"),
+    }
 
 
 # ─── Singleton ────────────────────────────────────────────────────────────────

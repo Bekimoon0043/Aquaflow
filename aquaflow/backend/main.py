@@ -28,6 +28,7 @@ from api.routes.mobile_routes import router as mobile_router
 from api.routes.collab_routes import router as collab_router
 from api.routes.dmx_routes import router as dmx_router
 from api.routes.hardware_routes import router as hardware_router
+from api.routes.deploy_routes import router as deploy_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -326,6 +327,7 @@ app.include_router(mobile_router,           prefix="/api/mobile",     tags=["Mob
 app.include_router(collab_router,           prefix="/api/collab",     tags=["Collaboration"])
 app.include_router(dmx_router,              prefix="/api/dmx",        tags=["DMX"])
 app.include_router(hardware_router,         prefix="/api/hardware",   tags=["Hardware"])
+app.include_router(deploy_router,           prefix="/api/deploy",     tags=["Deploy"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 

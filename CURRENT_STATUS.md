@@ -1,9 +1,34 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-002 Hardware Output Verification (CRITICAL) complete: full DMX/Art-Net/sACN output path verified against a UDP loopback "simulated hardware" node, including a real safety-gate fix. Resolves the "hardware output unverified" critical known issue.
+**Summary:** Recovery — AQ-X-003 Compile and Deploy Bundle complete: the compiler now produces a checksum-verified `.luxshow` bundle, the runtime exporter round-trips end-to-end, and a compiled bundle is proven to play on the real ShowEngine (on-site playback). Fixed a real Windows checksum bug in the bundle packager.
 
 ## Completed
+- **AQ-X-003 Compile and Deploy Bundle (recovery) — DONE on `main`.**
+  - **luxshow_compiler produces a valid bundle** — new `load_luxshow`
+    ([luxshow_compiler.py](aquaflow/backend/services/luxshow_compiler.py)) opens and VERIFIES a
+    `.luxshow`: ZIP integrity, all required members present, and every manifest checksum matching the
+    SHA-256 of the member it covers (tampering/corruption is rejected before a show reaches hardware).
+    **Bug fixed:** on Windows the packager wrote bundle files with `\n`→`\r\n` translation while the
+    checksums were computed on the `\n` strings, so every Windows-compiled bundle failed its own
+    checksum. Files are now written with `newline=""` so on-disk bytes match the hashed content.
+  - **runtime_exporter works end-to-end** — export → `persist_compiled_artifacts` → reload
+    (`load_bundle_manifest`/`load_bundle_artifact`) → verify internal consistency: canonical
+    `compile.validated`, the deployment-bundle checksum equals the canonical signature, and the
+    persisted `RuntimeSession` revalidates against its contract.
+  - **On-site playback verified** — new [services/deploy_verifier.py](aquaflow/backend/services/deploy_verifier.py)
+    adapts a compiled bundle (`bundle_to_playable_show`, ms→seconds) and runs it on the real
+    `ShowEngine` (load→play→tick→stop): the playhead advances, timeline clips are emitted, and the
+    pump clip reaches the output at intensity 0.8.
+  - API: `GET /api/deploy/verify` (full compile→export→playback report with `deploy_ready`),
+    `POST /api/deploy/verify-bundle` ([deploy_routes.py](aquaflow/backend/api/routes/deploy_routes.py)),
+    wired in main.py.
+  - **Verification: 17/17** ([validate_deploy_bundle.py](aquaflow/backend/validate_deploy_bundle.py),
+    `deploy_ready: True`, incl. a tamper-detection check); **8 pytest cases**
+    ([test_deploy_bundle.py](aquaflow/backend/tests/test_deploy_bundle.py)) → backend pytest now
+    **144 passing** (was 136). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-002 Hardware Output Verification (CRITICAL) — DONE on `main`.**
   - New [services/hardware_verifier.py](aquaflow/backend/services/hardware_verifier.py): a
     `VirtualDMXNode` — a real UDP receiver on 127.0.0.1 that stands in for a DMX/Art-Net/sACN
