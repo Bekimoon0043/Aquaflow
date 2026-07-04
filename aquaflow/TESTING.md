@@ -61,6 +61,7 @@ Config: [frontend/vitest.config.js](frontend/vitest.config.js). Tests in `src/ut
 | `walkthrough/__tests__/walkthrough.test.js` | The VR Walkthrough Engine (AQ-S3-006) — navigation (first-person step, bounds, waypoint path, look-at), VR/WebXR capability + session config, and client-presentation tour sequencing (auto-advance, loop). |
 | `video/__tests__/videoExport.test.js` | The 4K Video Export Engine (AQ-S3-007) — 4K resolution presets, 60 fps (frame count/period/bitrate), audio A/V sync + stream muxing, MIME selection, `buildExportConfig`. |
 | `dependency/__tests__/dependencyGraph.test.js` | The Equipment Dependency Graph (AQ-X-008) — `buildDependencyGraph` from fixtures (nodes/edges), conflict flagging (address clash, missing dep, cycle w/o DAG false positives, SPOF, orphan), and `layoutGraph` positioning + conflict highlighting for the `DependencyGraphPanel` SVG. |
+| `validation/__tests__/liveValidation.test.js` | Real-Time Validation (AQ-X-011) — `validateSystem` produces prioritised results for the `RealtimeValidationPanel`: identity (duplicate/missing id), value ranges (DMX channel/universe, intensity), placement, dependency-graph conflicts, and live safety status; each error carries a **target fixture id for immediate highlighting**; and a **100 ms latency budget** is verified (500-fixture design validated well under budget, measured + wall-clock). |
 
 ## Fixture library (AQ-S2-011)
 

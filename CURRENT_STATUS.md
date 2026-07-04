@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-010 Engineering Package Export complete: one downloadable ZIP bundling every engineering deliverable (cover PDF, DXF, BOM XLSX, P&ID SVG, dependency/hydraulics JSON, manifest) with PDF + DXF support. Completes the AQ-X-001…010 recovery run.
+**Summary:** Recovery — AQ-X-011 Real-Time Validation Display complete: a live validation panel that re-checks the design on every change, highlights errors immediately with their target fixture, and runs well within a 100 ms latency budget.
 
 ## Completed
+- **AQ-X-011 Real-Time Validation Display (recovery) — DONE on `main`.**
+  - New pure engine [validation/liveValidation.js](aquaflow/frontend/src/validation/liveValidation.js):
+    `validateSystem(state)` returns a prioritised list of errors/warnings from the current fixtures +
+    optional live safety status — fixture identity (duplicate/missing id), value ranges (DMX
+    channel 1–512, universe 0–32767, intensity 0–1), placement completeness, dependency-graph
+    conflicts (address clash / cycle / SPOF / orphan, reusing AQ-X-008), and safety (E-stop, no-permit,
+    hardware conflicts, PLC loss). Every result carries a **target fixture id** and the call measures its
+    own `durationMs` / `withinLatencyBudget`.
+  - **Real-time validation shown in UI** — new
+    [RealtimeValidationPanel.jsx](aquaflow/frontend/src/components/panels/RealtimeValidationPanel.jsx)
+    re-validates via `useMemo` on every fixture change (synchronous, no network) and lists results live
+    with a status pill and a latency badge; wired into `App.jsx` and the TopBar (Runtime → Live
+    Validation).
+  - **Errors highlighted immediately** — each error is rendered red with its offending fixture id and is
+    clickable to jump/select it; warnings amber. Updates instantly as the design changes.
+  - **Performance within 100 ms latency** — validation is O(n) and local; a 500-fixture design validates
+    well under budget (measured `durationMs` **and** wall-clock asserted < 100 ms in tests).
+  - **Verification: 14 vitest cases**
+    ([liveValidation.test.js](aquaflow/frontend/src/validation/__tests__/liveValidation.test.js)) →
+    frontend vitest now **102 passing** (was 88); **`npm run build` succeeds**. Frontend-only change.
+
+
 - **AQ-X-010 Engineering Package Export (recovery) — DONE on `main`.**
   - New [services/engineering_package.py](aquaflow/backend/services/engineering_package.py): the
     capstone that aggregates every engineering generator into one downloadable ZIP.
