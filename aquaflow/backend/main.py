@@ -43,6 +43,7 @@ from api.routes.crash_routes import router as crash_router
 from api.routes.analytics_routes import router as analytics_router
 from api.routes.portal_routes import router as portal_router
 from api.routes.academy_routes import router as academy_router
+from api.routes.twin_routes import router as twin_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -356,6 +357,7 @@ app.include_router(crash_router,            prefix="/api/crash",      tags=["Cra
 app.include_router(analytics_router,        prefix="/api/analytics",  tags=["Analytics"])
 app.include_router(portal_router,           prefix="/api/portal",     tags=["License-Portal"])
 app.include_router(academy_router,          prefix="/api/academy",    tags=["Academy"])
+app.include_router(twin_router,             prefix="/api/twin",       tags=["Digital-Twin"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 

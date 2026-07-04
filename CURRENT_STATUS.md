@@ -1,9 +1,33 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 4 — AQ-S4-006 Documentation Center complete: a bundled, fully-offline in-app help center with ranked full-text search and context-sensitive help.
+**Summary:** Stage 5 — AQ-S5-001 Digital Twin Engine complete: a live software mirror of the physical assets with historical replay and predictive maintenance, plus a Digital Twin UI panel. First Stage 5 task.
 
 ## Completed
+- **AQ-S5-001 Digital Twin Engine — DONE on `main` (Stage 5).**
+  - New backend [services/digital_twin.py](aquaflow/backend/services/digital_twin.py) — a live mirror of
+    the physical assets fed by telemetry.
+  - **Real assets mirrored** — `register_asset()` + `ingest()` keep a live mirrored state (running,
+    runtime hours, temperature, pressure, cycles) for every asset; `mirror()` gives the fleet view. New
+    [DigitalTwinPanel.jsx](aquaflow/frontend/src/components/panels/DigitalTwinPanel.jsx) shows the live
+    mirror + fleet summary (polling), wired into `App.jsx` + the TopBar (Runtime → Digital Twin).
+  - **Historical replay supported** — every telemetry sample is appended to a time-series history;
+    `replay_at(ts)` returns the state as-of any past moment (last sample ≤ target) and `replay_range()`
+    returns a window.
+  - **Predictive maintenance supported** — `maintenance_forecast()` computes hours-remaining vs the
+    service interval and extrapolates the runtime-accrual rate into a days-to-service / estimated service
+    date (ok / due-soon / overdue; `mark_serviced()` resets the countdown); `predict_anomalies()` fits the
+    temperature trend and flags an asset projected to reach its limit within the horizon (no false alert
+    when stable).
+  - API: `POST /api/twin/assets|ingest|assets/{id}/service`, `GET /api/twin/mirror|assets/{id}|assets/{id}/replay|assets/{id}/forecast|summary`
+    ([twin_routes.py](aquaflow/backend/api/routes/twin_routes.py)), wired in main.py.
+  - **Verification: 22/22** ([validate_digital_twin.py](aquaflow/backend/validate_digital_twin.py))
+    + **10 pytest cases** ([test_digital_twin.py](aquaflow/backend/tests/test_digital_twin.py)) →
+    backend pytest **349 passing** (was 339); the API was exercised end-to-end via TestClient (register →
+    ingest 31 days → mirror → replay@day10 → forecast with a temperature-trend alert → summary);
+    **`npm run build` succeeds**.
+
+
 - **AQ-S4-006 Documentation Center — DONE on `main` (Stage 4).**
   - New `src/docs/` module ([articles.js](aquaflow/frontend/src/docs/articles.js),
     [search.js](aquaflow/frontend/src/docs/search.js)) — the help content ships **bundled with the app**
