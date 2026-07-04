@@ -1,9 +1,29 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 3 — AQ-S3-008 Environment and Material Library complete: 20 built-in environments, 20 PBR materials, user-customisable presets, and a browse/edit panel.
+**Summary:** Stage 4 — AQ-S4-001 Installer Framework complete: one-click install, semantic-version auto-updates with rollback, and license activation, plus a cross-platform `install.py`.
 
 ## Completed
+- **AQ-S4-001 Installer Framework — DONE on `main` (Stage 4).**
+  - New [services/installer.py](aquaflow/backend/services/installer.py) — the machine-facing lifecycle.
+  - **One-click installation** — `InstallManager.install(root)` idempotently provisions the directory
+    layout (config/data/logs/compiled/cache), writes a default config + an install manifest (install id,
+    version, edition, timestamp), and verifies the result in a single call. A cross-platform
+    [install.py](install.py) one-click installer runs provisioning → pip deps → frontend build.
+  - **Auto updates supported** — semantic-version parse/compare, `check_for_update` against an update
+    manifest (with mandatory-when-below-min-supported), and `apply_update` / `rollback` that record an
+    update history and keep the app config version in sync.
+  - **License activation supported** — `activate_license` wraps the existing license engine
+    (hardware-fingerprint validation + cache); a signed key activates on the matching machine and is
+    rejected (INVALID_HW) on another.
+  - API: `GET /api/installer/version|activation`, `POST /api/installer/install|check-update|apply-update|activate`
+    ([installer_routes.py](aquaflow/backend/api/routes/installer_routes.py)), wired in main.py.
+  - **Verification: 28/28** ([validate_installer.py](aquaflow/backend/validate_installer.py)) + **15
+    pytest cases** ([test_installer.py](aquaflow/backend/tests/test_installer.py)) → backend pytest now
+    **297 passing** (was 282); the `install.py` one-click flow provisions a full install into a temp dir.
+    Backend + install script; no frontend source changed, so `npm run build` not applicable.
+
+
 - **AQ-S3-008 Environment and Material Library — DONE on `main` (Stage 3).**
   - New `src/environment/` library module ([index.js](aquaflow/frontend/src/environment/index.js)).
   - **20 environments included** — [environments.js](aquaflow/frontend/src/environment/environments.js)
