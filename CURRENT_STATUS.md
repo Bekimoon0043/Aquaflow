@@ -1,9 +1,32 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-009 CAD Layout Generator complete: fountain designs export to a valid AutoCAD-R12 DXF (DWG-importable) with accurate geometry and a correct layer structure.
+**Summary:** Recovery — AQ-X-010 Engineering Package Export complete: one downloadable ZIP bundling every engineering deliverable (cover PDF, DXF, BOM XLSX, P&ID SVG, dependency/hydraulics JSON, manifest) with PDF + DXF support. Completes the AQ-X-001…010 recovery run.
 
 ## Completed
+- **AQ-X-010 Engineering Package Export (recovery) — DONE on `main`.**
+  - New [services/engineering_package.py](aquaflow/backend/services/engineering_package.py): the
+    capstone that aggregates every engineering generator into one downloadable ZIP.
+  - **Full engineering package exported** — `build_package(design)` returns a valid ZIP containing the
+    CAD layout (DXF), Bill of Materials (XLSX, via the AQ-S2-009 generator), P&ID drawing (SVG, via the
+    AQ-S2-007 generator), equipment dependency graph + hydraulic-solver results (JSON), a README, a
+    cover-sheet PDF, and a manifest.
+  - **All required documents included** — a fixed `REQUIRED_DOCUMENTS` set is always present; the
+    manifest lists every document with its format, byte size and SHA-256, and reports `complete` /
+    `missing_documents`. Each generator is wrapped so a bad input degrades gracefully without breaking
+    the package.
+  - **PDF and DXF formats supported** — a **dependency-free, hand-built PDF writer** (`build_pdf`)
+    produces a valid cover sheet (%PDF header, uncompressed content stream, byte-accurate xref, trailer,
+    %%EOF) alongside the R12 DXF layout; no reportlab/CAD engine required. Formats: pdf, dxf, xlsx, svg,
+    json, txt.
+  - API: `POST /api/engineering/package` (manifest JSON) and `POST /api/engineering/package.zip`
+    (download) ([engineering_routes.py](aquaflow/backend/api/routes/engineering_routes.py)), wired in
+    main.py.
+  - **Verification: 26/26** ([validate_engineering_package.py](aquaflow/backend/validate_engineering_package.py));
+    **14 pytest cases** ([test_engineering_package.py](aquaflow/backend/tests/test_engineering_package.py)) →
+    backend pytest now **253 passing** (was 239). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-009 CAD Layout Generator (recovery) — DONE on `main`.**
   - New [services/cad_layout.py](aquaflow/backend/services/cad_layout.py): exports a pool design to a
     dependency-free, standards-compliant **AutoCAD R12 (AC1009) ASCII DXF**.
