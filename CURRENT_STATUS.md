@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 4 — AQ-S4-002 Crash Reporting System complete: automatic crash upload with an offline outbox, deterministic crash fingerprints, and readable support reports; the UI auto-captures uncaught errors.
+**Summary:** Stage 4 — AQ-S4-003 Usage Analytics Engine complete: privacy-first anonymous usage collection, feature statistics, and adoption metrics; the UI tracks feature usage anonymously (consent-gated).
 
 ## Completed
+- **AQ-S4-003 Usage Analytics Engine — DONE on `main` (Stage 4).**
+  - New backend [services/analytics_engine.py](aquaflow/backend/services/analytics_engine.py).
+  - **Anonymous usage collected** — `track()` one-way hashes the session id and sanitises properties
+    (email/name/ip/path/license/… dropped; identifier values hashed) before appending an event;
+    collection is **consent-gated** (persisted) and a no-op when disabled. The frontend
+    [utils/analytics.js](aquaflow/frontend/src/utils/analytics.js) generates a random, non-identity
+    session id and posts feature usage to `/api/analytics/track` (fire-and-forget, consent-aware),
+    wired to record `app_open` (`main.jsx`) and panel opens (`TopBar`).
+  - **Feature statistics collected** — `feature_stats()` gives per-feature count, unique sessions, and
+    first/last seen, sorted by usage.
+  - **Adoption metrics available** — `adoption_metrics()` gives total + active sessions (DAU/WAU/MAU
+    windows measured back from the latest event), per-feature adoption rate (unique sessions using it /
+    total), and the top features.
+  - API: `POST /api/analytics/track|consent`, `GET /api/analytics/feature-stats|adoption|summary`
+    ([analytics_routes.py](aquaflow/backend/api/routes/analytics_routes.py)), wired in main.py.
+  - **Verification: 20/20** ([validate_analytics_engine.py](aquaflow/backend/validate_analytics_engine.py))
+    + **8 pytest cases** ([test_analytics_engine.py](aquaflow/backend/tests/test_analytics_engine.py)) →
+    backend pytest **316 passing** (was 308); **6 vitest cases**
+    ([analytics.test.js](aquaflow/frontend/src/utils/__tests__/analytics.test.js)) → frontend vitest
+    **148 passing** (was 142); **`npm run build` succeeds**.
+
+
 - **AQ-S4-002 Crash Reporting System — DONE on `main` (Stage 4).**
   - New backend [services/crash_reporter.py](aquaflow/backend/services/crash_reporter.py).
   - **Automatic logs uploaded** — `CrashReporter.report()` builds a structured crash report with the

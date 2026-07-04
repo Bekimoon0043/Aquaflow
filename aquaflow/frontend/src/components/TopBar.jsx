@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useShowStore } from "../store/showStore";
 import { useWS } from "../hooks/WebSocketContext";
+import { trackFeature } from "../utils/analytics";
 
 const MENU_ITEMS = {
   File: [
@@ -249,6 +250,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
     const [label, type, value] = entry;
     if (type === "panel") {
       setActivePanel(value);
+      trackFeature(value, { via: "menu" });   // AQ-S4-003: anonymous feature usage
       setOpenMenu(null);
       return;
     }
