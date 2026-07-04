@@ -36,6 +36,7 @@ from api.routes.valve_routes import router as valve_router
 from api.routes.dependency_routes import router as dependency_router
 from api.routes.cad_routes import router as cad_router
 from api.routes.engineering_routes import router as engineering_router
+from api.routes.wind_routes import router as wind_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -342,6 +343,7 @@ app.include_router(valve_router,            prefix="/api/valves",     tags=["Val
 app.include_router(dependency_router,       prefix="/api/dependencies", tags=["Dependencies"])
 app.include_router(cad_router,              prefix="/api/cad",        tags=["CAD"])
 app.include_router(engineering_router,      prefix="/api/engineering", tags=["Engineering"])
+app.include_router(wind_router,             prefix="/api/wind",       tags=["Wind"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 

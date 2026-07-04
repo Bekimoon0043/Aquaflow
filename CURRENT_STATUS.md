@@ -1,9 +1,35 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-011 Real-Time Validation Display complete: a live validation panel that re-checks the design on every change, highlights errors immediately with their target fixture, and runs well within a 100 ms latency budget.
+**Summary:** Recovery — AQ-X-012 Wind Drift Calculation Engine complete: computes spray drift from live weather, updates the fountain safety/exclusion zone in real time, and raises operator warnings in the UI when the drift breaches the keep-clear perimeter.
 
 ## Completed
+- **AQ-X-012 Wind Drift Calculation Engine (recovery) — DONE on `main`.**
+  - New backend [services/wind_drift.py](aquaflow/backend/services/wind_drift.py) + mirrored frontend
+    [weather/windDrift.js](aquaflow/frontend/src/weather/windDrift.js), building a safety layer on the
+    AQ-S3-005 weather wind physics.
+  - **Wind drift calculated from weather data** — per jet, drift = coupling · wind · flight-time (with a
+    gust case), the downwind unit vector from the meteorological wind direction, and the landing +
+    farthest-wet points.
+  - **Safety zones updated in real-time** — `compute_safety_zones` recomputes each jet's wet zone
+    (circle of splash radius around the drifted landing point) and the aggregate exclusion radius from
+    the fountain centre on every weather change (pure O(n)); keep-clear and named-barrier breaches are
+    detected with their overshoot.
+  - **Operator warnings displayed** — `operator_warnings` emits severity-ranked warnings (keep-clear /
+    barrier / gust breach, high & moderate wind); the new
+    [WindDriftPanel.jsx](aquaflow/frontend/src/components/panels/WindDriftPanel.jsx) shows them live with
+    a top-down exclusion-zone map and wind arrow, driven by live wind/keep-clear sliders, wired into
+    `App.jsx` and the TopBar (Runtime → Wind Drift Safety).
+  - API: `POST /api/wind/drift` ([wind_routes.py](aquaflow/backend/api/routes/wind_routes.py)), wired in
+    main.py.
+  - **Verification: backend 22/22** ([validate_wind_drift.py](aquaflow/backend/validate_wind_drift.py),
+    every zone/warning cross-checked against hand physics) + **13 pytest cases**
+    ([test_wind_drift.py](aquaflow/backend/tests/test_wind_drift.py)) → backend pytest **266 passing**
+    (was 253); **13 vitest cases**
+    ([windDrift.test.js](aquaflow/frontend/src/weather/__tests__/windDrift.test.js)) → frontend vitest
+    **115 passing** (was 102); **`npm run build` succeeds**.
+
+
 - **AQ-X-011 Real-Time Validation Display (recovery) — DONE on `main`.**
   - New pure engine [validation/liveValidation.js](aquaflow/frontend/src/validation/liveValidation.js):
     `validateSystem(state)` returns a prioritised list of errors/warnings from the current fixtures +
