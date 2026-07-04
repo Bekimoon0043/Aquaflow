@@ -1,9 +1,28 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 3 — AQ-S3-003 AI Choreography Engine complete: full fixture-aware timelines, constraint enforcement, and prompt revisions.
+**Summary:** Stage 3 — AQ-S3-004 Photorealistic Rendering Engine complete: water physics, reflections, and night scenes as a testable engine wired into the 3D preview.
 
 ## Completed
+- **AQ-S3-004 Photorealistic Rendering Engine — DONE on `main` (Stage 3).**
+  - New testable engine under [frontend/src/rendering/](aquaflow/frontend/src/rendering) — pure,
+    framework-agnostic, and the single source of truth for the 3D preview:
+    - **Water physics rendered** — `waterPhysics.js`: projectile droplet trajectories (`dropletPosition`,
+      `simulateJet`), apex height, time-of-flight, launch velocity from jet height. The scene's
+      `GPUParticleSystem` gravity is now sourced from the engine (`RE_GRAVITY`).
+    - **Reflections rendered** — `reflections.js`: water-surface mirror matrix + `reflectPoint`, and
+      Schlick **Fresnel** reflectance (near-mirror at grazing angles, ~2% looking straight down).
+    - **Night scenes supported** — `sceneModes.js`: day/dusk/night/arena presets (dark sky, low
+      ambient, starfield, stronger bloom/fixture-glow for night); `FountainScene.ENVIRONMENTS` is now
+      sourced from the engine.
+    - `index.js`: `buildRenderConfig()` aggregates scene mode + reflection + per-jet water physics
+      into one renderer-agnostic config.
+  - Wired into [FountainScene_v6.js](aquaflow/frontend/src/components/preview/FountainScene_v6.js)
+    (imports `ENVIRONMENTS` + `GRAVITY` from the engine).
+  - **Verification: 16 vitest cases**
+    ([renderingEngine.test.js](aquaflow/frontend/src/rendering/__tests__/renderingEngine.test.js)) vs
+    hand calcs → frontend vitest now **40 passing**; `npm run build` clean (116 modules).
+
 - **AQ-S3-003 AI Choreography Engine — DONE on `main` (Stage 3).**
   - New [services/choreography_engine.py](aquaflow/backend/services/choreography_engine.py): builds a
     full show timeline from a prompt + the *designed fixtures*, and revises an existing show from a

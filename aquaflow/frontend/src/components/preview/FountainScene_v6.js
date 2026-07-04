@@ -43,6 +43,9 @@
  */
 
 import * as THREE from "three";
+// Photorealistic Rendering Engine (AQ-S3-004) — single source of truth for the
+// environment presets and gravity used by the water physics below.
+import { ENVIRONMENTS as RE_ENVIRONMENTS, GRAVITY as RE_GRAVITY } from "../../rendering";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -52,7 +55,7 @@ export const NOZZLE_TYPES = {
   MOTION_1D:"motion_1d", MOTION_2D:"motion_2d", MOTION_3D:"motion_3d",
   SCREEN:"screen",
 };
-export const ENVIRONMENTS = { NIGHT:"night", DAY:"day", DUSK:"dusk", ARENA:"arena" };
+export const ENVIRONMENTS = RE_ENVIRONMENTS;   // sourced from the rendering engine (AQ-S3-004)
 export const CAMERA_MODES  = {
   ORBIT:"orbit", TOP:"top", FRONT:"front",
   AERIAL:"aerial", FLYTHROUGH:"flythrough", DRAMATIC:"dramatic", AUDIENCE:"audience",
@@ -525,7 +528,7 @@ class GPUParticleSystem {
     this.stretches[i]=stretch;
   }
 
-  update(delta, gravity=-9.81, elapsed=0) {
+  update(delta, gravity=-RE_GRAVITY, elapsed=0) {
     this.uniforms.uTime.value = elapsed;
     let alive = 0;
     const drag = 0.018;
