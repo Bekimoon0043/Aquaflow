@@ -24,6 +24,7 @@ from api.routes.energy_routes import router as energy_router
 from api.routes.ai_show_routes import router as ai_show_router
 from api.routes.choreography_routes import router as choreography_router
 from api.routes.weather_routes import router as weather_router
+from api.routes.mobile_routes import router as mobile_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -318,6 +319,7 @@ app.include_router(energy_router,           prefix="/api/energy",     tags=["Ene
 app.include_router(ai_show_router,          prefix="/api/ai-show",    tags=["AI-Show"])
 app.include_router(choreography_router,     prefix="/api/choreography", tags=["Choreography"])
 app.include_router(weather_router,          prefix="/api/weather",    tags=["Weather"])
+app.include_router(mobile_router,           prefix="/api/mobile",     tags=["Mobile"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 

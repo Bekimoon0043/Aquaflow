@@ -1,9 +1,27 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 3 — AQ-S3-007 4K Video Export Engine complete: 4K, 60 FPS, and synchronized audio for show recording.
+**Summary:** Stage 3 — AQ-S3-009 Mobile Monitoring App complete: live monitoring, prioritized alerts, and validated remote control.
 
 ## Completed
+- **AQ-S3-009 Mobile Monitoring App — DONE on `main` (Stage 3).**
+  - New [services/mobile_monitor.py](aquaflow/backend/services/mobile_monitor.py): turns the operator
+    status into a phone-friendly monitoring feed, raises alerts, and gates remote commands.
+  - **Live monitoring** — `build_snapshot(status)` condenses safety/transport/engine into a compact
+    payload (health = estop/critical/warning/live/idle, playing, progress %, permit, fault count,
+    per-subsystem enables, PLC online).
+  - **Alerts** — `evaluate_alerts` derives prioritized alerts (E-stop, critical faults, hardware
+    conflicts → critical; PLC comm loss → warning) and an `AlertManager` de-duplicates by code,
+    tracks acknowledge, clears resolved conditions, and sorts critical-first.
+  - **Remote control** — `validate_remote_command(cmd, status)` only allows commands the safety
+    state permits (E-stop/stop always allowed; play blocked on hardware conflict / no permit / E-stop,
+    tying into AQ-S1-003 + AQ-S1-007).
+  - API: `GET /api/mobile/status|alerts`, `POST /api/mobile/command|alerts/ack`
+    ([mobile_routes.py](aquaflow/backend/api/routes/mobile_routes.py)), wired in main.py; commands
+    dispatch to the live safety/transport singletons.
+  - **Verification: 25/25** ([validate_mobile_monitor.py](aquaflow/backend/validate_mobile_monitor.py));
+    **7 pytest cases** ([test_mobile_monitor.py](aquaflow/backend/tests/test_mobile_monitor.py)) → backend pytest now **99 passing**.
+
 - **AQ-S3-007 4K Video Export Engine — DONE on `main` (Stage 3).**
   - New testable engine [frontend/src/video/videoExport.js](aquaflow/frontend/src/video/videoExport.js)
     — pure, framework-agnostic export config + A/V sync:
