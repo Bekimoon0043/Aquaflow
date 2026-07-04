@@ -1,9 +1,32 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 5 — AQ-S5-001 Digital Twin Engine complete: a live software mirror of the physical assets with historical replay and predictive maintenance, plus a Digital Twin UI panel. First Stage 5 task.
+**Summary:** Stage 5 — AQ-S5-002 AI Optimization Engine complete: physics-grounded energy, water and performance optimisation with quantified savings and an AI Optimization UI panel.
 
 ## Completed
+- **AQ-S5-002 AI Optimization Engine — DONE on `main` (Stage 5).**
+  - New backend [services/optimization_engine.py](aquaflow/backend/services/optimization_engine.py) —
+    analyses a design/show and recommends changes, each grounded in real physics so the savings are
+    concrete.
+  - **Energy optimised** — pump power follows the affinity laws (P∝N³), so trimming a pump's speed to the
+    flow actually needed yields large savings (4 kW @ 80% flow → 48.8% less); incandescent→LED (~80%) and
+    off-peak scheduling add more; reports baseline/optimized kWh + cost saving.
+  - **Water optimised** — an open (non-recirculating) design wastes all pumped water, so recirculation
+    cuts makeup to just evaporation + drift (>90% saving); a recirculating design trims wind-driven drift
+    (lower tall jets) and evaporation (timing).
+  - **Performance optimised** — trims low impact-per-flow jets to raise the show's visual efficiency
+    (impact per flow) while keeping most of the impact, and caps output to the 44 Hz Art-Net ceiling.
+  - New [OptimizationPanel.jsx](aquaflow/frontend/src/components/panels/OptimizationPanel.jsx) — edit a
+    design and see the three savings cards + recommendations; wired into `App.jsx` + the TopBar
+    (AI → AI Optimization).
+  - API: `POST /api/optimize/analyze|energy|water|performance`
+    ([optimize_routes.py](aquaflow/backend/api/routes/optimize_routes.py)), wired in main.py.
+  - **Verification: 20/20** ([validate_optimization_engine.py](aquaflow/backend/validate_optimization_engine.py),
+    every saving cross-checked against physics) + **10 pytest cases**
+    ([test_optimization_engine.py](aquaflow/backend/tests/test_optimization_engine.py)) → backend pytest
+    **359 passing** (was 349); **`npm run build` succeeds**.
+
+
 - **AQ-S5-001 Digital Twin Engine — DONE on `main` (Stage 5).**
   - New backend [services/digital_twin.py](aquaflow/backend/services/digital_twin.py) — a live mirror of
     the physical assets fed by telemetry.

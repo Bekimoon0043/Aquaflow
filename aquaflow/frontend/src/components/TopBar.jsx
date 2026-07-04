@@ -73,6 +73,7 @@ const MENU_ITEMS = {
   ],
   AI: [
     ["AI Studio", "panel", "ai"],
+    ["AI Optimization", "panel", "optimize"],
     ["---", "separator"],
     ["Generate Show from Music...", "action", "Generate Show from Music..."],
     ["Text to Show...", "action", "Text to Show..."],
@@ -116,6 +117,7 @@ const PANEL_TO_GROUP = {
   diagnostics: "Runtime",
   compile: "Runtime",
   ai: "AI",
+  optimize: "AI",
 };
 
 const emitStudioEvent = (name, detail = {}) =>

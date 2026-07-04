@@ -27,6 +27,7 @@ import EnvironmentMaterialPanel from "./components/panels/EnvironmentMaterialPan
 import TrainingAcademyPanel from "./components/panels/TrainingAcademyPanel";
 import DocumentationPanel from "./components/panels/DocumentationPanel";
 import DigitalTwinPanel from "./components/panels/DigitalTwinPanel";
+import OptimizationPanel from "./components/panels/OptimizationPanel";
 import CompilePanel from "./components/panels/CompilePanel";
 import PresetBrowser from "./components/panels/PresetBrowser";
 import CalibrationPanel from "./components/panels/CalibrationPanel";
@@ -87,6 +88,7 @@ function StudioApp() {
             {activePanel === "academy"      && <TrainingAcademyPanel />}
             {activePanel === "docs"         && <DocumentationPanel />}
             {activePanel === "twin"         && <DigitalTwinPanel />}
+            {activePanel === "optimize"     && <OptimizationPanel />}
             {activePanel === "compile"      && <CompilePanel />}
             {activePanel === "presets"      && <PresetBrowser />}
             {activePanel === "calibration"  && <CalibrationPanel />}
