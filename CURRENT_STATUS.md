@@ -1,9 +1,36 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-015 Replace Old Hydraulic Engine complete: geometry_service now uses the real Hazen-Williams / Darcy-Weisbach solver instead of the old linear turnover approximation. Resolves the "hydraulic engine uses linear approximations" known issue and completes the AQ-X-001…015 recovery run.
+**Summary:** Stage 3 — AQ-S3-008 Environment and Material Library complete: 20 built-in environments, 20 PBR materials, user-customisable presets, and a browse/edit panel.
 
 ## Completed
+- **AQ-S3-008 Environment and Material Library — DONE on `main` (Stage 3).**
+  - New `src/environment/` library module ([index.js](aquaflow/frontend/src/environment/index.js)).
+  - **20 environments included** — [environments.js](aquaflow/frontend/src/environment/environments.js)
+    ships ENV001–ENV020 (urban plaza, hotel courtyard, public square, mall atrium, resort lagoon,
+    desert, mountain, tropical, waterfront, civic plaza, studio black) each with the spec parameters
+    (ambient lux, sun elevation/azimuth, sky turbidity, fog density, wind, temperature, humidity), all
+    within the research ranges.
+  - **20 materials included** — [materials.js](aquaflow/frontend/src/environment/materials.js) ships
+    MAT001–MAT020 (stainless variants, powder-coated steel, aluminium, brass, bronze, granite, marble,
+    concrete incl. wet, glass clear/frosted, water surface, pool tile) with the Three.js
+    MeshPhysicalMaterial constants (roughness/metalness/ior/transmission/clearcoat/reflectivity);
+    polished-stainless and water-surface match the spec exactly. `buildThreeMaterial` emits a renderer
+    config.
+  - **User customization supported** — [customLibrary.js](aquaflow/frontend/src/environment/customLibrary.js)
+    saves/edits/deletes custom presets (localStorage with in-memory fallback), clamps values to the
+    ranges, and enforces the **50 custom environment / 100 custom material** slot limits. New
+    [EnvironmentMaterialPanel.jsx](aquaflow/frontend/src/components/panels/EnvironmentMaterialPanel.jsx)
+    browses/edits/saves presets with a live PBR swatch, wired into `App.jsx` + the TopBar
+    (Design → Environments & Materials).
+  - Physics formulas ([formulas.js](aquaflow/frontend/src/environment/formulas.js)) — Fresnel/water
+    reflection, wind-ripple amplitude, mist visibility, inverse-square attenuation, and the hard limits
+    (wind 25 m/s cutoff, 8-surface reflection budget, HDR/texture resolutions, FPS targets).
+  - **Verification: 18 vitest cases**
+    ([materialLibrary.test.js](aquaflow/frontend/src/environment/__tests__/materialLibrary.test.js)) →
+    frontend vitest now **137 passing** (was 119); **`npm run build` succeeds**. Frontend-only change.
+
+
 - **AQ-X-015 Replace Old Hydraulic Engine — DONE on `main`.**
   - **geometry_service.py uses the new solver** — the old inline linear approximation
     (`turnover_rate_hint_hours = volume·1000 / (nozzles·5)`) is removed and replaced by a real
