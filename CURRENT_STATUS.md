@@ -1,9 +1,30 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-008 Equipment Dependency Graph complete: dependency graph generated from system data, an SVG visualization panel wired into the UI, and dependency conflicts flagged. First recovery task with frontend changes (npm run build passes).
+**Summary:** Recovery — AQ-X-009 CAD Layout Generator complete: fountain designs export to a valid AutoCAD-R12 DXF (DWG-importable) with accurate geometry and a correct layer structure.
 
 ## Completed
+- **AQ-X-009 CAD Layout Generator (recovery) — DONE on `main`.**
+  - New [services/cad_layout.py](aquaflow/backend/services/cad_layout.py): exports a pool design to a
+    dependency-free, standards-compliant **AutoCAD R12 (AC1009) ASCII DXF**.
+  - **DXF/DWG export supported** — emits valid DXF (HEADER/TABLES/ENTITIES + EOF) with no external CAD
+    engine; DXF is the vendor-neutral exchange format every DWG application (AutoCAD/BricsCAD/DraftSight)
+    imports, so the payload documents DWG compatibility and serves the file as `.dxf`.
+  - **Layout accurate to design** — fixture circles are centred on the exact design coordinates
+    (metres), the pool boundary (rectangular/circular/elliptical/freeform) matches the pool parameters,
+    pipework connects fixtures, an overall-width dimension is drawn, and `$INSUNITS` = metres.
+  - **Layer structure correct** — a proper LAYER table (POOL_OUTLINE, WATER_SURFACE, NOZZLES, LIGHTS,
+    PIPEWORK, EQUIPMENT, MEASUREMENTS, ANNOTATIONS) each with its ACI colour, and every entity assigned
+    to the right layer by fixture type (nozzles→NOZZLES, lights→LIGHTS, pumps/valves→EQUIPMENT,
+    labels→ANNOTATIONS, dimensions→MEASUREMENTS).
+  - API: `POST /api/cad/layout` (JSON) and `POST /api/cad/layout.dxf` (file download)
+    ([cad_routes.py](aquaflow/backend/api/routes/cad_routes.py)), wired in main.py.
+  - **Verification: 26/26** ([validate_cad_layout.py](aquaflow/backend/validate_cad_layout.py) — the DXF
+    is parsed back and every coordinate/layer checked); **21 pytest cases**
+    ([test_cad_layout.py](aquaflow/backend/tests/test_cad_layout.py)) → backend pytest now
+    **239 passing** (was 218). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-008 Equipment Dependency Graph (recovery) — DONE on `main`.**
   - **Dependency graph generated from system data** — new
     [services/dependency_graph.py](aquaflow/backend/services/dependency_graph.py) and the mirrored
