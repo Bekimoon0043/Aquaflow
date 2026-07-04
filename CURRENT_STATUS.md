@@ -1,9 +1,32 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 4 — AQ-S4-004 Online License Portal complete: multi-seat license accounts with online activation, license transfer between machines, and seat management, built on the signed-license engine.
+**Summary:** Stage 4 — AQ-S4-005 Training Academy complete: interactive in-app lessons with server-graded quizzes, per-learner progress tracking, and verifiable course certificates, plus a Training Academy UI panel.
 
 ## Completed
+- **AQ-S4-005 Training Academy — DONE on `main` (Stage 4).**
+  - New backend [services/training_academy.py](aquaflow/backend/services/training_academy.py) — a built-in
+    curriculum of 4 courses (Fundamentals, Show Programming, Hardware & Safety, Hydraulic Design), each a
+    set of lessons with an interactive quiz.
+  - **Interactive lessons available** — `get_lesson()` serves lesson content + quiz **without the answer
+    key**; `submit_lesson()` grades the answers server-side and returns per-question feedback (best score
+    kept). New [TrainingAcademyPanel.jsx](aquaflow/frontend/src/components/panels/TrainingAcademyPanel.jsx)
+    renders the courses/lessons, lets the learner answer the quiz and see feedback, and shows progress +
+    the earned certificate; wired into `App.jsx` + the TopBar (Help → Training Academy).
+  - **Progress tracking supported** — `progress()` reports per-course completion %, lesson scores, and an
+    overall percentage; progress persists per learner.
+  - **Certification supported** — `issue_certificate()` awards a certificate only when every lesson is
+    completed and the average meets the course pass threshold (the safety course requires a stricter 80%);
+    certificates are idempotent and **verifiable by code** (`verify_certificate`).
+  - API: `GET /api/academy/courses|courses/{id}|courses/{id}/lessons/{lid}|progress/{learner}|verify/{code}`,
+    `POST /api/academy/submit|certificate`
+    ([academy_routes.py](aquaflow/backend/api/routes/academy_routes.py)), wired in main.py.
+  - **Verification: 21/21** ([validate_training_academy.py](aquaflow/backend/validate_training_academy.py))
+    + **10 pytest cases** ([test_training_academy.py](aquaflow/backend/tests/test_training_academy.py)) →
+    backend pytest **339 passing** (was 329); the API was exercised end-to-end via TestClient (courses →
+    lesson with answers hidden → submit → progress → certificate → verify valid); **`npm run build` succeeds**.
+
+
 - **AQ-S4-004 Online License Portal — DONE on `main` (Stage 4).**
   - New backend [services/license_portal.py](aquaflow/backend/services/license_portal.py) — server-side
     multi-seat license accounts on top of the existing license engine.

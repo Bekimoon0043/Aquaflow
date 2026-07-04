@@ -24,6 +24,7 @@ import EngineeringToolsPanel from "./components/panels/EngineeringToolsPanel";
 import MobileMonitorPanel from "./components/panels/MobileMonitorPanel";
 import CollaborationPanel from "./components/panels/CollaborationPanel";
 import EnvironmentMaterialPanel from "./components/panels/EnvironmentMaterialPanel";
+import TrainingAcademyPanel from "./components/panels/TrainingAcademyPanel";
 import CompilePanel from "./components/panels/CompilePanel";
 import PresetBrowser from "./components/panels/PresetBrowser";
 import CalibrationPanel from "./components/panels/CalibrationPanel";
@@ -81,6 +82,7 @@ function StudioApp() {
             {activePanel === "mobilemon"    && <MobileMonitorPanel />}
             {activePanel === "collab"       && <CollaborationPanel />}
             {activePanel === "envmaterial"  && <EnvironmentMaterialPanel />}
+            {activePanel === "academy"      && <TrainingAcademyPanel />}
             {activePanel === "compile"      && <CompilePanel />}
             {activePanel === "presets"      && <PresetBrowser />}
             {activePanel === "calibration"  && <CalibrationPanel />}

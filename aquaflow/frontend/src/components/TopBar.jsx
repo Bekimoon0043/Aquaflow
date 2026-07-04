@@ -79,6 +79,7 @@ const MENU_ITEMS = {
     ["AI Settings", "action", "AI Settings"],
   ],
   Help: [
+    ["Training Academy", "panel", "academy"],
     ["Documentation", "action", "Documentation"],
     ["Keyboard Shortcuts", "action", "Keyboard Shortcuts"],
     ["---", "separator"],
@@ -96,6 +97,7 @@ const PANEL_TO_GROUP = {
   engtools: "Design",
   collab: "Design",
   envmaterial: "Design",
+  academy: "Help",
   mobilemon: "Runtime",
   devices: "Devices",
   audio: "Devices",
