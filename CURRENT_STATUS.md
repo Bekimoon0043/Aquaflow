@@ -1,9 +1,35 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-013 Beat Detection Engine complete: a lightweight numpy-only tempo/beat engine with verified BPM accuracy, sub-50 ms latency, and both recorded-buffer and live-streaming paths.
+**Summary:** Recovery — AQ-X-014 Backend API Frontend Integration complete: the previously-unconnected backend engines (hydraulics, pipe sizing, nozzles, BOM, P&ID, energy, weather, mobile monitoring, collaboration) are now reachable from UI panels, verified end-to-end.
 
 ## Completed
+- **AQ-X-014 Backend API Frontend Integration — DONE on `main`.**
+  - New shared [utils/apiClient.js](aquaflow/frontend/src/utils/apiClient.js) (`apiGet`/`apiPost`/
+    `apiPostText`, error surfacing) behind three new panels wiring the built-but-unconnected engines to
+    the UI.
+  - **Engineering Tools** ([EngineeringToolsPanel.jsx](aquaflow/frontend/src/components/panels/EngineeringToolsPanel.jsx))
+    — tabbed access to the hydraulic solver (`POST /api/hydraulics/solve`), pipe sizing
+    (`/api/hydraulics/size` — the actual pipe-sizing endpoint), nozzle database (`GET /api/nozzles/models`
+    + `POST /api/nozzles/query`), BOM generator (`POST /api/bom/generate` from the design fixtures),
+    P&ID generator (`POST /api/pid/generate?format=svg`, rendered inline), energy model
+    (`POST /api/energy/model`) and weather simulation (`POST /api/weather/simulate`).
+  - **Mobile Monitoring** ([MobileMonitorPanel.jsx](aquaflow/frontend/src/components/panels/MobileMonitorPanel.jsx))
+    — live snapshot + alerts with acknowledge (`GET /api/mobile/status|alerts`, `POST /api/mobile/alerts/ack`),
+    polling every 4 s.
+  - **Cloud Collaboration** ([CollaborationPanel.jsx](aquaflow/frontend/src/components/panels/CollaborationPanel.jsx))
+    — open/join a shared document, apply a field edit, and view version/active-users/history
+    (`/api/collab/open|join|edit`, `GET /api/collab/doc|users|history`).
+  - All three wired into `App.jsx` + the TopBar (Design → Engineering Tools / Collaboration; Runtime →
+    Mobile Monitoring).
+  - **Verification:** every endpoint hit end-to-end with the exact panel payloads via FastAPI TestClient
+    — hydraulics, pipe-sizing, nozzles, BOM, weather, energy, P&ID, mobile status/alerts/ack and collab
+    all return 200; **4 vitest cases**
+    ([apiClient.test.js](aquaflow/frontend/src/utils/__tests__/apiClient.test.js)) → frontend vitest
+    **119 passing** (was 115); **`npm run build` succeeds**. Frontend-only change (backend pytest
+    unaffected at 282).
+
+
 - **AQ-X-013 Beat Detection Engine (recovery) — DONE on `main`.**
   - New [services/beat_detection.py](aquaflow/backend/services/beat_detection.py): a dependency-free
     (numpy-only) tempo/beat engine, independent of the heavy offline-only librosa path in the audio

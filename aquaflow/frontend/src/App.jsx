@@ -20,6 +20,9 @@ import DiagnosticsPanel from "./components/panels/DiagnosticsPanel";
 import DependencyGraphPanel from "./components/panels/DependencyGraphPanel";
 import RealtimeValidationPanel from "./components/panels/RealtimeValidationPanel";
 import WindDriftPanel from "./components/panels/WindDriftPanel";
+import EngineeringToolsPanel from "./components/panels/EngineeringToolsPanel";
+import MobileMonitorPanel from "./components/panels/MobileMonitorPanel";
+import CollaborationPanel from "./components/panels/CollaborationPanel";
 import CompilePanel from "./components/panels/CompilePanel";
 import PresetBrowser from "./components/panels/PresetBrowser";
 import CalibrationPanel from "./components/panels/CalibrationPanel";
@@ -73,6 +76,9 @@ function StudioApp() {
             {activePanel === "dependencies" && <DependencyGraphPanel />}
             {activePanel === "validation"   && <RealtimeValidationPanel />}
             {activePanel === "wind"         && <WindDriftPanel />}
+            {activePanel === "engtools"     && <EngineeringToolsPanel />}
+            {activePanel === "mobilemon"    && <MobileMonitorPanel />}
+            {activePanel === "collab"       && <CollaborationPanel />}
             {activePanel === "compile"      && <CompilePanel />}
             {activePanel === "presets"      && <PresetBrowser />}
             {activePanel === "calibration"  && <CalibrationPanel />}
