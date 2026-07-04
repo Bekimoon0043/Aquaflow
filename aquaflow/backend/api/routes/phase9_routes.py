@@ -40,8 +40,26 @@ async def delete_geometry_project(project_id: str):
 
 @phase9_router.get("/geometry/projects/{project_id}/export")
 async def export_for_hydraulics(project_id: str):
+    """
+    Export a pool-geometry project for hydraulics. The ``hydraulics`` block is now
+    produced by the real Hazen-Williams engine (services/hydraulic_solver.py) via
+    geometry_service, not the old linear turnover approximation.
+    """
     from services.geometry_service import get_geometry_service
     result = get_geometry_service().export_for_hydraulics(project_id)
     if not result:
         raise HTTPException(404, f"Project {project_id} not found")
     return result
+
+
+@phase9_router.post("/geometry/hydraulics/solve")
+async def solve_geometry_hydraulics(network: dict):
+    """
+    Solve a hydraulic network for a geometry design with the real Hazen-Williams /
+    Darcy-Weisbach engine (services/hydraulic_solver.solve_network).
+    """
+    from services.hydraulic_solver import solve_network
+    try:
+        return solve_network(network)
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))

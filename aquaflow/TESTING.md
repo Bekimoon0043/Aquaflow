@@ -42,7 +42,7 @@ Config: [backend/pytest.ini](backend/pytest.ini). Tests live in `backend/tests/`
 | `test_wind_drift.py` | Wind Drift Calculation Engine (AQ-X-012) — **wind drift from weather** (flight-time × wind × coupling, cross-checked), **safety zones** that expand downwind and flag keep-clear / barrier breaches (wet-circle-around-landing model, deterministic recompute), and **operator warnings** (severity-ranked: keep-clear/barrier/gust breach, high/moderate wind), incl. a gust-only breach case. |
 | `test_beat_detection.py` | Beat Detection Engine (AQ-X-013) — **BPM correctness** against click tracks of known tempo (90–140 BPM within ±2, beat count/spacing, noise-tolerant, silence→0), **latency under 50 ms** (algorithmic hop latency + streaming per-frame median/p95), and **recorded + live audio** (`detect_beats` buffer path and `LiveBeatDetector` streaming that locks onto the tempo). numpy-only; complements the librosa upload path. |
 
-Standalone `validate_*.py` scripts in `backend/` remain as scenario harnesses; pytest is the canonical suite.
+Standalone `validate_*.py` scripts in `backend/` remain as scenario harnesses; pytest is the canonical suite. `validate_hydraulic.py` (AQ-X-015) confirms `geometry_service` now uses the real Hazen-Williams / Darcy-Weisbach solver (head loss cross-checked to the equations by hand) and that the old linear turnover approximation is removed.
 
 ## Frontend — vitest (resolver + projections)
 

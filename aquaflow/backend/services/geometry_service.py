@@ -5,9 +5,12 @@ Stores pool geometry projects and exports them for the hydraulic solver.
 """
 import json
 import hashlib
+import math
 import time
 from pathlib import Path
 from typing import Optional
+
+from services.hydraulic_solver import solve_network
 
 GEOMETRY_DIR = Path(__file__).parent.parent.parent / "geometry_projects"
 GEOMETRY_DIR.mkdir(exist_ok=True)
@@ -156,28 +159,32 @@ class GeometryService:
         equipment = equipment_types
         effects = effect_types
         unknown = unknown_types
-        surface_area = 0
-        pool_type = project.get("pool_type","rectangular")
-        import math
+        pool_type = project.get("pool_type", "rectangular")
         if pool_type == "circular":
             r = params.get("radius", 5)
             surface_area = math.pi * r ** 2
         else:
             surface_area = params.get("width", 10) * params.get("length", 10)
         volume = surface_area * params.get("depth", 0.8)
+        volume_litres = volume * 1000.0
+
+        # Real hydraulics: build a supply network from the designed nozzles and solve
+        # it with the Hazen-Williams engine (services/hydraulic_solver.solve_network),
+        # replacing the old linear turnover approximation.
+        hydraulics = self._solve_pool_hydraulics(nozzles, params, volume_litres)
+        hydraulics.update({
+            "surface_area_m2": round(surface_area, 2),
+            "volume_m3": round(volume, 2),
+            "volume_litres": round(volume_litres, 0),
+            "design_depth_m": params.get("depth", 0.8),
+        })
         return {
             "project_id": project_id,
             "project_name": project.get("name"),
             "pool_type": pool_type,
             "geometry": geom,
             "dimensions": params,
-            "hydraulics": {
-                "surface_area_m2": round(surface_area, 2),
-                "volume_m3": round(volume, 2),
-                "volume_litres": round(volume * 1000, 0),
-                "design_depth_m": params.get("depth", 0.8),
-                "turnover_rate_hint_hours": round(volume * 1000 / max(1, len(nozzles) * 5), 1),
-            },
+            "hydraulics": hydraulics,
             "nozzle_positions": [
                 {
                     "id": n.get("id"),
@@ -246,6 +253,63 @@ class GeometryService:
                 for e in unknown
             ],
         }
+
+
+    def _solve_pool_hydraulics(self, nozzles: list, params: dict, volume_litres: float) -> dict:
+        """
+        Build a supply network from the designed nozzles and solve it with the real
+        Hazen-Williams engine (services/hydraulic_solver.solve_network) — replacing the
+        old linear ``turnover_rate_hint_hours`` approximation.
+
+        A pump-discharge reservoir feeds a manifold, which branches to one demand node
+        per nozzle (flow from the fixture's engineering spec, or a sensible default).
+        Returns the real total design flow, the physically-correct pool turnover time,
+        and the full solver solution (per-node pressure, per-pipe flow/head loss).
+        """
+        default_flow_lps = 0.5      # L/s per nozzle when the fixture carries no spec
+        design_head_m = float(params.get("design_head_m", 40.0))
+
+        if not nozzles:
+            return {"total_design_flow_m3s": 0.0, "total_design_flow_lpm": 0.0,
+                    "turnover_time_hours": None, "hydraulic_solution": None,
+                    "method": "hazen-williams", "note": "no nozzles in design"}
+
+        xs = [float(n.get("x") or 0.0) for n in nozzles]
+        ys = [float(n.get("y") or 0.0) for n in nozzles]
+        cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+
+        nodes = [{"id": "PUMP", "fixed_head": design_head_m, "elevation": 0.0},
+                 {"id": "MANIFOLD", "elevation": 0.0, "demand": 0.0}]
+        pipes = [{"id": "MAIN", "from": "PUMP", "to": "MANIFOLD",
+                  "length": 10.0, "diameter": 0.15, "roughness": 130}]
+        total_flow = 0.0
+        for i, n in enumerate(nozzles):
+            eng = n.get("engineering") or {}
+            flow_lps = float(eng.get("design_flow_lps", eng.get("flow_lps", default_flow_lps))
+                             or default_flow_lps)
+            demand = flow_lps / 1000.0
+            total_flow += demand
+            nx = float(n.get("x") or cx); ny = float(n.get("y") or cy)
+            length = max(1.0, math.hypot(nx - cx, ny - cy))
+            dia = float(eng.get("pipe_diameter_m", 0.05) or 0.05)
+            nodes.append({"id": f"NOZ{i}", "elevation": 0.0, "demand": demand})
+            pipes.append({"id": f"P{i}", "from": "MANIFOLD", "to": f"NOZ{i}",
+                          "length": length, "diameter": dia, "roughness": 130})
+
+        network = {"method": "hazen-williams", "nodes": nodes, "pipes": pipes}
+        flow_l_per_h = total_flow * 1000.0 * 3600.0
+        turnover = round(volume_litres / flow_l_per_h, 2) if flow_l_per_h > 0 else None
+        base = {
+            "total_design_flow_m3s": round(total_flow, 6),
+            "total_design_flow_lpm": round(total_flow * 60000.0, 2),
+            "turnover_time_hours": turnover,
+            "method": "hazen-williams",
+        }
+        try:
+            solution = solve_network(network)
+        except Exception as exc:                     # solver stays non-fatal for export
+            return {**base, "hydraulic_solution": None, "note": f"solver error: {exc}"}
+        return {**base, "converged": solution.get("converged"), "hydraulic_solution": solution}
 
 
 _service: Optional[GeometryService] = None

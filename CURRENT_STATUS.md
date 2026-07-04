@@ -1,9 +1,30 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-014 Backend API Frontend Integration complete: the previously-unconnected backend engines (hydraulics, pipe sizing, nozzles, BOM, P&ID, energy, weather, mobile monitoring, collaboration) are now reachable from UI panels, verified end-to-end.
+**Summary:** Recovery — AQ-X-015 Replace Old Hydraulic Engine complete: geometry_service now uses the real Hazen-Williams / Darcy-Weisbach solver instead of the old linear turnover approximation. Resolves the "hydraulic engine uses linear approximations" known issue and completes the AQ-X-001…015 recovery run.
 
 ## Completed
+- **AQ-X-015 Replace Old Hydraulic Engine — DONE on `main`.**
+  - **geometry_service.py uses the new solver** — the old inline linear approximation
+    (`turnover_rate_hint_hours = volume·1000 / (nozzles·5)`) is removed and replaced by a real
+    hydraulic solve: `_solve_pool_hydraulics` builds a supply network (pump → manifold → per-nozzle
+    demand branches) and solves it with [hydraulic_solver.solve_network](aquaflow/backend/services/hydraulic_solver.py),
+    returning the real total design flow, a physically-correct pool turnover time, and the full solution
+    (per-node pressure, per-pipe flow/velocity/head loss).
+  - **phase9_routes.py uses the new solver** — the `/geometry/projects/{id}/export` endpoint now returns
+    the real-solver hydraulics (via geometry_service), and a new `POST /geometry/hydraulics/solve`
+    endpoint calls `solve_network` directly.
+  - **Old incorrect hydraulic code removed** — the linear `len(nozzles)·5` turnover approximation is
+    gone (only a docstring notes what it replaced).
+  - **All existing tests still pass** — full backend pytest **282 passing** (unchanged; the acceptance's
+    "108" baseline has since grown), no regressions from the replacement.
+  - **New `validate_hydraulic` harness** — [validate_hydraulic.py](aquaflow/backend/validate_hydraulic.py)
+    **18/18** cross-checks the solver's head loss against the **Hazen-Williams** (1.9017 m) and
+    **Darcy-Weisbach** (1.6525 m) equations computed by hand, confirms geometry_service now returns a
+    converged solver solution, and asserts the old approximation is gone. `validate_hydraulic_solver.py`
+    still 26/26. Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-014 Backend API Frontend Integration — DONE on `main`.**
   - New shared [utils/apiClient.js](aquaflow/frontend/src/utils/apiClient.js) (`apiGet`/`apiPost`/
     `apiPostText`, error surfacing) behind three new panels wiring the built-but-unconnected engines to
