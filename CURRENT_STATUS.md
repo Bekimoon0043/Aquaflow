@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 4 — AQ-S4-001 Installer Framework complete: one-click install, semantic-version auto-updates with rollback, and license activation, plus a cross-platform `install.py`.
+**Summary:** Stage 4 — AQ-S4-002 Crash Reporting System complete: automatic crash upload with an offline outbox, deterministic crash fingerprints, and readable support reports; the UI auto-captures uncaught errors.
 
 ## Completed
+- **AQ-S4-002 Crash Reporting System — DONE on `main` (Stage 4).**
+  - New backend [services/crash_reporter.py](aquaflow/backend/services/crash_reporter.py).
+  - **Automatic logs uploaded** — `CrashReporter.report()` builds a structured crash report with the
+    recent log lines auto-attached, spools it, and uploads it via a pluggable transport (local sink by
+    default); a failed upload stays in an **offline outbox** and `flush()` retries it. New frontend
+    [utils/crashReporter.js](aquaflow/frontend/src/utils/crashReporter.js) installs global
+    `window.onerror` / `unhandledrejection` handlers (wired in `main.jsx`) so uncaught UI errors are
+    captured and POSTed to `/api/crash/report` automatically (with client-side dedupe).
+  - **Crash fingerprints generated** — `crash_fingerprint()` hashes the exception type + the normalised
+    traceback frames (paths → basenames, line numbers/addresses stripped), so the same bug shares one id
+    across machines and minor code drift; `summary()` groups reports by fingerprint (recurring-crash view).
+  - **Support reports generated** — `generate_support_report()` produces a readable report (system info,
+    app version, fingerprint, traceback, recent logs, how-to-send instructions).
+  - API: `POST /api/crash/report|flush`, `GET /api/crash/reports|summary|support/{id}`
+    ([crash_routes.py](aquaflow/backend/api/routes/crash_routes.py)), wired in main.py.
+  - **Verification: 19/19** ([validate_crash_reporter.py](aquaflow/backend/validate_crash_reporter.py)) +
+    **11 pytest cases** ([test_crash_reporter.py](aquaflow/backend/tests/test_crash_reporter.py)) →
+    backend pytest **308 passing** (was 297); **5 vitest cases**
+    ([crashReporter.test.js](aquaflow/frontend/src/utils/__tests__/crashReporter.test.js)) → frontend
+    vitest **142 passing** (was 137); **`npm run build` succeeds**.
+
+
 - **AQ-S4-001 Installer Framework — DONE on `main` (Stage 4).**
   - New [services/installer.py](aquaflow/backend/services/installer.py) — the machine-facing lifecycle.
   - **One-click installation** — `InstallManager.install(root)` idempotently provisions the directory

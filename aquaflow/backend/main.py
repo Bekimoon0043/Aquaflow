@@ -39,6 +39,7 @@ from api.routes.engineering_routes import router as engineering_router
 from api.routes.wind_routes import router as wind_router
 from api.routes.beat_routes import router as beat_router
 from api.routes.installer_routes import router as installer_router
+from api.routes.crash_routes import router as crash_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -348,6 +349,7 @@ app.include_router(engineering_router,      prefix="/api/engineering", tags=["En
 app.include_router(wind_router,             prefix="/api/wind",       tags=["Wind"])
 app.include_router(beat_router,             prefix="/api/beat",       tags=["Beat"])
 app.include_router(installer_router,        prefix="/api/installer",  tags=["Installer"])
+app.include_router(crash_router,            prefix="/api/crash",      tags=["Crash"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 
