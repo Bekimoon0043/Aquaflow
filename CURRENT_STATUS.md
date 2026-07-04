@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-006 Pump Curve Engine complete: manufacturer H–Q data fit to a pump curve, correct operating-point (pump ∩ system curve) with power/efficiency, and parallel/series/variable-speed configurations.
+**Summary:** Recovery — AQ-X-007 Valve Authority Engine complete: correct control-valve authority, installed-characteristic distortion, flow-control recommendations, and verified integration with the hydraulic solver.
 
 ## Completed
+- **AQ-X-007 Valve Authority Engine (recovery) — DONE on `main`.**
+  - New [services/valve_authority.py](aquaflow/backend/services/valve_authority.py): control-valve
+    authority for modulating flow control.
+  - **Valve authority calculated correctly** — β = ΔP_valve(open)/(ΔP_valve+ΔP_rest) at design flow,
+    the Kv relation Q=Kv·√(ΔP/SG) (both directions), authority classification (good ≥0.5 / acceptable
+    ≥0.25 / poor), and the standard installed-characteristic distortion
+    q(φ)=φ/√(β+(1−β)·φ²) with linear / equal-percentage / quick-opening inherent curves.
+  - **Flow control recommendations generated** — `recommend` rates the authority, picks the inherent
+    characteristic whose installed curve is closest to linear (equal-% for lower authority), flags an
+    oversized valve, and computes the target Kv / valve ΔP to reach good authority.
+  - **Integration with hydraulic solver verified** — `kv_to_minor_loss` converts a valve Kv into the
+    solver's dimensionless minor-loss K, so a valve drops into a network as a pipe; `authority_from_network`
+    runs [hydraulic_solver](aquaflow/backend/services/hydraulic_solver.py) and derives β from the solved
+    head losses. Cross-checked: the solver's valve head loss equals the Kv formula at the solved flow
+    (10.9383 m both ways), and a larger Kv correctly gives lower authority.
+  - API: `POST /api/valves/authority`, `POST /api/valves/authority-network`
+    ([valve_routes.py](aquaflow/backend/api/routes/valve_routes.py)), wired in main.py.
+  - **Verification: 27/27** ([validate_valve_authority.py](aquaflow/backend/validate_valve_authority.py));
+    **19 pytest cases** ([test_valve_authority.py](aquaflow/backend/tests/test_valve_authority.py)) →
+    backend pytest now **205 passing** (was 186). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-006 Pump Curve Engine (recovery) — DONE on `main`.**
   - New [services/pump_curve.py](aquaflow/backend/services/pump_curve.py): proper centrifugal-pump
     hydraulics (SI units) — a real advance over the linear approximations flagged in the known issues.
