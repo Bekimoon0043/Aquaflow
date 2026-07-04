@@ -1,9 +1,27 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 3 — AQ-S3-004 Photorealistic Rendering Engine complete: water physics, reflections, and night scenes as a testable engine wired into the 3D preview.
+**Summary:** Stage 3 — AQ-S3-005 Weather Simulation Engine complete: wind drift, evaporation, and visibility impact from ambient conditions.
 
 ## Completed
+- **AQ-S3-005 Weather Simulation Engine — DONE on `main` (Stage 3).**
+  - New [services/weather_engine.py](aquaflow/backend/services/weather_engine.py): computes the three
+    weather effects on an outdoor show from ambient conditions.
+  - **Wind simulated** — wind vector (from-direction → blows-toward), per-jet horizontal drift over
+    flight time (`drift = coupling·wind·2√(2h/g)`), downwind landing offset, growing splash radius,
+    gust drift, and a wind advisory.
+  - **Evaporation estimated** — standard mass-transfer Θ model `E = (25+19v)·A·(x_s−x_air)` with
+    Tetens saturation pressure + humidity ratios; reported as kg/h, L/day, and mm/day (verified
+    ~0.3–0.6 kg/m²/h, zero at saturation).
+  - **Visibility impact calculated** — Koschmieder visual range `V = 3.912/β` (β from condition +
+    humidity + fountain spray) plus a show-clarity score from contrast transmission over the viewing
+    distance (excellent on a clear night, poor in fog), and a show-suitability advisory.
+  - API: `POST /api/weather/simulate` ([weather_routes.py](aquaflow/backend/api/routes/weather_routes.py)),
+    wired in main.py.
+  - **Verification: 25/25** ([validate_weather_engine.py](aquaflow/backend/validate_weather_engine.py))
+    vs independent hand calcs; **11 pytest cases**
+    ([test_weather_engine.py](aquaflow/backend/tests/test_weather_engine.py)) → backend pytest now **92 passing**.
+
 - **AQ-S3-004 Photorealistic Rendering Engine — DONE on `main` (Stage 3).**
   - New testable engine under [frontend/src/rendering/](aquaflow/frontend/src/rendering) — pure,
     framework-agnostic, and the single source of truth for the 3D preview:

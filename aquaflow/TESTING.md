@@ -26,6 +26,7 @@ Config: [backend/pytest.ini](backend/pytest.ini). Tests live in `backend/tests/`
 | `test_energy_model.py` | Energy consumption model (AQ-S2-013) — kWh (daily/annual, duty cycle, hourly profiles), annual operating cost (energy + demand + standing + CO2), peak demand (coincident sum vs non-coincident max), fixture-driven loads. |
 | `test_ai_show_generator.py` | AI show generator (AQ-S3-001) — free-text prompt parsing (effects/name/bpm/duration/negation), mood inference + shaping, and a generated timeline that plays on the real ShowEngine. |
 | `test_choreography_engine.py` | AI Choreography Engine (AQ-S3-003) — full fixture-aware timelines (coverage), fixture constraints (absent fixtures skipped, intensity clamped, flame bursts within on-time), and prompt revisions (scale/add/remove with history); plays on the real ShowEngine. |
+| `test_weather_engine.py` | Weather simulation engine (AQ-S3-005) — wind (vector, jet drift, splash), evaporation (Θ mass-transfer, L/day), and visibility (Koschmieder visual range + show clarity); all vs hand calcs. |
 
 Standalone `validate_*.py` scripts in `backend/` remain as scenario harnesses; pytest is the canonical suite.
 
