@@ -1,9 +1,29 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Stage 4 — AQ-S4-005 Training Academy complete: interactive in-app lessons with server-graded quizzes, per-learner progress tracking, and verifiable course certificates, plus a Training Academy UI panel.
+**Summary:** Stage 4 — AQ-S4-006 Documentation Center complete: a bundled, fully-offline in-app help center with ranked full-text search and context-sensitive help.
 
 ## Completed
+- **AQ-S4-006 Documentation Center — DONE on `main` (Stage 4).**
+  - New `src/docs/` module ([articles.js](aquaflow/frontend/src/docs/articles.js),
+    [search.js](aquaflow/frontend/src/docs/search.js)) — the help content ships **bundled with the app**
+    (16 articles across Basics/Design/Programming/Hardware/Engineering/Safety/Runtime/Account) so the
+    center works with **no network**.
+  - **Search supported** — a pure, dependency-free ranked full-text search (title/tag weighted over body,
+    substring boost, snippets); empty/stopword queries return nothing.
+  - **Offline mode supported** — search + article retrieval are entirely client-side over the bundled
+    docs (`OFFLINE_AVAILABLE`, verified to work with no `fetch`); the panel shows an "Offline ready" badge.
+  - **Context-sensitive help supported** — each article maps to the UI panels it explains; `contextHelp()`
+    returns the relevant articles for a panel key, and [helpContext.js](aquaflow/frontend/src/docs/helpContext.js)
+    records the last panel the user was on (set in `TopBar`) so opening the docs shows help for that area.
+  - New [DocumentationPanel.jsx](aquaflow/frontend/src/components/panels/DocumentationPanel.jsx) — search
+    box, category browse, context-help section, and an article viewer; wired into `App.jsx` + the TopBar
+    (Help → Documentation Center).
+  - **Verification: 10 vitest cases** ([docs.test.js](aquaflow/frontend/src/docs/__tests__/docs.test.js)) →
+    frontend vitest **158 passing** (was 148); **`npm run build` succeeds**. Frontend-only change (backend
+    unaffected at 339).
+
+
 - **AQ-S4-005 Training Academy — DONE on `main` (Stage 4).**
   - New backend [services/training_academy.py](aquaflow/backend/services/training_academy.py) — a built-in
     curriculum of 4 courses (Fundamentals, Show Programming, Hardware & Safety, Hydraulic Design), each a

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useShowStore } from "../store/showStore";
 import { useWS } from "../hooks/WebSocketContext";
 import { trackFeature } from "../utils/analytics";
+import { setHelpContext } from "../docs/helpContext";
 
 const MENU_ITEMS = {
   File: [
@@ -79,8 +80,8 @@ const MENU_ITEMS = {
     ["AI Settings", "action", "AI Settings"],
   ],
   Help: [
+    ["Documentation Center", "panel", "docs"],
     ["Training Academy", "panel", "academy"],
-    ["Documentation", "action", "Documentation"],
     ["Keyboard Shortcuts", "action", "Keyboard Shortcuts"],
     ["---", "separator"],
     ["About AquaFlow", "action", "About AquaFlow"],
@@ -98,6 +99,7 @@ const PANEL_TO_GROUP = {
   collab: "Design",
   envmaterial: "Design",
   academy: "Help",
+  docs: "Help",
   mobilemon: "Runtime",
   devices: "Devices",
   audio: "Devices",
@@ -253,6 +255,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
     if (type === "panel") {
       setActivePanel(value);
       trackFeature(value, { via: "menu" });   // AQ-S4-003: anonymous feature usage
+      setHelpContext(value);                   // AQ-S4-006: context-sensitive help
       setOpenMenu(null);
       return;
     }
