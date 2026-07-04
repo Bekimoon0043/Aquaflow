@@ -1,9 +1,25 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 3 — AQ-S3-009 Mobile Monitoring App complete: live monitoring, prioritized alerts, and validated remote control.
+**Summary:** Stage 3 — AQ-S3-010 Cloud Collaboration System complete: multi-user editing, version history, and 3-way conflict resolution.
 
 ## Completed
+- **AQ-S3-010 Cloud Collaboration System — DONE on `main` (Stage 3).**
+  - New [services/collaboration.py](aquaflow/backend/services/collaboration.py): shared show documents
+    with optimistic concurrency (`CollabDocument` + `CollaborationHub`).
+  - **Multi-user editing** — users join with presence + cursors; each edit is a dot-path field patch
+    applied against the base version the user last saw; concurrent edits to different fields merge.
+  - **Version history** — every applied change creates an immutable version (author, ts, message,
+    snapshot, changed paths); inspect any version and `revert` to it (itself a new version).
+  - **Conflict resolution** — three-way, field-level merge: patches to fields nobody else changed
+    since base auto-merge; a field changed to a different value returns a conflict (base/mine/theirs);
+    same-value edits are idempotent; `resolve_conflicts` force-applies the chosen values. Partial
+    merges apply the clean fields and conflict only the rest.
+  - API: `POST /api/collab/open|join|leave|cursor|edit|resolve|revert`, `GET /doc|history|users/{id}`
+    ([collab_routes.py](aquaflow/backend/api/routes/collab_routes.py)), wired in main.py.
+  - **Verification: 18/18** ([validate_collaboration.py](aquaflow/backend/validate_collaboration.py));
+    **9 pytest cases** ([test_collaboration.py](aquaflow/backend/tests/test_collaboration.py)) → backend pytest now **108 passing**.
+
 - **AQ-S3-009 Mobile Monitoring App — DONE on `main` (Stage 3).**
   - New [services/mobile_monitor.py](aquaflow/backend/services/mobile_monitor.py): turns the operator
     status into a phone-friendly monitoring feed, raises alerts, and gates remote commands.

@@ -28,6 +28,7 @@ Config: [backend/pytest.ini](backend/pytest.ini). Tests live in `backend/tests/`
 | `test_choreography_engine.py` | AI Choreography Engine (AQ-S3-003) — full fixture-aware timelines (coverage), fixture constraints (absent fixtures skipped, intensity clamped, flame bursts within on-time), and prompt revisions (scale/add/remove with history); plays on the real ShowEngine. |
 | `test_weather_engine.py` | Weather simulation engine (AQ-S3-005) — wind (vector, jet drift, splash), evaporation (Θ mass-transfer, L/day), and visibility (Koschmieder visual range + show clarity); all vs hand calcs. |
 | `test_mobile_monitor.py` | Mobile Monitoring App backend (AQ-S3-009) — live snapshot (health/progress/subsystems), alert engine (severity, dedupe, ack, clear, ordering), and remote-command validation against the safety state. |
+| `test_collaboration.py` | Cloud Collaboration System (AQ-S3-010) — multi-user presence + editing, version history + revert, and 3-way conflict resolution (auto-merge non-overlapping, surface + resolve overlapping). |
 
 Standalone `validate_*.py` scripts in `backend/` remain as scenario harnesses; pytest is the canonical suite.
 
