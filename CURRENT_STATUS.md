@@ -1,9 +1,25 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-03
-**Summary:** Stage 3 — AQ-S3-006 VR Walkthrough Mode complete: navigation, WebXR VR mode, and a client presentation tour, wired into the 3D preview.
+**Summary:** Stage 3 — AQ-S3-007 4K Video Export Engine complete: 4K, 60 FPS, and synchronized audio for show recording.
 
 ## Completed
+- **AQ-S3-007 4K Video Export Engine — DONE on `main` (Stage 3).**
+  - New testable engine [frontend/src/video/videoExport.js](aquaflow/frontend/src/video/videoExport.js)
+    — pure, framework-agnostic export config + A/V sync:
+    - **4K supported** — resolution presets incl. 4K UHD (3840×2160), `is4K`, custom `{w,h}`.
+    - **60 FPS supported** — framerate presets (24/30/60), `frameCount`/`frameDurationMs`, and a
+      resolution×fps bitrate estimate; `buildExportConfig` carries fps + bitrate + frame count.
+    - **Audio synchronized** — `audioVideoSync` (A/V offset, in-tolerance flag, correction, latency)
+      and `combineStreams` to mux a canvas video stream with an audio stream; MIME selection.
+  - Wired into [FountainScene_v6.js](aquaflow/frontend/src/components/preview/FountainScene_v6.js):
+    `startRecording({resolution,fps,audioStream})` renders at the export resolution (true 4K), sets
+    fps + bitrate + MIME, and muxes audio; restores the preview size on stop. PreviewPanel adds
+    resolution + fps selectors on the record button.
+  - **Verification: 15 vitest cases**
+    ([videoExport.test.js](aquaflow/frontend/src/video/__tests__/videoExport.test.js)) → frontend
+    vitest now **74 passing**; `npm run build` clean.
+
 - **AQ-S3-006 VR Walkthrough Mode — DONE on `main` (Stage 3).**
   - New testable engine [frontend/src/walkthrough/](aquaflow/frontend/src/walkthrough) — pure,
     framework-agnostic:

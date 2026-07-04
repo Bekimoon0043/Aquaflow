@@ -52,6 +52,8 @@ import {
   vrReferenceSpaceType as WT_vrReferenceSpaceType, DEFAULT_TOUR as WT_DEFAULT_TOUR,
   buildTour as WT_buildTour, tourStepAt as WT_tourStepAt,
 } from "../../walkthrough";
+// 4K Video Export Engine (AQ-S3-007) — export config + A/V sync.
+import { buildExportConfig as VE_buildExportConfig, combineStreams as VE_combineStreams } from "../../video/videoExport";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -2155,27 +2157,56 @@ export class FountainScene {
     c.addEventListener('touchend',   this._onUp);
   }
 
-  // ─── Video capture ──────────────────────────────────────────────────────
-  startRecording() {
+  // ─── Video capture — 4K / 60 FPS / synchronized audio (AQ-S3-007) ─────────
+  /**
+   * @param {object} opts { resolution:"720p|1080p|1440p|4k", fps:24|30|60,
+   *                        audioStream?:MediaStream, durationS?:number }
+   */
+  startRecording(opts = {}) {
     if (!this.canvas.captureStream) return false;
-    const stream = this.canvas.captureStream(30);
+    const cfg = VE_buildExportConfig({
+      resolution: opts.resolution || "1080p",
+      fps: opts.fps || 60,
+      durationS: opts.durationS || 0,
+      withAudio: !!opts.audioStream,
+    });
+    this._exportCfg = cfg;
+    // Render at the export resolution so the captured frames are true 4K/etc.
+    if (opts.resolution) {
+      this._preExportSize = { w: this.canvas.clientWidth || this.canvas.width, h: this.canvas.clientHeight || this.canvas.height };
+      try { this.renderer.setSize(cfg.width, cfg.height, false); this.camera.aspect = cfg.width / cfg.height; this.camera.updateProjectionMatrix(); } catch (e) {}
+    }
+    let stream = this.canvas.captureStream(cfg.fps);
+    if (opts.audioStream) stream = VE_combineStreams(stream, opts.audioStream);
     this._recordedChunks = [];
-    this._mediaRecorder = new MediaRecorder(stream, {mimeType:'video/webm;codecs=vp9'});
-    this._mediaRecorder.ondataavailable = e => { if (e.data.size>0) this._recordedChunks.push(e.data); };
+    const recOpts = { mimeType: cfg.mimeType, videoBitsPerSecond: cfg.videoBitrate };
+    if (cfg.hasAudio) recOpts.audioBitsPerSecond = cfg.audioBitrate;
+    try { this._mediaRecorder = new MediaRecorder(stream, recOpts); }
+    catch (e) { this._mediaRecorder = new MediaRecorder(stream); }
+    this._mediaRecorder.ondataavailable = e => { if (e.data.size > 0) this._recordedChunks.push(e.data); };
     this._mediaRecorder.start(100);
     return true;
   }
   stopRecording() {
     if (!this._mediaRecorder) return;
+    const cfg = this._exportCfg || { mimeType: "video/webm", fileExtension: "webm", label: "" };
+    // Restore the preview size after capturing at export resolution.
+    if (this._preExportSize) {
+      const s = this._preExportSize; this._preExportSize = null;
+      try { this.resize(s.w, s.h); } catch (e) {}
+    }
     this._mediaRecorder.stop();
     setTimeout(() => {
-      const blob = new Blob(this._recordedChunks, {type:'video/webm'});
+      const blob = new Blob(this._recordedChunks, { type: (cfg.mimeType || "video/webm").split(";")[0] });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `aquaflow-show-${Date.now()}.webm`; a.click();
+      const tag = cfg.label ? cfg.label.replace(/\s+/g, "") : "show";
+      a.href = url; a.download = `aquaflow-${tag}-${Date.now()}.${cfg.fileExtension || "webm"}`; a.click();
       URL.revokeObjectURL(url);
     }, 500);
   }
+  /** Expose the last/target export config (for the UI). */
+  getExportConfig(opts = {}) { return VE_buildExportConfig({ resolution: opts.resolution || "1080p", fps: opts.fps || 60, withAudio: !!opts.withAudio }); }
     _groupIntensityForNozzle(nozzle, fallback = 0) {
     const groups = this._signals?.groups || {};
 

@@ -78,6 +78,10 @@ export default function PreviewPanel() {
   const [dryRunState, setDryRunState] = useState(null);
   const lastDryRunRef = useRef(null);
 
+  // 4K Video Export (AQ-S3-007)
+  const [exportRes, setExportRes] = useState("1080p");
+  const [exportFps, setExportFps] = useState(60);
+
   // VR Walkthrough (AQ-S3-006)
   const [vrSupported, setVrSupported] = useState(false);
   const [presenting,  setPresenting]  = useState(false);
@@ -249,8 +253,10 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
   };
 
   const toggleRecord = () => {
-    if (!recording) { if(sceneRef.current?.startRecording()) setRecording(true); }
-    else { sceneRef.current?.stopRecording(); setRecording(false); }
+    if (!recording) {
+      // 4K Video Export (AQ-S3-007) — capture at the chosen resolution + fps.
+      if (sceneRef.current?.startRecording({ resolution: exportRes, fps: exportFps })) setRecording(true);
+    } else { sceneRef.current?.stopRecording(); setRecording(false); }
   };
 
   const poolDesc = poolType === "circular"
@@ -531,8 +537,25 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
           <button onClick={screenshot} style={{ ...btnSm(false,"#00ff88"), color:"#00ff88", textAlign:"center" }}>
             📷 Screenshot PNG
           </button>
+          {!recording && (
+            <div style={{ display:"flex", gap:3 }}>
+              <select value={exportRes} onChange={e=>setExportRes(e.target.value)} title="Export resolution"
+                style={{ flex:1, fontSize:11, padding:"3px 4px", background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4 }}>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+                <option value="1440p">1440p</option>
+                <option value="4k">4K UHD</option>
+              </select>
+              <select value={exportFps} onChange={e=>setExportFps(Number(e.target.value))} title="Export frame rate"
+                style={{ width:74, fontSize:11, padding:"3px 4px", background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4 }}>
+                <option value={24}>24 fps</option>
+                <option value={30}>30 fps</option>
+                <option value={60}>60 fps</option>
+              </select>
+            </div>
+          )}
           <button onClick={toggleRecord} style={{ ...btnSm(recording,"#ff4444"), color:recording?"#ff4444":"#ff8866", textAlign:"center" }}>
-            {recording ? "⏹ Stop & Save WebM" : "⏺ Record Video"}
+            {recording ? "⏹ Stop & Save" : `⏺ Record ${exportRes==="4k"?"4K":exportRes} · ${exportFps}fps`}
           </button>
         </div>
       </div>

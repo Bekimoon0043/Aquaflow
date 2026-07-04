@@ -47,6 +47,7 @@ Config: [frontend/vitest.config.js](frontend/vitest.config.js). Tests in `src/ut
 | `data/__tests__/fixtureLibrary.test.js` | The expanded fixture library (AQ-S2-011) — 500+ fixtures, every one with hydraulic + electrical metadata, unique keys, computed currents. |
 | `rendering/__tests__/renderingEngine.test.js` | The Photorealistic Rendering Engine (AQ-S3-004) — water physics (projectile trajectory, apex, time-of-flight), reflections (mirror matrix + Fresnel), and scene modes incl. night; `buildRenderConfig` aggregation. |
 | `walkthrough/__tests__/walkthrough.test.js` | The VR Walkthrough Engine (AQ-S3-006) — navigation (first-person step, bounds, waypoint path, look-at), VR/WebXR capability + session config, and client-presentation tour sequencing (auto-advance, loop). |
+| `video/__tests__/videoExport.test.js` | The 4K Video Export Engine (AQ-S3-007) — 4K resolution presets, 60 fps (frame count/period/bitrate), audio A/V sync + stream muxing, MIME selection, `buildExportConfig`. |
 
 ## Fixture library (AQ-S2-011)
 
