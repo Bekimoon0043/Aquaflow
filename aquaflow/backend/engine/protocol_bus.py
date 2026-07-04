@@ -601,7 +601,9 @@ class ProtocolBus:
                     universe = device.params.get("dmxUniverse", 0) if device else 0
 
             # Build channel map — RGB fixture: ch0=master, ch1=R, ch2=G, ch3=B
-            val = int(max(0, min(1, intensity)) * 255)
+            # `intensity` has already passed the output-path safety gate.
+            scale = max(0.0, min(1.0, intensity))
+            val = int(scale * 255)
 
             color = cmd.get("color") or cmd.get("lightingColor") or {}
 
@@ -618,10 +620,14 @@ class ProtocolBus:
                 g = 1.0
                 b = 1.0
 
-            # Accept both 0..1 and 0..255 RGB values.
-            r = int(max(0, min(255, r * 255 if r <= 1 else r)))
-            g = int(max(0, min(255, g * 255 if g <= 1 else g)))
-            b = int(max(0, min(255, b * 255 if b <= 1 else b)))
+            # Accept both 0..1 and 0..255 RGB values, then scale the colour channels
+            # by the gated intensity. This is the safety-critical part: when the
+            # safety gate reduces intensity to 0 (e.g. no permit), EVERY channel —
+            # not just the master/dimmer — goes to 0, so a fixture with no separate
+            # dimmer channel still goes dark. (AQ-X-002)
+            r = int(max(0, min(255, r * 255 if r <= 1 else r)) * scale)
+            g = int(max(0, min(255, g * 255 if g <= 1 else g)) * scale)
+            b = int(max(0, min(255, b * 255 if b <= 1 else b)) * scale)
 
             channels = {
                 dmx_addr - 1: val,        # Master/dimmer

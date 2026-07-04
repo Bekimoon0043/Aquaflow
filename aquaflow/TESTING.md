@@ -30,6 +30,7 @@ Config: [backend/pytest.ini](backend/pytest.ini). Tests live in `backend/tests/`
 | `test_mobile_monitor.py` | Mobile Monitoring App backend (AQ-S3-009) — live snapshot (health/progress/subsystems), alert engine (severity, dedupe, ack, clear, ordering), and remote-command validation against the safety state. |
 | `test_collaboration.py` | Cloud Collaboration System (AQ-S3-010) — multi-user presence + editing, version history + revert, and 3-way conflict resolution (auto-merge non-overlapping, surface + resolve overlapping). |
 | `test_dmx_assigner.py` | Automatic DMX Address Assignment (AQ-X-001) — per-profile/type channel sizing for all fixture types, conflict-free first-fit allocation with universe rollover at 512, manual-override honouring (pinned addresses kept, autos packed around them), manual-vs-manual collision reporting, and the DeviceRegistry/fixture-bridge integration path. |
+| `test_hardware_output.py` | **Hardware Output Verification (AQ-X-002, CRITICAL)** — Art-Net/sACN packet round-trip (encode→decode incl. 15-bit universes), 44 Hz timing analysis vs the DMX512 physical frame floor, safety-gate zeroing of emitted colour bytes without a permit, and **live UDP loopback** against a `VirtualDMXNode` ("simulated hardware") for real Art-Net/sACN output, safety gate on the wire, and transmit timing (loopback checks skip gracefully if sockets are unavailable). |
 
 Standalone `validate_*.py` scripts in `backend/` remain as scenario harnesses; pytest is the canonical suite.
 

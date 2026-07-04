@@ -103,6 +103,37 @@ def build_sacn_packet(
     return preamble + root_layer
 
 
+def parse_sacn_packet(packet: bytes) -> dict:
+    """
+    Decode an sACN (E1.31) data packet — the inverse of ``build_sacn_packet``.
+
+    Parsed from the tail of the frame (the DMP layer is always last), which is
+    robust to the layered length fields. Returns universe, priority, sequence, the
+    DMX start code, and the 512 DMX ``data`` bytes. Raises ValueError if the packet
+    is not a well-formed E1.31 frame.
+    """
+    # preamble(4) + packet id(12) + root/framing/dmp layers. Minimum full frame is
+    # 638 bytes of layers on top of the 16-byte preamble+id = 654.
+    if len(packet) < 638:
+        raise ValueError(f"sACN packet too short: {len(packet)} bytes")
+    if packet[4:16] != SACN_PACKET_ID:
+        raise ValueError("not an sACN packet (bad ACN packet identifier)")
+    # Slice from the end: dmp_layer is the final 523 bytes; its last 513 bytes are
+    # the DMX start code + 512 channels. The framing fields sit just before it.
+    data = bytes(packet[-512:])
+    start_code = packet[-513]
+    universe = struct.unpack('>H', packet[-525:-523])[0]
+    sequence = packet[-527]
+    priority = packet[-530]
+    return {
+        "universe":   universe,
+        "priority":   priority,
+        "sequence":   sequence,
+        "start_code": start_code,
+        "data":       data,
+    }
+
+
 @dataclass
 class SACNUniverseState:
     universe: int

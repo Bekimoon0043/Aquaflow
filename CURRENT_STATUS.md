@@ -1,9 +1,37 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-001 Automatic DMX Address Assignment complete: conflict-free allocation for all fixture types with manual-override support.
+**Summary:** Recovery — AQ-X-002 Hardware Output Verification (CRITICAL) complete: full DMX/Art-Net/sACN output path verified against a UDP loopback "simulated hardware" node, including a real safety-gate fix. Resolves the "hardware output unverified" critical known issue.
 
 ## Completed
+- **AQ-X-002 Hardware Output Verification (CRITICAL) — DONE on `main`.**
+  - New [services/hardware_verifier.py](aquaflow/backend/services/hardware_verifier.py): a
+    `VirtualDMXNode` — a real UDP receiver on 127.0.0.1 that stands in for a DMX/Art-Net/sACN
+    fixture node — plus a verification engine that drives the production drivers and decodes the
+    frames that actually leave the socket.
+  - **DMX + Art-Net output verified** — commanded channels arrive intact and decode to spec, incl.
+    15-bit universes (> 255) surviving the net/sub/low split. New `parse_artdmx`/`extract_artnet_dmx`
+    ([artnet_driver.py](aquaflow/backend/protocols/artnet_driver.py)) round-trip `build_artdmx`.
+  - **Art-Net + sACN output verified** — `parse_sacn_packet`
+    ([sacn_driver.py](aquaflow/backend/protocols/sacn_driver.py)) round-trips `build_sacn_packet`;
+    E1.31 frames verified on the wire via unicast loopback.
+  - **Safety gate tested on hardware** — routed a real lighting command through the ProtocolBus
+    output-path gate to a loopback node: no permit ⇒ **all** emitted channels are zero, permit ⇒ the
+    commanded value reaches the wire. This surfaced and fixed a real safety bug — the gate scaled the
+    master/dimmer but not the R/G/B colour channels, so a fixture with no dimmer channel would still
+    emit light without a permit. Colour channels are now scaled by the gated intensity
+    ([protocol_bus.py](aquaflow/backend/engine/protocol_bus.py)).
+  - **Output timing verified within spec** — the transmit cadence stays within the Art-Net 44 Hz
+    ceiling and respects the ~22.7 ms DMX512 physical frame floor (`analyze_timing`).
+  - API: `GET /api/hardware/verify` (runs the suite, returns a `deployment_ready` report),
+    `GET /api/hardware/spec` ([hardware_routes.py](aquaflow/backend/api/routes/hardware_routes.py)),
+    wired in main.py.
+  - **Verification: 20/20** ([validate_hardware_output.py](aquaflow/backend/validate_hardware_output.py),
+    `deployment_ready: True`, 5/5 live loopback checks pass); **19 pytest cases**
+    ([test_hardware_output.py](aquaflow/backend/tests/test_hardware_output.py)) → backend pytest now
+    **136 passing** (was 117). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-001 Automatic DMX Address Assignment (recovery) — DONE on `main`.**
   - New [services/dmx_assigner.py](aquaflow/backend/services/dmx_assigner.py): the conflict-free DMX
     allocator that turns a set of fixtures into concrete (universe, channel) addresses.

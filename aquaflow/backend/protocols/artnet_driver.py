@@ -54,6 +54,59 @@ def build_artdmx(universe: int, data: bytes, sequence: int = 0) -> bytes:
     return packet
 
 
+ARTNET_HEADER_LEN = 18   # ID(8)+opcode(2)+ver(2)+seq(1)+phys(1)+universe(2)+len(2)
+
+
+def parse_artdmx(packet: bytes) -> dict:
+    """
+    Decode an ArtDmx packet back into its fields — the inverse of ``build_artdmx``.
+
+    This is what a real Art-Net node does on the wire, so round-tripping
+    build→parse verifies the exact bytes a fixture would receive. Returns a dict
+    with universe, sequence, physical, version, length and the DMX ``data`` bytes.
+    Raises ValueError on a malformed / non-ArtDmx packet.
+    """
+    if len(packet) < ARTNET_HEADER_LEN:
+        raise ValueError(f"packet too short: {len(packet)} bytes")
+    if packet[0:8] != ARTNET_ID:
+        raise ValueError("not an Art-Net packet (bad ID)")
+    opcode = struct.unpack('<H', packet[8:10])[0]
+    if opcode != OPCODE_DMX:
+        raise ValueError(f"not an ArtDmx packet (opcode 0x{opcode:04x})")
+    version  = struct.unpack('>H', packet[10:12])[0]
+    sequence = packet[12]
+    physical = packet[13]
+    uni_lowsub = packet[14]
+    uni_net    = packet[15]
+    uni_low = uni_lowsub & 0x0F
+    uni_sub = (uni_lowsub >> 4) & 0x0F
+    universe = (uni_net << 8) | (uni_sub << 4) | uni_low
+    length = struct.unpack('>H', packet[16:18])[0]
+    data = packet[ARTNET_HEADER_LEN:ARTNET_HEADER_LEN + length]
+    return {
+        "universe": universe,
+        "sequence": sequence,
+        "physical": physical,
+        "version":  version,
+        "length":   length,
+        "data":     data,
+    }
+
+
+def extract_artnet_dmx(packet: bytes) -> bytes:
+    """
+    Return just the DMX channel bytes from any ArtDmx packet.
+
+    Tolerant of both this driver's build_artdmx and the legacy inline encoder in
+    protocol_bus.py (identical 18-byte header + big-endian length), so it can pull
+    the on-wire channel values regardless of which driver emitted the frame.
+    """
+    if len(packet) < ARTNET_HEADER_LEN or packet[0:8] != ARTNET_ID:
+        raise ValueError("not an Art-Net packet")
+    length = struct.unpack('>H', packet[16:18])[0]
+    return packet[ARTNET_HEADER_LEN:ARTNET_HEADER_LEN + length]
+
+
 @dataclass
 class UniverseTarget:
     """One output destination for a universe."""
