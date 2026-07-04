@@ -1,9 +1,33 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-04
-**Summary:** Recovery — AQ-X-003 Compile and Deploy Bundle complete: the compiler now produces a checksum-verified `.luxshow` bundle, the runtime exporter round-trips end-to-end, and a compiled bundle is proven to play on the real ShowEngine (on-site playback). Fixed a real Windows checksum bug in the bundle packager.
+**Summary:** Recovery — AQ-X-004 Cue Stack and Scene Recall complete: a pure, clock-injectable cue engine with exact scene recall, smooth crossfades, and multiple independent cue stacks.
 
 ## Completed
+- **AQ-X-004 Cue Stack and Scene Recall (recovery) — DONE on `main`.**
+  - New [services/cue_engine.py](aquaflow/backend/services/cue_engine.py): the theatrical playback
+    model on top of the timeline — `Scene` (a named snapshot of per-target levels), `Cue` (a numbered
+    step: scene + fade time), `CueStack` (ordered cues + live playhead + crossfade engine), and
+    `CueStackManager` (many independent stacks).
+  - **Cue stack saves and recalls correctly** — GO / GO-TO / BACK / RELEASE drive the playhead; when a
+    fade completes the output equals the target scene exactly (`recalled_values`). Everything
+    round-trips through `to_dict`/`from_dict` for persistence (cues, scenes, numbers, fade times).
+  - **Scene transitions smooth** — `crossfade` interpolates every target between the current look and
+    the cue's scene (targets present on only one side fade to/from 0, so nothing snaps); linear +
+    smoothstep/ease-in/ease-out curves, exact endpoints and midpoint, verified monotonic.
+  - **Multiple cue stacks supported** — the manager holds any number of named stacks that run
+    independently (a GO on one never affects another); the whole manager round-trips too.
+  - Clock-injectable (every time-dependent call takes an explicit `now`) so fades are deterministic
+    and unit-testable without sleeping. A `scene_values_from_commands` helper captures a live look
+    from emitted output.
+  - API: `POST/GET /api/cues/stacks`, `POST /api/cues/stacks/{id}/cues|go|go-to|back|release`,
+    `GET /api/cues/stacks/{id}/output` ([cue_routes.py](aquaflow/backend/api/routes/cue_routes.py)),
+    wired in main.py.
+  - **Verification: 20/20** ([validate_cue_engine.py](aquaflow/backend/validate_cue_engine.py));
+    **14 pytest cases** ([test_cue_engine.py](aquaflow/backend/tests/test_cue_engine.py)) → backend
+    pytest now **158 passing** (was 144). Backend-only change; `npm run build` not applicable.
+
+
 - **AQ-X-003 Compile and Deploy Bundle (recovery) — DONE on `main`.**
   - **luxshow_compiler produces a valid bundle** — new `load_luxshow`
     ([luxshow_compiler.py](aquaflow/backend/services/luxshow_compiler.py)) opens and VERIFIES a
