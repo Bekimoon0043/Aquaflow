@@ -1,9 +1,32 @@
 # AquaFlow Studio — Current Status
 
-**Date:** 2026-07-04
-**Summary:** Stage 5 — AQ-S5-002 AI Optimization Engine complete: physics-grounded energy, water and performance optimisation with quantified savings and an AI Optimization UI panel.
+**Date:** 2026-07-05
+**Summary:** Stage 5 — AQ-S5-003 Autonomous Show Adaptation complete: the show auto-adapts to live weather, crowd and event context (with safety precedence), plus an Autonomous Adaptation UI panel.
 
 ## Completed
+- **AQ-S5-003 Autonomous Show Adaptation — DONE on `main` (Stage 5).**
+  - New backend [services/show_adaptation.py](aquaflow/backend/services/show_adaptation.py) — from live
+    context it produces an adaptation plan that re-scales the running show (intensity, jet height, tempo,
+    enabled/disabled effects), reusing the AQ-X-012 wind thresholds.
+  - **Weather adaptation** — high wind (≥12 m/s) cuts jet height to 0.4 and disables mist/laminar/fine
+    jets + flame; moderate wind trims height to 0.7; rain reduces intensity and drops fog; storm/dense-fog
+    is flagged unsafe with a near-shutdown; night (low ambient lux) boosts lighting.
+  - **Crowd adaptation** — scales intensity with crowd density (eco 0.5× when empty → boost 1.2× when
+    packed); density derived from level, or count/capacity.
+  - **Event adaptation** — profiles per event (quiet-hours dims + disables flame/laser; celebration/VIP
+    boost; finale boosts + enables flame/laser/fog; countdown speeds tempo).
+  - **Safety precedence** — weather caps are applied last, so a finale can never raise jets or ignite
+    flame in high wind, and intensity is capped at 1.5×.
+  - New [AdaptationPanel.jsx](aquaflow/frontend/src/components/panels/AdaptationPanel.jsx) — live
+    wind/crowd/condition/event controls that recompute the plan (scale bars, effect toggles, triggers,
+    safety badge); wired into `App.jsx` + the TopBar (Runtime → Autonomous Adaptation).
+  - API: `POST /api/adaptation/plan` ([adaptation_routes.py](aquaflow/backend/api/routes/adaptation_routes.py)),
+    wired in main.py.
+  - **Verification: 25/25** ([validate_show_adaptation.py](aquaflow/backend/validate_show_adaptation.py))
+    + **15 pytest cases** ([test_show_adaptation.py](aquaflow/backend/tests/test_show_adaptation.py)) →
+    backend pytest **374 passing** (was 359); **`npm run build` succeeds**.
+
+
 - **AQ-S5-002 AI Optimization Engine — DONE on `main` (Stage 5).**
   - New backend [services/optimization_engine.py](aquaflow/backend/services/optimization_engine.py) —
     analyses a design/show and recommends changes, each grounded in real physics so the savings are
