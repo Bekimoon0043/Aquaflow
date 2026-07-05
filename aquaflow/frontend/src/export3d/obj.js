@@ -46,6 +46,17 @@ export function toOBJ(graph, mtlFilename = "aquaflow_scene.mtl") {
   (graph.nodes || []).forEach((node) => {
     if (!node.mesh || !node.mesh.indices.length) return;
     const [tx, ty, tz] = node.translation || [0, 0, 0];
+    const [sx, sy, sz] = node.scale || [1, 1, 1];
+    const a = ((node.rotationY || 0) * Math.PI) / 180;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    // Bake the node transform (scale → rotate about Y → translate) into world
+    // vertices, since OBJ has no per-object transform node.
+    const xf = (px, py, pz) => {
+      const x = px * sx, y = py * sy, z = pz * sz;
+      return [x * ca + z * sa + tx, y + ty, -x * sa + z * ca + tz];
+    };
+    // Normals rotate about Y only (uniform scale keeps them valid).
+    const xfN = (nx, ny, nz) => [nx * ca + nz * sa, ny, -nx * sa + nz * ca];
     const pos = node.mesh.positions;
     const nrm = node.mesh.normals;
     const idx = node.mesh.indices;
@@ -53,10 +64,12 @@ export function toOBJ(graph, mtlFilename = "aquaflow_scene.mtl") {
     lines.push(`o ${node.name}`);
     if (node.material) lines.push(`usemtl ${node.material.name}`);
     for (let i = 0; i < pos.length; i += 3) {
-      lines.push(`v ${f6(pos[i] + tx)} ${f6(pos[i + 1] + ty)} ${f6(pos[i + 2] + tz)}`);
+      const [wx, wy, wz] = xf(pos[i], pos[i + 1], pos[i + 2]);
+      lines.push(`v ${f6(wx)} ${f6(wy)} ${f6(wz)}`);
     }
     for (let i = 0; i < nrm.length; i += 3) {
-      lines.push(`vn ${f6(nrm[i])} ${f6(nrm[i + 1])} ${f6(nrm[i + 2])}`);
+      const [nx, ny, nz] = xfN(nrm[i], nrm[i + 1], nrm[i + 2]);
+      lines.push(`vn ${f6(nx)} ${f6(ny)} ${f6(nz)}`);
     }
     for (let i = 0; i < idx.length; i += 3) {
       const a = idx[i] + vBase, b = idx[i + 1] + vBase, c = idx[i + 2] + vBase;

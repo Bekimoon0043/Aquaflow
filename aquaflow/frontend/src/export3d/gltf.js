@@ -140,6 +140,14 @@ function assemble(graph, { embedBuffer }) {
     if (node.translation && node.translation.some((v) => v !== 0)) {
       gnode.translation = node.translation.map((v) => +v.toFixed(6));
     }
+    if (node.rotationY) {
+      const a = (node.rotationY * Math.PI) / 180;
+      gnode.rotation = [0, +Math.sin(a / 2).toFixed(6), 0, +Math.cos(a / 2).toFixed(6)];
+    }
+    if (node.scale && node.scale.some((v) => v !== 1)) {
+      gnode.scale = node.scale.map((v) => +v.toFixed(6));
+    }
+    if (node.extras) gnode.extras = { aquaflow: node.extras };
     const ref = meshRefs[i];
     if (ref) {
       const primitive = { attributes: { POSITION: ref.position, NORMAL: ref.normal }, indices: ref.indices };

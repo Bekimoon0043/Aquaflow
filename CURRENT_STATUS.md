@@ -5,9 +5,12 @@
 The live 3D preview scene (pool + water + fixtures + lights) now exports to **glTF/GLB, OBJ+MTL,
 USD (USDA), FBX**, and a **LUXEXCHANGE v1** envelope for import into LuxuryForm/LuxuryScape —
 fixture positions + basic PBR materials preserved in every format. Dependency-free serializers
-(no three.js/exporter libs), new `Export3DPanel` (Design → 3D Export). Frontend vitest **183
-passing** (+18), `validate_export3d.mjs` **48/48**, `npm run build` warning-clean (main chunk
-181 kB; export panel is its own 26 kB lazy chunk). Backend pytest unchanged at **437**.
+(no three.js/exporter libs), new `Export3DPanel` (Design → 3D Export). Nodes also carry
+Y-rotation + scale and a rich engineering-identity extras record (DMX patch, protocol,
+flow/pressure/power, group) with NaN/Inf coordinate hardening — folded in from a duplicate
+backend attempt that was then removed. Frontend vitest **190 passing** (+25),
+`validate_export3d.mjs` **56/56**, `npm run build` warning-clean (main chunk 181 kB; export
+panel is its own 29 kB lazy chunk). Backend pytest unchanged at **437**.
 
 ## Completed
 - **AQ-X-016 AquaFlow 3D Export Bridge — DONE on `main`.**
@@ -42,12 +45,20 @@ passing** (+18), `validate_export3d.mjs` **48/48**, `npm run build` warning-clea
     engineering design (engineeringStore, falling back to showStore), shows scene stats
     (nodes/fixtures/lights/triangles), format picker and one-click download; wired into `App.jsx` +
     the TopBar (Design → 3D Export). AquaFlow stays control software — this is presentation export only.
-  - **Verification:** [export3d.test.js](aquaflow/frontend/src/export3d/__tests__/export3d.test.js) **18
-    cases** → frontend vitest **183 passing** (was 165); [validate_export3d.mjs](aquaflow/frontend/validate_export3d.mjs)
-    **48/48** (parses every format back — GLB magic/version/chunk alignment, glTF accessors, OBJ↔MTL
-    material closure, USDA prims, FBX blocks, LUXEXCHANGE round-trip of fixture positions + materials +
-    lights); `npm run build` warning-clean (main chunk 181 kB, Export3DPanel a 26 kB lazy chunk).
-    Frontend-only change; backend pytest unaffected at **437**.
+  - **Folded in from a duplicate backend attempt (then removed):** every node also carries a
+    Y-rotation + per-axis scale and a rich `extras` engineering record (fixture id, DMX universe/
+    channel/count, protocol, flow/pressure/power, group id) that rides on glTF `node.extras.aquaflow`,
+    USD custom attrs, FBX Lcl Rotation/Scaling, and the LUXEXCHANGE fixture manifest — the round-trip
+    identity LuxuryForm/LuxuryScape match on. Coordinates are hardened (`safeNum`) so a stray NaN/Inf
+    can't corrupt a file. An unintegrated parallel `backend/services/export_3d_service.py` (no route/
+    UI/tests, and it stubbed FBX+USD) was deleted after its good ideas were ported here.
+  - **Verification:** [export3d.test.js](aquaflow/frontend/src/export3d/__tests__/export3d.test.js) **25
+    cases** → frontend vitest **190 passing** (was 165); [validate_export3d.mjs](aquaflow/frontend/validate_export3d.mjs)
+    **56/56** (parses every format back — GLB magic/version/chunk alignment, glTF accessors + rotation
+    quaternion + extras, OBJ↔MTL material closure, USDA prims + xformOps, FBX blocks, NaN hardening,
+    LUXEXCHANGE round-trip of fixture positions + transforms + materials + lights + engineering identity);
+    `npm run build` warning-clean (main chunk 181 kB, Export3DPanel a 29 kB lazy chunk). Frontend-only
+    change; backend pytest unaffected at **437**.
 
 - **EVAL-AQ-003 Implement Fixes — DONE on `main`.** Worked the prioritised queue in
   [fix_strategy_report.md](fix_strategy_report.md):

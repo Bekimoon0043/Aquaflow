@@ -63,11 +63,15 @@ function geometryBlock(node, geomId) {
 
 function modelBlock(node, modelId) {
   const [tx, ty, tz] = node.translation || [0, 0, 0];
+  const [sx, sy, sz] = node.scale || [1, 1, 1];
+  const ry = node.rotationY || 0;
   return [
     `    Model: ${modelId}, "Model::${node.name}", "Mesh" {`,
     `        Version: 232`,
     `        Properties70:  {`,
     `            P: "Lcl Translation", "Lcl Translation", "", "A",${f6(tx)},${f6(ty)},${f6(tz)}`,
+    `            P: "Lcl Rotation", "Lcl Rotation", "", "A",0,${f6(ry)},0`,
+    `            P: "Lcl Scaling", "Lcl Scaling", "", "A",${f6(sx)},${f6(sy)},${f6(sz)}`,
     `        }`,
     `        Shading: T`,
     `        Culling: "CullingOff"`,

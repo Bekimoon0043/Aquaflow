@@ -73,9 +73,25 @@ export function toUSDA(graph) {
       lines.push(`        rel material:binding = </${rootName}/Materials/${node.material.name}>`);
     }
     lines.push(`        uniform token subdivisionScheme = "none"`);
+    // Transform ops: scale → rotateY → translate (USD composes in list order).
+    const [sx, sy, sz] = node.scale || [1, 1, 1];
+    const order = ['"xformOp:translate"'];
     lines.push(`        double3 xformOp:translate = ${vec3(tx, ty, tz)}`);
-    lines.push(`        uniform token[] xformOpOrder = ["xformOp:translate"]`);
+    if (node.rotationY) {
+      lines.push(`        float xformOp:rotateY = ${n6(node.rotationY)}`);
+      order.push('"xformOp:rotateY"');
+    }
+    if (sx !== 1 || sy !== 1 || sz !== 1) {
+      lines.push(`        float3 xformOp:scale = ${vec3(sx, sy, sz)}`);
+      order.push('"xformOp:scale"');
+    }
+    lines.push(`        uniform token[] xformOpOrder = [${order.join(", ")}]`);
     lines.push(`        custom string aquaflow:fixtureType = "${node.fixtureType || ""}"`);
+    if (node.extras) {
+      if (node.extras.fixtureId != null) lines.push(`        custom string aquaflow:fixtureId = "${node.extras.fixtureId}"`);
+      if (node.extras.groupId) lines.push(`        custom string aquaflow:groupId = "${node.extras.groupId}"`);
+      if (node.extras.category) lines.push(`        custom string aquaflow:category = "${node.extras.category}"`);
+    }
     lines.push("    }");
     // Silence unused var without changing output.
     void vertCount;

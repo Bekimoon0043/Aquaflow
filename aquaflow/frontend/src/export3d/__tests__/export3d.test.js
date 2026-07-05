@@ -215,3 +215,82 @@ describe("exportScene orchestrator", () => {
     expect(doc.asset.version).toBe("2.0");
   });
 });
+
+// Transforms + engineering metadata + input hardening (folded in from the
+// backend parallel implementation).
+const RICH = {
+  name: "Rich Fountain",
+  poolGeometry: { poolType: "rectangular", params: { width: 10, length: 8, depth: 0.8 } },
+  fixtures: [
+    { id: "arch1", type: "arch_jet", x: 2, y: 1, rotation: 90, scale: 1.5, label: "Arch",
+      protocol: "artnet", dmx: { universe: 3, channel: 12, channels: 4 },
+      engineering: { flowLpm: 60, pressureBar: 2.5, powerKw: 1.1 }, groupId: "arch_jets" },
+    { id: "bad1", type: "jet_3d", x: NaN, y: Infinity, label: "Bad Coords" },
+  ],
+};
+
+describe("node transforms", () => {
+  const graph = buildSceneGraph(RICH);
+  const arch = graph.nodes.find((n) => n.fixtureId === "arch1");
+
+  it("carries rotationY, scale and extras on the fixture node", () => {
+    expect(arch.rotationY).toBe(90);
+    expect(arch.scale).toEqual([1.5, 1.5, 1.5]);
+    expect(arch.extras.dmx.universe).toBe(3);
+    expect(arch.extras.engineering.flowLpm).toBe(60);
+    expect(arch.extras.groupId).toBe("arch_jets");
+  });
+
+  it("hardens NaN/Infinity coordinates to 0", () => {
+    const bad = graph.nodes.find((n) => n.fixtureId === "bad1");
+    expect(bad.translation.every((v) => Number.isFinite(v))).toBe(true);
+    expect(bad.translation[0]).toBe(0);
+    expect(bad.translation[2]).toBe(0);
+  });
+
+  it("glTF emits a Y-rotation quaternion, scale and extras.aquaflow", () => {
+    const doc = JSON.parse(toGLTF(graph));
+    const node = doc.nodes.find((n) => n.name.startsWith("Arch"));
+    // 90° about Y → quaternion (0, sin45, 0, cos45).
+    expect(node.rotation[1]).toBeCloseTo(Math.SQRT1_2, 4);
+    expect(node.rotation[3]).toBeCloseTo(Math.SQRT1_2, 4);
+    expect(node.scale).toEqual([1.5, 1.5, 1.5]);
+    expect(node.extras.aquaflow.dmx.channel).toBe(12);
+    // No non-finite numbers anywhere in the document.
+    expect(JSON.stringify(doc)).not.toMatch(/null,null|NaN|Infinity/);
+  });
+
+  it("USD lists rotateY + scale in the xformOpOrder", () => {
+    const usd = toUSDA(graph);
+    expect(usd).toMatch(/xformOp:rotateY = 90/);
+    expect(usd).toContain('"xformOp:rotateY"');
+    expect(usd).toContain('"xformOp:scale"');
+    expect(usd).toContain('aquaflow:groupId = "arch_jets"');
+  });
+
+  it("FBX emits Lcl Rotation + Lcl Scaling", () => {
+    const fbx = toFBXASCII(graph);
+    expect(fbx).toContain('P: "Lcl Rotation", "Lcl Rotation", "", "A",0,90.000000,0');
+    expect(fbx).toMatch(/P: "Lcl Scaling".*1\.500000,1\.500000,1\.500000/);
+  });
+
+  it("OBJ bakes rotation into world vertices (90° swaps X/Z extent)", () => {
+    const obj = toOBJ(graph);
+    // Arch glyph is a cone ~0.28 tall, radius ~0.09*1.5. After 90° about Y and
+    // translate to (2,·,1), vertices cluster around x≈2, z≈1 and stay finite.
+    const verts = [...obj.matchAll(/^v (\S+) (\S+) (\S+)$/gm)].map((m) => m.slice(1).map(Number));
+    expect(verts.every((v) => v.every(Number.isFinite))).toBe(true);
+    const nearArch = verts.filter((v) => Math.abs(v[0] - 2) < 0.5 && Math.abs(v[2] - 1) < 0.5);
+    expect(nearArch.length).toBeGreaterThan(0);
+  });
+
+  it("LUXEXCHANGE manifest carries engineering identity + transforms", () => {
+    const env = JSON.parse(JSON.stringify(toLuxExchange(graph)));
+    const arch1 = env.payload.fixtures.find((f) => f.id === "arch1");
+    expect(arch1.rotation.y).toBe(90);
+    expect(arch1.scale.x).toBe(1.5);
+    expect(arch1.engineering.dmx.universe).toBe(3);
+    expect(arch1.engineering.engineering.pressureBar).toBe(2.5);
+    expect(arch1.engineering.protocol).toBe("artnet");
+  });
+});

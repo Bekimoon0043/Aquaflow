@@ -119,6 +119,33 @@ check("manifest preserves material baseColor", Array.isArray(manifestCenter.mate
 const manifestLight = env.payload.fixtures.find((f) => f.id === "light_0");
 check("manifest preserves light record", manifestLight.light && manifestLight.light.type === "point");
 
+console.log("\nTransforms + engineering metadata + input hardening");
+const richGraph = buildSceneGraph({
+  name: "Rich",
+  poolGeometry: { poolType: "rectangular", params: { width: 10, length: 8, depth: 0.8 } },
+  fixtures: [
+    { id: "arch", type: "arch_jet", x: 2, y: 1, rotation: 90, scale: 1.5, protocol: "artnet",
+      dmx: { universe: 3, channel: 12, channels: 4 },
+      engineering: { flowLpm: 60, pressureBar: 2.5, powerKw: 1.1 }, groupId: "arch_jets" },
+    { id: "bad", type: "jet_3d", x: NaN, y: Infinity },
+  ],
+});
+const richGltf = JSON.parse(toGLTF(richGraph));
+const archNode = richGltf.nodes.find((n) => n.extras?.aquaflow?.fixtureId === "arch");
+check("glTF node carries Y-rotation quaternion", Math.abs(archNode.rotation[1] - Math.SQRT1_2) < 1e-4);
+check("glTF node carries scale [1.5,1.5,1.5]", archNode.scale[0] === 1.5);
+check("glTF node.extras.aquaflow has DMX + hydraulics", archNode.extras.aquaflow.dmx.channel === 12 && archNode.extras.aquaflow.engineering.flowLpm === 60);
+check("no NaN/Infinity leaks into glTF", !/NaN|Infinity/.test(JSON.stringify(richGltf)));
+const badNode = richGltf.nodes.find((n) => n.extras?.aquaflow?.fixtureId === "bad");
+check("NaN/Inf coordinates hardened to finite", (badNode.translation || [0, 0, 0]).every(Number.isFinite));
+const richUsd = toUSDA(richGraph);
+check("USD lists rotateY + scale ops", richUsd.includes('"xformOp:rotateY"') && richUsd.includes('"xformOp:scale"'));
+const richFbx = toFBXASCII(richGraph);
+check("FBX emits Lcl Rotation + Lcl Scaling", richFbx.includes('P: "Lcl Rotation"') && richFbx.includes('P: "Lcl Scaling"'));
+const richLux = JSON.parse(JSON.stringify(toLuxExchange(richGraph)));
+const archLux = richLux.payload.fixtures.find((f) => f.id === "arch");
+check("LUXEXCHANGE manifest keeps rotation + engineering identity", archLux.rotation.y === 90 && archLux.engineering.dmx.universe === 3 && archLux.engineering.protocol === "artnet");
+
 console.log("\nOrchestrator (exportScene)");
 for (const fmt of EXPORT_FORMATS) {
   const out = exportScene(design, fmt.id);

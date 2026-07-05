@@ -30,10 +30,14 @@ function fixtureManifest(graph) {
       kind: n.kind,
       type: n.fixtureType,
       position: { x: n.translation[0], y: n.translation[1], z: n.translation[2] },
+      rotation: { x: 0, y: n.rotationY || 0, z: 0 },
+      scale: n.scale ? { x: n.scale[0], y: n.scale[1], z: n.scale[2] } : { x: 1, y: 1, z: 1 },
       material: n.material
         ? { name: n.material.name, baseColor: n.material.baseColor, metallic: n.material.metallic, roughness: n.material.roughness, emissive: n.material.emissive }
         : null,
       light: n.light || null,
+      // Engineering identity for round-trip import (DMX patch, hydraulics, group).
+      engineering: n.extras || null,
     }));
 }
 

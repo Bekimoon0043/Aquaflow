@@ -14,11 +14,13 @@
  *   {
  *     meta:  { name, generator, generatedAt, upAxis:"Y", unit:"meter", ... },
  *     nodes: [ {
- *       name, kind, translation:[x,y,z],
+ *       name, kind, translation:[x,y,z], rotationY:degrees, scale:[x,y,z],
  *       mesh: { positions:number[], normals:number[], indices:number[] } | null,
  *       material: { name, baseColor:[r,g,b,a], metallic, roughness, emissive:[r,g,b] },
  *       light: { type:"point"|"spot", color:[r,g,b], intensity } | null,
  *       fixtureId, fixtureType,
+ *       extras: { fixtureId, fixtureType, category, label, groupId, dmx, protocol,
+ *                 engineering:{flowLpm,pressureBar,powerKw}, sourceModule } | null,
  *     } ],
  *   }
  *
@@ -32,6 +34,7 @@ import {
   classifyFixtureType,
   resolveFixtureType,
   fixturePlanCoords,
+  resolveFixtureGroup,
 } from "../hooks/fixtureTypeMap.js";
 import { box, cylinder, cone, disc, plane, prism, sphere } from "./primitives.js";
 
@@ -58,6 +61,13 @@ export function hexToRgb(hex) {
 /** sRGB channel 0..1 → linear 0..1 (glTF/USD baseColor is linear). */
 export function srgbToLinear(c) {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+/** Coerce to a finite number; NaN/Infinity/garbage → fallback. Guards exports
+ *  against a stray coordinate blowing up a whole file (borrowed from the backend). */
+export function safeNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 // ── material palette ─────────────────────────────────────────────────────────
@@ -141,23 +151,64 @@ function buildPoolNodes(poolConfig, center) {
     // Box basin is centred on its own origin, so drop it by depth/2; cylinder/prism
     // bases already sit at y=0, so drop them by depth.
     translation: [cx, isBoxBasin ? -depth / 2 : -depth, cz],
+    rotationY: 0,
+    scale: [1, 1, 1],
     mesh: basinMesh,
     material: MATERIALS.basin,
     light: null,
     fixtureId: null,
     fixtureType: "pool",
+    extras: { kind: "pool", poolType: type, depthM: depth },
   });
   nodes.push({
     name: "WaterSurface",
     kind: "water",
     translation: [cx, 0, cz],
+    rotationY: 0,
+    scale: [1, 1, 1],
     mesh: waterMesh,
     material: MATERIALS.water,
     light: null,
     fixtureId: null,
     fixtureType: "water",
+    extras: { kind: "water_surface", poolType: type },
   });
   return nodes;
+}
+
+// ── engineering metadata ─────────────────────────────────────────────────────
+
+/**
+ * Distil a fixture's engineering identity into a compact, serializer-friendly
+ * extras record (fixture id, DMX patch, protocol, hydraulics, group). Carried on
+ * glTF node.extras.aquaflow and in the LUXEXCHANGE manifest so LuxuryForm /
+ * LuxuryScape can re-import by matching fixture_id. Reads defensively — designs
+ * from different modules spell these fields a few different ways.
+ */
+function buildExtras(f, category) {
+  const eng = f.engineering || {};
+  const spec = f.spec || {};
+  const dmx = f.dmx || {};
+  return {
+    fixtureId: f.id ?? null,
+    fixtureType: f.type,
+    category,
+    label: f.label || String(f.id ?? ""),
+    groupId: f.groupId || f.group_id || resolveFixtureGroup(f.type) || "",
+    zone: f.zone || "",
+    dmx: {
+      universe: Math.round(safeNum(dmx.universe ?? eng.universe, 0)),
+      channel: Math.round(safeNum(dmx.channel ?? eng.channel, 0)),
+      channels: Math.round(safeNum(dmx.channels ?? eng.channels, 1)) || 1,
+    },
+    protocol: f.protocol || dmx.protocol || "",
+    engineering: {
+      flowLpm: safeNum(spec.flow_lpm ?? eng.flowLpm ?? eng.flow_lpm, 0),
+      pressureBar: safeNum(spec.pressure_bar ?? eng.pressureBar ?? eng.pressure_bar, 0),
+      powerKw: safeNum(spec.power_kw ?? eng.powerKw ?? eng.power_kw, 0),
+    },
+    sourceModule: f.source_module || "EngineeringDesigner",
+  };
 }
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
@@ -186,9 +237,15 @@ function buildFixtureNodes(fixtures) {
   (fixtures || []).forEach((f, i) => {
     const category = classifyFixtureType(f.type);
     const map = resolveFixtureType(f.type);
-    const { x, z } = fixturePlanCoords(f);
+    const raw = fixturePlanCoords(f);
+    const x = safeNum(raw.x);
+    const z = safeNum(raw.z);
     const id = f.id ?? null;
     const color = f.color || f.params?.color || map.color;
+    const rotationY = safeNum(f.rotation, 0);
+    const s = safeNum(f.scale, 1) || 1;
+    const scale = [s, s, s];
+    const extras = buildExtras(f, category);
 
     if (category === "light") {
       const [r, g, b] = hexToRgb(color || "#ffffff");
@@ -196,45 +253,49 @@ function buildFixtureNodes(fixtures) {
       nodes.push({
         name: sanitizeName(f.label || id, "Light_" + i),
         kind: "light",
-        translation: [x, 0.05, z],
+        translation: [x, 0.05, z], rotationY, scale,
         mesh: lightGlyph(),
         material: lightMaterial(color),
         light: { type: map.lightType === "spot" ? "spot" : "point", color: [r, g, b], intensity },
         fixtureId: id,
         fixtureType: f.type,
+        extras,
       });
     } else if (category === "equipment") {
       nodes.push({
         name: sanitizeName(f.label || id, "Equipment_" + i),
         kind: "equipment",
-        translation: [x, 0.16, z],
+        translation: [x, 0.16, z], rotationY, scale,
         mesh: equipmentGlyph(),
         material: MATERIALS.equipment,
         light: null,
         fixtureId: id,
         fixtureType: f.type,
+        extras,
       });
     } else if (category === "effect") {
       nodes.push({
         name: sanitizeName(f.label || id, "Effect_" + i),
         kind: "effect",
-        translation: [x, 0, z],
+        translation: [x, 0, z], rotationY, scale,
         mesh: nozzleGlyph(map.heightMult || 1),
         material: effectMaterial(color),
         light: null,
         fixtureId: id,
         fixtureType: f.type,
+        extras,
       });
     } else {
       nodes.push({
         name: sanitizeName(f.label || id, "Nozzle_" + i),
         kind: "nozzle",
-        translation: [x, 0, z],
+        translation: [x, 0, z], rotationY, scale,
         mesh: nozzleGlyph(map.heightMult || 1),
         material: nozzleMaterial(color),
         light: null,
         fixtureId: id,
         fixtureType: f.type,
+        extras,
       });
     }
   });
@@ -249,7 +310,7 @@ function fixtureCentroid(fixtures) {
   const all = [...nozzleConfigs, ...lightConfigs];
   if (!all.length) return [0, 0, 0];
   let sx = 0, sz = 0;
-  all.forEach((f) => { sx += Number(f.x) || 0; sz += Number(f.z) || 0; });
+  all.forEach((f) => { sx += safeNum(f.x); sz += safeNum(f.z); });
   return [sx / all.length, 0, sz / all.length];
 }
 
