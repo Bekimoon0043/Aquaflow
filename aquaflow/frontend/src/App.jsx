@@ -31,6 +31,7 @@ import OptimizationPanel from "./components/panels/OptimizationPanel";
 import AdaptationPanel from "./components/panels/AdaptationPanel";
 import FleetPanel from "./components/panels/FleetPanel";
 import CloudPanel from "./components/panels/CloudPanel";
+import GenerativeDesignerPanel from "./components/panels/GenerativeDesignerPanel";
 import CompilePanel from "./components/panels/CompilePanel";
 import PresetBrowser from "./components/panels/PresetBrowser";
 import CalibrationPanel from "./components/panels/CalibrationPanel";
@@ -95,6 +96,7 @@ function StudioApp() {
             {activePanel === "adaptation"   && <AdaptationPanel />}
             {activePanel === "fleet"        && <FleetPanel />}
             {activePanel === "cloud"        && <CloudPanel />}
+            {activePanel === "generative"   && <GenerativeDesignerPanel />}
             {activePanel === "compile"      && <CompilePanel />}
             {activePanel === "presets"      && <PresetBrowser />}
             {activePanel === "calibration"  && <CalibrationPanel />}

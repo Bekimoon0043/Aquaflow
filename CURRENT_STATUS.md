@@ -1,9 +1,34 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-05
-**Summary:** Stage 5 — AQ-S5-005 Global Asset Cloud complete: a multi-tenant cloud with versioned, checksummed backups per company and remote diagnostics for their sites.
+**Summary:** Stage 5 — AQ-S5-006 Generative Fountain Designer complete: a brief generates costed fountain concepts, each exportable as an engineering and a construction package.
 
 ## Completed
+- **AQ-S5-006 Generative Fountain Designer — DONE on `main` (Stage 5).**
+  - New backend [services/generative_designer.py](aquaflow/backend/services/generative_designer.py) —
+    turns a short brief (venue, area, budget, style, theme) into complete fountain concepts and the two
+    downstream deliverable packages.
+  - **Generates fountain concepts** — `generate_concepts` synthesises distinct, reproducible concepts
+    across three spatial archetypes (radial rotunda / grand canal / clustered cascade), each with a
+    laid-out fixture set from a costed component catalog, a sized pool, a written narrative, signature
+    elements, and a budget-aware estimate (trims the priciest fixtures to stay under budget).
+  - **Produces an engineering package** — `build_engineering_package` projects a concept to the canonical
+    design and reuses the existing engineering packager (CAD DXF, BOM XLSX, P&ID SVG, cover PDF,
+    dependency graph, manifest with checksums).
+  - **Produces a construction package** — `build_construction_package` emits a construction ZIP: civil
+    works (excavation/concrete/waterproofing/rebar quantities), structural spec, equipment room,
+    electrical connected-load, plumbing schedule, a phased install programme (CSV), a safety plan, a
+    cover PDF and a checksummed manifest.
+  - New [GenerativeDesignerPanel.jsx](aquaflow/frontend/src/components/panels/GenerativeDesignerPanel.jsx) —
+    brief form → concept cards (palette, narrative, cost) → download engineering/construction ZIPs;
+    wired into `App.jsx` + the TopBar (AI → Generative Designer).
+  - API: `POST /api/generative/concepts|engineering-package|construction-package`
+    ([generative_routes.py](aquaflow/backend/api/routes/generative_routes.py)), wired in main.py.
+  - **Verification: 22/22** ([validate_generative_designer.py](aquaflow/backend/validate_generative_designer.py))
+    + **10 pytest cases** ([test_generative_designer.py](aquaflow/backend/tests/test_generative_designer.py)) →
+    backend pytest **403 passing** (was 393); frontend **158 vitest passing**; **`npm run build` succeeds**.
+
+
 - **AQ-S5-005 Global Asset Cloud — DONE on `main` (Stage 5).**
   - New backend [services/asset_cloud.py](aquaflow/backend/services/asset_cloud.py) — a multi-tenant
     cloud store: companies own assets, whose backups are versioned + SHA-256 checksummed; sites report
