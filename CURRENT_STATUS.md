@@ -4,6 +4,21 @@
 **Summary:** Stage 5 — AQ-S5-006 Generative Fountain Designer complete: a brief generates costed fountain concepts, each exportable as an engineering and a construction package.
 
 ## Completed
+- **EVAL-AQ-002 Fix Strategy — DONE on `main` (Stage 8 evaluation track).**
+  - New [services/fix_strategy_engine.py](aquaflow/backend/services/fix_strategy_engine.py) — a
+    deterministic rule-based + heuristic engine that turns [EVALUATION_REPORT.md](EVALUATION_REPORT.md)
+    into an implementation-ready fix plan (issue → diagnosis → fix approach → criticality → effort →
+    dependency → owner → acceptance test). No ML: triage/safety/priority must be explainable.
+  - Extracts + de-duplicates 9 issues (merging the physical-hardware item that appears in §3/§4/§5),
+    scores a weighted priority with mandatory safety/blocker overrides, estimates effort (bands +
+    person-hours), and generates acceptance criteria, test plan, rollback plan and a safety gate for
+    hardware/safety issues. One P0 (physical-hardware commissioning) → BLOCK-release verdict.
+  - Emits [fix_strategy_report.md](fix_strategy_report.md), [fix_strategy_queue.json](fix_strategy_queue.json)
+    and [fix_strategy_acceptance_matrix.csv](fix_strategy_acceptance_matrix.csv).
+  - Verified: [validate_fix_strategy.py](aquaflow/backend/validate_fix_strategy.py) 88/88 +
+    [tests/test_fix_strategy_engine.py](aquaflow/backend/tests/test_fix_strategy_engine.py) 25/25;
+    full backend suite **428 passed** (403 baseline + 25 new, no regressions).
+
 - **AQ-S5-006 Generative Fountain Designer — DONE on `main` (Stage 5).**
   - New backend [services/generative_designer.py](aquaflow/backend/services/generative_designer.py) —
     turns a short brief (venue, area, budget, style, theme) into complete fountain concepts and the two
