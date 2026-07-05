@@ -1,9 +1,32 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-05
-**Summary:** Stage 5 — AQ-S5-004 Fleet Management System complete: a fleet of fountain sites is centrally monitored from one dashboard with a unified, severity-ranked alert feed.
+**Summary:** Stage 5 — AQ-S5-005 Global Asset Cloud complete: a multi-tenant cloud with versioned, checksummed backups per company and remote diagnostics for their sites.
 
 ## Completed
+- **AQ-S5-005 Global Asset Cloud — DONE on `main` (Stage 5).**
+  - New backend [services/asset_cloud.py](aquaflow/backend/services/asset_cloud.py) — a multi-tenant
+    cloud store: companies own assets, whose backups are versioned + SHA-256 checksummed; sites report
+    diagnostics that support can pull remotely.
+  - **Cloud backups work** — `create_backup` stores a versioned, checksummed snapshot; `restore_backup`
+    / `latest_backup` return it and verify the checksum (corruption is caught); retention prunes to the
+    newest 10 versions per asset.
+  - **Multi-company support exists** — every company is an isolated tenant namespace; assets, backups
+    and diagnostics are scoped per company and never leak across tenants (a backup id can't be restored
+    under another company).
+  - **Remote diagnostics supported** — a site reports its operator status (condensed via the mobile
+    monitor); `run_remote_diagnostic` collects a full bundle (health, severity-ranked alerts,
+    reachability with a 300 s timeout, backup freshness, and actionable recommendations).
+  - New [CloudPanel.jsx](aquaflow/frontend/src/components/panels/CloudPanel.jsx) — a tenant console:
+    pick a company, browse/restore its cloud backups, and run remote diagnostics on its sites; wired
+    into `App.jsx` + the TopBar (Runtime → Global Asset Cloud).
+  - API: `/api/cloud/companies[...]/backups`, `/diagnostics` ([cloud_routes.py](aquaflow/backend/api/routes/cloud_routes.py)),
+    wired in main.py.
+  - **Verification: 25/25** ([validate_asset_cloud.py](aquaflow/backend/validate_asset_cloud.py))
+    + **10 pytest cases** ([test_asset_cloud.py](aquaflow/backend/tests/test_asset_cloud.py)) →
+    backend pytest **393 passing** (was 383); frontend **158 vitest passing**; **`npm run build` succeeds**.
+
+
 - **AQ-S5-004 Fleet Management System — DONE on `main` (Stage 5).**
   - New backend [services/fleet_manager.py](aquaflow/backend/services/fleet_manager.py) — persists one
     JSON per site and mirrors each site's health by reusing the AQ-X-020 `mobile_monitor`
