@@ -1,9 +1,54 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-05
-**Summary:** EVAL-AQ-003 — implemented the EVAL-AQ-002 fix strategy (9 fixes). Frontend bundle code-split (main chunk 1.87 MB → 181 kB, build warning-clean), cross-feature end-to-end journey tests + time-based-timer contract tests added, VR/4K caveat fallbacks pinned, dead duplicate panel archived, and coverage-map + hardware-commissioning docs added. Backend pytest **437 passing**, frontend vitest **165 passing**.
+**Summary:** AQ-X-016 — AquaFlow 3D Export Bridge implemented (the last open AQ-X recovery task).
+The live 3D preview scene (pool + water + fixtures + lights) now exports to **glTF/GLB, OBJ+MTL,
+USD (USDA), FBX**, and a **LUXEXCHANGE v1** envelope for import into LuxuryForm/LuxuryScape —
+fixture positions + basic PBR materials preserved in every format. Dependency-free serializers
+(no three.js/exporter libs), new `Export3DPanel` (Design → 3D Export). Frontend vitest **183
+passing** (+18), `validate_export3d.mjs` **48/48**, `npm run build` warning-clean (main chunk
+181 kB; export panel is its own 26 kB lazy chunk). Backend pytest unchanged at **437**.
 
 ## Completed
+- **AQ-X-016 AquaFlow 3D Export Bridge — DONE on `main`.**
+  - New `src/export3d/` module — a serializer-agnostic scene-graph builder plus five dependency-free
+    writers, all runnable headlessly (vitest env = node):
+    - [sceneGraph.js](aquaflow/frontend/src/export3d/sceneGraph.js) — `buildSceneGraph(design)` reuses
+      the app's canonical transforms ([fixtureTypeMap.js](aquaflow/frontend/src/hooks/fixtureTypeMap.js):
+      `fixturePlanCoords`, `classifyFixtureType`, `resolveFixtureType`, `geometryToPoolConfig`) so an
+      export matches the live preview exactly. Emits an IR of nodes (pool basin + water surface +
+      per-fixture glyphs) each carrying translation, mesh, PBR material and (for lights) a punctual
+      light record. **Fixture positions preserved** (plan x → world x, plan y → world z); fixtures
+      classified by their **original** type (fixed the lossy `type`→`jet_3d` overwrite so pumps/valves
+      export as equipment, not nozzles).
+    - [primitives.js](aquaflow/frontend/src/export3d/primitives.js) — box/cylinder/cone/disc/plane/
+      prism/sphere triangle-mesh generators with flat normals (no three.js).
+    - [gltf.js](aquaflow/frontend/src/export3d/gltf.js) — **glTF 2.0** (`toGLTF`, self-contained JSON
+      with a base64-embedded buffer) and **GLB** (`toGLB`, binary container: 12-byte header + 4-aligned
+      JSON + BIN chunks). PBR metallic-roughness materials, sRGB→linear conversion, punctual lights via
+      **KHR_lights_punctual**. Pure base64 encoder (node + browser).
+    - [obj.js](aquaflow/frontend/src/export3d/obj.js) — **Wavefront OBJ + MTL** (world-space verts,
+      per-node `o`/`usemtl`, material library).
+    - [usd.js](aquaflow/frontend/src/export3d/usd.js) — **USD (USDA ASCII)** with `def Mesh` prims
+      (points/faceVertexIndices/normals) + `UsdPreviewSurface` materials + translate xformOps.
+    - [fbx.js](aquaflow/frontend/src/export3d/fbx.js) — **ASCII FBX 7.3** (Geometry/Model/Material
+      objects + Connections; polygon-boundary bit-inversion; Lcl Translation).
+    - [luxexchange.js](aquaflow/frontend/src/export3d/luxexchange.js) — **LUXEXCHANGE v1** envelope
+      `{platform, version, payload_type, payload}` embedding the glTF **and** a design-level fixture
+      manifest (positions + materials + lights) — the verified import path into LuxuryForm/LuxuryScape.
+    - [index.js](aquaflow/frontend/src/export3d/index.js) — `exportScene(design, format)` →
+      `{filename, mimeType, data, companions}` (OBJ ships its MTL companion); `EXPORT_FORMATS` list.
+  - New [Export3DPanel.jsx](aquaflow/frontend/src/components/panels/Export3DPanel.jsx) — reads the live
+    engineering design (engineeringStore, falling back to showStore), shows scene stats
+    (nodes/fixtures/lights/triangles), format picker and one-click download; wired into `App.jsx` +
+    the TopBar (Design → 3D Export). AquaFlow stays control software — this is presentation export only.
+  - **Verification:** [export3d.test.js](aquaflow/frontend/src/export3d/__tests__/export3d.test.js) **18
+    cases** → frontend vitest **183 passing** (was 165); [validate_export3d.mjs](aquaflow/frontend/validate_export3d.mjs)
+    **48/48** (parses every format back — GLB magic/version/chunk alignment, glTF accessors, OBJ↔MTL
+    material closure, USDA prims, FBX blocks, LUXEXCHANGE round-trip of fixture positions + materials +
+    lights); `npm run build` warning-clean (main chunk 181 kB, Export3DPanel a 26 kB lazy chunk).
+    Frontend-only change; backend pytest unaffected at **437**.
+
 - **EVAL-AQ-003 Implement Fixes — DONE on `main`.** Worked the prioritised queue in
   [fix_strategy_report.md](fix_strategy_report.md):
   - **AQ-FIX-002 (bundle, P2) — DONE.** Route-level code-split: every conditionally-rendered panel is

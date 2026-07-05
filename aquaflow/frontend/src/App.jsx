@@ -42,6 +42,7 @@ const CalibrationPanel = lazy(() => import("./components/panels/CalibrationPanel
 const KeyframeEditor = lazy(() => import("./components/timeline/KeyframeEditor"));
 const PoolGeometryDesigner = lazy(() => import("./components/panels/PoolGeometryDesigner"));
 const PatternDesignerPanel = lazy(() => import("./components/panels/PatternDesignerPanel"));
+const Export3DPanel = lazy(() => import("./components/panels/Export3DPanel"));
 const ShowProgrammerPanel = lazy(() => import("./components/programmer/ShowProgrammerPanel"));
 import StatusBar from "./components/StatusBar";
 import ConnectionBanner from "./components/ConnectionBanner";
@@ -109,6 +110,7 @@ function StudioApp() {
             {activePanel === "geometry"     && <PoolGeometryDesigner />}
             {activePanel === "patterns" && <PatternDesignerPanel />}
             {activePanel === "show_programmer" && <ShowProgrammerPanel />}
+            {activePanel === "export3d"     && <Export3DPanel />}
            </Suspense>
           </div>
           <Timeline height={layout.timelineHeight} />
