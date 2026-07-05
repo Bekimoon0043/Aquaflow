@@ -1,0 +1,427 @@
+{
+  "task": "EVAL-AQ-002",
+  "generated_from": "EVALUATION_REPORT.md",
+  "issue_count": 9,
+  "release_readiness": {
+    "p0": 1,
+    "p1": 0,
+    "p2": 6,
+    "score": 0.3,
+    "verdict": "BLOCK release"
+  },
+  "queue": [
+    {
+      "issue_id": "AQ-FIX-001",
+      "title": "Physical-hardware verification pending (Issue #2)",
+      "description": "Hardware output unverified on real DMX/Art-Net device. Status: ⚠️ Partially resolved. AQ-X-002 verifies real socket output + on-wire safety gate against a **virtual loopback node** (20/20). **Physical-device bring-up is still outstanding** and should gate the first live site.",
+      "source": "evaluation_report §3 (AQ-X-002) + evaluation_report §4 + evaluation_report §5",
+      "module": "",
+      "category": "SAFETY",
+      "secondary_categories": [
+        "DMX_ARTNET",
+        "PROTOCOL_OUTPUT"
+      ],
+      "severity": "HIGH",
+      "impact": "High risk (per evaluation report)",
+      "root_cause": "Output path is verified only against a virtual loopback socket, never against a physical fixture on real cabling, so on-wire timing/levels are unproven in situ.",
+      "fix_type": "TEST_ADDITION",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nOutput path is verified only against a virtual loopback socket, never against a physical fixture on real cabling, so on-wire timing/levels are unproven in situ.\n\n### Required Change\nAdd the missing automated coverage (and, for hardware, a real-target commissioning test) so the flagged behaviour is guarded by a failing-on-break test.\n\n### Implementation Logic\n1. Schedule a commissioning session with a real DMX/Art-Net/sACN fixture and cabling.\n2. Keep the loopback test as the CI gate; add a real-hardware checklist run as a manual gate.\n3. Assert on-wire values, ≤44 Hz refresh and the `_safety_gate` choke point during output.\n4. Record device/universe/address map + measured timing in a commissioning report.\n\n### Files Likely Affected\n- backend/services/hardware_verifier.py\n- backend/protocols/protocol_bus.py\n- backend/validate_hardware_output.py\n- docs/commissioning_checklist.md\n\n### Acceptance Criteria\n- AQ-X-002 verifies real socket output + on-wire safety gate against a **virtual loopback node** (20/20). **Physical-device bring-up is still outstanding** and should gate the first live site.\n- Output verified on the target device (real or, if unavailable, an explicitly labelled simulator) with the `_safety_gate` choke point still enforced — no regression in per-fixture clamp or flame-duration limits.\n- A commissioning checklist records device, cabling, universe/address map and measured on-wire timing; first bring-up is treated as a formal test.\n- New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).\n\n### Test Plan\n- Hardware-output test: drive the fix through `protocol_bus` into the loopback node AND (when scheduled) a real DMX/Art-Net/sACN fixture; assert channel values, refresh rate ≤44 Hz and the safety gate on the wire.\n- Safety regression: re-run `validate_safety_output_limits.py` and `validate_hardware_output.py`; both must stay green.\n- Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to backend/services/hardware_verifier.py, backend/protocols/protocol_bus.py, backend/validate_hardware_output.py, docs/commissioning_checklist.md.\n- No physical risk on rollback: reverting only removes the new test/commissioning artifacts; the safety gate is unchanged.\n\n### Safety Gate\nSAFETY GATE — the `_safety_gate` choke point (per-fixture intensity clamp + flame duration) MUST remain enforced on every output frame; this fix may not weaken any safety limit for UX, and is not complete until an output test (real or labelled-simulator) passes.",
+      "files_likely_affected": [
+        "backend/services/hardware_verifier.py",
+        "backend/protocols/protocol_bus.py",
+        "backend/validate_hardware_output.py",
+        "docs/commissioning_checklist.md"
+      ],
+      "acceptance_criteria": [
+        "AQ-X-002 verifies real socket output + on-wire safety gate against a **virtual loopback node** (20/20). **Physical-device bring-up is still outstanding** and should gate the first live site.",
+        "Output verified on the target device (real or, if unavailable, an explicitly labelled simulator) with the `_safety_gate` choke point still enforced — no regression in per-fixture clamp or flame-duration limits.",
+        "A commissioning checklist records device, cabling, universe/address map and measured on-wire timing; first bring-up is treated as a formal test.",
+        "New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break)."
+      ],
+      "test_plan": [
+        "Hardware-output test: drive the fix through `protocol_bus` into the loopback node AND (when scheduled) a real DMX/Art-Net/sACN fixture; assert channel values, refresh rate ≤44 Hz and the safety gate on the wire.",
+        "Safety regression: re-run `validate_safety_output_limits.py` and `validate_hardware_output.py`; both must stay green.",
+        "Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to backend/services/hardware_verifier.py, backend/protocols/protocol_bus.py, backend/validate_hardware_output.py, docs/commissioning_checklist.md.",
+        "No physical risk on rollback: reverting only removes the new test/commissioning artifacts; the safety gate is unchanged."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (safety)",
+      "effort_score": 47,
+      "effort_band": "Very Large",
+      "effort_person_hours": 92.5,
+      "priority_score": 425,
+      "priority_band": "P0",
+      "override_reason": "Real hardware cannot yet be tested (output path unproven in situ)",
+      "safety_gate": "SAFETY GATE — the `_safety_gate` choke point (per-fixture intensity clamp + flame duration) MUST remain enforced on every output frame; this fix may not weaken any safety limit for UX, and is not complete until an output test (real or labelled-simulator) passes.",
+      "needs_discovery": false,
+      "action_hint": "AQ-X-002 verifies real socket output + on-wire safety gate against a **virtual loopback node** (20/20). **Physical-device bring-up is still outstanding** and should gate the first live site.",
+      "status": "queued",
+      "iss": 7.2,
+      "fci": 6.2
+    },
+    {
+      "issue_id": "AQ-FIX-002",
+      "title": "Large JS bundle",
+      "description": "`npm run build` warns the main chunk exceeds 500 kB (~1.85 MB / ~439 kB gzip). Functional, but *Action:* code-split (dynamic `import()` / `manualChunks`) before scaling the user base.",
+      "source": "evaluation_report §5",
+      "module": "",
+      "category": "PERFORMANCE",
+      "secondary_categories": [
+        "DOCUMENTATION"
+      ],
+      "severity": "MEDIUM",
+      "impact": "Medium risk (per evaluation report)",
+      "root_cause": "The frontend ships as one large chunk (>500 kB) because routes/panels are statically imported instead of code-split, inflating first load.",
+      "fix_type": "CONFIG_CHANGE",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nThe frontend ships as one large chunk (>500 kB) because routes/panels are statically imported instead of code-split, inflating first load.\n\n### Required Change\nChange the build/config so the flagged budget or path is met without touching runtime behaviour.\n\n### Implementation Logic\n1. Introduce route-level dynamic `import()` / Vite `manualChunks` to split the bundle.\n2. Set a per-chunk size budget and fail the build when exceeded.\n3. Re-measure gzip size and confirm first-load improvement.\n\n### Files Likely Affected\n- frontend/vite.config.js\n- frontend/src/main.jsx\n- frontend/src/App.jsx\n\n### Acceptance Criteria\n- Code-split (dynamic `import()` / `manualChunks`) before scaling the user base.\n- Main chunk < 500 kB (or largest route-chunk target met) after code-split; `npm run build` emits no chunk-size warning.\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- Build-size assertion: parse `npm run build` output; fail CI if any chunk exceeds the configured budget.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/vite.config.js, frontend/src/main.jsx, frontend/src/App.jsx.\n- Restore the previous build config (single-bundle) — no runtime data affected.",
+      "files_likely_affected": [
+        "frontend/vite.config.js",
+        "frontend/src/main.jsx",
+        "frontend/src/App.jsx"
+      ],
+      "acceptance_criteria": [
+        "Code-split (dynamic `import()` / `manualChunks`) before scaling the user base.",
+        "Main chunk < 500 kB (or largest route-chunk target met) after code-split; `npm run build` emits no chunk-size warning.",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "Build-size assertion: parse `npm run build` output; fail CI if any chunk exceeds the configured budget."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/vite.config.js, frontend/src/main.jsx, frontend/src/App.jsx.",
+        "Restore the previous build config (single-bundle) — no runtime data affected."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (frontend)",
+      "effort_score": 7,
+      "effort_band": "Medium",
+      "effort_person_hours": 10.5,
+      "priority_score": 165,
+      "priority_band": "P2",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "code-split (dynamic `import()` / `manualChunks`) before scaling the user base.",
+      "status": "queued",
+      "iss": 4.8,
+      "fci": 5.5
+    },
+    {
+      "issue_id": "AQ-FIX-003",
+      "title": "Naming mismatch between services and test files",
+      "description": "A dozen services lack a same-named `test_<service>.py`, but are in fact covered by differently-named suites (e.g. `deploy_verifier`/`luxshow_compiler` → `test_deploy_bundle.py`; `hardware_verifier` → `test_hardware_output.py`; `fixture_registry_bridge` → `test_fixture_registry.py`). This is a cosmetic coverage-audit hazard, not a real gap. *Action:* optional — a coverage report (`pytest --cov`) would make true coverage unambiguous.",
+      "source": "evaluation_report §5",
+      "module": "",
+      "category": "DOCUMENTATION",
+      "secondary_categories": [
+        "RUNTIME_COMPILER",
+        "TESTING"
+      ],
+      "severity": "LOW",
+      "impact": "Low risk (per evaluation report)",
+      "root_cause": "The frontend ships as one large chunk (>500 kB) because routes/panels are statically imported instead of code-split, inflating first load.",
+      "fix_type": "TEST_ADDITION",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nThe frontend ships as one large chunk (>500 kB) because routes/panels are statically imported instead of code-split, inflating first load.\n\n### Required Change\nAdd the missing automated coverage (and, for hardware, a real-target commissioning test) so the flagged behaviour is guarded by a failing-on-break test.\n\n### Implementation Logic\n1. Enumerate the flagged flow's seams (UI action → API route → engine call → result).\n2. Write an integration/journey test that drives the real stack end-to-end.\n3. Prove it fails when the seam is deliberately broken, then wire it into CI.\n\n### Files Likely Affected\n- backend/pytest.ini\n- backend/tests/\n\n### Acceptance Criteria\n- Optional — a coverage report (`pytest --cov`) would make true coverage unambiguous.\n- New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to backend/pytest.ini, backend/tests/.",
+      "files_likely_affected": [
+        "backend/pytest.ini",
+        "backend/tests/"
+      ],
+      "acceptance_criteria": [
+        "Optional — a coverage report (`pytest --cov`) would make true coverage unambiguous.",
+        "New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to backend/pytest.ini, backend/tests/."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code + ChatGPT",
+      "effort_score": 14,
+      "effort_band": "Medium",
+      "effort_person_hours": 10.5,
+      "priority_score": 155,
+      "priority_band": "P2",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "optional — a coverage report (`pytest --cov`) would make true coverage unambiguous.",
+      "status": "queued",
+      "iss": 3.3,
+      "fci": 6.0
+    },
+    {
+      "issue_id": "AQ-FIX-004",
+      "title": "VR walkthrough mode — real-world caveat (AQ-S3-006)",
+      "description": "Navigation; VR; presentation mode. Verdict: ⚠️ Works, caveat. `walkthrough.test.js` 19 cases (pure logic verified; WebXR needs a headset to exercise live)",
+      "source": "evaluation_report §3 (AQ-S3-006)",
+      "module": "AQ-S3-006",
+      "category": "3D_PREVIEW",
+      "secondary_categories": [
+        "FRONTEND_UI"
+      ],
+      "severity": "MEDIUM",
+      "impact": "Medium risk (per evaluation report)",
+      "root_cause": "WebXR paths are logic-verified but cannot be exercised without a physical VR headset.",
+      "fix_type": "PATCH",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nWebXR paths are logic-verified but cannot be exercised without a physical VR headset.\n\n### Required Change\nCorrect the faulty behaviour at its source and add a regression test.\n\n### Implementation Logic\n1. Locate the root-cause code path.\n2. Apply the minimal corrective change.\n3. Add a regression test and re-run the full suite.\n\n### Files Likely Affected\n- frontend/src/engines/walkthrough.js\n- frontend/src/__tests__/walkthrough.test.js\n\n### Acceptance Criteria\n- Exercise VR walkthrough mode on real target hardware/runtime.\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- Add/extend a `validate_*.py` harness or `tests/test_*.py` module asserting the acceptance criteria; run the full suite.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/src/engines/walkthrough.js, frontend/src/__tests__/walkthrough.test.js.",
+      "files_likely_affected": [
+        "frontend/src/engines/walkthrough.js",
+        "frontend/src/__tests__/walkthrough.test.js"
+      ],
+      "acceptance_criteria": [
+        "Exercise VR walkthrough mode on real target hardware/runtime.",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "Add/extend a `validate_*.py` harness or `tests/test_*.py` module asserting the acceptance criteria; run the full suite."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/src/engines/walkthrough.js, frontend/src/__tests__/walkthrough.test.js."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (frontend)",
+      "effort_score": 8,
+      "effort_band": "Medium",
+      "effort_person_hours": 10.5,
+      "priority_score": 150,
+      "priority_band": "P2",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "Exercise VR walkthrough mode on real target hardware/runtime.",
+      "status": "queued",
+      "iss": 4.8,
+      "fci": 5.5
+    },
+    {
+      "issue_id": "AQ-FIX-005",
+      "title": "4K video export — real-world caveat (AQ-S3-007)",
+      "description": "4K; 60 FPS; audio sync. Verdict: ⚠️ Works, caveat. `videoExport.test.js` 15 cases (config/sync verified; real capture is browser-`MediaRecorder`-dependent)",
+      "source": "evaluation_report §3 (AQ-S3-007)",
+      "module": "AQ-S3-007",
+      "category": "3D_PREVIEW",
+      "secondary_categories": [
+        "FRONTEND_UI"
+      ],
+      "severity": "MEDIUM",
+      "impact": "Medium risk (per evaluation report)",
+      "root_cause": "Real frame capture depends on the browser MediaRecorder and is not exercised headlessly.",
+      "fix_type": "PATCH",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nReal frame capture depends on the browser MediaRecorder and is not exercised headlessly.\n\n### Required Change\nCorrect the faulty behaviour at its source and add a regression test.\n\n### Implementation Logic\n1. Locate the root-cause code path.\n2. Apply the minimal corrective change.\n3. Add a regression test and re-run the full suite.\n\n### Files Likely Affected\n- frontend/src/engines/videoExport.js\n\n### Acceptance Criteria\n- Exercise 4K video export on real target hardware/runtime.\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- Add/extend a `validate_*.py` harness or `tests/test_*.py` module asserting the acceptance criteria; run the full suite.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/src/engines/videoExport.js.",
+      "files_likely_affected": [
+        "frontend/src/engines/videoExport.js"
+      ],
+      "acceptance_criteria": [
+        "Exercise 4K video export on real target hardware/runtime.",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "Add/extend a `validate_*.py` harness or `tests/test_*.py` module asserting the acceptance criteria; run the full suite."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/src/engines/videoExport.js."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (frontend)",
+      "effort_score": 8,
+      "effort_band": "Medium",
+      "effort_person_hours": 10.5,
+      "priority_score": 150,
+      "priority_band": "P2",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "Exercise 4K video export on real target hardware/runtime.",
+      "status": "queued",
+      "iss": 4.8,
+      "fci": 5.5
+    },
+    {
+      "issue_id": "AQ-FIX-006",
+      "title": "Frontend test coverage is engine-focused",
+      "description": "vitest (158) covers pure engines (rendering, walkthrough, wind, validation, docs, analytics) well, but there is **little React component/interaction testing** — panels are verified mainly via `npm run build` plus manual wiring. *Action:* add component tests for the highest-traffic panels.",
+      "source": "evaluation_report §5",
+      "module": "",
+      "category": "TESTING",
+      "secondary_categories": [
+        "3D_PREVIEW",
+        "FRONTEND_UI",
+        "DOCUMENTATION"
+      ],
+      "severity": "MEDIUM",
+      "impact": "Medium risk (per evaluation report)",
+      "root_cause": "Frontend tests target pure engines; React panels are covered only by build + manual wiring, so component/interaction regressions can slip through.",
+      "fix_type": "TEST_ADDITION",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nFrontend tests target pure engines; React panels are covered only by build + manual wiring, so component/interaction regressions can slip through.\n\n### Required Change\nAdd the missing automated coverage (and, for hardware, a real-target commissioning test) so the flagged behaviour is guarded by a failing-on-break test.\n\n### Implementation Logic\n1. Enumerate the flagged flow's seams (UI action → API route → engine call → result).\n2. Write an integration/journey test that drives the real stack end-to-end.\n3. Prove it fails when the seam is deliberately broken, then wire it into CI.\n\n### Files Likely Affected\n- backend/tests/test_journeys_e2e.py\n- frontend/src/__tests__/journeys.test.js\n\n### Acceptance Criteria\n- Add component tests for the highest-traffic panels.\n- New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to backend/tests/test_journeys_e2e.py, frontend/src/__tests__/journeys.test.js.",
+      "files_likely_affected": [
+        "backend/tests/test_journeys_e2e.py",
+        "frontend/src/__tests__/journeys.test.js"
+      ],
+      "acceptance_criteria": [
+        "Add component tests for the highest-traffic panels.",
+        "New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to backend/tests/test_journeys_e2e.py, frontend/src/__tests__/journeys.test.js."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (QA)",
+      "effort_score": 11,
+      "effort_band": "Medium",
+      "effort_person_hours": 10.5,
+      "priority_score": 135,
+      "priority_band": "P2",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "add component tests for the highest-traffic panels.",
+      "status": "queued",
+      "iss": 4.8,
+      "fci": 5.5
+    },
+    {
+      "issue_id": "AQ-FIX-007",
+      "title": "Self-authored verification",
+      "description": "Every `validate_*.py` harness and pytest module was written alongside the feature it checks. They are hand-cross-checked against physics/spec (a real strength), but there is **no independent/third-party test authorship or integration test across full user journeys** spanning UI → API → engine → hardware. *Action:* add a small number of cross-feature, end-to-end journey tests.",
+      "source": "evaluation_report §5",
+      "module": "",
+      "category": "TESTING",
+      "secondary_categories": [
+        "BACKEND_API"
+      ],
+      "severity": "HIGH",
+      "impact": "High risk (per evaluation report)",
+      "root_cause": "No test exercises a full UI→API→engine(→hardware) user journey; every harness was authored beside the unit it checks, leaving integration seams uncovered.",
+      "fix_type": "TEST_ADDITION",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nNo test exercises a full UI→API→engine(→hardware) user journey; every harness was authored beside the unit it checks, leaving integration seams uncovered.\n\n### Required Change\nAdd the missing automated coverage (and, for hardware, a real-target commissioning test) so the flagged behaviour is guarded by a failing-on-break test.\n\n### Implementation Logic\n1. Enumerate the flagged flow's seams (UI action → API route → engine call → result).\n2. Write an integration/journey test that drives the real stack end-to-end.\n3. Prove it fails when the seam is deliberately broken, then wire it into CI.\n\n### Files Likely Affected\n- backend/tests/test_journeys_e2e.py\n- frontend/src/__tests__/journeys.test.js\n\n### Acceptance Criteria\n- Add a small number of cross-feature, end-to-end journey tests.\n- New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to backend/tests/test_journeys_e2e.py, frontend/src/__tests__/journeys.test.js.",
+      "files_likely_affected": [
+        "backend/tests/test_journeys_e2e.py",
+        "frontend/src/__tests__/journeys.test.js"
+      ],
+      "acceptance_criteria": [
+        "Add a small number of cross-feature, end-to-end journey tests.",
+        "New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to backend/tests/test_journeys_e2e.py, frontend/src/__tests__/journeys.test.js."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (QA)",
+      "effort_score": 36,
+      "effort_band": "Very Large",
+      "effort_person_hours": 96.0,
+      "priority_score": 175,
+      "priority_band": "P2",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "add a small number of cross-feature, end-to-end journey tests.",
+      "status": "queued",
+      "iss": 6.6,
+      "fci": 7.2
+    },
+    {
+      "issue_id": "AQ-FIX-008",
+      "title": "Residual duplicate frontend files",
+      "description": "The architecture review's \"prerequisite #0\" (archive dead component variants) is mostly done — only the mounted `FountainScene_v6.js` and `PreviewPanel_v5.jsx` remain in `components/preview/`, but a second `components/panels/PreviewPanel.jsx` also exists. *Action:* confirm the single source of truth for the preview panel and archive/remove the unused one to avoid editing a dead copy.",
+      "source": "evaluation_report §5",
+      "module": "",
+      "category": "FRONTEND_UI",
+      "secondary_categories": [],
+      "severity": "MEDIUM",
+      "impact": "Medium risk (per evaluation report)",
+      "root_cause": "More than one component variant remains mounted/available (a second PreviewPanel), so edits can be applied to a dead copy — no single source of truth.",
+      "fix_type": "REFACTOR",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nMore than one component variant remains mounted/available (a second PreviewPanel), so edits can be applied to a dead copy — no single source of truth.\n\n### Required Change\nConsolidate to a single source of truth and archive the dead variant.\n\n### Implementation Logic\n1. Identify the single panel/scene that is actually mounted.\n2. Archive the unused variant(s) out of the live tree.\n3. Grep for stale imports and update them to the retained source.\n\n### Files Likely Affected\n- frontend/src/components/preview/PreviewPanel_v5.jsx\n- frontend/src/components/panels/PreviewPanel.jsx\n\n### Acceptance Criteria\n- Confirm the single source of truth for the preview panel and archive/remove the unused one to avoid editing a dead copy.\n- Exactly one live source of truth remains; the dead variant is archived/removed and no import references it (grep clean); build + suites stay green.\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- `npm run build` clean + a component test mounting the single retained panel; grep confirms no import of the archived variant.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/src/components/preview/PreviewPanel_v5.jsx, frontend/src/components/panels/PreviewPanel.jsx.\n- Restore the archived component variant from git history if the retained panel regresses.",
+      "files_likely_affected": [
+        "frontend/src/components/preview/PreviewPanel_v5.jsx",
+        "frontend/src/components/panels/PreviewPanel.jsx"
+      ],
+      "acceptance_criteria": [
+        "Confirm the single source of truth for the preview panel and archive/remove the unused one to avoid editing a dead copy.",
+        "Exactly one live source of truth remains; the dead variant is archived/removed and no import references it (grep clean); build + suites stay green.",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "`npm run build` clean + a component test mounting the single retained panel; grep confirms no import of the archived variant."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to frontend/src/components/preview/PreviewPanel_v5.jsx, frontend/src/components/panels/PreviewPanel.jsx.",
+        "Restore the archived component variant from git history if the retained panel regresses."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (frontend)",
+      "effort_score": 8,
+      "effort_band": "Medium",
+      "effort_person_hours": 10.5,
+      "priority_score": 105,
+      "priority_band": "P3",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "confirm the single source of truth for the preview panel and archive/remove the unused one to avoid editing a dead copy.",
+      "status": "queued",
+      "iss": 4.8,
+      "fci": 5.5
+    },
+    {
+      "issue_id": "AQ-FIX-009",
+      "title": "`WAU`/`MAU`, escalation timers, offline outboxes and similar are clock-injected and unit-tested",
+      "description": "but have not been observed over real elapsed calendar time in production.",
+      "source": "evaluation_report §5",
+      "module": "",
+      "category": "TESTING",
+      "secondary_categories": [],
+      "severity": "LOW",
+      "impact": "Low risk (per evaluation report)",
+      "root_cause": "Time-based metrics/timers are clock-injected and unit-tested but never observed over real elapsed calendar time in production.",
+      "fix_type": "TEST_ADDITION",
+      "fix_strategy": "## Fix Approach\n\n### Root Cause\nTime-based metrics/timers are clock-injected and unit-tested but never observed over real elapsed calendar time in production.\n\n### Required Change\nAdd the missing automated coverage (and, for hardware, a real-target commissioning test) so the flagged behaviour is guarded by a failing-on-break test.\n\n### Implementation Logic\n1. Enumerate the flagged flow's seams (UI action → API route → engine call → result).\n2. Write an integration/journey test that drives the real stack end-to-end.\n3. Prove it fails when the seam is deliberately broken, then wire it into CI.\n\n### Files Likely Affected\n- backend/tests/test_journeys_e2e.py\n- frontend/src/__tests__/journeys.test.js\n\n### Acceptance Criteria\n- New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n- Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).\n\n### Test Plan\n- Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken.\n\n### Rollback Plan\n- Revert the fix commit (`git revert <sha>`); the change is isolated to backend/tests/test_journeys_e2e.py, frontend/src/__tests__/journeys.test.js.",
+      "files_likely_affected": [
+        "backend/tests/test_journeys_e2e.py",
+        "frontend/src/__tests__/journeys.test.js"
+      ],
+      "acceptance_criteria": [
+        "New automated test(s) added and green in the same suite run; failure of the underlying behaviour makes the test fail (verified by a deliberate break).",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions).",
+        "Full backend `pytest` and frontend `vitest` suites remain green after the fix (403 + 158 baseline, no regressions)."
+      ],
+      "test_plan": [
+        "Add integration/journey test(s) spanning UI→API→engine for the flagged flow; run in CI and confirm they fail when the path is deliberately broken."
+      ],
+      "rollback_plan": [
+        "Revert the fix commit (`git revert <sha>`); the change is isolated to backend/tests/test_journeys_e2e.py, frontend/src/__tests__/journeys.test.js."
+      ],
+      "dependencies": [],
+      "owner": "Claude Code (QA)",
+      "effort_score": 11,
+      "effort_band": "Medium",
+      "effort_person_hours": 10.5,
+      "priority_score": 105,
+      "priority_band": "P3",
+      "override_reason": "",
+      "safety_gate": "",
+      "needs_discovery": false,
+      "action_hint": "",
+      "status": "queued",
+      "iss": 3.0,
+      "fci": 5.5
+    }
+  ]
+}
