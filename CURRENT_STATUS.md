@@ -1,9 +1,46 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-05
-**Summary:** Stage 5 — AQ-S5-006 Generative Fountain Designer complete: a brief generates costed fountain concepts, each exportable as an engineering and a construction package.
+**Summary:** EVAL-AQ-003 — implemented the EVAL-AQ-002 fix strategy (9 fixes). Frontend bundle code-split (main chunk 1.87 MB → 181 kB, build warning-clean), cross-feature end-to-end journey tests + time-based-timer contract tests added, VR/4K caveat fallbacks pinned, dead duplicate panel archived, and coverage-map + hardware-commissioning docs added. Backend pytest **437 passing**, frontend vitest **165 passing**.
 
 ## Completed
+- **EVAL-AQ-003 Implement Fixes — DONE on `main`.** Worked the prioritised queue in
+  [fix_strategy_report.md](fix_strategy_report.md):
+  - **AQ-FIX-002 (bundle, P2) — DONE.** Route-level code-split: every conditionally-rendered panel is
+    now a `lazy()` chunk behind one `<Suspense>` in [App.jsx](aquaflow/frontend/src/App.jsx); three.js /
+    react are isolated vendor chunks ([vite.config.js](aquaflow/frontend/vite.config.js) `manualChunks`).
+    Main app chunk **1.87 MB → 181 kB**; `npm run build` is **warning-clean**.
+  - **AQ-FIX-007 + AQ-FIX-006 (integration seams, P2) — DONE.** New
+    [tests/test_journeys_e2e.py](aquaflow/backend/tests/test_journeys_e2e.py) — 5 cross-feature journeys
+    driving the real FastAPI stack (brief→engineering+construction packages; fleet register→E-stop→
+    dashboard→alert→ack; twin ingest→forecast; cloud backup→restore→remote diagnostics; cross-tenant
+    isolation). Frontend component-DOM testing needs jsdom (not installed) — recorded as a follow-up in
+    the coverage map; the seams are covered via the journey suite instead.
+  - **AQ-FIX-004 + AQ-FIX-005 (VR / 4K caveats, P2) — DONE.** New
+    [caveatFallbacks.test.js](aquaflow/frontend/src/__tests__/caveatFallbacks.test.js) pins graceful
+    degradation with no WebXR headset and no `MediaRecorder` (7 cases).
+  - **AQ-FIX-009 (time-based timers, P3) — DONE.** New
+    [tests/test_time_based_metrics.py](aquaflow/backend/tests/test_time_based_metrics.py) makes the
+    "time advances → state changes" contract explicit (fault escalation tiers, fleet heartbeat timeout,
+    cloud reachability window) via injected clocks.
+  - **AQ-FIX-008 (duplicate files, P3) — DONE.** The dead second preview panel
+    (`components/panels/PreviewPanel.jsx`, actually a v4 copy) is archived to `frontend/_archive/`; the
+    mounted source of truth is `preview/PreviewPanel_v5`; grep + build clean.
+  - **AQ-FIX-003 (service/test naming, P2) — DONE.** New
+    [docs/TEST_COVERAGE_MAP.md](aquaflow/docs/TEST_COVERAGE_MAP.md) maps every "orphan" service to its
+    real covering suite and honestly lists the 2–3 genuine gaps; recommends `pytest --cov`.
+  - **AQ-FIX-001 (physical-hardware verification, P0) — CODE/DOC PORTION DONE; physical bring-up
+    pending.** New [docs/commissioning_checklist.md](aquaflow/docs/commissioning_checklist.md) turns the
+    first real-fixture bring-up into a formal test (levels, 15-bit universes, ≤44 Hz, safety-gate
+    no-permit=all-zero incl. colour channels, flame-duration). The physical session requires real
+    hardware and an authorised on-site operator — it cannot run in CI, so the honest status remains
+    **loopback-verified, physical-pending**; the loopback + safety suites stay green
+    (`validate_hardware_output.py` 20/20, `validate_safety_output_limits.py` 15/15).
+  - **Verification:** backend pytest **437 passing** (+10: journeys + time-based), frontend vitest
+    **165 passing** (+7: caveat fallbacks); `npm run build` warning-clean (main chunk 181 kB). No
+    safety limit weakened; all changes additive/config-only.
+
+
 - **EVAL-AQ-002 Fix Strategy — DONE on `main` (Stage 8 evaluation track).**
   - New [services/fix_strategy_engine.py](aquaflow/backend/services/fix_strategy_engine.py) — a
     deterministic rule-based + heuristic engine that turns [EVALUATION_REPORT.md](EVALUATION_REPORT.md)
