@@ -46,6 +46,7 @@ from api.routes.academy_routes import router as academy_router
 from api.routes.twin_routes import router as twin_router
 from api.routes.optimize_routes import router as optimize_router
 from api.routes.adaptation_routes import router as adaptation_router
+from api.routes.fleet_routes import router as fleet_router
 from services.show_programmer_service import show_programmer_router
 from services.diagnostics import get_diagnostics
 from app_state import show_engine, device_manager, protocol_bus, load_saved_show, apply_show_payload
@@ -362,6 +363,7 @@ app.include_router(academy_router,          prefix="/api/academy",    tags=["Aca
 app.include_router(twin_router,             prefix="/api/twin",       tags=["Digital-Twin"])
 app.include_router(optimize_router,         prefix="/api/optimize",   tags=["Optimization"])
 app.include_router(adaptation_router,       prefix="/api/adaptation", tags=["Adaptation"])
+app.include_router(fleet_router,            prefix="/api/fleet",      tags=["Fleet"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
 

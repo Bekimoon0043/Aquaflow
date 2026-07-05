@@ -1,9 +1,31 @@
 # AquaFlow Studio — Current Status
 
 **Date:** 2026-07-05
-**Summary:** Stage 5 — AQ-S5-003 Autonomous Show Adaptation complete: the show auto-adapts to live weather, crowd and event context (with safety precedence), plus an Autonomous Adaptation UI panel.
+**Summary:** Stage 5 — AQ-S5-004 Fleet Management System complete: a fleet of fountain sites is centrally monitored from one dashboard with a unified, severity-ranked alert feed.
 
 ## Completed
+- **AQ-S5-004 Fleet Management System — DONE on `main` (Stage 5).**
+  - New backend [services/fleet_manager.py](aquaflow/backend/services/fleet_manager.py) — persists one
+    JSON per site and mirrors each site's health by reusing the AQ-X-020 `mobile_monitor`
+    (`build_snapshot`/`evaluate_alerts`), so fleet health matches the single-site monitor.
+  - **Multiple sites monitored** — `register_site` + `report_status` ingest each site's operator status;
+    a clock-injected 120 s heartbeat timeout marks silent (or never-reporting) sites offline.
+  - **Central dashboard works** — `dashboard()` rolls up site count, online/offline split, a
+    live/warning/critical/estop/idle/offline health breakdown, the critical-alert count, and per-site rows.
+  - **Alerts centralised** — `central_alerts()` merges every online site's alerts (attributed to
+    `site_id`/`site_name`), injects a synthetic `SITE_OFFLINE` alert for stale sites, sorts critical-first,
+    and supports acknowledge (persisted, and pruned automatically when the underlying alert clears).
+  - New [FleetPanel.jsx](aquaflow/frontend/src/components/panels/FleetPanel.jsx) — a live (5 s poll)
+    central dashboard: stat tiles, per-site health cards, and the centralised alert feed with Ack; wired
+    into `App.jsx` + the TopBar (Runtime → Fleet Management).
+  - API: `POST /api/fleet/sites`, `POST /api/fleet/sites/{id}/status`, `GET /api/fleet/sites/{id}`,
+    `GET /api/fleet/dashboard`, `GET /api/fleet/alerts`, `POST /api/fleet/alerts/ack`
+    ([fleet_routes.py](aquaflow/backend/api/routes/fleet_routes.py)), wired in main.py.
+  - **Verification: 19/19** ([validate_fleet_manager.py](aquaflow/backend/validate_fleet_manager.py))
+    + **9 pytest cases** ([test_fleet_manager.py](aquaflow/backend/tests/test_fleet_manager.py)) →
+    backend pytest **383 passing** (was 374); frontend **158 vitest passing**; **`npm run build` succeeds**.
+
+
 - **AQ-S5-003 Autonomous Show Adaptation — DONE on `main` (Stage 5).**
   - New backend [services/show_adaptation.py](aquaflow/backend/services/show_adaptation.py) — from live
     context it produces an adaptation plan that re-scales the running show (intensity, jet height, tempo,
