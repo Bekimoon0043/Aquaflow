@@ -20,6 +20,7 @@ unit-tested against a temp directory; the route exposes it to the installer UI.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
@@ -30,6 +31,15 @@ from typing import Optional
 APP_NAME = "AquaFlow Studio"
 INSTALL_DIRS = ["config", "data", "logs", "compiled", "cache"]
 MANIFEST_NAME = "install.json"
+# Files whose integrity the installer tracks (checksummed at install, verified after).
+TRACKED_FILES = ["config/app_config.json"]
+
+
+def _sha256_file(path: Path) -> Optional[str]:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except Exception:
+        return None
 
 
 def get_app_version() -> str:
@@ -151,6 +161,9 @@ class InstallManager:
             "install_id": (self.info() or {}).get("install_id") or uuid.uuid4().hex[:16],
             "installed_at": datetime.now(timezone.utc).isoformat(),
             "dirs": INSTALL_DIRS,
+            # AF-HUB-009B — integrity checksums so verify() can detect a tampered/corrupted
+            # tracked file, not just a missing one.
+            "checksums": self._compute_checksums(),
             "update_history": [],
         }
         self._manifest_path().write_text(json.dumps(manifest, indent=2),
@@ -162,8 +175,18 @@ class InstallManager:
                 "install_id": manifest["install_id"], "edition": edition,
                 "path": str(self.root), "steps": steps, "verification": verified}
 
+    def _compute_checksums(self) -> dict:
+        """SHA-256 of each tracked file that exists (relative-path keyed)."""
+        out = {}
+        for rel in TRACKED_FILES:
+            digest = _sha256_file(self.root / rel)
+            if digest is not None:
+                out[rel] = digest
+        return out
+
     def verify(self) -> dict:
-        """Confirm the install layout is complete and the manifest is readable."""
+        """Confirm the install is complete AND intact: layout present, config readable,
+        and every tracked file matches its recorded checksum (tamper/corruption)."""
         problems = []
         if not self.is_installed():
             problems.append("install manifest missing or not marked installed")
@@ -172,6 +195,15 @@ class InstallManager:
                 problems.append(f"missing dir: {d}")
         if not (self.root / "config" / "app_config.json").exists():
             problems.append("missing config/app_config.json")
+
+        # AF-HUB-009B — integrity check against the recorded checksums.
+        recorded = (self.info() or {}).get("checksums", {}) or {}
+        for rel, expected in recorded.items():
+            actual = _sha256_file(self.root / rel)
+            if actual is None:
+                problems.append(f"missing tracked file: {rel}")
+            elif actual != expected:
+                problems.append(f"corrupted (checksum mismatch): {rel}")
         return {"ok": not problems, "problems": problems}
 
     # ── Auto-update ────────────────────────────────────────────────────────────
@@ -192,7 +224,6 @@ class InstallManager:
             "at": datetime.now(timezone.utc).isoformat()})
         info["version"] = new_version
         info["updated_at"] = datetime.now(timezone.utc).isoformat()
-        self._manifest_path().write_text(json.dumps(info, indent=2), encoding="utf-8", newline="")
         # keep app_config version in sync
         cfg_path = self.root / "config" / "app_config.json"
         if cfg_path.exists():
@@ -202,6 +233,10 @@ class InstallManager:
                 cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8", newline="")
             except Exception:
                 pass
+        # AF-HUB-009B — the update legitimately rewrote a tracked file; refresh the
+        # recorded checksums so verify() stays green after an update.
+        info["checksums"] = self._compute_checksums()
+        self._manifest_path().write_text(json.dumps(info, indent=2), encoding="utf-8", newline="")
         return {"ok": True, "from": previous, "to": new_version}
 
     def rollback(self) -> dict:

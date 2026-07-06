@@ -111,6 +111,20 @@ class RuntimeHealthMonitor:
         from services.commissioning import commissioning_status
         subsystems["commissioning"] = commissioning_status()
 
+    def _check_license(self, issues, subsystems):
+        # AF-HUB-009B — surface the running instance's license/activation state honestly.
+        # No license activated (NOT_FOUND) is normal for an internal/dev build → info only;
+        # an EXPIRED or grace-expired license is a real operational issue → degraded.
+        from services.installer import activation_status
+        st = activation_status()
+        subsystems["license"] = {
+            "activated": st.get("activated"), "status": st.get("status"),
+            "edition": st.get("edition"),
+        }
+        status = str(st.get("status", ""))
+        if status in ("EXPIRED", "GRACE_EXPIRED"):
+            issues.append((DEGRADED, "license", f"License {status.lower().replace('_', ' ')}"))
+
     def _check_runtime_authority(self, issues, subsystems):
         subsystems["runtime_authority"] = self._runtime_authority.get_status()
 
@@ -123,6 +137,7 @@ class RuntimeHealthMonitor:
             ("devices", self._device_manager, self._check_devices),
             ("show_engine", self._show_engine, self._check_show_engine),
             ("commissioning", True, self._check_commissioning),
+            ("license", True, self._check_license),
             ("runtime_authority", self._runtime_authority, self._check_runtime_authority),
         ]
         for name, target, fn in checks:
