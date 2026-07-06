@@ -470,6 +470,7 @@ async def handle_ws_message(data: dict, ws: WebSocket):
         "request_show_snapshot",
         "save_show",
         "emergency_stop",
+        "recover",
         "scan_devices",
     }
 
@@ -566,6 +567,19 @@ async def handle_ws_message(data: dict, ws: WebSocket):
             "type": "log",
             "level": "error",
             "message": "EMERGENCY STOP executed",
+        })
+        await broadcast_playback_state()
+
+    elif msg_type == "recover":
+        # AF-HUB-007C — coordinated recovery counterpart to emergency_stop. Gated: only
+        # succeeds when the blocking conditions have cleared; otherwise reports why.
+        from engine.runtime_authority import runtime_authority
+        result = await runtime_authority.recover(source="websocket-operator")
+        await ws_manager.broadcast({
+            "type": "recover",
+            "recovered": result["recovered"],
+            "state": result["state"],
+            "blocked_by": result["blocked_by"],
         })
         await broadcast_playback_state()
 

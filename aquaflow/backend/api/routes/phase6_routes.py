@@ -50,10 +50,12 @@ async def safety_estop():
 
 @phase6_router.post("/safety/reset")
 async def safety_reset():
-    from safety.safety_kernel import get_safety_kernel
-    k = get_safety_kernel()
-    ok = k.reset_faults()
-    return {"ok": ok, "state": k.state}
+    # AF-HUB-007C — route recovery through the single runtime authority so it is gated
+    # and reports why it was refused (blocked_by), rather than a silent False.
+    from app_state import runtime_authority
+    result = await runtime_authority.recover(source="api-safety-reset")
+    return {"ok": result["recovered"], "state": result["state"],
+            "blocked_by": result["blocked_by"]}
 
 
 @phase6_router.post("/safety/dry-run")

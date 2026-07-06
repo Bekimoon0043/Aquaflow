@@ -37,6 +37,7 @@ class RuntimeAuthority:
         self._hardware_output = None
         self._device_manager = None
         self._last_trip: dict | None = None
+        self._last_recovery: dict | None = None
 
     def register(self, *, safety=None, show_engine=None, protocol_bus=None,
                  hardware_output=None, device_manager=None) -> "RuntimeAuthority":
@@ -101,6 +102,42 @@ class RuntimeAuthority:
         self._last_trip = trip
         return trip
 
+    async def recover(self, source: str = "operator") -> dict:
+        """Coordinated recovery — the counterpart to emergency_stop(). Attempt to clear
+        faults and return the runtime to a safe idle state, but ONLY when the blocking
+        conditions have cleared. A refused recovery reports exactly WHY (never a silent
+        no-op) so the operator knows what to fix before re-arming (AF-HUB-007C)."""
+        result: dict = {"kind": "recover", "source": source, "at": time.time(),
+                        "recovered": False, "state": None, "blocked_by": []}
+        safety = self._safety
+        if safety is None:
+            result["blocked_by"] = ["safety kernel not registered"]
+            self._last_recovery = result
+            return result
+        try:
+            blockers = list(safety.recovery_blockers()) if hasattr(safety, "recovery_blockers") else []
+        except Exception as exc:
+            blockers = [f"blocker check failed: {exc}"]
+        if blockers:
+            result["blocked_by"] = blockers
+        else:
+            try:
+                ok = bool(safety.reset_faults())
+                result["recovered"] = ok
+                if not ok:
+                    result["blocked_by"] = ["fault reset refused by safety kernel"]
+            except Exception as exc:
+                result["blocked_by"] = [f"reset failed: {exc}"]
+        try:
+            state = safety.get_status().get("state")
+            result["state"] = getattr(state, "value", str(state))  # plain 'SAFE_IDLE', not the enum repr
+        except Exception:  # pragma: no cover - defensive
+            pass
+        self._last_recovery = result
+        logger.warning("RuntimeAuthority RECOVER by %s → recovered=%s blocked_by=%s",
+                       source, result["recovered"], result["blocked_by"])
+        return result
+
     def get_status(self) -> dict:
         return {
             "registered": {
@@ -111,6 +148,7 @@ class RuntimeAuthority:
                 "device_manager": self._device_manager is not None,
             },
             "last_trip": self._last_trip,
+            "last_recovery": self._last_recovery,
         }
 
 

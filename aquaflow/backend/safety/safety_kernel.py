@@ -159,13 +159,34 @@ class SafetyKernel:
         self._transition(SafetyState.EMERGENCY_STOP)
 
     def reset_faults(self) -> bool:
-        """Clear non-latched faults and transition to SAFE_IDLE if inputs clear."""
+        """Attempt fault recovery. AF-HUB-007C — check the input conditions FIRST and
+        only clear the latched faults / return to SAFE_IDLE when they are actually clear.
+        A refused recovery leaves the fault record intact (previously it wiped the latched
+        faults before checking inputs, hiding a still-present hazard)."""
+        if not self._inputs_clear():
+            return False
         self.latched_faults.clear()
         self.fault_log.clear()
-        if self._inputs_clear():
-            self._transition(SafetyState.SAFE_IDLE)
-            return True
-        return False
+        self._transition(SafetyState.SAFE_IDLE)
+        return True
+
+    def recovery_blockers(self) -> list[str]:
+        """The input conditions currently preventing fault recovery — empty means recovery
+        is possible. Lets the operator see WHY a reset was refused instead of a silent
+        False (AF-HUB-007C)."""
+        i = self.inputs
+        checks = [
+            (i.estop_chain_closed, "E-stop chain open"),
+            (i.plc_heartbeat_ok,   "PLC heartbeat lost"),
+            (i.watchdog_ok,        "Runtime watchdog not healthy"),
+            (i.water_level_ok,     "Low water level"),
+            (i.pressure_ok,        "Pressure out of range"),
+            (i.pump_flow_ok,       "No pump flow"),
+            (i.valve_positions_ok, "Valve position fault"),
+            (i.vfd_ok,             "VFD fault"),
+            (i.thermal_ok,         "Thermal overload"),
+        ]
+        return [msg for ok, msg in checks if not ok]
 
     def enter_maintenance(self):
         if self.state in (SafetyState.SAFE_IDLE, SafetyState.ARMED):
