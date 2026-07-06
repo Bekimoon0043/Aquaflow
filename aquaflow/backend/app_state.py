@@ -8,6 +8,7 @@ from pathlib import Path
 from engine.show_engine import ShowEngine
 from engine.device_manager import DeviceManager
 from engine.protocol_bus import ProtocolBus
+from engine.runtime_authority import runtime_authority
 from services.fixture_registry_bridge import build_registry_from_fixtures
 
 BASE_DIR = Path(__file__).parent
@@ -17,6 +18,26 @@ SHOWS_DIR.mkdir(exist_ok=True)
 show_engine = ShowEngine()
 device_manager = DeviceManager()
 protocol_bus = ProtocolBus()
+
+# AF-HUB-006B — the ONE runtime output authority. Register the core output actors here
+# so every E-stop / blackout entry point halts the SAME complete set of subsystems.
+# The safety kernel and the network hardware-output manager are registered too (guarded
+# against import issues); the lifespan re-registers them (idempotent).
+runtime_authority.register(
+    show_engine=show_engine,
+    protocol_bus=protocol_bus,
+    device_manager=device_manager,
+)
+try:
+    from engine.network_scanner import hardware_output as _hardware_output
+    runtime_authority.register(hardware_output=_hardware_output)
+except Exception:  # pragma: no cover - defensive wiring
+    pass
+try:
+    from safety.safety_kernel import get_safety_kernel as _get_safety_kernel
+    runtime_authority.register(safety=_get_safety_kernel())
+except Exception:  # pragma: no cover - defensive wiring
+    pass
 
 
 def sanitize_show_id(name: str) -> str:

@@ -40,10 +40,12 @@ async def safety_disarm():
 
 @phase6_router.post("/safety/estop")
 async def safety_estop():
+    # AF-HUB-006B — a safety E-stop must halt ALL output, not just latch the kernel.
+    # Route through the single runtime authority (which trips the kernel first).
+    from app_state import runtime_authority
     from safety.safety_kernel import get_safety_kernel
-    k = get_safety_kernel()
-    k.emergency_stop(source="api")
-    return {"ok": True, "state": k.state}
+    await runtime_authority.emergency_stop(source="api-safety")
+    return {"ok": True, "state": get_safety_kernel().state}
 
 
 @phase6_router.post("/safety/reset")

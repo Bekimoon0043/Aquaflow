@@ -189,6 +189,11 @@ async def lifespan(app: FastAPI):
     if hasattr(protocol_bus, "set_safety_kernel"):
         protocol_bus.set_safety_kernel(safety)
 
+    # AF-HUB-006B — register the live safety kernel + hardware output with the single
+    # runtime authority so every E-stop path halts the complete set (idempotent).
+    from engine.runtime_authority import runtime_authority
+    runtime_authority.register(safety=safety, hardware_output=hardware_output)
+
     # ── Phase 7: Wire diagnostics to safety kernel ────────────────────────────
     diag = get_diagnostics()
     def _on_safety_change_diag(old, new):
@@ -533,13 +538,11 @@ async def handle_ws_message(data: dict, ws: WebSocket):
         await broadcast_show_snapshot()
 
     elif msg_type == "emergency_stop":
-        # Phase 6: trigger safety kernel E-stop as well
-        try:
-            get_safety_kernel().emergency_stop(source="websocket-operator")
-        except Exception:
-            pass
-        await show_engine.stop_playback()
-        await device_manager.emergency_stop()
+        # AF-HUB-006B — one authority halts every output subsystem (safety kernel,
+        # show engine, protocol bus, hardware output, device manager) in one call,
+        # fault-tolerantly. Replaces the old partial + AttributeError-prone sequence.
+        from engine.runtime_authority import runtime_authority
+        await runtime_authority.emergency_stop(source="websocket-operator")
         await ws_manager.broadcast({
             "type": "emergency_stop",
             "state": show_engine.get_state(),

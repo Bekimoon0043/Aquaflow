@@ -105,9 +105,11 @@ async def get_universe(universe: int):
 
 @router.post("/dmx/blackout")
 async def dmx_blackout():
-    """Zero all DMX universes"""
-    await hardware_output.blackout_all()
-    return {"status": "blackout"}
+    """Zero all physical outputs via the single runtime authority (protocol bus +
+    hardware output), not just the local hardware_output manager (AF-HUB-006B)."""
+    from app_state import runtime_authority
+    trip = await runtime_authority.blackout(source="rest-dmx-blackout")
+    return {"status": "blackout", "results": trip["results"]}
 
 
 @router.post("/modbus/write")
@@ -151,5 +153,9 @@ async def send_device_command(device_id: str, cmd: DeviceCommand):
 
 @router.post("/emergency-stop")
 async def emergency_stop():
-    await hardware_output.blackout_all()
-    return {"status": "emergency_stop_executed"}
+    """Full E-stop via the single runtime authority — halts safety kernel, show engine,
+    protocol bus, hardware output and device manager. Previously this only zeroed the
+    hardware_output manager while the show loop + protocol bus kept emitting (AF-HUB-006B)."""
+    from app_state import runtime_authority
+    trip = await runtime_authority.emergency_stop(source="rest-devices")
+    return {"status": "emergency_stop_executed", "results": trip["results"]}
