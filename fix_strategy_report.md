@@ -1,5 +1,10 @@
 # AquaFlow Studio — Fix Strategy (EVAL-AQ-002)
 
+> **HISTORICAL — superseded.** This is a point-in-time EVAL-AQ artifact (test counts here,
+> e.g. "403 + 158 baseline", are from that date). Current authoritative status + test
+> numbers live in `AQUAFLOW_STATUS_CANONICAL.md` (backend 513 / frontend 231 / coverage 59%).
+
+
 **Source:** `EVALUATION_REPORT.md` (EVAL-AQ-001)  
 **Engine:** `backend/services/fix_strategy_engine.py` — rule-based + heuristic scoring (deterministic, no ML).  
 **Issues:** 9  

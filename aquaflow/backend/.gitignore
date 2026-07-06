@@ -1,0 +1,6 @@
+
+# AF-HUB-017 — coverage artifacts (pytest-cov)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

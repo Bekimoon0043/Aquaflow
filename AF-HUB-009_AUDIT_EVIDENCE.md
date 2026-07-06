@@ -30,7 +30,7 @@ AquaFlow is cleared for live operation.
 
 ```bash
 # Backend (Python) — from aquaflow/backend
-./.venv/Scripts/python.exe -m pytest            # expect: 473 passed, 21 skipped, 0 errors
+./.venv/Scripts/python.exe -m pytest            # expect: 513 passed, 21 skipped, 0 errors
 
 # Frontend (JS) — from aquaflow/frontend
 npx vitest run                                  # expect: 231 passed (20 files)
@@ -44,8 +44,15 @@ The 21 skips are `test_fix_strategy_engine.py`, which requires the transient
 
 | Suite | Result | Notes |
 | --- | --- | --- |
-| Backend pytest | **473 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
+| Backend pytest | **513 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
+| Backend coverage | **59%** line coverage | `pytest --cov` (measured in AF-HUB-017). |
 | Frontend vitest | **231 passed (20 files)** | Node env; no DOM. |
+
+> **Update (post first review):** the independent review returned **CONDITIONAL-GO** and
+> found incomplete work reported as done. The Stage-7 corrective tasks AF-HUB-013…018 fix
+> it — one 100 Hz playback loop, protocol honesty gate, fail-closed output routing,
+> singleton lockdown, this evidence-consistency pass, and the bench safety lock. Numbers
+> above are the post-corrective authoritative run.
 | Frontend build | **green** | Vite production build. |
 
 **Not measured:** numeric code-coverage %. `pytest-cov` / `coverage` are not installed in

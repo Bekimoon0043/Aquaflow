@@ -1,5 +1,10 @@
 # AquaFlow Studio — Current Status
 
+> **AUTHORITATIVE (2026-07-06, AF-HUB Stage 7):** backend pytest **513 passed, 21 skipped,
+> 0 errors** · backend line coverage **59%** · frontend vitest **231 passed (20 files)** ·
+> `npm run build` green. Single source of truth: `AQUAFLOW_STATUS_CANONICAL.md`. Test/task
+> numbers in the dated entries below are point-in-time snapshots — the line above is current.
+
 **Date:** 2026-07-05
 **Summary:** AQ-X-016 — AquaFlow 3D Export Bridge implemented (the last open AQ-X recovery task).
 The live 3D preview scene (pool + water + fixtures + lights) now exports to **glTF/GLB, OBJ+MTL,

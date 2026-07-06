@@ -137,10 +137,22 @@ npm run dev
 ```
 
 ### Backend
+
+**Production / bench / operator (default — NO auto-reload):**
 ```bash
 cd backend
 py -m pip install -r requirements.txt
-py -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python main.py            # production mode: reload OFF, no file watchers (AF-HUB-000B)
+```
+
+> Do **not** run the backend with `--reload` in production/bench. uvicorn's reloader
+> spawns a file-watching supervisor that can restart the process mid-show, dropping output
+> and re-initialising hardware. Auto-reload is development-only:
+
+**Developer mode only (auto-reload):**
+```bash
+cd backend
+AQUAFLOW_DEV=1 python main.py     # dev: auto-reload + watchers (never on the bench)
 ```
 
 ---

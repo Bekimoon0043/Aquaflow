@@ -31,7 +31,8 @@ signed off** — the minimum bar before any live, hardware-driving fountain site
 
 | Item | Result | Reproduce |
 | --- | --- | --- |
-| Backend pytest (full, no ignores) | **488 passed, 21 skipped, 0 errors** | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest` |
+| Backend pytest (full, no ignores) | **513 passed, 21 skipped, 0 errors** | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest` |
+| Backend line coverage | **59%** (`pytest --cov`) | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest --cov=.` |
 | Frontend vitest | **231 passed (20 files)** | `aquaflow/frontend`: `npx vitest run` |
 | Frontend production build | **green** | `aquaflow/frontend`: `npm run build` |
 
@@ -48,6 +49,8 @@ The 21 skips are the fix-strategy contract tests, which require the transient
 | 006 / 006B | e8ddf89 / 0928606 | Route/singleton wiring repair · single runtime-authority E-stop |
 | 007 / 007B / 007C | 19912bd / 7ed3858 / 0537cc1 | Safety-path stub burn-down · runtime health verdict · gated failure recovery |
 | 008 / 009B / 010 | 074dd4a / d66a7da / 334a24c | Test stabilization + coverage · internal installer + license validation · hardware verification harness prep |
+| **013 / 014 / 015** | b077c49 / 9ddfa7a / 672a866 | **Stage-7 corrective (independent review):** playback authority locked to one 100 Hz loop · protocol support honesty gate (MQTT fails closed) · fail-closed output routing (unmapped fixtures cannot reach hardware) |
+| **016 / 017 / 018** | 83c5883 / (this) / (pending) | **Stage-7 corrective:** protocol-bus singleton lockdown · evidence consistency pass · bench safety environment lock |
 
 ### 2.3 Hardware-readiness artifacts (prepared; execution pending)
 
@@ -77,7 +80,7 @@ met by software work.
 
 - **[CRITICAL] Real hardware output unverified** until AF-HUB-011 (bench). Commissioning flag FALSE.
 - **[HIGH] Hydraulic engine** uses linear approximations, not Hazen-Williams / Darcy-Weisbach. Not in the AF-HUB plan; open.
-- **Coverage %** not numerically measured (pytest-cov not installed).
+- **Coverage** now measured (AF-HUB-017): backend line coverage **59%** (`pytest --cov`).
 - **Licensing doc discrepancy** — docs say Ed25519; implementation is HMAC-SHA256 (env secret, server-side). Acceptable for internal use; reconcile before external claims.
 
 ## 5. Final acceptance & sign-off (completed only after gates 7–9 close)

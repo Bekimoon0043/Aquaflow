@@ -40,35 +40,49 @@ bench so bench time is not wasted debugging software.
 
 ---
 
-## 2. Active plan — the AF-HUB Tier A Hardening sequence (19 tasks)
+## 2. Active plan — the AF-HUB Tier A Hardening sequence (26 tasks)
 
-The old 65-task AquaFlow roadmap is **superseded** by this sequence (v3 + supplement).
-Tasks 000–009B are software (Claude Code); 010–012 are on-site hardware.
+The old 65-task AquaFlow roadmap is **superseded** by this sequence (v3 + supplement +
+Stage-7 corrective tasks from the independent ChatGPT review). Tasks 000–010, 013–018 are
+software (Claude Code); 009 is an independent review; 011–012 are on-site hardware.
 
-| ID | Title | Pri | Stage | Deps | Type | Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| AF-HUB-000 | Green the backend suite | P0 | 0 Pre-flight | — | code | **DONE** `feec4b4` |
-| AF-HUB-000B | Production startup mode (no reload) | P0 | 0 Pre-flight | — | code | **DONE** `026c8b1` |
-| AF-HUB-000C | Honest hardware labeling + flag | P0 | 0 Pre-flight | — | code | **DONE** `4246006` |
-| AF-HUB-001 | Archive stale frontend variants | P0 | 1 Frontend | 000 | code | Queued (next) |
-| AF-HUB-002 | Canonical fixture-type resolver | P0 | 2 Contracts | 001 | code | Queued |
-| AF-HUB-003 | Geometry / axis contract | P0 | 2 Contracts | 001 | code | Queued |
-| AF-HUB-004 | Fixture store unification + projection | P0 | 3 Stores | 002,003 | code | Queued |
-| AF-HUB-004B | DMX patch system unification | P0 | 3 Stores | 004 | code | Queued |
-| AF-HUB-005 | Backend fixture-aware sync pipeline | P0 | 3 Stores | 004B | code | Queued |
-| AF-HUB-006 | Route / singleton wiring repair | P1 | 4 Wiring/Runtime | 005 | code | Queued |
-| AF-HUB-006B | Runtime authority consolidation | P0 | 4 Wiring/Runtime | 006 | code | Queued |
-| AF-HUB-007 | Stub burn-down (safety paths real) | P0 | 4 Wiring/Runtime | 006B | code | Queued |
-| AF-HUB-007B | Runtime health monitoring | P0 | 4 Wiring/Runtime | 007 | code | Queued |
-| AF-HUB-007C | Failure mode recovery paths | P0 | 4 Wiring/Runtime | 007 | code | Queued |
-| AF-HUB-008 | Test stabilization + coverage | P1 | 5 Tests/Audit | 007B,007C | code | Queued |
-| AF-HUB-009 | INDEPENDENT re-audit (GO/NO-GO) | P0 | 5 Tests/Audit | 008 | independent | Queued |
-| AF-HUB-009B | Internal installer + license validation | P0 | 5.5 Installer | 009 | code+on-site | Queued |
-| AF-HUB-010 | Hardware verification harness prep | P0 | 6 Hardware | 009B | code (prep) | Queued |
-| AF-HUB-011 | Real bench commissioning (= AQ-X-002) | P0 | 6 Hardware | 010 | on-site | Queued |
-| AF-HUB-012 | Tier A acceptance pack | P0 | 6 Hardware | 011 | on-site | Queued |
+**Authoritative test evidence (single source):** backend pytest **513 passed, 21 skipped,
+0 errors**; frontend vitest **231 passed (20 files)**; frontend `npm run build` green;
+backend line coverage **59%** (`pytest --cov`). The 21 skips are the fix-strategy contract
+tests, which require a transient `EVALUATION_REPORT.md` absent on a clean checkout.
 
-**Completed: 3 / 19.** **Next: AF-HUB-001 — Archive stale frontend variants.**
+| ID | Title | Pri | Stage | Type | Status |
+| --- | --- | --- | --- | --- | --- |
+| AF-HUB-000 | Green the backend suite | P0 | 0 Pre-flight | code | **DONE** `feec4b4` |
+| AF-HUB-000B | Production startup mode (no reload) | P0 | 0 Pre-flight | code | **DONE** `026c8b1` |
+| AF-HUB-000C | Honest hardware labeling + flag | P0 | 0 Pre-flight | code | **DONE** `4246006` |
+| AF-HUB-001 | Archive stale frontend variants | P0 | 1 Frontend | code | **DONE** `151c34b` |
+| AF-HUB-002 | Canonical fixture-type resolver | P0 | 2 Contracts | code | **DONE** `addc913` |
+| AF-HUB-003 | Geometry / axis contract | P0 | 2 Contracts | code | **DONE** `2f00a30` |
+| AF-HUB-004 | Fixture store unification + projection | P0 | 3 Stores | code | **DONE** `04be522` |
+| AF-HUB-004B | DMX patch system unification | P0 | 3 Stores | code | **DONE** `a010785` |
+| AF-HUB-005 | Backend fixture-aware sync pipeline | P0 | 3 Stores | code | **DONE** `bef93c6` |
+| AF-HUB-006 | Route / singleton wiring repair | P1 | 4 Wiring/Runtime | code | **DONE** `e8ddf89` |
+| AF-HUB-006B | Runtime authority consolidation | P0 | 4 Wiring/Runtime | code | **DONE** `0928606` |
+| AF-HUB-007 | Stub burn-down (safety paths real) | P0 | 4 Wiring/Runtime | code | **DONE** `19912bd` |
+| AF-HUB-007B | Runtime health monitoring | P0 | 4 Wiring/Runtime | code | **DONE** `7ed3858` |
+| AF-HUB-007C | Failure mode recovery paths | P0 | 4 Wiring/Runtime | code | **DONE** `0537cc1` |
+| AF-HUB-008 | Test stabilization + coverage | P1 | 5 Tests/Audit | code | **DONE** `074dd4a` |
+| AF-HUB-009 | INDEPENDENT re-audit (GO/NO-GO) | P0 | 5 Tests/Audit | independent | Awaiting reviewer (evidence `dd886ac`; returned CONDITIONAL-GO → corrective 013–018) |
+| AF-HUB-009B | Internal installer + license validation | P0 | 5.5 Installer | code | **DONE** `d66a7da` |
+| AF-HUB-010 | Hardware verification harness prep | P0 | 6 Hardware | code (prep) | **DONE** `334a24c` |
+| AF-HUB-011 | Real bench commissioning (= AQ-X-002) | P0 | 6 Hardware | on-site | Deferred — on-site (record template `f581333`) |
+| AF-HUB-012 | Tier A acceptance pack | P0 | 6 Hardware | code+on-site | Pack delivered `4bf7607`; acceptance pending 011+009 |
+| AF-HUB-013 | Playback authority lockdown (one 100Hz loop) | P0 | 7 Corrective | code | **DONE** `b077c49` |
+| AF-HUB-014 | Protocol support honesty gate | P0 | 7 Corrective | code | **DONE** `9ddfa7a` |
+| AF-HUB-015 | Hardware output fail-closed routing | P0 | 7 Corrective | code | **DONE** `672a866` |
+| AF-HUB-016 | Protocol bus singleton lockdown | P1 | 7 Corrective | code | **DONE** `83c5883` |
+| AF-HUB-017 | Evidence consistency pass | P1 | 7 Corrective | code | In progress |
+| AF-HUB-018 | Bench safety environment lock | P1 | 7 Corrective | code | Queued |
+
+**Completed: 20 / 26 code tasks done.** Remaining: AF-HUB-017/018 (corrective, code),
+AF-HUB-009 (independent verdict), AF-HUB-011 (on-site bench), AF-HUB-012 final sign-off.
+Hardware output remains UNVERIFIED (commissioning flag FALSE / SIMULATED).
 
 ---
 
@@ -80,7 +94,7 @@ Tasks 000–009B are software (Claude Code); 010–012 are on-site hardware.
 - **AQ-RT-001** (runtime authority) → now **AF-HUB-006B**.
 - **AQ-RT-002** (production startup) → now **AF-HUB-000B** (done).
 - **AQ-REPAIR-003/004** (frontend testing, coverage) → now **AF-HUB-008**.
-- **DeepSeek AQ-TEST / AQ-VAL series** → **DISCARDED** (premise wrong: claimed "zero tests / no 3D engine"; the repo has ~437 backend + ~165 frontend tests and a real Three.js engine).
+- **DeepSeek AQ-TEST / AQ-VAL series** → **DISCARDED** (premise wrong: claimed "zero tests / no 3D engine"; the repo has 513 backend + 231 frontend tests and a real Three.js engine).
 
 ---
 
