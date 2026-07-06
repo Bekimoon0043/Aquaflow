@@ -264,6 +264,25 @@ class ShowEngine:
             )
             print("[BLOCKED] " + self.last_error)
             return False
+        # ── AF-HUB-015 — fail-closed mapping check on REAL hardware ────────────────
+        # In real-hardware mode (commissioned), refuse to start if any designed fixture
+        # has no valid DMX/Modbus mapping — an unmapped fixture must never reach hardware.
+        # In simulation mode we allow playback (design workflow); the per-command routing
+        # still fails closed and logs, so nothing unmapped is ever emitted.
+        try:
+            from services.commissioning import is_hardware_commissioned
+            if (is_hardware_commissioned() and self.protocol_bus
+                    and hasattr(self.protocol_bus, "unmapped_fixtures")):
+                unmapped = self.protocol_bus.unmapped_fixtures(self.fixtures)
+                if unmapped:
+                    shown = ", ".join(str(u) for u in unmapped[:5])
+                    extra = f" (+{len(unmapped) - 5} more)" if len(unmapped) > 5 else ""
+                    self.last_error = ("Unmapped fixtures block playback on real hardware — "
+                                       "no valid DMX/Modbus address for: " + shown + extra)
+                    print("[BLOCKED] " + self.last_error)
+                    return False
+        except Exception:  # pragma: no cover - never let the check itself block dev/sim
+            pass
         self.last_error = ""
         await self._cancel_playback_task()
         self._start_time = time.monotonic()

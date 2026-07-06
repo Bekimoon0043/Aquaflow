@@ -76,13 +76,19 @@ class RuntimeHealthMonitor:
         drivers = st.get("drivers", {}) or {}
         running = bool(st.get("running"))
         connected = sum(1 for d in drivers.values() if isinstance(d, dict) and d.get("connected"))
+        unmapped = list(st.get("unmapped_output", []) or [])
         subsystems["protocol_bus"] = {
             "running": running, "driver_count": len(drivers), "connected": connected,
+            "unmapped_output": unmapped,
         }
         if running and len(drivers) == 0:
             issues.append((DEGRADED, "protocol_bus", "No protocol drivers connected"))
         elif len(drivers) > 0 and connected == 0:
             issues.append((DEGRADED, "protocol_bus", f"All {len(drivers)} protocol drivers disconnected"))
+        # AF-HUB-015 — fixtures dropped for lack of a valid mapping (fail-closed).
+        if unmapped:
+            issues.append((DEGRADED, "protocol_bus",
+                           f"{len(unmapped)} fixture(s) have no valid output mapping (no output sent)"))
 
     def _check_devices(self, issues, subsystems):
         summ = self._device_manager.get_summary()

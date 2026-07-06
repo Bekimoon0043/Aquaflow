@@ -300,6 +300,9 @@ class ProtocolBus:
         self._fixture_registers: dict[str, dict] = {}
         self._fixtures_loaded = False
         self._running = False
+        # AF-HUB-015 — fail-closed routing: fixtures dropped for having no valid mapping.
+        # device_id → {type, protocol, count}. Surfaced in get_status()/health.
+        self._unmapped_fixtures: dict[str, dict] = {}
 
         # ── Safety limits in the output path (Stage 1, Priority 7) ────────────
         # Optional safety-kernel reference. When set, the master permit and the
@@ -604,18 +607,18 @@ class ProtocolBus:
             driver_key = self._device_map.get(device_id)
             driver = self._drivers.get(driver_key) if driver_key else None
 
-            # Fallback: try any modbus driver
+            # AF-HUB-015 — FAIL CLOSED. No fixture register and no explicit device→driver
+            # mapping means we do NOT know which physical PLC/register this drives. Sending
+            # to "any modbus driver at register 1" could actuate the wrong pump/valve/flame,
+            # so send NOTHING and record it.
             if not driver:
-                for key, d in self._drivers.items():
-                    if key.startswith("modbus:"):
-                        driver = d
-                        break
+                self._note_unmapped(device_id, device_type, "modbus")
+                return
 
-            if driver:
-                # Register 0x0001 = speed/intensity (0-10000 scale for VFDs)
-                value = int(intensity * 10000)
-                await driver.send({"register": 0x0001, "value": value})
-                logger.debug(f"Modbus → {device_id} intensity={intensity:.2f} reg=0x0001 val={value}")
+            # Register 0x0001 = speed/intensity (0-10000 scale for VFDs)
+            value = int(intensity * 10000)
+            await driver.send({"register": 0x0001, "value": value})
+            logger.debug(f"Modbus → {device_id} intensity={intensity:.2f} reg=0x0001 val={value}")
 
         # ── DMX / Art-Net (lighting, fog) ─────────────────────────────────────
         elif device_type in ("lighting", "rgb_lights", "fog", "fog_machines", "laser", "laser_units"):
@@ -623,7 +626,8 @@ class ProtocolBus:
             if not driver:
                 return
 
-            # Look up DMX address from Pattern Designer map first.
+            # Look up DMX address from the Pattern Designer map first, then the seed
+            # devices' own configured address.
             mapped = next(
                 (m for m in self._dmx_map if str(m.get("fixtureId")) == str(device_id)),
                 None,
@@ -633,19 +637,17 @@ class ProtocolBus:
                 dmx_addr = int(mapped.get("channel", 1))
                 universe = int(mapped.get("universe", 0))
             else:
-                mapped = next(
-                    (m for m in self._dmx_map if str(m.get("fixtureId")) == str(device_id)),
-                    None,
-                )
-
-                if mapped:
-                    dmx_addr = int(mapped.get("channel", 1))
-                    universe = int(mapped.get("universe", 0))
+                from engine.device_manager import SEED_DEVICES
+                device = next((d for d in SEED_DEVICES if d.id == device_id), None)
+                if device is not None:
+                    dmx_addr = int(device.params.get("dmxAddress", 1))
+                    universe = int(device.params.get("dmxUniverse", 0))
                 else:
-                    from engine.device_manager import SEED_DEVICES
-                    device = next((d for d in SEED_DEVICES if d.id == device_id), None)
-                    dmx_addr = device.params.get("dmxAddress", 1) if device else 1
-                    universe = device.params.get("dmxUniverse", 0) if device else 0
+                    # AF-HUB-015 — FAIL CLOSED. Previously an unmapped fixture fell back to
+                    # universe 0 / channel 1, which on real hardware is a REAL device (a pump,
+                    # valve or solenoid). An unmapped fixture must send NOTHING.
+                    self._note_unmapped(device_id, device_type, "dmx/artnet")
+                    return
 
             # Build channel map — RGB fixture: ch0=master, ch1=R, ch2=G, ch3=B
             # `intensity` has already passed the output-path safety gate.
@@ -684,6 +686,44 @@ class ProtocolBus:
             }
             await driver.send({"universe": universe, "channels": channels})
             logger.debug(f"DMX → {device_id} addr={dmx_addr} universe={universe} val={val}")
+
+    # ── AF-HUB-015 — fail-closed mapping helpers ──────────────────────────────────
+    def _note_unmapped(self, device_id, device_type, protocol: str) -> None:
+        """Record (and warn once about) a fixture command dropped for lack of a valid
+        mapping. No output is sent for it."""
+        did = str(device_id)
+        if did not in self._unmapped_fixtures:
+            logger.warning("FAIL-CLOSED: fixture %r (%s) has no valid %s mapping — NO output "
+                           "sent (would be unsafe on real hardware)", did, device_type, protocol)
+        entry = self._unmapped_fixtures.get(did, {"type": device_type, "protocol": protocol, "count": 0})
+        entry["count"] += 1
+        self._unmapped_fixtures[did] = entry
+
+    def _has_mapping(self, device_id) -> bool:
+        """True iff this device has a real hardware mapping — a Pattern Designer DMX entry,
+        a designed-fixture Modbus register, an explicit device→driver map, or a seed device."""
+        did = str(device_id)
+        if any(str(m.get("fixtureId")) == did for m in self._dmx_map):
+            return True
+        if device_id in self._fixture_registers:
+            return True
+        dk = self._device_map.get(device_id)
+        if dk and dk in self._drivers:
+            return True
+        from engine.device_manager import SEED_DEVICES
+        return any(d.id == device_id for d in SEED_DEVICES)
+
+    def unmapped_fixtures(self, fixtures: list) -> list:
+        """Given the designed fixtures, return the ids of those with NO valid hardware
+        mapping. Used to BLOCK playback on real hardware (AF-HUB-015)."""
+        out = []
+        for fx in fixtures or []:
+            if not isinstance(fx, dict):
+                continue
+            did = fx.get("id") or fx.get("fixtureId")
+            if did and not self._has_mapping(did):
+                out.append(did)
+        return out
 
     def update_dmx_map(self, map_list: list[dict]) -> None:
         """
@@ -756,6 +796,8 @@ class ProtocolBus:
             "fixtures_loaded": self._fixtures_loaded,
             # AF-HUB-014 — honest protocol support (no protocol claims false readiness).
             "protocol_support": dict(PROTOCOL_SUPPORT),
+            # AF-HUB-015 — fixtures dropped for having no valid mapping (fail-closed).
+            "unmapped_output": list(self._unmapped_fixtures.keys()),
         }
 _protocol_bus: Optional[ProtocolBus] = None
 
