@@ -359,8 +359,20 @@ def verify_output_timing(seconds: float = 0.35) -> dict:
 def run_full_verification() -> dict:
     """
     Run the complete AQ-X-002 hardware-output verification suite and return a
-    structured report. `deployment_ready` is True only when no check failed.
+    structured report.
+
+    AF-HUB-000C — HONEST LABELING. These checks run against a UDP *loopback* node,
+    not physical fixtures, so a clean pass is SIMULATED output-path evidence only.
+    The report is therefore labeled SIMULATED and `deployment_ready` is True ONLY
+    when both (a) every loopback check passed AND (b) the system-wide
+    hardware-commissioning flag is set (a real bench run happened, AF-HUB-011). The
+    raw simulated result is still exposed honestly as `loopback_checks_passed` so no
+    information is lost — it is just no longer mislabeled as deployment readiness.
     """
+    from services.commissioning import (
+        is_hardware_commissioned, SIMULATED_LABEL,
+    )
+
     checks = [
         verify_artnet_output(),
         verify_artnet_high_universe(),
@@ -371,10 +383,23 @@ def run_full_verification() -> dict:
     passed  = [c for c in checks if c["status"] == "pass"]
     failed  = [c for c in checks if c["status"] == "fail"]
     skipped = [c for c in checks if c["status"] == "skipped"]
+
+    loopback_ok  = len(failed) == 0
+    commissioned = is_hardware_commissioned()
     return {
         "task": "AQ-X-002",
         "title": "Hardware Output Verification (CRITICAL)",
-        "deployment_ready": len(failed) == 0,
+        # Honest labeling: SIMULATED until the commissioning flag is TRUE.
+        "verification_mode": "REAL_HARDWARE" if commissioned else "SIMULATED",
+        "hardware_commissioned": commissioned,
+        "simulated": not commissioned,
+        "label": None if commissioned else SIMULATED_LABEL,
+        # Raw simulated (loopback) result — preserved, honestly named.
+        "loopback_checks_passed": loopback_ok,
+        # Real-hardware verification requires BOTH a clean run AND commissioning.
+        "real_hardware_verified": loopback_ok and commissioned,
+        # Never True on unverified hardware: gated on the commissioning flag.
+        "deployment_ready": loopback_ok and commissioned,
         "summary": {"passed": len(passed), "failed": len(failed), "skipped": len(skipped),
                     "total": len(checks)},
         "checks": checks,

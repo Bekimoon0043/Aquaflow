@@ -46,6 +46,7 @@ const Export3DPanel = lazy(() => import("./components/panels/Export3DPanel"));
 const ShowProgrammerPanel = lazy(() => import("./components/programmer/ShowProgrammerPanel"));
 import StatusBar from "./components/StatusBar";
 import ConnectionBanner from "./components/ConnectionBanner";
+import CommissioningBanner from "./components/CommissioningBanner";
 import LogPanel from "./components/LogPanel";
 import ShowBrowser from "./components/ShowBrowser";
 import { useShowStore } from "./store/showStore";
@@ -64,6 +65,8 @@ function StudioApp() {
 
   return (
     <div className="app-shell">
+      {/* AF-HUB-000C — persistent "simulated output only" banner until hardware is commissioned. */}
+      <CommissioningBanner />
       <ConnectionBanner />
       <TopBar
         activePanel={activePanel}
