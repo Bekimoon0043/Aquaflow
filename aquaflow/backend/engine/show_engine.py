@@ -108,11 +108,11 @@ class ShowEngine:
         self.runtime_devices = payload.get("devices", self.runtime_devices) or []
         # Fixture-aware: accept designed fixtures (frontend sends them as
         # `fixtures`, or as `engineeringFixtures` from the show store) and their
-        # control groups. Groups are derived from fixture groupIds when absent.
+        # control groups. Groups arrive in three shapes (AF-HUB-005) — bare id
+        # strings from the frontend fixture projection, full objects from a saved
+        # show, or absent — and are normalized to one object shape here.
         self.fixtures = payload.get("fixtures", payload.get("engineeringFixtures", self.fixtures)) or []
-        self.groups = payload.get("groups", self.groups) or []
-        if not self.groups and self.fixtures:
-            self.groups = self._derive_groups(self.fixtures)
+        self.groups = self._normalize_groups(payload.get("groups"), self.fixtures)
         self.last_error = ""  # fresh show — clear any prior conflict block
         self._recording_buffer = []
 
@@ -152,6 +152,51 @@ class ShowEngine:
             if g["type"] is None:
                 g["type"] = fx.get("type")
         return list(groups.values())
+
+    def _normalize_groups(self, raw, fixtures: list) -> list:
+        """
+        Coerce the payload's control groups to one consistent object shape
+        [{id, label, type, memberIds}], regardless of how they arrive.
+
+        The frontend fixture projection (AF-HUB-004) sends groups as bare group-id
+        strings; a saved show sends full objects; some payloads omit them. All three
+        are normalized here so the fixture-aware routing and the snapshot contract
+        always see the same shape. Members/type are back-filled from the fixtures'
+        groupIds when a group does not carry them.
+        """
+        fixtures = fixtures or []
+        members_by_gid: dict = {}
+        type_by_gid: dict = {}
+        for fx in fixtures:
+            if not isinstance(fx, dict):
+                continue
+            gid = fx.get("groupId") or "ungrouped"
+            fid = fx.get("id")
+            if fid:
+                members_by_gid.setdefault(gid, []).append(fid)
+            type_by_gid.setdefault(gid, fx.get("type"))
+
+        if not raw:
+            return self._derive_groups(fixtures)
+
+        normalized: list = []
+        seen: set = set()
+        for g in raw:
+            if isinstance(g, dict):
+                gid = g.get("id") or g.get("groupId") or "ungrouped"
+                member_ids = g.get("memberIds") or members_by_gid.get(gid, [])
+                gtype = g.get("type") if g.get("type") is not None else type_by_gid.get(gid)
+                group = {"id": gid, "label": g.get("label") or gid,
+                         "type": gtype, "memberIds": list(member_ids)}
+            else:
+                gid = str(g)
+                group = {"id": gid, "label": gid, "type": type_by_gid.get(gid),
+                         "memberIds": list(members_by_gid.get(gid, []))}
+            if group["id"] in seen:
+                continue
+            seen.add(group["id"])
+            normalized.append(group)
+        return normalized
 
     def set_bpm(self, bpm: float):
         self.show_state.bpm = float(bpm)
