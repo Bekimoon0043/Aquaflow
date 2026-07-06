@@ -148,10 +148,13 @@ async def set_dmx_map(payload: DmxMapPayload):
 
     # Attempt live push to protocol bus (non-fatal if bus not ready)
     try:
-        from engine.protocol_bus import get_protocol_bus
-        bus = get_protocol_bus()
-        if hasattr(bus, "update_dmx_map"):
-            bus.update_dmx_map(data["map"])
+        # AF-HUB-006 — push to the ONE shared protocol bus (app_state), the same
+        # instance the runtime started and apply_show_payload configured. The old
+        # get_protocol_bus() returned a *second* ProtocolBus the runtime never used,
+        # so DMX map pushes silently landed on a throwaway bus.
+        from app_state import protocol_bus
+        if hasattr(protocol_bus, "update_dmx_map"):
+            protocol_bus.update_dmx_map(data["map"])
     except Exception as exc:
         # Bus offline or method not yet implemented — log and continue
         print(f"[pattern_routes] DMX push skipped: {exc}")
@@ -199,18 +202,24 @@ async def import_timeline_clips(payload: TimelineClipsPayload):
 
     # Attempt live injection into show_engine timeline
     try:
-        from engine.show_engine import get_show_engine
-        engine = get_show_engine()
-        if hasattr(engine, "inject_manual_clips"):
-            engine.inject_manual_clips(clip)
+        # AF-HUB-006 — inject into the shared show engine (app_state). The old
+        # engine.show_engine.get_show_engine accessor never existed, so this import
+        # always raised and recorded clips were silently dropped instead of reaching
+        # the live timeline.
+        from app_state import show_engine
+        if hasattr(show_engine, "inject_manual_clips"):
+            show_engine.inject_manual_clips(clip)
     except Exception as exc:
         print(f"[pattern_routes] Timeline injection skipped: {exc}")
 
     # Broadcast via WebSocket so the frontend timeline panel updates live
     try:
-        from backend.main import broadcast
+        # AF-HUB-006 — the WS manager lives in `main` (not `backend.main`), and it
+        # exposes _get_ws_manager().broadcast — there was never a top-level
+        # `broadcast`, so this notification was silently skipped.
+        from main import _get_ws_manager
         import asyncio
-        asyncio.create_task(broadcast({
+        asyncio.create_task(_get_ws_manager().broadcast({
             "type": "timeline_clips_updated",
             "clipId": clip_id,
             "name": payload.name,

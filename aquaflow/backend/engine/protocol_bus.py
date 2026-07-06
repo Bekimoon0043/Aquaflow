@@ -712,6 +712,14 @@ _protocol_bus: Optional[ProtocolBus] = None
 
 
 def get_protocol_bus() -> ProtocolBus:
+    """
+    DEPRECATED (AF-HUB-006). Do NOT use for runtime output.
+
+    This lazily creates a SECOND ProtocolBus that the application never starts,
+    configures, or safety-gates. The one shared bus is `app_state.protocol_bus`
+    (started in the lifespan and configured by apply_show_payload) — import that
+    instead. Retained only to avoid breaking any external caller.
+    """
     global _protocol_bus
     if _protocol_bus is None:
         _protocol_bus = ProtocolBus()

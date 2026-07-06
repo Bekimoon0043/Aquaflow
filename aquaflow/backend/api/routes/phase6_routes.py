@@ -178,14 +178,22 @@ async def get_snapshots():
 
 
 # ─── Protocol status routes ───────────────────────────────────────────────────
+# AF-HUB-006 — these routes previously did `from app_state import app_state` and read
+# `artnet_driver`/`sacn_driver` off it. There is no `app_state` object and those driver
+# attributes never existed, so every call raised ImportError (swallowed → "error"/500).
+# They now talk to the ONE shared protocol bus (app_state.protocol_bus), which owns the
+# Art-Net driver and exposes get_status()/blackout().
 @phase6_router.get("/protocols/artnet/status")
 async def artnet_status():
     try:
-        from app_state import app_state
-        driver = getattr(app_state, 'artnet_driver', None)
-        if driver is None:
+        from app_state import protocol_bus
+        status = protocol_bus.get_status()
+        drivers = status.get("drivers", {})
+        artnet = drivers.get("artnet") or drivers.get("dmx")
+        if artnet is None:
             return {"running": False, "note": "Art-Net driver not initialised"}
-        return driver.get_status()
+        return {"running": status.get("running", False), "driver": artnet,
+                "dmx_map_count": status.get("dmx_map_count", 0)}
     except Exception as e:
         return {"error": str(e)}
 
@@ -193,11 +201,12 @@ async def artnet_status():
 @phase6_router.get("/protocols/sacn/status")
 async def sacn_status():
     try:
-        from app_state import app_state
-        driver = getattr(app_state, 'sacn_driver', None)
-        if driver is None:
+        from app_state import protocol_bus
+        drivers = protocol_bus.get_status().get("drivers", {})
+        sacn = drivers.get("sacn")
+        if sacn is None:
             return {"running": False, "note": "sACN driver not initialised"}
-        return driver.get_status()
+        return {"running": True, "driver": sacn}
     except Exception as e:
         return {"error": str(e)}
 
@@ -205,10 +214,8 @@ async def sacn_status():
 @phase6_router.post("/protocols/artnet/blackout")
 async def artnet_blackout():
     try:
-        from app_state import app_state
-        driver = getattr(app_state, 'artnet_driver', None)
-        if driver:
-            driver.blackout()
+        from app_state import protocol_bus
+        await protocol_bus.blackout()
         return {"ok": True}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -217,10 +224,8 @@ async def artnet_blackout():
 @phase6_router.post("/protocols/sacn/blackout")
 async def sacn_blackout():
     try:
-        from app_state import app_state
-        driver = getattr(app_state, 'sacn_driver', None)
-        if driver:
-            driver.blackout()
+        from app_state import protocol_bus
+        await protocol_bus.blackout()
         return {"ok": True}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
