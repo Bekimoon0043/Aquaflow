@@ -8,6 +8,7 @@ real-hardware verification until the system-wide commissioning flag is set.
   GET /api/hardware/verify         → run the full (SIMULATED) verification.
   GET /api/hardware/commissioning  → the hardware-commissioning status + banner.
   GET /api/hardware/spec           → the DMX512 / Art-Net timing spec constants.
+  GET /api/hardware/protocols      → the honest four-tier protocol support matrix.
 """
 from fastapi import APIRouter
 from starlette.concurrency import run_in_threadpool
@@ -44,6 +45,14 @@ async def commissioning():
     after a real bench commissioning run.
     """
     return commissioning_status()
+
+
+@router.get("/protocols")
+async def protocols():
+    """AF-HUB-014 — the honest protocol support matrix (REAL / SIMULATED / GATED /
+    UNSUPPORTED). No protocol is reported as ready unless it genuinely is."""
+    from app_state import protocol_bus
+    return protocol_bus.protocol_support_matrix()
 
 
 @router.get("/spec")

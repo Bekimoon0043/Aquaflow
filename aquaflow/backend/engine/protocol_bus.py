@@ -1,7 +1,13 @@
 """
 AquaFlow Protocol Bus
 Hardware-agnostic abstraction layer for all control protocols.
-Supports: DMX512, Art-Net, sACN, Modbus TCP, MQTT, OPC UA, BACnet
+
+AF-HUB-014 — HONEST support (see PROTOCOL_SUPPORT below):
+  REAL driver, tested:  DMX512, Art-Net, sACN, Modbus TCP
+  GATED (stub, disabled): MQTT
+  UNSUPPORTED (no code):  OPC UA, BACnet
+(REAL = the protocol driver genuinely works; whether real fixtures are verified is a
+separate concern governed by the hardware-commissioning flag — see AF-HUB-000C.)
 """
 import asyncio
 import struct
@@ -12,6 +18,31 @@ from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# ── AF-HUB-014 — protocol support classification (single source of truth) ─────────
+# Four honest tiers so nothing claims support it does not have:
+#   REAL        — implemented + tested driver (field verification gated by commissioning)
+#   SIMULATED   — loopback only, not field-real
+#   GATED       — code exists but explicitly disabled; cannot connect or send
+#   UNSUPPORTED — not implemented at all
+PROTOCOL_SUPPORT = {
+    "dmx":    "REAL",
+    "artnet": "REAL",
+    "sacn":   "REAL",
+    "modbus": "REAL",
+    "mqtt":   "GATED",        # MQTTDriver is a stub — explicitly disabled below
+    "opcua":  "UNSUPPORTED",  # no implementation exists
+    "bacnet": "UNSUPPORTED",  # no implementation exists
+}
+REAL_PROTOCOLS = [p for p, tier in PROTOCOL_SUPPORT.items() if tier == "REAL"]
+
+SUPPORT_TIER_MEANING = {
+    "REAL": "implemented + tested driver (field verification gated by the commissioning flag)",
+    "SIMULATED": "loopback only, not field-real",
+    "GATED": "code exists but explicitly disabled — not usable",
+    "UNSUPPORTED": "not implemented",
+}
 
 
 class ProtocolDriver(ABC):
@@ -209,36 +240,40 @@ class ModbusTCPDriver(ProtocolDriver):
 
 
 class MQTTDriver(ProtocolDriver):
-    """MQTT for sensors and IoT devices"""
+    """
+    MQTT driver — NOT IMPLEMENTED (GATED). AF-HUB-014: this was a stub whose connect()/
+    send() returned fake success. MQTT is not implemented, so it now FAILS CLOSED: it never
+    reports a connection and never claims to have sent a command. Do not re-enable until a
+    real aiomqtt/paho-mqtt implementation exists and is tested.
+    """
     name = "mqtt"
+    SUPPORT_TIER = "GATED"
 
     def __init__(self, host: str, port: int = 1883):
         self.host = host
         self.port = port
         self._connected = False
-        # aiomqtt or paho-mqtt would be used in production
 
     async def connect(self) -> bool:
-        # TODO: implement with aiomqtt
-        logger.info(f"MQTT driver → {self.host}:{self.port} (stub)")
-        self._connected = True
-        return True
+        logger.warning("MQTT is not implemented (GATED) — refusing to connect %s:%s; "
+                       "no MQTT driver will be added to the bus", self.host, self.port)
+        self._connected = False
+        return False
 
     async def disconnect(self):
         self._connected = False
 
     async def send(self, data: dict) -> bool:
-        topic = data.get("topic", "aquaflow/control")
-        payload = data.get("payload", {})
-        logger.debug(f"MQTT publish {topic}: {payload}")
-        return True
+        logger.warning("MQTT is not implemented (GATED) — command NOT sent (topic=%s)",
+                       data.get("topic", "aquaflow/control"))
+        return False
 
     async def blackout(self):
         pass
 
     @property
     def is_connected(self) -> bool:
-        return self._connected
+        return False
 
 
 class ProtocolBus:
@@ -246,7 +281,9 @@ class ProtocolBus:
     Central protocol router.
     Maps device types/protocols to correct driver instances.
     """
-    SUPPORTED = ["dmx", "artnet", "sacn", "modbus", "mqtt", "opcua", "bacnet"]
+    # AF-HUB-014 — SUPPORTED now lists ONLY genuinely-usable (REAL) protocols. The full
+    # honest classification (incl. GATED/UNSUPPORTED) is PROTOCOL_SUPPORT / the matrix.
+    SUPPORTED = REAL_PROTOCOLS
 
     # Flame safety defaults (Stage 1, Priority 7). The hardware-level flame cutoff
     # is the last line of defence regardless of what the show timeline requests.
@@ -425,18 +462,28 @@ class ProtocolBus:
         self._running = False
 
     async def add_device(self, protocol: str, config: dict) -> bool:
-        """Dynamically add a protocol driver for a device"""
+        """Dynamically add a protocol driver for a device. AF-HUB-014 — refuse any protocol
+        that is not a REAL, usable protocol (no GATED/UNSUPPORTED drivers get added, so a
+        show can never be silently routed to a non-functioning transport)."""
+        tier = PROTOCOL_SUPPORT.get(protocol, "UNSUPPORTED")
+        if tier != "REAL":
+            logger.warning("add_device refused — protocol %r is %s (%s), not usable",
+                           protocol, tier, SUPPORT_TIER_MEANING.get(tier, ""))
+            return False
         if protocol == "modbus":
             driver = ModbusTCPDriver(config["ip"], config.get("port", 502))
             if await driver.connect():
                 self._drivers[f"modbus:{config['ip']}"] = driver
                 return True
-        elif protocol == "mqtt":
-            driver = MQTTDriver(config["ip"], config.get("port", 1883))
-            if await driver.connect():
-                self._drivers[f"mqtt:{config['ip']}"] = driver
-                return True
         return False
+
+    def protocol_support_matrix(self) -> dict:
+        """AF-HUB-014 — the honest, four-tier protocol support matrix (single source)."""
+        return {
+            "tiers": dict(SUPPORT_TIER_MEANING),
+            "protocols": dict(PROTOCOL_SUPPORT),
+            "usable": list(REAL_PROTOCOLS),
+        }
 
     def configure_from_fixtures(self, registry) -> dict:
         """
@@ -707,6 +754,8 @@ class ProtocolBus:
             "device_map_count": len(self._device_map),
             "fixture_register_count": len(self._fixture_registers),
             "fixtures_loaded": self._fixtures_loaded,
+            # AF-HUB-014 — honest protocol support (no protocol claims false readiness).
+            "protocol_support": dict(PROTOCOL_SUPPORT),
         }
 _protocol_bus: Optional[ProtocolBus] = None
 
