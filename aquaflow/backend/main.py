@@ -208,8 +208,11 @@ async def lifespan(app: FastAPI):
     safety.on_state_change(_on_safety_change_diag)
     diag.record("info", "system", "startup", "AquaFlow Studio started — Phase 7 active")
 
-    # ── Phase 6: Runtime transport ────────────────────────────────────────────
+    # ── Phase 6: Runtime transport (AF-HUB-013 — demoted to a driven mirror) ───
     transport = get_transport()
+    # ShowEngine is the SINGLE playback authority; it drives the transport's playhead.
+    # transport.start() no longer runs an independent 100 Hz loop.
+    show_engine.attach_transport(transport)
     def _on_transport_change(old, new):
         try:
             asyncio.create_task(ws_manager.broadcast({

@@ -62,9 +62,33 @@ class ShowEngine:
         # Hardware conflict detection (Stage 1, Priority 3): the last operator-facing
         # error, set when a show is blocked from starting due to address conflicts.
         self.last_error: str = ""
+        # AF-HUB-013 — ShowEngine is the SINGLE playback timing + output authority. The
+        # RuntimeTransport (demoted to a driven mirror) is attached here so this one 100 Hz
+        # loop can push the playhead into it; the transport no longer runs its own clock.
+        self.transport = None
 
     def _bump_revision(self):
         self._revision += 1
+
+    def attach_transport(self, transport):
+        """AF-HUB-013 — register the demoted RuntimeTransport mirror. ShowEngine remains the
+        sole timing authority and pushes its playhead into the transport via
+        _sync_transport(); the transport never advances time on its own."""
+        self.transport = transport
+
+    def _sync_transport(self, is_playing: bool):
+        """Push the current playhead + play-state into the driven transport mirror (if any).
+        This is the one and only clock feeding the transport."""
+        if self.transport is None:
+            return
+        try:
+            self.transport.sync_from_engine(
+                int(self.show_state.playhead * 1000),
+                is_playing,
+                int(self.show_state.duration * 1000),
+            )
+        except Exception:  # pragma: no cover - the mirror must never break playback
+            pass
 
     async def start(self, device_manager, protocol_bus):
         self.device_manager = device_manager
@@ -266,6 +290,7 @@ class ShowEngine:
         if was_recording:
             self._commit_recording_buffer()
         self.show_state.playhead = 0.0
+        self._sync_transport(False)   # AF-HUB-013 — mirror the stop into the transport
         if self.protocol_bus:
             await self.protocol_bus.blackout()
         print("⏹  Playback stopped")
@@ -273,6 +298,7 @@ class ShowEngine:
     async def pause(self):
         self.show_state.state = PlaybackState.PAUSED
         await self._cancel_playback_task()
+        self._sync_transport(False)   # AF-HUB-013 — mirror the pause into the transport
         print(f"⏸  Playback paused at {self.show_state.playhead:.2f}s")
 
     async def seek(self, position: float):
@@ -285,6 +311,12 @@ class ShowEngine:
         self.show_state.state = PlaybackState.STOPPED
         self.show_state.playhead = 0.0
         await self._cancel_playback_task()
+        # AF-HUB-013 — drive the transport mirror to its fault state too.
+        if self.transport is not None:
+            try:
+                self.transport.emergency_stop()
+            except Exception:  # pragma: no cover - mirror must not block the E-stop
+                pass
         print("🚨 EMERGENCY STOP")
 
     async def _playback_loop(self):
@@ -304,6 +336,9 @@ class ShowEngine:
                         break
 
                 self.show_state.playhead = playhead
+                # AF-HUB-013 — this single loop is the timing authority; mirror the playhead
+                # into the demoted transport so it never needs its own clock.
+                self._sync_transport(self.show_state.state == PlaybackState.PLAYING)
                 active_commands = self._evaluate_timeline(playhead) if self.show_state.state == PlaybackState.PLAYING else []
                 if active_commands and self.protocol_bus:
                     await self.protocol_bus.send_batch(active_commands)

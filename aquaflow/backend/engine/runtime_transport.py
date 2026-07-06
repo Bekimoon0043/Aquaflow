@@ -1,9 +1,19 @@
 """
 runtime_transport.py — AquaFlow Phase 6
-Deterministic runtime transport state machine.
-Manages PLAY / PAUSE / STOP / SEEK with monotonic clock,
-integrates with the safety kernel, and maintains rollback snapshots
-so the operator can recover from any fault state.
+
+AF-HUB-013 — DEMOTED to a DRIVEN transport-state + snapshot mirror. It is NOT a timing
+authority and no longer runs an independent clock/loop.
+
+The single playback timing + output authority is engine/show_engine.ShowEngine (its 100 Hz
+_playback_loop advances the playhead AND dispatches to the protocol bus). RuntimeTransport
+used to run a SECOND independent 100 Hz loop advancing its own position_ms — two loops
+commanding the same show is exactly the split-authority problem the runtime hardening set
+out to remove, and would be nondeterministic on real hardware.
+
+Now: ShowEngine is the one clock; it pushes position/state into this transport via
+sync_from_engine(). This class keeps the transport STATE machine, rollback snapshots, and
+safety go_live/stop_live integration for the UI/API, but it never advances time on its own
+and has NO output-dispatch path.
 """
 
 import asyncio
@@ -54,14 +64,15 @@ class TransportSnapshot:
 # ─── Runtime Transport ────────────────────────────────────────────────────────
 class RuntimeTransport:
     """
-    Deterministic show transport with monotonic clock.
-    - PLAY / PAUSE / STOP / SEEK operations
+    Driven transport-state + snapshot mirror (AF-HUB-013 — NOT a timing authority).
+    - PLAY / PAUSE / STOP / SEEK operations reflect state for the UI/API
     - Safety kernel integration — transport cannot enter PLAYING without permit
-    - 100 Hz position update loop
-    - Rollback snapshot ring buffer (last 50 snapshots, every 2 seconds)
+    - Position/state are pushed by the single authority (ShowEngine) via sync_from_engine()
+    - Rollback snapshot ring buffer (last 50 snapshots)
     - Callbacks for position updates and state changes
     """
-    LOOP_HZ = 100
+    # AF-HUB-013 — this component does NOT own playback timing.
+    TIMING_AUTHORITY = False
     SNAPSHOT_INTERVAL = 2.0    # seconds between automatic snapshots
     MAX_SNAPSHOTS = 50
 
@@ -112,8 +123,8 @@ class RuntimeTransport:
                     log.warning("PLAY rejected — safety kernel refused LIVE transition")
                     return False
 
-        self._play_start_mono = time.monotonic()
-        self._play_start_pos = self._position_ms
+        # AF-HUB-013 — no independent clock: PLAYING is a state; the playhead is advanced
+        # only by the single authority (ShowEngine) via sync_from_engine().
         self._transition(TransportState.PLAYING)
         self._take_snapshot("play_start")
         log.info(f"PLAY — position: {self._position_ms}ms")
@@ -123,8 +134,7 @@ class RuntimeTransport:
         if self._state != TransportState.PLAYING:
             return False
 
-        # Freeze position
-        self._position_ms = self._calc_position()
+        # Position is already whatever the authority last synced — just freeze the state.
 
         # Safety integration:
         # Pausing removes active LIVE output state but keeps the system armed.
@@ -225,11 +235,14 @@ class RuntimeTransport:
         """Callback(old_state, new_state) on transitions."""
         self._state_callbacks.append(cb)
 
-    # ─── Async loop ───────────────────────────────────────────────────────────
+    # ─── Lifecycle (AF-HUB-013: NO independent timing loop) ────────────────────
     async def start(self):
-        self._running = True
-        self._task = asyncio.create_task(self._loop())
-        log.info("RuntimeTransport loop started at 100 Hz")
+        """DEMOTED — starts NO independent clock. The single playback authority
+        (ShowEngine) drives this transport via sync_from_engine(). Kept async so the
+        application lifespan can call it uniformly."""
+        self._running = False
+        log.info("RuntimeTransport in DRIVEN mode (no independent 100 Hz loop) — "
+                 "ShowEngine is the sole playback authority")
 
     async def stop_loop(self):
         self._running = False
@@ -237,53 +250,43 @@ class RuntimeTransport:
             self._task.cancel()
             try: await self._task
             except asyncio.CancelledError: pass
+        self._task = None
 
-    async def _loop(self):
-        interval = 1.0 / self.LOOP_HZ
-        while self._running:
-            t0 = time.monotonic()
-            try:
-                self._tick()
-            except Exception as e:
-                log.error(f"Transport tick error: {e}")
-            elapsed = time.monotonic() - t0
-            await asyncio.sleep(max(0, interval - elapsed))
-
-    def _tick(self):
+    def sync_from_engine(self, position_ms: int, is_playing: bool,
+                         duration_ms: Optional[int] = None) -> None:
+        """The single playback authority (ShowEngine) pushes its playhead + play-state here
+        each tick. This is the ONLY way the transport position advances — the transport has
+        no clock of its own, so two loops can never command the fixtures independently."""
         self._tick_count += 1
-        # Check safety permit — if lost while playing, fault
-        if self._state == TransportState.PLAYING:
+        if duration_ms is not None:
+            self._duration_ms = duration_ms
+
+        if is_playing:
+            # Safety permit lost mid-play → fault (mirrors the engine's own output gate).
             if not self._safety_permit():
                 log.error("Safety permit lost during playback — transport FAULT")
                 self.emergency_stop()
                 return
-            # Advance position using monotonic clock
-            self._position_ms = self._calc_position()
-            # Check end of show
-            if self._position_ms >= self._duration_ms:
+            if self._state in (TransportState.READY, TransportState.PAUSED,
+                               TransportState.STOPPED, TransportState.ENDED):
+                self._transition(TransportState.PLAYING)
+            self._position_ms = max(0, min(position_ms, self._duration_ms or position_ms))
+            if self._duration_ms and self._position_ms >= self._duration_ms:
                 self._position_ms = self._duration_ms
                 self._transition(TransportState.ENDED)
                 self._take_snapshot("show_end")
-                log.info("Show ended naturally")
+            now = time.time()
+            if now - self._last_snapshot_time >= self.SNAPSHOT_INTERVAL:
+                self._take_snapshot("auto")
+                self._last_snapshot_time = now
+        else:
+            self._position_ms = max(0, position_ms)
+            if self._state == TransportState.PLAYING:
+                self._transition(TransportState.PAUSED)
 
-        # Auto snapshot
-        now = time.time()
-        if (self._state == TransportState.PLAYING and
-                now - self._last_snapshot_time >= self.SNAPSHOT_INTERVAL):
-            self._take_snapshot("auto")
-            self._last_snapshot_time = now
-
-        # Fire position callbacks
         for cb in self._position_callbacks:
             try: cb(self._position_ms, self._state)
             except: pass
-
-    def _calc_position(self) -> int:
-        """Calculate current position using monotonic clock."""
-        if self._state != TransportState.PLAYING:
-            return self._position_ms
-        elapsed_ms = int((time.monotonic() - self._play_start_mono) * 1000)
-        return min(self._play_start_pos + elapsed_ms, self._duration_ms)
 
     def _safety_permit(self) -> bool:
         if self._safety is None:
