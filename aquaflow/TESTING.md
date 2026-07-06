@@ -10,6 +10,14 @@ pip install -r requirements.txt   # includes pytest + httpx
 python -m pytest
 ```
 
+**License secret (AF-HUB-000):** `license/license_engine.py` raises at import time if
+`AQUAFLOW_LICENSE_SECRET` is unset, and several suites import the full app (e.g.
+`test_journeys_e2e.py` imports `main.py`). So the test suite supplies a deterministic
+**test-only** secret via `tests/conftest.py` (`os.environ.setdefault(...)`) — the suite
+runs green from a clean checkout with **no manual setup**. A real `AQUAFLOW_LICENSE_SECRET`
+in the environment (deployment/CI) always takes precedence; production still hard-fails
+when the secret is genuinely absent (this is a test convenience only, not a weakening).
+
 Config: [backend/pytest.ini](backend/pytest.ini). Tests live in `backend/tests/`:
 
 | File | Covers |
