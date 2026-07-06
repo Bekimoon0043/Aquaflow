@@ -9,6 +9,8 @@ import {
   geometryToPoolConfig,
   classifyFixtureType,
 } from "./fixtureTypeMap";
+// AF-HUB-003 — the engineering→3D centering shift goes through the one canonical helper.
+import { centerToWorld } from "../engineering/geometryContract";
 
 export function useEngineeringSync(sceneRef) {
   const lastKeyRef   = useRef(null);
@@ -104,26 +106,17 @@ const { nozzleConfigs, lightConfigs } =
 // - 3D preview centers the pool at world origin.
 // - Therefore, only the 3D preview copy is shifted.
 // - The engineering store data must NEVER be modified here.
+// getPoolBounds() now delegates to the canonical geometry contract, so its center is
+// the single poolCenter() value; centerToWorld() applies exactly that shift.
 const bounds = useEngineeringStore.getState().getPoolBounds?.();
-
-const shiftX = Number(bounds?.cx || 0);
-const shiftZ = Number(bounds?.cy || 0);
+const center = bounds ? { cx: bounds.cx, cy: bounds.cy } : null;
 
 const shouldCenterFor3D =
-  bounds &&
-  Number.isFinite(shiftX) &&
-  Number.isFinite(shiftZ);
+  center && Number.isFinite(center.cx) && Number.isFinite(center.cy);
 
 if (shouldCenterFor3D) {
-  nozzleConfigs.forEach(n => {
-    n.x = Number(n.x || 0) - shiftX;
-    n.z = Number(n.z || 0) - shiftZ;
-  });
-
-  lightConfigs.forEach(l => {
-    l.x = Number(l.x || 0) - shiftX;
-    l.z = Number(l.z || 0) - shiftZ;
-  });
+  nozzleConfigs.forEach(n => { const w = centerToWorld(n, center); n.x = w.x; n.z = w.z; });
+  lightConfigs.forEach(l => { const w = centerToWorld(l, center); l.x = w.x; l.z = w.z; });
 }
 
     // 4. Push to scene

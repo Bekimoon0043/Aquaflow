@@ -13,6 +13,9 @@
  */
 
 import { create } from "zustand";
+// AF-HUB-003 — pool bounds/center come from the single canonical geometry contract,
+// so the 3D-centering shift here and the conversion in useEngineeringSync can't drift.
+import { poolBounds as canonicalPoolBounds } from "../engineering/geometryContract";
 
 const useEngineeringStore = create((set, get) => ({
   // ─── Project metadata ────────────────────────────────────────────────────────
@@ -151,28 +154,12 @@ pipes: [],
    * Returns pool bounds in world coordinates.
    */
   getPoolBounds: () => {
-    const { geometry, params } = get();
-    if (!geometry) return null;
-    if (geometry.type === "circle") {
-      const r = geometry.radius || params.radius || 6;
-      const cx = geometry.center?.x || 0;
-      const cy = geometry.center?.y || 0;
-      return { minX:cx-r, maxX:cx+r, minY:cy-r, maxY:cy+r, cx, cy, radius:r };
-    }
-    if (geometry.type === "ellipse") {
-      const cx = geometry.center?.x || 0;
-      const cy = geometry.center?.y || 0;
-      return { minX:cx-geometry.rx, maxX:cx+geometry.rx, minY:cy-geometry.ry, maxY:cy+geometry.ry, cx, cy };
-    }
-    if (geometry.points?.length) {
-      const xs = geometry.points.map(p=>p.x);
-      const ys = geometry.points.map(p=>p.y);
-      const minX=Math.min(...xs), maxX=Math.max(...xs);
-      const minY=Math.min(...ys), maxY=Math.max(...ys);
-      return { minX, maxX, minY, maxY, cx:(minX+maxX)/2, cy:(minY+maxY)/2 };
-    }
-    const w=params.width||12, l=params.length||8;
-    return { minX:0, maxX:w, minY:0, maxY:l, cx:w/2, cy:l/2 };
+    // AF-HUB-003 — delegate to the single canonical geometry contract. Returns null
+    // only when there is no geometry AND no usable params (preserves prior callers
+    // that treat null as "no pool yet").
+    const { geometry, params, poolType } = get();
+    if (!geometry) return null;  // no pool drawn yet — preserve prior "no bounds" contract
+    return canonicalPoolBounds(geometry, params, poolType);
   },
 }));
 
