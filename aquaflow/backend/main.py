@@ -7,8 +7,23 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import os
+import sys
 import uvicorn
 from contextlib import asynccontextmanager
+
+# AF-HUB-000B — Force UTF-8 console output at process entry.
+#   Several startup/log lines contain non-ASCII characters (e.g. the "⚙" the show
+#   engine prints on init). On a Windows console the default cp1252 codec raises
+#   UnicodeEncodeError on those, which aborts the FastAPI lifespan and kills the
+#   server on startup. A control platform must never die because of a log character,
+#   so we reconfigure stdout/stderr to UTF-8 with a non-fatal fallback. Guarded in a
+#   try/except because under pytest sys.stdout is a capture object without
+#   reconfigure(); there it is simply a no-op.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
 
 from api.routes import shows, devices, ai_engine, protocols, audio, plc, scheduler as scheduler_routes, runtime
 from api.routes.ai_learning_routes import router as ai_learning_router
@@ -567,4 +582,33 @@ async def health():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+
+    # AF-HUB-000B — Production startup mode.
+    #
+    # Production default: NO reload, NO dev file watchers. uvicorn's reload=True spawns
+    # a file-watching supervisor that can restart the process mid-show — unacceptable
+    # for a live fountain-control platform (it would drop output and re-init hardware).
+    # Auto-reload is therefore OPT-IN for development only, behind an explicit flag.
+    #
+    #   Production (default):   python main.py
+    #   Development (opt-in):    AQUAFLOW_DEV=1 python main.py   (auto-reload + watchers)
+    #
+    # Host/port are overridable via AQUAFLOW_HOST / AQUAFLOW_PORT.
+    _truthy = ("1", "true", "yes", "on")
+    dev_mode = os.getenv("AQUAFLOW_DEV", "").strip().lower() in _truthy
+    host = os.getenv("AQUAFLOW_HOST", "0.0.0.0")
+    port = int(os.getenv("AQUAFLOW_PORT", "8000"))
+
+    if dev_mode:
+        # Developer convenience ONLY — file watchers + auto-reload. Never use this in a
+        # packaged/production deployment. Reload needs the import-string form of the app.
+        print("[startup] DEV MODE — auto-reload + file watchers ENABLED (AQUAFLOW_DEV set). "
+              "Do NOT use this in production.")
+        uvicorn.run("main:app", host=host, port=port, reload=True)
+    else:
+        # Production: single process, no reload, no watchers. Pass the app object directly
+        # (the import-string form is only needed for reload/workers).
+        print(f"[startup] PRODUCTION MODE — no reload, no dev watchers "
+              f"(set AQUAFLOW_DEV=1 for development). Serving on {host}:{port}.")
+        uvicorn.run(app, host=host, port=port, reload=False)
