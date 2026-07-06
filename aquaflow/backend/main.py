@@ -194,6 +194,10 @@ async def lifespan(app: FastAPI):
     from engine.runtime_authority import runtime_authority
     runtime_authority.register(safety=safety, hardware_output=hardware_output)
 
+    # AF-HUB-007B — register the live safety kernel with the runtime health monitor.
+    from services.runtime_health import runtime_health
+    runtime_health.register(safety=safety)
+
     # ── Phase 7: Wire diagnostics to safety kernel ────────────────────────────
     diag = get_diagnostics()
     def _on_safety_change_diag(old, new):
@@ -315,6 +319,17 @@ async def telemetry_broadcast_loop():
                         "type": "safety_telemetry",
                         "safety": get_safety_kernel().get_status(),
                         "transport": get_transport().get_status(),
+                    })
+                except Exception:
+                    pass
+
+                # AF-HUB-007B — push the aggregated runtime-health verdict live so the
+                # operator UI sees degraded/critical subsystems without polling.
+                try:
+                    from services.runtime_health import runtime_health
+                    await ws_manager.broadcast({
+                        "type": "runtime_health",
+                        "health": runtime_health.snapshot(),
                     })
                 except Exception:
                     pass
@@ -568,8 +583,14 @@ async def health():
         transport_status = get_transport().get_status()
     except Exception:
         pass
+    # AF-HUB-007B — real runtime-health verdict instead of a hardcoded "ok". The process
+    # is up ("api": "ok"); "status" now reflects the aggregated subsystem health.
+    from services.runtime_health import runtime_health
+    health_snapshot = runtime_health.snapshot()
     return {
-        "status": "ok",
+        "status": health_snapshot["status"],
+        "api": "ok",
+        "runtime_health": health_snapshot,
         "version": APP_VERSION,
         "engine": show_engine.get_state(),
         "devices": device_manager.get_summary(),
@@ -582,6 +603,14 @@ async def health():
             "api_base": "/api",
         },
     }
+
+
+@app.get("/api/health/runtime")
+async def runtime_health_endpoint():
+    """Aggregated runtime health verdict (ok / degraded / critical) with per-subsystem
+    detail and the specific issues (AF-HUB-007B)."""
+    from services.runtime_health import runtime_health
+    return runtime_health.snapshot()
 
 
 if __name__ == "__main__":

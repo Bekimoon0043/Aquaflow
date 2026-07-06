@@ -39,6 +39,21 @@ try:
 except Exception:  # pragma: no cover - defensive wiring
     pass
 
+# AF-HUB-007B — the runtime health monitor aggregates every subsystem's health into a
+# single verdict. Register the core actors here; the lifespan adds the safety kernel.
+from services.runtime_health import runtime_health
+runtime_health.register(
+    show_engine=show_engine,
+    protocol_bus=protocol_bus,
+    device_manager=device_manager,
+    runtime_authority=runtime_authority,
+)
+try:
+    from safety.safety_kernel import get_safety_kernel as _get_safety_kernel_h
+    runtime_health.register(safety=_get_safety_kernel_h())
+except Exception:  # pragma: no cover - defensive wiring
+    pass
+
 
 def sanitize_show_id(name: str) -> str:
     safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in str(name)).strip()
