@@ -256,13 +256,17 @@ async def broadcast_show_snapshot(target: WebSocket | None = None):
         await ws_manager.broadcast(payload)
 
 
-DEV_MODE = os.environ.get("AQUAFLOW_ENV", "production").lower() == "dev"
-SAFETY_BYPASS = DEV_MODE and os.environ.get("AQUAFLOW_UNSAFE_DEV", "false").lower() == "true"
+# AF-HUB-018 — bench safety environment lock. The unsafe dev safety bypass can NEVER be
+# enabled on a commissioned/bench machine, even if the env flags are set: resolve_safety_bypass
+# enforces that (and logs loudly if unsafe flags were requested but blocked).
+from services.bench_safety import resolve_safety_bypass, startup_safety_banner
+SAFETY_BYPASS = resolve_safety_bypass()
+print(startup_safety_banner())
 
 if SAFETY_BYPASS:
     print("=" * 60)
     print("DEVELOPMENT SAFETY BYPASS IS ACTIVE")
-    print("This should NEVER be enabled in production!")
+    print("This should NEVER be enabled in production or on a bench!")
     print("=" * 60)
 
 def _telemetry_state_changed(current: dict) -> bool:

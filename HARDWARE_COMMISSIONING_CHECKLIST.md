@@ -20,6 +20,7 @@ every report is labelled SIMULATED.**
 ## 0. Pre-flight (before any output)
 
 - [ ] Backend runs in **production mode** (no auto-reload): `python main.py` (not `AQUAFLOW_DEV=1`).
+- [ ] **Environment safety lock (AF-HUB-018):** startup prints `✅ Safety bypasses DISABLED`. Confirm the safety-weakening flags are **unset** on the bench machine: `AQUAFLOW_DEV_MODE`, `AQUAFLOW_ENV`, `AQUAFLOW_UNSAFE_DEV`. Once the commissioning flag is TRUE these are ignored anyway, but they must not be set — if any is present, the log shows a `BENCH SAFETY LOCK … BLOCKED` warning; clear it before proceeding.
 - [ ] `AQUAFLOW_LICENSE_SECRET` is set (server-side); `/api/health` returns and license state is as expected.
 - [ ] `/api/health/runtime` verdict reviewed; no unexpected **critical** issues before hardware is energized.
 - [ ] Commissioning flag is **FALSE** at start: `GET /api/hardware/commissioning` → `commissioned: false`.
