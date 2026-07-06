@@ -10,9 +10,17 @@
 // inside a 100 ms latency budget; `durationMs` is measured on every call.
 
 import { buildDependencyGraph } from "../dependency/dependencyGraph";
+// AF-HUB-004B — DMX patch reading + range limits come from the one canonical module,
+// so this validator and the dependency graph resolve every fixture's patch identically.
+import {
+  readPatch,
+  DMX_MAX_CHANNEL as DMX_MAX_CHANNEL_C,
+  DMX_MAX_UNIVERSE as DMX_MAX_UNIVERSE_C,
+} from "../runtime/dmxPatch";
 
-export const DMX_MAX_CHANNEL = 512;
-export const DMX_MAX_UNIVERSE = 32767;
+// Re-exported from the canonical source (names kept for existing importers/tests).
+export const DMX_MAX_CHANNEL = DMX_MAX_CHANNEL_C;
+export const DMX_MAX_UNIVERSE = DMX_MAX_UNIVERSE_C;
 export const LATENCY_BUDGET_MS = 100;
 
 const SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
@@ -21,15 +29,6 @@ function nowMs() {
   return typeof performance !== "undefined" && performance.now
     ? performance.now()
     : Date.now();
-}
-
-function firstNum(...vals) {
-  for (const v of vals) {
-    if (v === undefined || v === null || v === "") continue;
-    const n = Number(v);
-    if (!Number.isNaN(n)) return n;
-  }
-  return null;
 }
 
 export function validateSystem(state = {}) {
@@ -54,10 +53,11 @@ export function validateSystem(state = {}) {
     if (!fx) continue;
     const id = fx.id ?? fx.fixtureId;
     if (!id) continue;
-    const ch = firstNum(fx.channel, fx.dmxChannel, fx.dmxAddress);
+    const patch = readPatch(fx);
+    const ch = patch.startChannel;
     if (ch !== null && (ch < 1 || ch > DMX_MAX_CHANNEL))
       add("error", "channel_range", `${id}: DMX channel ${ch} out of range 1–${DMX_MAX_CHANNEL}`, id);
-    const uni = firstNum(fx.universe, fx.dmxUniverse);
+    const uni = patch.universe;
     if (uni !== null && (uni < 0 || uni > DMX_MAX_UNIVERSE))
       add("error", "universe_range", `${id}: universe ${uni} out of range 0–${DMX_MAX_UNIVERSE}`, id);
     if (fx.intensity !== undefined && fx.intensity !== null &&

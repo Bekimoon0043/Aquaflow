@@ -10,6 +10,10 @@
 //
 // Edge kind ∈ member_of | controlled_by | depends_on  ("from depends on to").
 
+// AF-HUB-004B — DMX universe/channel come from the one canonical patch reader, so the
+// graph resolves a fixture's address identically to the live validator.
+import { readPatch } from "../runtime/dmxPatch";
+
 const MODBUS_CLASSES = new Set(["pump", "valve", "flame", "sensor"]);
 const DMX_CLASSES = new Set(["lighting", "fog", "laser"]);
 export const LAYER = { plc: 0, universe: 0, group: 1, fixture: 2 };
@@ -75,10 +79,11 @@ export function buildDependencyGraph(fixtures, spofThreshold = DEFAULT_SPOF_THRE
         modbusAddr.set(key, [...(modbusAddr.get(key) || []), id]);
       }
     } else if (DMX_CLASSES.has(dclass)) {
-      const uni = first(fx.universe, fx.dmxUniverse, eng.dmxUniverse) ?? 1;
+      const patch = readPatch(fx);
+      const uni = patch.universe ?? 1;
       addNode(`universe:${uni}`, "universe", `Universe ${uni}`);
       addEdge(id, `universe:${uni}`, "controlled_by");
-      const ch = first(fx.channel, fx.dmxChannel, fx.dmxAddress, eng.dmxChannel);
+      const ch = patch.startChannel ?? undefined;
       if (ch !== undefined) {
         const key = `${uni}|${ch}`;
         dmxAddr.set(key, [...(dmxAddr.get(key) || []), id]);

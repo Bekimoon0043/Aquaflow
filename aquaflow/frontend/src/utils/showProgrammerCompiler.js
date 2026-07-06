@@ -5,6 +5,9 @@
  * No dependencies on App.jsx, showStore, or any global state
  */
 
+// AF-HUB-004B — canonical DMX patch reader + frame size (single source of truth).
+import { readPatch, DMX_CHANNELS_PER_UNIVERSE } from "../runtime/dmxPatch";
+
 // ─── Types ─────────────────────────────────────────────────────────────
 
 /**
@@ -52,7 +55,9 @@
 
 export const DEFAULT_FPS = 30;
 export const DMX_CHANNELS_PER_FIXTURE = 8;
-export const MAX_DMX_UNIVERSE = 512;
+// Channels per DMX512 universe (this is the per-universe frame size, NOT a universe
+// count — the misleading name is kept for back-compat but now sourced canonically).
+export const MAX_DMX_UNIVERSE = DMX_CHANNELS_PER_UNIVERSE;
 
 export const EFFECT_TEMPLATES = {
   jet_burst: {
@@ -394,17 +399,19 @@ function stateToProtocolParams(fixture, state) {
   const protocol = getFixtureProtocol(fixture);
   
   switch (protocol) {
-    case 'dmx':
+    case 'dmx': {
+      const patch = readPatch(fixture);
       return {
-        channel: fixture.dmxChannel || 1,
-        universe: fixture.dmxUniverse || 1,
+        channel: patch.startChannel || 1,
+        universe: patch.universe || 1,
         intensity: Math.round(state.intensity * 255),
         tiltX: Math.round((state.tiltX + 90) / 180 * 255), // Map -90..90 to 0..255
         tiltZ: Math.round((state.tiltZ + 90) / 180 * 255),
         color: hexToDMXColor(state.color),
         strobe: state.on ? 0 : 255,
       };
-    
+    }
+
     case 'plc':
       return {
         motorId: fixture.motorId || fixture.id,
