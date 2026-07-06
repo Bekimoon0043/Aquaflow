@@ -299,13 +299,22 @@ class ProtocolRouter:
         else:
             raw_value = int(event.value * 65535)
 
-        # TODO Phase 2: implement via protocol_bus Modbus driver
-        # For now: log the intended command
-        logger.debug(
-            f"[ProtocolRouter] Modbus {plc_host}:{plc_port} "
-            f"unit={unit_id} reg={register} val={raw_value}"
-        )
-        return True  # stub
+        # AF-HUB-007 — pumps / valves / flame ride the Modbus path. This must not
+        # report a phantom success: route to the bus transport and return its ACTUAL
+        # result. If the bus exposes no Modbus transport, the command was NOT sent —
+        # say so (fail closed) instead of returning True.
+        send = getattr(self._bus, "send_modbus", None)
+        if send is None:
+            logger.error(
+                "[ProtocolRouter] Modbus transport unavailable (%r has no send_modbus) — "
+                "command to %s:%s unit=%s reg=%s val=%s NOT sent",
+                type(self._bus).__name__, plc_host, plc_port, unit_id, register, raw_value,
+            )
+            return False
+        return bool(await send({
+            "host": plc_host, "port": plc_port, "unit_id": unit_id,
+            "register": register, "value": raw_value, "data_type": data_type,
+        }))
 
     async def _dispatch_relay(self, event: CompiledEvent, address: dict) -> bool:
         """Simple relay on/off based on value threshold."""
@@ -313,11 +322,19 @@ class ProtocolRouter:
         relay_index = address.get("relay_index", 1)
         state       = event.value > 0.01
 
-        # TODO Phase 2: implement via protocol_bus relay driver
-        logger.debug(
-            f"[ProtocolRouter] Relay {relay_board}:{relay_index} → {'ON' if state else 'OFF'}"
-        )
-        return True  # stub
+        # AF-HUB-007 — same contract as Modbus: dispatch through the bus transport and
+        # return its real result; never claim success when nothing was sent.
+        send = getattr(self._bus, "send_relay", None)
+        if send is None:
+            logger.error(
+                "[ProtocolRouter] Relay transport unavailable (%r has no send_relay) — "
+                "command to %s:%s state=%s NOT sent",
+                type(self._bus).__name__, relay_board, relay_index, state,
+            )
+            return False
+        return bool(await send({
+            "board": relay_board, "index": relay_index, "state": state,
+        }))
 
     async def blackout(self) -> None:
         """Send zero to all known devices across all protocols."""
@@ -552,6 +569,10 @@ def _create_virtual_bus():
         def __init__(self, name="virtual"):
             self._name = name
             self._dmx_state = {}
+            # AF-HUB-007 — record Modbus (pump/valve/flame) + relay commands too, so the
+            # simulation captures the safety-critical paths instead of dropping them.
+            self._modbus_state = {}   # (host, unit_id, register) → value
+            self._relay_state = {}    # (board, index) → bool
             self._command_count = 0
             self._blackout_count = 0
 
@@ -565,10 +586,27 @@ def _create_virtual_bus():
             self._command_count += 1
             return True
 
+        async def send_modbus(self, data):
+            key = (data.get("host"), data.get("unit_id"), data.get("register"))
+            self._modbus_state[key] = data.get("value")
+            self._command_count += 1
+            return True
+
+        async def send_relay(self, data):
+            key = (data.get("board"), data.get("index"))
+            self._relay_state[key] = bool(data.get("state"))
+            self._command_count += 1
+            return True
+
         async def blackout(self):
             for universe in self._dmx_state:
                 for ch in self._dmx_state[universe]:
                     self._dmx_state[universe][ch] = 0
+            # Safety: a blackout must zero every output path, not just DMX.
+            for key in self._modbus_state:
+                self._modbus_state[key] = 0
+            for key in self._relay_state:
+                self._relay_state[key] = False
             self._blackout_count += 1
             logger.critical("[VirtualBus] BLACKOUT executed")
 
@@ -577,11 +615,19 @@ def _create_virtual_bus():
                 return dict(self._dmx_state.get(universe, {}))
             return {u: dict(ch) for u, ch in self._dmx_state.items()}
 
+        def get_modbus_state(self):
+            return dict(self._modbus_state)
+
+        def get_relay_state(self):
+            return dict(self._relay_state)
+
         def get_state(self):
             return {
                 "bus_type": "virtual",
                 "bus_name": self._name,
                 "dmx": self.get_dmx_state(),
+                "modbus": {f"{h}:{u}:{r}": v for (h, u, r), v in self._modbus_state.items()},
+                "relay": {f"{b}:{i}": v for (b, i), v in self._relay_state.items()},
                 "stats": {
                     "command_count": self._command_count,
                     "blackout_count": self._blackout_count,
