@@ -290,7 +290,21 @@ class ProtocolBus:
     FLAME_MAX_DURATION = 3.0     # max continuous on-time (seconds)
     FLAME_GAP_RESET    = 0.5     # a command gap this long ends the current burst
 
-    def __init__(self):
+    # AF-HUB-016 — the ONE runtime output bus. app_state builds it with primary=True; a
+    # second primary is blocked so two independent output paths can never exist. Throwaway
+    # instances (loopback verification, unit tests) use the default primary=False.
+    _primary: Optional["ProtocolBus"] = None
+
+    def __init__(self, primary: bool = False):
+        if primary:
+            if ProtocolBus._primary is not None and ProtocolBus._primary is not self:
+                raise RuntimeError(
+                    "A primary ProtocolBus already exists — refusing to create a second "
+                    "runtime output bus (AF-HUB-016). Use app_state.protocol_bus / "
+                    "get_protocol_bus()."
+                )
+            ProtocolBus._primary = self
+        self._is_primary = primary
         self._drivers: dict[str, ProtocolDriver] = {}
         self._device_map: dict[str, str] = {}  # device_id → driver_key
         self._dmx_state: dict[int, dict[int, int]] = {}  # universe → {channel: value}
@@ -799,19 +813,18 @@ class ProtocolBus:
             # AF-HUB-015 — fixtures dropped for having no valid mapping (fail-closed).
             "unmapped_output": list(self._unmapped_fixtures.keys()),
         }
-_protocol_bus: Optional[ProtocolBus] = None
-
-
 def get_protocol_bus() -> ProtocolBus:
     """
-    DEPRECATED (AF-HUB-006). Do NOT use for runtime output.
+    AF-HUB-016 — return THE one runtime ProtocolBus (the primary created by app_state).
 
-    This lazily creates a SECOND ProtocolBus that the application never starts,
-    configures, or safety-gates. The one shared bus is `app_state.protocol_bus`
-    (started in the lifespan and configured by apply_show_payload) — import that
-    instead. Retained only to avoid breaking any external caller.
+    The old escape hatch that lazily created a SECOND, unconfigured bus is removed: this
+    now always returns the single app singleton and never constructs a new instance. Two
+    calls return the same object.
     """
-    global _protocol_bus
-    if _protocol_bus is None:
-        _protocol_bus = ProtocolBus()
-    return _protocol_bus
+    if ProtocolBus._primary is not None:
+        return ProtocolBus._primary
+    # Not created yet — importing app_state constructs the primary (side effect).
+    from app_state import protocol_bus  # noqa: F401
+    if ProtocolBus._primary is None:  # pragma: no cover - defensive
+        raise RuntimeError("No primary ProtocolBus available — app_state not initialised")
+    return ProtocolBus._primary

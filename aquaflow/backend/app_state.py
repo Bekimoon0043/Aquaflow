@@ -17,7 +17,9 @@ SHOWS_DIR.mkdir(exist_ok=True)
 
 show_engine = ShowEngine()
 device_manager = DeviceManager()
-protocol_bus = ProtocolBus()
+# AF-HUB-016 — the ONE runtime output bus (primary). A second primary is refused, and
+# get_protocol_bus() returns this instance rather than lazily creating another.
+protocol_bus = ProtocolBus(primary=True)
 
 # AF-HUB-006B — the ONE runtime output authority. Register the core output actors here
 # so every E-stop / blackout entry point halts the SAME complete set of subsystems.
