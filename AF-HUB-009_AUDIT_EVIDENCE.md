@@ -30,7 +30,7 @@ AquaFlow is cleared for live operation.
 
 ```bash
 # Backend (Python) — from aquaflow/backend
-./.venv/Scripts/python.exe -m pytest            # expect: 513 passed, 21 skipped, 0 errors
+./.venv/Scripts/python.exe -m pytest            # expect: 521 passed, 21 skipped, 0 errors
 
 # Frontend (JS) — from aquaflow/frontend
 npx vitest run                                  # expect: 231 passed (20 files)
@@ -40,25 +40,21 @@ npm run build                                   # expect: build succeeds
 The 21 skips are `test_fix_strategy_engine.py`, which requires the transient
 `EVALUATION_REPORT.md` artifact (untracked; absent on a clean checkout). See AF-HUB-008.
 
-## 3. Test evidence (measured at commit 074dd4a)
+## 3. Test evidence (post-corrective authoritative run, commit `88d9c52`)
 
 | Suite | Result | Notes |
 | --- | --- | --- |
-| Backend pytest | **513 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
+| Backend pytest | **521 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
 | Backend coverage | **59%** line coverage | `pytest --cov` (measured in AF-HUB-017). |
 | Frontend vitest | **231 passed (20 files)** | Node env; no DOM. |
+| Frontend build | **green** | Vite production build. |
 
 > **Update (post first review):** the independent review returned **CONDITIONAL-GO** and
 > found incomplete work reported as done. The Stage-7 corrective tasks AF-HUB-013…018 fix
 > it — one 100 Hz playback loop, protocol honesty gate, fail-closed output routing,
-> singleton lockdown, this evidence-consistency pass, and the bench safety lock. Numbers
-> above are the post-corrective authoritative run.
-| Frontend build | **green** | Vite production build. |
-
-**Not measured:** numeric code-coverage %. `pytest-cov` / `coverage` are not installed in
-the backend venv and the agent did not modify the environment. Coverage was improved by
-adding targeted tests (see per-task table), but a reviewer wanting a coverage number must
-install `pytest-cov` and run `pytest --cov`.
+> singleton lockdown, this evidence-consistency pass (which also installed pytest-cov and
+> measured the 59% above), and the bench safety lock. The numbers above are the
+> post-corrective authoritative run.
 
 ## 4. What each AF-HUB task changed (Stages 1–5 software)
 
@@ -92,13 +88,13 @@ These are the reasons a reasonable reviewer would withhold an unconditional GO. 
    SIMULATED banner precisely because this is unproven. → **AF-HUB-011 (on-site bench).**
 2. **[HIGH] Hydraulic engine uses linear approximations**, not real Hazen-Williams /
    Darcy-Weisbach. Not addressed in this series.
-3. **Coverage is not numerically measured** (see §3).
+3. **Coverage measured** at 59% line coverage (AF-HUB-017) — improvement welcome, not a blocker.
 4. **AF-HUB-009B / 010 / 011 / 012 remain** (installer+license validation, hardware harness
    prep, real bench commissioning, acceptance pack).
 
 ## 6. What an independent reviewer should verify before deciding
 
-- [ ] Re-run both suites at `074dd4a` and confirm the counts in §3.
+- [ ] Re-run both suites at current `main` HEAD and confirm the counts in §3.
 - [ ] Spot-check 2–3 AF-HUB diffs against their claims in §4 (e.g. `git show 0928606`).
 - [ ] Confirm the commissioning flag defaults FALSE and gates `deployment_ready`.
 - [ ] Confirm no task in this series claims real-hardware verification (it must not).

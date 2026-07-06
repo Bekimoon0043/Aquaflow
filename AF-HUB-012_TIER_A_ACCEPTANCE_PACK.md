@@ -27,11 +27,11 @@ signed off** — the minimum bar before any live, hardware-driving fountain site
 
 ## 2. Evidence inventory (verifiable)
 
-### 2.1 Automated test + build evidence (measured at `f581333`)
+### 2.1 Automated test + build evidence (post-corrective authoritative run)
 
 | Item | Result | Reproduce |
 | --- | --- | --- |
-| Backend pytest (full, no ignores) | **513 passed, 21 skipped, 0 errors** | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest` |
+| Backend pytest (full, no ignores) | **521 passed, 21 skipped, 0 errors** | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest` |
 | Backend line coverage | **59%** (`pytest --cov`) | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest --cov=.` |
 | Frontend vitest | **231 passed (20 files)** | `aquaflow/frontend`: `npx vitest run` |
 | Frontend production build | **green** | `aquaflow/frontend`: `npm run build` |

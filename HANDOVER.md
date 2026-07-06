@@ -1,6 +1,6 @@
 # Session Handover — LuxuryCon Platforms
 
-> **AUTHORITATIVE AquaFlow numbers (2026-07-06, AF-HUB Stage 7):** backend pytest **513
+> **AUTHORITATIVE AquaFlow numbers (2026-07-06, AF-HUB Stage 7):** backend pytest **521
 > passed, 21 skipped, 0 errors** · line coverage **59%** · frontend vitest **231 passed** ·
 > build green. See `AQUAFLOW_STATUS_CANONICAL.md`. Older counts below are point-in-time.
 
@@ -25,7 +25,7 @@ GitHub org: `burook-Luxury`. Git user: Burook <burookm@gmail.com>.
 
 ### AquaFlow Studio (primary)
 - **Stages 1–5 complete in code.** AQ-X recovery series done **except AQ-X-016** (3D export bridge — not started).
-- **Tests green:** backend `pytest` **513 passed, 21 skipped**, frontend `vitest` **231 passed**, `npm run build` green (line coverage 59%).
+- **Tests green:** backend `pytest` **521 passed, 21 skipped**, frontend `vitest` **231 passed**, `npm run build` green (line coverage 59%).
 - **Run it locally** (two terminals):
   - Backend: `cd aquaflow/backend && .\.venv\Scripts\Activate.ps1 && python main.py` → http://localhost:8000 (`/docs` for API)
   - Frontend: `cd aquaflow/frontend && npm run dev` → http://localhost:3000 (Vite proxies `/api`,`/ws` → :8000)
@@ -101,4 +101,4 @@ See generated `OPEN_ISSUES.md` / `NEXT_TASKS.md` inside the audit ZIP for the fu
 1. Read this file, then `CURRENT_STATUS.md`.
 2. If a `LUXHUB-AUTO-2026:` task is waiting → follow §3.
 3. Otherwise, the highest-value open work is **AQ-X-016** (3D export) or pushing **luxurycon-forex** to a new remote (§4).
-4. Sanity check before big changes: `cd aquaflow/backend && python -m pytest -q` (expect 513 passed, 21 skipped) and `cd aquaflow/frontend && npx vitest run` (expect 231).
+4. Sanity check before big changes: `cd aquaflow/backend && python -m pytest -q` (expect 521 passed, 21 skipped) and `cd aquaflow/frontend && npx vitest run` (expect 231).
