@@ -21,8 +21,17 @@ BAND_RANK = {b: i for i, b in enumerate(fse.PRIORITY_BANDS)}
 
 @pytest.fixture(scope="module")
 def report_text():
+    # AF-HUB-008 — EVALUATION_REPORT.md is a transient evaluation artifact that is not
+    # tracked in git. On a clean checkout it is absent, and hard-reading it here made the
+    # whole module ERROR at setup (42 collection errors on every full run). Skip cleanly
+    # when it is missing so the suite stays green; the contract tests still run whenever
+    # the artifact is present (during an evaluation session).
     root = fse.find_repo_root()
-    with open(os.path.join(root, "EVALUATION_REPORT.md"), "r", encoding="utf-8") as fh:
+    path = os.path.join(root, "EVALUATION_REPORT.md")
+    if not os.path.exists(path):
+        pytest.skip("EVALUATION_REPORT.md not present in this checkout — fix-strategy "
+                    "contract tests require the evaluation artifact")
+    with open(path, "r", encoding="utf-8") as fh:
         return fh.read()
 
 
