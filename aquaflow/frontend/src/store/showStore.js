@@ -1056,6 +1056,10 @@ setAudioData: (data) => set((s) => { pushUndoSnapshot(s); s.audioData = data; s.
 clearAudioData: () => set((s) => { pushUndoSnapshot(s); s.audioData = null; s.isDirty = true; }),
 
 setPoolGeometry: (g) => set((s) => { pushUndoSnapshot(s); s.poolGeometry = g; s.isDirty = true; }),
+// AF-HUB-004 — DEPRECATED. engineeringStore.fixtures is the single master source of
+// designed fixtures; this mirror is retained only for save/load history-snapshot
+// compatibility and must NOT be used as an authoritative fixture source. The backend
+// sync (useServerShowSync) and all projections now read the master. Do not add callers.
 setEngineeringFixtures: (f) => set((s) => { pushUndoSnapshot(s); s.engineeringFixtures = f; s.isDirty = true; }),
 
 setGeneratedTracks: (tracks) => set((s) => { pushUndoSnapshot(s); s.generatedTracks = tracks; s.isDirty = true; }),

@@ -33,18 +33,19 @@ export default function Export3DPanel() {
   const geometry = useEngineeringStore((s) => s.geometry);
   const params = useEngineeringStore((s) => s.params);
   const poolType = useEngineeringStore((s) => s.poolType);
+  // AF-HUB-004 — fixtures come only from the single master (engineeringStore.fixtures);
+  // the old showStore.engineeringFixtures fallback was a dead mirror (never written).
   const engFixtures = useEngineeringStore((s) => s.fixtures);
-  const showFixtures = useShowStore((s) => s.engineeringFixtures);
   const showPool = useShowStore((s) => s.poolGeometry);
   const showName = useShowStore((s) => s.currentShow?.name);
 
   const design = useMemo(() => {
-    const fixtures = (engFixtures && engFixtures.length) ? engFixtures : (showFixtures || []);
+    const fixtures = engFixtures || [];
     const poolGeometry = (geometry || params)
       ? { poolType, params, geometry }
       : (showPool || null);
     return { name: showName || "AquaFlow Scene", fixtures, poolGeometry };
-  }, [engFixtures, showFixtures, geometry, params, poolType, showPool, showName]);
+  }, [engFixtures, geometry, params, poolType, showPool, showName]);
 
   const graph = useMemo(() => buildSceneGraph(design), [design]);
   const stats = useMemo(() => ({
