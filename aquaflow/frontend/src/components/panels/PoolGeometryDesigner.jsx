@@ -22,6 +22,11 @@ import {
   FIXTURE_LIBRARY,
   getDefaultEngineering
 } from "../../data/fixtureLibrary";
+// AF-HUB-002 — single canonical show-group authority (hooks/fixtureTypeMap.js).
+// The pattern designer, 3D preview and runtime all read a fixture's group via
+// `fixture.groupId || resolveFixtureGroup(type)`, so the groupId we STORE here must
+// come from that same resolver — not a divergent inline copy.
+import { resolveFixtureGroup } from "../../hooks/fixtureTypeMap";
 
 const API = API_BASE_URL;
 
@@ -218,19 +223,10 @@ const getToolFixtureTypes = (tool) => {
   return FIXTURE_TYPES;
 };
 
-const getDefaultGroupId = (type) => {
-  const t = String(type || "").toLowerCase();
-
-  if (t.includes("ring") || t.includes("running")) return "outer_ring_jets";
-  if (t.includes("arch") || t.includes("2d")) return "arch_jets";
-  if (t.includes("1d") || t.includes("3d") || t.includes("geyser") || t.includes("jet")) return "center_jets";
-  if (t.includes("light") || t.includes("rgb")) return "rgb_lights";
-  if (t.includes("fire") || t.includes("flame")) return "flame_units";
-  if (t.includes("air") || t.includes("burst") || t.includes("fog") || t.includes("mist")) return "fog_machines";
-  if (t.includes("laser")) return "laser_units";
-
-  return "engineering_equipment";
-};
+// AF-HUB-002 — delegate to the canonical resolver (resolveFixtureGroup). Non-show
+// equipment (pumps/valves/sensors/…) has no show group (resolver returns null); we
+// keep the "engineering_equipment" tag for those, matching prior behavior.
+const getDefaultGroupId = (type) => resolveFixtureGroup(type) || "engineering_equipment";
 
 // Engineering defaults now come from frontend/src/data/fixtureLibrary.js
 
@@ -1419,20 +1415,8 @@ if (tool === "pipe") { onPipeClick(world); return; }
   color: "#22c55e",
   icon: "⚙"
 };
-      const getDefaultGroupId = (type) => {
-  const t = String(type || "").toLowerCase();
-
-  if (t.includes("ring") || t.includes("running")) return "outer_ring_jets";
-  if (t.includes("arch") || t.includes("2d")) return "arch_jets";
-  if (t.includes("1d") || t.includes("3d") || t.includes("geyser") || t.includes("jet")) return "center_jets";
-  if (t.includes("light") || t.includes("rgb")) return "rgb_lights";
-  if (t.includes("fire") || t.includes("flame")) return "flame_units";
-  if (t.includes("air") || t.includes("burst") || t.includes("fog") || t.includes("mist")) return "fog_machines";
-  if (t.includes("laser")) return "laser_units";
-
-  return "engineering_equipment";
-};
-
+      // AF-HUB-002 — groupId comes from the canonical module-level getDefaultGroupId
+      // (delegates to resolveFixtureGroup); the divergent inline copy was removed.
 setFixtures(prev => [...prev, {
   id: Date.now(),
   x: Math.round(world.x * 10) / 10,

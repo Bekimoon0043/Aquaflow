@@ -12,7 +12,9 @@
 // ─── TEAM C: added useCallback + useEffect to existing imports
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import useEngineeringStore from "../../store/engineeringStore";
-import { generateAutoTracks } from "../../runtime/autoTrackGenerator";
+// AF-HUB-002 — use the single canonical equipment-category resolver instead of a
+// local mirror (both delegate to utils/fixtureTypeResolver via autoTrackGenerator).
+import { generateAutoTracks, getEquipmentCategory } from "../../runtime/autoTrackGenerator";
 import { buildRuntimeDeviceGraph, getTrackDevices } from "../../runtime/runtimeDeviceGraph";
 import { useShowStore } from "../../store/showStore";
 import AudioWaveform from "./AudioWaveform";
@@ -56,21 +58,8 @@ const TRACK_TYPE_COLORS = {
 };
 
 // ─── TEAM C: format timecode MM:SS.mm ─────────────────────────────────────
-const getEquipmentCategory = (type = "") => {
-  const t = String(type || "").toLowerCase();
-
-  if (t.includes("rgb") || t.includes("light") || t.includes("spot")) return "lighting";
-  if (t.includes("pump") || t.includes("vfd")) return "pump";
-  if (t.includes("valve") || t.includes("solenoid")) return "solenoid";
-  if (t.includes("motion_3d") || t.includes("3d")) return "motion_3d";
-  if (t.includes("motion_2d") || t.includes("2d")) return "motion_2d";
-  if (t.includes("motion_1d") || t.includes("1d")) return "motion_1d";
-  if (t.includes("fire") || t.includes("flame")) return "fire";
-  if (t.includes("fog") || t.includes("mist") || t.includes("smoke")) return "fog";
-  if (t.includes("laser")) return "laser";
-
-  return "generic";
-};
+// AF-HUB-002 — getEquipmentCategory is imported from autoTrackGenerator (the single
+// canonical resolver, backed by utils/fixtureTypeResolver); the local mirror was removed.
 const isRgbTrack = (type = "") =>
   type.includes("lighting_red") ||
   type.includes("lighting_green") ||
