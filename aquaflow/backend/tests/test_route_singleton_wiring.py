@@ -26,6 +26,14 @@ from api.routes.pattern_routes import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_route_data_files(tmp_path, monkeypatch):
+    """Redirect the routes' JSON persistence to a temp dir so tests never dirty the
+    real backend/data/*.json files."""
+    monkeypatch.setattr(pattern_routes, "DMX_FILE", str(tmp_path / "dmx_map.json"))
+    monkeypatch.setattr(pattern_routes, "CLIPS_FILE", str(tmp_path / "timeline_clips.json"))
+
+
 def test_timeline_clips_inject_into_shared_show_engine():
     """A recorded clip posted to the route must land in app_state.show_engine's timeline."""
     engine = app_state.show_engine
