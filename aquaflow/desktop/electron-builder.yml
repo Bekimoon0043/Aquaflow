@@ -38,14 +38,30 @@ fileAssociations:
     role: Editor
     icon: build/icon.png
 
-# NSIS installer (fleshed out in AF-PKG-008).
+# AF-PKG-008 — NSIS installer.
+# Default = per-user (no admin prompt), the smoother path for Tier A internal rollout.
+# CEO DECISION PENDING: to install into "C:\Program Files\LuxuryCon\AquaFlow Studio"
+# system-wide instead, flip `perMachine: true` (installer will then request elevation).
 nsis:
-  oneClick: false
-  perMachine: false               # per-user install (no admin) for Tier A; see AF-PKG-008
+  oneClick: false                        # assisted installer (welcome/dir/progress/finish)
+  perMachine: false                      # per-user by default; see note above
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  menuCategory: LuxuryCon                 # group Start-menu shortcut under a LuxuryCon folder
   shortcutName: AquaFlow Studio
+  runAfterFinish: true
+  # Upgrades reinstall in place; user data lives in %APPDATA%\AquaFlow Studio and is NOT
+  # removed on uninstall/upgrade, so shows/settings survive.
+  deleteAppDataOnUninstall: false
+  # Branded installer graphics (CEO to supply — see AF-PKG report). When the real assets
+  # land, drop them in build/ and uncomment:
+  #   installerIcon: build/installerIcon.ico       # 256x256 .ico
+  #   uninstallerIcon: build/uninstallerIcon.ico
+  #   installerHeader: build/installerHeader.bmp    # 150x57 BMP
+  #   installerSidebar: build/installerSidebar.bmp  # 164x314 BMP
+  # Until then electron-builder derives the installer icon from win.icon (build/icon.png).
+artifactName: ${productName}-Setup-${version}.${ext}
 
 # AF-PKG-007 — auto-update feed. `publish` makes electron-builder emit latest.yml
 # (with sha512 checksums) next to the installer so electron-updater can verify downloads.
