@@ -215,12 +215,14 @@ async def sacn_status():
         return {"error": str(e)}
 
 
+# AF-HUB-FINAL-VERIFY — blackout goes through the ONE authority (zeroes protocol bus AND
+# hardware output), not a direct partial bus call. One blackout path, everywhere.
 @phase6_router.post("/protocols/artnet/blackout")
 async def artnet_blackout():
     try:
-        from app_state import protocol_bus
-        await protocol_bus.blackout()
-        return {"ok": True}
+        from app_state import runtime_authority
+        trip = await runtime_authority.blackout(source="api-artnet-blackout")
+        return {"ok": True, "results": trip["results"]}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
 
@@ -228,8 +230,8 @@ async def artnet_blackout():
 @phase6_router.post("/protocols/sacn/blackout")
 async def sacn_blackout():
     try:
-        from app_state import protocol_bus
-        await protocol_bus.blackout()
-        return {"ok": True}
+        from app_state import runtime_authority
+        trip = await runtime_authority.blackout(source="api-sacn-blackout")
+        return {"ok": True, "results": trip["results"]}
     except Exception as e:
         raise HTTPException(500, detail=str(e))

@@ -71,8 +71,11 @@ def test_phase6_artnet_status_talks_to_shared_bus():
 
 
 def test_phase6_blackout_uses_shared_bus():
+    # AF-HUB-FINAL-VERIFY — blackout now goes through the single RuntimeAuthority and
+    # reports the per-subsystem results (protocol bus + hardware output), not a bare ok.
     result = asyncio.run(phase6_routes.artnet_blackout())
-    assert result == {"ok": True}
+    assert result["ok"] is True
+    assert result["results"]["protocol_bus"] == "ok"
 
 
 def _route_code(*names) -> str:

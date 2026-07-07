@@ -1,6 +1,6 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-07-06, AF-HUB Stage 7):** backend pytest **525 passed, 21 skipped,
+> **AUTHORITATIVE (2026-07-06, AF-HUB Stage 7):** backend pytest **532 passed, 21 skipped,
 > 0 errors** · backend line coverage **59%** · frontend vitest **231 passed (20 files)** ·
 > `npm run build` green. Single source of truth: `AQUAFLOW_STATUS_CANONICAL.md`. Test/task
 > numbers in the dated entries below are point-in-time snapshots — the line above is current.

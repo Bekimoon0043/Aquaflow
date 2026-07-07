@@ -46,7 +46,7 @@ The old 65-task AquaFlow roadmap is **superseded** by this sequence (v3 + supple
 Stage-7 corrective tasks from the independent ChatGPT review). Tasks 000–010, 013–018 are
 software (Claude Code); 009 is an independent review; 011–012 are on-site hardware.
 
-**Authoritative test evidence (single source):** backend pytest **525 passed, 21 skipped,
+**Authoritative test evidence (single source):** backend pytest **532 passed, 21 skipped,
 0 errors**; frontend vitest **231 passed (20 files)**; frontend `npm run build` green;
 backend line coverage **59%** (`pytest --cov`). The 21 skips are the fix-strategy contract
 tests, which require a transient `EVALUATION_REPORT.md` absent on a clean checkout.
@@ -94,7 +94,7 @@ Hardware output remains UNVERIFIED (commissioning flag FALSE / SIMULATED).
 - **AQ-RT-001** (runtime authority) → now **AF-HUB-006B**.
 - **AQ-RT-002** (production startup) → now **AF-HUB-000B** (done).
 - **AQ-REPAIR-003/004** (frontend testing, coverage) → now **AF-HUB-008**.
-- **DeepSeek AQ-TEST / AQ-VAL series** → **DISCARDED** (premise wrong: claimed "zero tests / no 3D engine"; the repo has 525 backend + 231 frontend tests and a real Three.js engine).
+- **DeepSeek AQ-TEST / AQ-VAL series** → **DISCARDED** (premise wrong: claimed "zero tests / no 3D engine"; the repo has 532 backend + 231 frontend tests and a real Three.js engine).
 
 ---
 

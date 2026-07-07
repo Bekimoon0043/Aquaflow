@@ -653,13 +653,16 @@ class ProtocolBus:
             else:
                 from engine.device_manager import SEED_DEVICES
                 device = next((d for d in SEED_DEVICES if d.id == device_id), None)
-                if device is not None:
-                    dmx_addr = int(device.params.get("dmxAddress", 1))
+                # AF-HUB-FINAL-VERIFY — a seed device counts as mapped ONLY if it carries an
+                # EXPLICIT dmxAddress. Previously a DMX-class seed device without one (e.g.
+                # fog-01) silently defaulted to channel 1 / universe 0 — the same
+                # drive-the-wrong-device hazard AF-HUB-015 removed for unknown fixtures.
+                if device is not None and device.params.get("dmxAddress") is not None:
+                    dmx_addr = int(device.params["dmxAddress"])
                     universe = int(device.params.get("dmxUniverse", 0))
                 else:
-                    # AF-HUB-015 — FAIL CLOSED. Previously an unmapped fixture fell back to
-                    # universe 0 / channel 1, which on real hardware is a REAL device (a pump,
-                    # valve or solenoid). An unmapped fixture must send NOTHING.
+                    # AF-HUB-015 — FAIL CLOSED. No valid mapping must send NOTHING (universe
+                    # 0 / channel 1 is a REAL device on real hardware).
                     self._note_unmapped(device_id, device_type, "dmx/artnet")
                     return
 
@@ -761,14 +764,15 @@ class ProtocolBus:
                 if not fixture_id:
                     continue
 
-                if universe < 0:
-                    universe = 0
-
-                if channel < 1:
-                    channel = 1
-
-                if channel > 512:
-                    channel = 512
+                # AF-HUB-FINAL-VERIFY — REJECT invalid map entries instead of silently
+                # clamping them onto channel 1 / universe 0 (someone else's device).
+                if universe < 0 or channel < 1 or channel > 512:
+                    logger.warning(
+                        "DMX map entry rejected (out of range): fixture=%r universe=%s "
+                        "channel=%s — fixture stays UNMAPPED (fail-closed)",
+                        fixture_id, universe, channel,
+                    )
+                    continue
 
                 cleaned.append({
                     "fixtureId": fixture_id,

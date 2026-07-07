@@ -74,33 +74,38 @@ async def mobile_command(payload: dict):
         return {"executed": False, **decision}
 
     try:
+        # AF-HUB-FINAL-VERIFY — this route previously bypassed the single authorities:
+        # estop tripped only the safety kernel (partial), blackout zeroed only the bus,
+        # reset skipped the gated recovery, and play/pause/stop/seek drove the DEMOTED
+        # RuntimeTransport mirror (post AF-HUB-013 that no longer controls playback).
+        # All commands now go through the same authorities as every other entry point.
         from safety.safety_kernel import get_safety_kernel
-        from engine.runtime_transport import get_transport
+        from app_state import runtime_authority, show_engine
         safety = get_safety_kernel()
-        transport = get_transport()
         if command == "estop":
-            safety.emergency_stop(source="mobile")
+            await runtime_authority.emergency_stop(source="mobile")
         elif command == "reset":
-            safety.reset_faults()
+            result = await runtime_authority.recover(source="mobile")
+            if not result["recovered"]:
+                return {"executed": False, "command": command, "allowed": True,
+                        "reason": "Recovery blocked: " + "; ".join(result["blocked_by"])}
         elif command == "arm":
             safety.arm()
         elif command == "disarm":
             safety.disarm()
         elif command == "play":
-            transport.play()
+            started = await show_engine.play()
+            if not started:
+                return {"executed": False, "command": command, "allowed": True,
+                        "reason": show_engine.last_error or "Playback refused"}
         elif command == "pause":
-            transport.pause()
+            await show_engine.pause()
         elif command == "stop":
-            transport.stop()
+            await show_engine.stop_playback()
         elif command == "seek":
-            transport.seek(int(payload.get("position_ms", 0)))
+            await show_engine.seek(int(payload.get("position_ms", 0)) / 1000.0)
         elif command == "blackout":
-            from app_state import protocol_bus
-            import asyncio
-            try:
-                asyncio.get_event_loop().create_task(protocol_bus.blackout())
-            except Exception:
-                pass
+            await runtime_authority.blackout(source="mobile")
         return {"executed": True, **decision}
     except Exception as e:
         # The command was permitted; surface a dispatch error without 500-ing the app.

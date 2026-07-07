@@ -30,7 +30,7 @@ AquaFlow is cleared for live operation.
 
 ```bash
 # Backend (Python) — from aquaflow/backend
-./.venv/Scripts/python.exe -m pytest            # expect: 525 passed, 21 skipped, 0 errors
+./.venv/Scripts/python.exe -m pytest            # expect: 532 passed, 21 skipped, 0 errors
 
 # Frontend (JS) — from aquaflow/frontend
 npx vitest run                                  # expect: 231 passed (20 files)
@@ -44,7 +44,7 @@ The 21 skips are `test_fix_strategy_engine.py`, which requires the transient
 
 | Suite | Result | Notes |
 | --- | --- | --- |
-| Backend pytest | **525 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
+| Backend pytest | **532 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
 | Backend coverage | **59%** line coverage | `pytest --cov` (measured in AF-HUB-017). |
 | Frontend vitest | **231 passed (20 files)** | Node env; no DOM. |
 | Frontend build | **green** | Vite production build. |

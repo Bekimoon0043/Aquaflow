@@ -31,7 +31,7 @@ signed off** — the minimum bar before any live, hardware-driving fountain site
 
 | Item | Result | Reproduce |
 | --- | --- | --- |
-| Backend pytest (full, no ignores) | **525 passed, 21 skipped, 0 errors** | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest` |
+| Backend pytest (full, no ignores) | **532 passed, 21 skipped, 0 errors** | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest` |
 | Backend line coverage | **59%** (`pytest --cov`) | `aquaflow/backend`: `./.venv/Scripts/python.exe -m pytest --cov=.` |
 | Frontend vitest | **231 passed (20 files)** | `aquaflow/frontend`: `npx vitest run` |
 | Frontend production build | **green** | `aquaflow/frontend`: `npm run build` |
@@ -52,6 +52,7 @@ The 21 skips are the fix-strategy contract tests, which require the transient
 | **013 / 014 / 015** | b077c49 / 9ddfa7a / 672a866 | **Stage-7 corrective (ChatGPT review):** playback authority locked to one 100 Hz loop · protocol support honesty gate (MQTT fails closed) · fail-closed output routing (unmapped fixtures cannot reach hardware) |
 | **016 / 017 / 018** | 83c5883 / ef2d20d / 88d9c52 | **Stage-7 corrective (ChatGPT review):** protocol-bus singleton lockdown · evidence consistency pass · bench safety environment lock |
 | **019 / 020** | 7fb874e / 9fdec68 | **Stage-7 corrective (Genspark review — ran on Linux):** cross-platform crash fingerprint (split on `/` and `\`) · runtime-bridge retired from the supported surface (test-only; live path documented) |
+| **FINAL-VERIFY** | (this commit) | **Complete product verification** (`AF-HUB-FINAL-VERIFICATION-REPORT.md`): clean-run test truth, file:line architecture walk, full stub audit, live production-mode server + installer tamper/license demos. Found + fixed 4 residual defects: mobile route bypassed the authorities (incl. dead play path post-013), phase6 blackout partial-path, seed-device channel-1 fallback + DMX-map clamping (fail-open), OPC UA matrix nuance |
 
 ### 2.3 Hardware-readiness artifacts (prepared; execution pending)
 

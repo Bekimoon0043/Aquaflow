@@ -61,6 +61,38 @@ def test_mapped_dmx_fixture_still_emits():
     assert art.sent[0]["universe"] == 2
 
 
+def test_seed_device_without_explicit_dmx_address_fails_closed():
+    """AF-HUB-FINAL-VERIFY — fog-01 is a DMX-class seed device with NO dmxAddress. It used
+    to default to channel 1 / universe 0 (a real device on the wire). Must now send nothing."""
+    bus = ProtocolBus()
+    art = _CapturingArtNet()
+    bus._drivers["artnet"] = art
+    asyncio.run(bus._route_command({"device_id": "fog-01", "type": "fog", "intensity": 1.0}))
+    assert art.sent == [], "seed device without an explicit dmxAddress reached the wire"
+    assert "fog-01" in bus.get_status()["unmapped_output"]
+
+
+def test_seed_device_with_explicit_dmx_address_still_emits():
+    bus = ProtocolBus()
+    art = _CapturingArtNet()
+    bus._drivers["artnet"] = art
+    # light-01 is a seed device WITH dmxAddress=1 explicitly configured.
+    asyncio.run(bus._route_command({"device_id": "light-01", "type": "lighting", "intensity": 1.0}))
+    assert len(art.sent) == 1
+
+
+def test_invalid_dmx_map_entries_are_rejected_not_clamped_to_channel_1():
+    bus = ProtocolBus()
+    bus.update_dmx_map([
+        {"fixtureId": "bad1", "universe": -3, "channel": 5},
+        {"fixtureId": "bad2", "universe": 0, "channel": 0},
+        {"fixtureId": "bad3", "universe": 0, "channel": 999},
+        {"fixtureId": "good", "universe": 1, "channel": 10},
+    ])
+    kept = {m["fixtureId"] for m in bus.get_dmx_map()}
+    assert kept == {"good"}, f"invalid entries were not rejected: {kept}"
+
+
 def test_unmapped_fixtures_lists_the_unmapped_ones():
     bus = ProtocolBus()
     bus.update_dmx_map([{"fixtureId": "L1", "universe": 0, "channel": 1}])

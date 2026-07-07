@@ -22,7 +22,7 @@ match it (and the live `GET /api/hardware/protocols` endpoint).
 | sACN (E1.31) | **REAL** | `protocols/sacn_driver.py`; loopback-verified. |
 | Modbus TCP | **REAL** | `ModbusTCPDriver`; drives pumps/valves/flame. |
 | MQTT | **GATED** | `MQTTDriver` is a stub. AF-HUB-014 disabled it: `connect()`/`send()` fail closed (return False, never fake success). `add_device("mqtt", …)` is refused. Do not re-enable without a real, tested implementation. |
-| OPC UA | **UNSUPPORTED** | No implementation exists. |
+| OPC UA | **UNSUPPORTED** (as a bus transport) | No protocol-bus transport exists. Note: the separate **PLC subsystem** has a real OPC UA *client* driver (`plc/plc_engine.py::OPCUADriver`) for reading/writing PLC tags — it requires the optional `asyncua` library and **fails closed** (connect returns False) when it is not installed. That PLC tag client is not a show-output transport and does not change this matrix. |
 | BACnet | **UNSUPPORTED** | No implementation exists. |
 
 ## History (why this exists)
