@@ -30,7 +30,7 @@ AquaFlow is cleared for live operation.
 
 ```bash
 # Backend (Python) — from aquaflow/backend
-./.venv/Scripts/python.exe -m pytest            # expect: 521 passed, 21 skipped, 0 errors
+./.venv/Scripts/python.exe -m pytest            # expect: 525 passed, 21 skipped, 0 errors
 
 # Frontend (JS) — from aquaflow/frontend
 npx vitest run                                  # expect: 231 passed (20 files)
@@ -44,17 +44,20 @@ The 21 skips are `test_fix_strategy_engine.py`, which requires the transient
 
 | Suite | Result | Notes |
 | --- | --- | --- |
-| Backend pytest | **521 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
+| Backend pytest | **525 passed, 21 skipped, 0 errors** | Full suite, no `--ignore`. Was 42 collection errors before AF-HUB-008. |
 | Backend coverage | **59%** line coverage | `pytest --cov` (measured in AF-HUB-017). |
 | Frontend vitest | **231 passed (20 files)** | Node env; no DOM. |
 | Frontend build | **green** | Vite production build. |
 
-> **Update (post first review):** the independent review returned **CONDITIONAL-GO** and
-> found incomplete work reported as done. The Stage-7 corrective tasks AF-HUB-013…018 fix
-> it — one 100 Hz playback loop, protocol honesty gate, fail-closed output routing,
-> singleton lockdown, this evidence-consistency pass (which also installed pytest-cov and
-> measured the 59% above), and the bench safety lock. The numbers above are the
-> post-corrective authoritative run.
+> **Update (post independent reviews):** two independent reviews ran — ChatGPT (code-read,
+> CONDITIONAL-GO) and Genspark (cloned + ran on Linux). Both found incomplete work reported
+> as done. The Stage-7 corrective tasks **AF-HUB-013…020** fix everything they flagged: one
+> 100 Hz playback loop, protocol honesty gate, fail-closed output routing, singleton
+> lockdown, evidence-consistency pass (installed pytest-cov, 59% above), bench safety lock,
+> the cross-platform crash-fingerprint fix (Genspark), and retiring the test-only
+> runtime_bridge from the supported surface (Genspark). The numbers above are the
+> post-corrective authoritative run (green on Windows; the crash-fingerprint fix makes the
+> one Linux failure Genspark measured pass too).
 
 ## 4. What each AF-HUB task changed (Stages 1–5 software)
 
