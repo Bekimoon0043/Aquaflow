@@ -98,7 +98,7 @@ met by software work.
 - **[CRITICAL] Real hardware output unverified** until AF-HUB-011 (bench). Commissioning flag FALSE.
 - **[HIGH] Hydraulic engine** uses linear approximations, not Hazen-Williams / Darcy-Weisbach. Not in the AF-HUB plan; open.
 - **Coverage** now measured (AF-HUB-017): backend line coverage **59%** (`pytest --cov`).
-- **Licensing doc discrepancy** — docs say Ed25519; implementation is HMAC-SHA256 (env secret, server-side). Acceptable for internal use; reconcile before external claims.
+- **Licensing doc discrepancy — RECONCILED (2026-07-07).** Implementation is **HMAC-SHA256** (machine-locked, server-side env secret); the older "Ed25519" wording was corrected across the docs and the hub. Ed25519 asymmetric signing remains a planned Tier B upgrade. Admin workflow now documented in `LICENSE-ADMIN.md`.
 
 ## 5. Final acceptance & sign-off (completed only after gates 7–9 close)
 
