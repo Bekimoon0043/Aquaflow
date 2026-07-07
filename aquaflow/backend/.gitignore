@@ -4,3 +4,6 @@
 .coverage.*
 htmlcov/
 coverage.xml
+
+# AF-PKG-002 — the PyInstaller build spec IS tracked source (overrides *.spec above)
+!aquaflow-engine.spec
