@@ -1,0 +1,24 @@
+{
+  "name": "aquaflow-studio-desktop",
+  "productName": "AquaFlow Studio",
+  "version": "1.0.0",
+  "description": "AquaFlow Studio — LuxuryCon fountain design, engineering, programming & operation platform (desktop shell)",
+  "author": "LuxuryCon",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:web": "node scripts/build-web.js",
+    "build:engine": "node scripts/build-engine.js",
+    "dist": "npm run build:web && npm run build:engine && electron-builder --win --config electron-builder.yml",
+    "pack": "electron-builder --dir --config electron-builder.yml"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}

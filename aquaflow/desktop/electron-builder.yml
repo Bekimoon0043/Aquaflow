@@ -1,0 +1,44 @@
+# AquaFlow Studio — electron-builder configuration (AF-PKG-001 skeleton).
+# Fleshed out across AF-PKG-005 (branding), 006 (.aquashow), 007 (auto-update), 008 (NSIS).
+appId: com.luxurycon.aquaflow
+productName: AquaFlow Studio
+copyright: Copyright © 2026 LuxuryCon
+
+directories:
+  output: dist
+  buildResources: build   # icons + installer graphics live here (added in AF-PKG-005)
+
+# Files packed into the app (added incrementally):
+#   web/            — the Vite production build (AF-PKG-003)
+#   resources/engine/aquaflow-engine.exe — the PyInstaller backend bundle (AF-PKG-002)
+files:
+  - main.js
+  - preload.js
+  - "web/**/*"
+  - "!**/*.map"
+
+extraResources:
+  - from: resources/engine
+    to: engine
+    filter: ["**/*"]
+
+# Windows target (Tier A = Windows only).
+win:
+  target:
+    - nsis
+  # icon: build/icon.ico            # AF-PKG-005
+  # fileAssociations added in AF-PKG-006
+
+# NSIS installer (fleshed out in AF-PKG-008).
+nsis:
+  oneClick: false
+  perMachine: false               # per-user install (no admin) for Tier A; see AF-PKG-008
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AquaFlow Studio
+
+# Auto-update feed (configured in AF-PKG-007; internal for Tier A).
+# publish:
+#   provider: generic
+#   url: https://updates.luxuryconworld.com/aquaflow/
