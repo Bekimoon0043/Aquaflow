@@ -27,7 +27,16 @@ win:
   target:
     - nsis
   icon: build/icon.png              # AF-PKG-005 — electron-builder converts PNG→ICO (placeholder; CEO swaps the real logo)
-  # fileAssociations added in AF-PKG-006
+
+# AF-PKG-006 — .aquashow file association. Double-clicking a show launches AquaFlow with
+# the file path in argv (handled in main.js). Uses the app icon until a dedicated
+# document icon (build/aquashow.png) is provided.
+fileAssociations:
+  - ext: aquashow
+    name: AquaFlow Show
+    description: AquaFlow fountain show
+    role: Editor
+    icon: build/icon.png
 
 # NSIS installer (fleshed out in AF-PKG-008).
 nsis:

@@ -25,18 +25,54 @@ let splashWindow = null;
 let engine = null; // { child, mode, command }
 let enginePort = 0;
 let shuttingDown = false;
+let pendingOpenPath = null; // AF-PKG-006 — .aquashow path awaiting the ready window
+
+// AF-PKG-006 — extract a .aquashow path from a launch/second-instance argv.
+function showPathFromArgv(argv) {
+  const arg = (argv || []).find(
+    (a) => typeof a === "string" && a.toLowerCase().endsWith(".aquashow")
+  );
+  return arg && fs.existsSync(arg) ? arg : null;
+}
+
+// Deliver an .aquashow to the renderer once it exists; queue it otherwise. A basic
+// readability check turns a corrupted/missing file into a dialog rather than a crash.
+function handleOpenShow(filePath) {
+  if (!filePath) return;
+  try {
+    if (!fs.existsSync(filePath)) throw new Error("file not found");
+    fs.accessSync(filePath, fs.constants.R_OK);
+  } catch {
+    try {
+      dialog.showErrorBox("Cannot open show", `The file could not be read:\n${filePath}`);
+    } catch { /* ignore */ }
+    return;
+  }
+  if (mainWindow && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send("open-show", filePath);
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  } else {
+    pendingOpenPath = filePath;
+  }
+}
 
 // ── Single instance ───────────────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_e, argv) => {
+    // AF-PKG-006 — a second launch (e.g. double-clicking another .aquashow) forwards its
+    // argv here; load it in the existing instance instead of starting a new one.
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+    handleOpenShow(showPathFromArgv(argv));
   });
+  // macOS delivers file opens via this event (kept for a future Tier B mac build).
+  app.on("open-file", (e, filePath) => { e.preventDefault(); handleOpenShow(filePath); });
   app.whenReady().then(boot);
 }
 
@@ -89,6 +125,10 @@ function createMainWindow() {
     );
   }
 
+  mainWindow.webContents.once("did-finish-load", () => {
+    // AF-PKG-006 — flush a queued .aquashow (from launch argv) once the UI is ready.
+    if (pendingOpenPath) { handleOpenShow(pendingOpenPath); pendingOpenPath = null; }
+  });
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
@@ -99,6 +139,8 @@ function createMainWindow() {
 
 // ── Boot sequence ───────────────────────────────────────────────────────────────
 async function boot() {
+  // AF-PKG-006 — capture a .aquashow passed on the initial launch command line.
+  pendingOpenPath = showPathFromArgv(process.argv.slice(1));
   createSplash();
   try {
     const cfg = resolveConfig();
