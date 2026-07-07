@@ -1,85 +1,171 @@
 // AquaFlow Studio — Electron main process.
 //
-// AF-PKG-001 scaffolding: an intentionally minimal shell. It shows a blank branded
-// window and does NOT yet launch the backend or load the frontend — that arrives in
-// AF-PKG-003 (frontend) and AF-PKG-004 (startup orchestration). Keeping this stage a
-// pure skeleton makes each later task independently verifiable.
+// AF-PKG-004 startup orchestration: pick a free port → spawn the backend engine →
+// show a branded splash while polling /api/health → open the main window on the local
+// frontend build → shut the engine down cleanly on exit. Errors surface as dialogs, not
+// crashes. A single-instance lock keeps one process group (also needed for .aquashow in
+// AF-PKG-006).
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
+const { findFreePort, startEngine, waitForHealth, stopEngine } = require("./launcher");
+const { resolveConfig } = require("./app-config");
+
 // LuxuryCon brand.
 const BRAND = { forest: "#0D2A1A", gold: "#C9A227" };
-
-// AF-PKG-003 — the built frontend lives in web/ (produced by scripts/build-web.js).
 const WEB_INDEX = path.join(__dirname, "web", "index.html");
+const SPLASH = path.join(__dirname, "splash.html");
 
 let mainWindow = null;
+let splashWindow = null;
+let engine = null; // { child, mode, command }
+let enginePort = 0;
+let shuttingDown = false;
 
-// The backend base URL is passed to the renderer as query params the frontend's config
-// override chain already honours (src/config.js). In AF-PKG-003 there is no backend yet,
-// so this is empty; AF-PKG-004 fills it with the launched engine's host:port.
-function webQuery() {
-  const base = process.env.AQUAFLOW_RENDERER_API_BASE || "";
-  const ws = process.env.AQUAFLOW_RENDERER_WS_URL || "";
-  const q = {};
-  if (base) q.api = base;
-  if (ws) q.ws = ws;
-  return q;
+// ── Single instance ───────────────────────────────────────────────────────────────
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+  app.whenReady().then(boot);
 }
 
-const SCAFFOLD_HTML =
-  "data:text/html;charset=utf-8," +
-  encodeURIComponent(
-    `<!doctype html><html><body style="margin:0;height:100vh;display:flex;` +
-      `align-items:center;justify-content:center;background:${BRAND.forest};` +
-      `color:${BRAND.gold};font-family:system-ui,sans-serif">` +
-      `<div style="text-align:center"><div style="font-size:28px;font-weight:700;` +
-      `letter-spacing:.1em">AquaFlow Studio</div>` +
-      `<div style="opacity:.7;margin-top:8px">LuxuryCon · desktop shell — run ` +
-      `<code>npm run build:web</code> to bundle the UI</div></div></body></html>`
-  );
+// ── Splash ──────────────────────────────────────────────────────────────────────
+function createSplash() {
+  splashWindow = new BrowserWindow({
+    width: 420, height: 300, frame: false, resizable: false, show: true,
+    backgroundColor: BRAND.forest, center: true, alwaysOnTop: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  splashWindow.loadFile(SPLASH);
+}
 
-function createWindow() {
+function setSplashStatus(text) {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents
+      .executeJavaScript(`window.setSplashStatus && window.setSplashStatus(${JSON.stringify(text)})`)
+      .catch(() => {});
+  }
+}
+
+// ── Main window ───────────────────────────────────────────────────────────────────
+function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 680,
-    backgroundColor: BRAND.forest,
-    title: "AquaFlow Studio — LuxuryCon",
+    width: 1440, height: 900, minWidth: 1024, minHeight: 680,
+    backgroundColor: BRAND.forest, title: "AquaFlow Studio — LuxuryCon",
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
 
-  // AF-PKG-003 — load the local production frontend build if present (loaded from disk,
-  // not a URL), passing the backend api/ws as query params. Falls back to the branded
-  // scaffold placeholder if the UI has not been built yet.
+  const query = {
+    api: `http://127.0.0.1:${enginePort}/api`,
+    ws: `ws://127.0.0.1:${enginePort}/ws`,
+  };
+
   if (fs.existsSync(WEB_INDEX)) {
-    mainWindow.loadFile(WEB_INDEX, { query: webQuery() });
+    mainWindow.loadFile(WEB_INDEX, { query });
   } else {
-    mainWindow.loadURL(SCAFFOLD_HTML);
+    // UI not built — show a clear message instead of a blank/broken window.
+    mainWindow.loadURL(
+      "data:text/html;charset=utf-8," +
+        encodeURIComponent(
+          `<body style="margin:0;height:100vh;display:flex;align-items:center;` +
+            `justify-content:center;background:${BRAND.forest};color:${BRAND.gold};` +
+            `font-family:system-ui">Frontend not built — run <code>npm run build:web</code>.</body>`
+        )
+    );
   }
 
-  mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.on("closed", () => {
-    mainWindow = null;
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+    splashWindow = null;
   });
+  mainWindow.on("closed", () => { mainWindow = null; });
 }
 
-app.whenReady().then(createWindow);
+// ── Boot sequence ───────────────────────────────────────────────────────────────
+async function boot() {
+  createSplash();
+  try {
+    const cfg = resolveConfig();
+    if (!cfg.hasLicenseSecret) {
+      throw new Error(
+        "No license secret configured. Provision resources/app-config.json (licenseSecret) " +
+          "or set AQUAFLOW_LICENSE_SECRET before launch."
+      );
+    }
 
-app.on("window-all-closed", () => {
-  // Windows/Linux: quit when all windows are closed.
-  if (process.platform !== "darwin") app.quit();
+    setSplashStatus("Selecting port…");
+    enginePort = await findFreePort(8000);
+
+    setSplashStatus("Starting engine…");
+    engine = startEngine({
+      port: enginePort,
+      licenseSecret: cfg.licenseSecret,
+      onLog: (line) => process.stdout.write(`[engine] ${line}`),
+    });
+
+    // If the engine process dies before we're up, fail fast with a dialog.
+    engine.child.once("exit", (code) => {
+      if (!shuttingDown && !mainWindow) {
+        fatal(`The AquaFlow engine exited during startup (code ${code}).`);
+      }
+    });
+
+    setSplashStatus("Waiting for engine health…");
+    await waitForHealth(enginePort, { timeoutMs: 30000 });
+
+    setSplashStatus("Loading interface…");
+    createMainWindow();
+  } catch (err) {
+    fatal(String(err && err.message ? err.message : err));
+  }
+}
+
+function fatal(message) {
+  if (shuttingDown) return;
+  try {
+    dialog.showErrorBox(
+      "AquaFlow Studio — startup failed",
+      `${message}\n\nThe application will now close.`
+    );
+  } catch { /* ignore */ }
+  cleanupAndQuit();
+}
+
+// ── Shutdown ──────────────────────────────────────────────────────────────────────
+async function cleanupAndQuit() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try { if (engine && engine.child) await stopEngine(engine.child); } catch { /* ignore */ }
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+  app.quit();
+}
+
+app.on("before-quit", (e) => {
+  if (shuttingDown) return;
+  e.preventDefault();
+  cleanupAndQuit();
 });
 
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") cleanupAndQuit();
+});
+
+// Last-resort: never leave the engine orphaned.
+process.on("exit", () => {
+  try { if (engine && engine.child && engine.child.exitCode === null) engine.child.kill("SIGKILL"); }
+  catch { /* ignore */ }
 });
