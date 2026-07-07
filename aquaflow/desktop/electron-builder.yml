@@ -14,7 +14,14 @@ directories:
 files:
   - main.js
   - preload.js
+  - launcher.js
+  - app-config.js
+  - menu.js
+  - updater.js
+  - splash.html
+  - "assets/**/*"           # icon.png, shield.png, splash.png (runtime), *.ico
   - "web/**/*"
+  - package.json
   - "!**/*.map"
 
 extraResources:
@@ -26,17 +33,17 @@ extraResources:
 win:
   target:
     - nsis
-  icon: build/icon.png              # AF-PKG-005 — electron-builder converts PNG→ICO (placeholder; CEO swaps the real logo)
+  icon: build/AquaFlow.ico          # multi-size app icon (shield + water) from generate_brand_assets.py
 
 # AF-PKG-006 — .aquashow file association. Double-clicking a show launches AquaFlow with
-# the file path in argv (handled in main.js). Uses the app icon until a dedicated
-# document icon (build/aquashow.png) is provided.
+# the file path in argv (handled in main.js). Uses a dedicated document icon (shield + water
+# + document fold) from generate_brand_assets.py.
 fileAssociations:
   - ext: aquashow
     name: AquaFlow Show
     description: AquaFlow fountain show
     role: Editor
-    icon: build/icon.png
+    icon: build/aquashow.ico
 
 # AF-PKG-008 — NSIS installer.
 # Default = per-user (no admin prompt), the smoother path for Tier A internal rollout.
@@ -54,22 +61,24 @@ nsis:
   # Upgrades reinstall in place; user data lives in %APPDATA%\AquaFlow Studio and is NOT
   # removed on uninstall/upgrade, so shows/settings survive.
   deleteAppDataOnUninstall: false
-  # Branded installer graphics (CEO to supply — see AF-PKG report). When the real assets
-  # land, drop them in build/ and uncomment:
-  #   installerIcon: build/installerIcon.ico       # 256x256 .ico
-  #   uninstallerIcon: build/uninstallerIcon.ico
-  #   installerHeader: build/installerHeader.bmp    # 150x57 BMP
-  #   installerSidebar: build/installerSidebar.bmp  # 164x314 BMP
-  # Until then electron-builder derives the installer icon from win.icon (build/icon.png).
-artifactName: ${productName}-Setup-${version}.${ext}
+  # Branded installer graphics from generate_brand_assets.py (placeholder LuxuryCon shield
+  # artwork — CEO can supply higher-res finals and re-run the script).
+  installerIcon: build/AquaFlow.ico
+  uninstallerIcon: build/AquaFlow.ico
+  installerHeaderIcon: build/AquaFlow.ico
+  installerHeader: build/installerHeader.bmp     # 150x57 BMP
+  installerSidebar: build/installerSidebar.bmp   # 164x314 BMP
+  uninstallerSidebar: build/installerSidebar.bmp
+artifactName: AquaFlowSetup-${version}.${ext}
 
 # AF-PKG-007 — auto-update feed. `publish` makes electron-builder emit latest.yml
 # (with sha512 checksums) next to the installer so electron-updater can verify downloads.
 # This URL is only the DEFAULT baked into the build; the running app reads its feed URL
 # from AQUAFLOW_UPDATE_URL / bundled app-config.json (admin-only — see updater.js), which
-# is the MITM guard. Serve the feed over HTTPS; code-sign the installer (Tier A note in
-# RELEASE.md) for real tamper resistance.
+# is the MITM guard. Serve the feed over HTTPS. Tier A ships UNSIGNED (no code-signing cert
+# purchased — CEO decision); integrity rests on HTTPS transport + the sha512 checksum in
+# latest.yml. Code-signing is a Tier B task. See RELEASE.md.
 publish:
   - provider: generic
-    url: https://updates.luxuryconworld.com/aquaflow/
+    url: https://luxuryconworld.com/updates/aquaflow/
     channel: latest

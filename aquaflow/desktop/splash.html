@@ -3,41 +3,41 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      /* LuxuryCon brand: forest green #0D2A1A, gold #C9A227 */
+      /* LuxuryCon brand: forest green #0D2A1A / dark #0A1A0F, gold #C9A227, water-blue #1E88E5 */
       html, body { margin: 0; height: 100%; overflow: hidden; }
       body {
-        background: radial-gradient(120% 120% at 50% 30%, #123522 0%, #0D2A1A 70%);
-        color: #C9A227; font-family: system-ui, "Segoe UI", sans-serif;
-        display: flex; align-items: center; justify-content: center; user-select: none;
-      }
-      .wrap { text-align: center; }
-      .mono {
-        width: 84px; height: 84px; margin: 0 auto 18px; border-radius: 18px;
-        background: #0D2A1A; border: 2px solid #C9A227;
+        background: radial-gradient(120% 120% at 50% 28%, #123522 0%, #0A1A0F 72%);
+        color: #C9A227; font-family: Georgia, "Segoe UI", serif; user-select: none;
         display: flex; align-items: center; justify-content: center;
-        font-weight: 800; font-size: 34px; letter-spacing: .02em; color: #C9A227;
       }
-      .title { font-size: 26px; font-weight: 700; letter-spacing: .12em; }
-      .sub { margin-top: 6px; font-size: 12px; opacity: .65; color: #e6d9a8; letter-spacing: .08em; }
-      .barwrap { width: 240px; height: 6px; margin: 22px auto 0; background: rgba(201,162,39,.18);
+      .wrap { text-align: center; padding: 0 24px; }
+      .shield { width: 118px; height: auto; margin: 0 auto 14px; display: block;
+                filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+      .title { font-size: 27px; font-weight: 700; letter-spacing: .04em; color: #C9A227; }
+      .sub { margin-top: 5px; font-size: 12.5px; font-family: system-ui, sans-serif;
+             color: #b79a4e; letter-spacing: .06em; }
+      .barwrap { width: 240px; height: 6px; margin: 20px auto 0; background: rgba(30,136,229,.16);
                  border-radius: 999px; overflow: hidden; }
-      .bar { height: 100%; width: 30%; background: #C9A227; border-radius: 999px;
+      .bar { height: 100%; width: 34%; background: #1E88E5; border-radius: 999px;
              animation: slide 1.2s ease-in-out infinite; }
-      @keyframes slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
-      .status { margin-top: 12px; font-size: 11px; opacity: .55; color: #e6d9a8; min-height: 14px; }
+      @keyframes slide { 0% { margin-left: -34%; } 100% { margin-left: 100%; } }
+      .status { margin-top: 11px; font-size: 11px; font-family: system-ui, sans-serif;
+                color: #8fa38f; min-height: 14px; }
+      .tag { margin-top: 10px; font-size: 10.5px; font-family: system-ui, sans-serif;
+             letter-spacing: .18em; text-transform: uppercase; color: #7a6a34; }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <!-- AF-PKG-005 swaps this monogram for the LuxuryCon logo asset. -->
-      <div class="mono">AF</div>
+      <img class="shield" src="assets/shield.png" alt="LuxuryCon" />
       <div class="title">AquaFlow Studio</div>
-      <div class="sub">LUXURYCON</div>
+      <div class="sub">by LuxuryCon</div>
       <div class="barwrap"><div class="bar"></div></div>
       <div class="status" id="status">Starting engine…</div>
+      <div class="tag">Exceed Yourself</div>
     </div>
     <script>
-      // The main process updates this via IPC-free title channel (executeJavaScript).
+      // The main process updates this via executeJavaScript on the splash webContents.
       window.setSplashStatus = (t) => { document.getElementById("status").textContent = t; };
     </script>
   </body>

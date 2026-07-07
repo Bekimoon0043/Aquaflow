@@ -25,26 +25,24 @@ whether an update is available. Never ship two builds with the same version.
 
 ---
 
-## 2. Code signing (required for a real release)
+## 2. Code signing — SKIPPED for Tier A (CEO decision)
 
-Auto-update integrity depends on it. Without a signing certificate the installer is
-**unsigned** and integrity rests on HTTPS transport + the sha512 checksum in `latest.yml`
-only — acceptable for a controlled internal LAN, **not** for wider distribution.
+**Tier A ships UNSIGNED.** No Authenticode certificate will be purchased for Tier A (there is
+no free option for code-signing certificates). This is an accepted, documented decision:
 
-To sign, provide the Authenticode certificate to electron-builder via env before `npm run dist`:
+- **Windows SmartScreen** will show an **"Unknown publisher"** / "Windows protected your PC"
+  warning on first install. This is expected for internal use. Users click
+  **"More info" → "Run anyway"**. Document this in the install instructions given to each
+  operator (also in FIRST-BUILD-GUIDE.md and the installer README).
+- Integrity in the meantime rests on **HTTPS transport + the SHA-256/sha512 checksum** in
+  `latest.yml` (verified automatically by electron-updater on download). Publish the SHA-256
+  of each installer alongside it so a manual install can be checked too.
+- **Purchasing a code-signing certificate is a Tier B task.** When one is obtained, sign by
+  setting `CSC_LINK` (path to `.pfx` or base64) + `CSC_KEY_PASSWORD` before `npm run dist`;
+  electron-builder then signs the app + installer and electron-updater verifies the signature.
 
-```bash
-export CSC_LINK="C:/path/to/cert.pfx"      # or a base64 cert
-export CSC_KEY_PASSWORD="********"
-npm run dist
-```
-
-electron-builder signs both the app and the installer, and electron-updater then verifies
-the signature on download.
-
-> **Current status:** no certificate provisioned. See AF-PKG-VERIFICATION-REPORT §8 — the CEO
-> must supply the cert. Until then, releases are **checksum-verified, not signed**, and this
-> must be stated in the release notes.
+> **Current status:** intentionally unsigned for Tier A → releases are **checksum-verified,
+> not signed**, and each release note must say so.
 
 ---
 
@@ -52,12 +50,12 @@ the signature on download.
 
 `electron-builder.yml` `publish` is a **generic** provider. `npm run dist` emits, in `dist/`:
 
-- `AquaFlow Studio-Setup-<version>.exe` — the installer
+- `AquaFlowSetup-<version>.exe` — the installer
 - `latest.yml` — version + sha512 metadata electron-updater reads
 - (blockmap for differential download)
 
-Publish by copying **all three** to the feed root (the `updateUrl`), e.g.
-`https://updates.luxuryconworld.com/aquaflow/`. Serve over **HTTPS**. The running app reads
+Publish by copying **all three** to the feed root (the `updateUrl`):
+`https://luxuryconworld.com/updates/aquaflow/`. Serve over **HTTPS**. The running app reads
 its feed URL from `AQUAFLOW_UPDATE_URL` / bundled `app-config.json` only — never from the UI
 (MITM guard, see `updater.js`).
 

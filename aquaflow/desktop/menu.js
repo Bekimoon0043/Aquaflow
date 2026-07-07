@@ -30,12 +30,13 @@ function showAbout() {
     title: "About AquaFlow Studio",
     message: "AquaFlow Studio",
     detail:
+      `by LuxuryCon — Exceed Yourself\n\n` +
       `Version ${app.getVersion()}\n` +
       `© ${new Date().getFullYear()} LuxuryCon. All rights reserved.\n\n` +
       `Fountain design, engineering, programming & operation platform.\n` +
       `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node ${process.versions.node}`,
     buttons: ["OK"],
-    icon: path.join(__dirname, "build", "icon.png"),
+    icon: path.join(__dirname, "assets", "icon.png"),
   });
 }
 

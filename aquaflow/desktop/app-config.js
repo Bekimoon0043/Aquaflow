@@ -31,7 +31,13 @@ function resolveConfig() {
   const bundled = readBundledConfig();
   const licenseSecret =
     process.env.AQUAFLOW_LICENSE_SECRET || bundled.licenseSecret || (app.isPackaged ? "" : DEV_SECRET);
-  const updateUrl = process.env.AQUAFLOW_UPDATE_URL || bundled.updateUrl || "";
+  // Auto-update feed. Hardcoded LuxuryCon default (admin-overridable via env or bundled
+  // app-config.json only — never user-editable, the MITM guard). The server need not exist
+  // yet; updater.js is silent when it is unreachable.
+  const updateUrl =
+    process.env.AQUAFLOW_UPDATE_URL ||
+    bundled.updateUrl ||
+    "https://luxuryconworld.com/updates/aquaflow/";
   return {
     licenseSecret,
     updateUrl,

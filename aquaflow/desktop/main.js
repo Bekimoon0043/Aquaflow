@@ -21,7 +21,7 @@ const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindo
 const BRAND = { forest: "#0D2A1A", gold: "#C9A227" };
 const WEB_INDEX = path.join(__dirname, "web", "index.html");
 const SPLASH = path.join(__dirname, "splash.html");
-const APP_ICON = path.join(__dirname, "build", "icon.png"); // AF-PKG-005 (placeholder)
+const APP_ICON = path.join(__dirname, "assets", "icon.png"); // shield + water (generate_brand_assets.py)
 
 let mainWindow = null;
 let splashWindow = null;

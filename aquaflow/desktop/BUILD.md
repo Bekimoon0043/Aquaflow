@@ -51,7 +51,7 @@ Run from `aquaflow/desktop`:
 | `npm run build:web` | Vite production build with `--base=./` (for `file://` loading) | `desktop/web/` |
 | `npm run build:engine` | PyInstaller freezes the backend via `aquaflow-engine.spec` | `desktop/resources/engine/aquaflow-engine.exe` |
 | `npm run pack` | Unpacked app dir (fast smoke test, no installer) | `desktop/dist/win-unpacked/` |
-| `npm run dist` | Full build: web + engine + **NSIS installer** | `desktop/dist/AquaFlow Studio-Setup-<version>.exe` (+ `latest.yml`) |
+| `npm run dist` | Full build: web + engine + **NSIS installer** | `desktop/dist/AquaFlowSetup-<version>.exe` (+ `latest.yml`) |
 | `npm start` | Run the shell in dev against a locally-built `web/` + dev engine | — |
 
 A complete release build is just:
@@ -76,7 +76,7 @@ Resolved at runtime by `app-config.js` (priority: env → bundled `resources/app
 For a provisioned installer, ship a `resources/app-config.json`:
 
 ```json
-{ "licenseSecret": "…", "updateUrl": "https://updates.luxuryconworld.com/aquaflow/" }
+{ "licenseSecret": "…", "updateUrl": "https://luxuryconworld.com/updates/aquaflow/" }
 ```
 
 ---
