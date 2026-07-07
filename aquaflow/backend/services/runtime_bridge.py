@@ -1,8 +1,23 @@
 """
 runtime_bridge.py — AquaFlow Team D
-Compiled show → live hardware output bridge scaffold.
 
-This is the last mile between the compiled event list and the physical devices.
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║ AF-HUB-020 — INTERNAL / TEST-ONLY. NOT part of the supported Tier A production     ║
+║ surface. This ProtocolRouter dispatches through a bus interface that only the      ║
+║ in-memory VirtualProtocolBus (used in tests) implements — the real production      ║
+║ engine/protocol_bus.ProtocolBus has no send_artnet/send_modbus/send_relay, so this ║
+║ path is exercised by unit tests only, never by the live runtime.                   ║
+║                                                                                    ║
+║ THE LIVE PRODUCTION OUTPUT PATH IS:                                                 ║
+║     show_engine._playback_loop → protocol_bus._route_command → real drivers        ║
+║ (single 100 Hz authority, AF-HUB-013; fail-closed routing, AF-HUB-015).            ║
+║                                                                                    ║
+║ Do not wire this module into a live route or the runtime without first completing  ║
+║ it against the real ProtocolBus (AF-HUB-020 Option A). See                         ║
+║ aquaflow/docs/RUNTIME_ARCHITECTURE.md.                                             ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+Compiled show → hardware output bridge scaffold (test-only).
 At each SHOW tick (100Hz), the bridge:
   1. Reads the current show clock position
   2. Fetches newly-crossed compiled events
@@ -42,6 +57,11 @@ from enum import Enum
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+# AF-HUB-020 — machine-checkable marker: this module is NOT the live production output
+# path. The live path is show_engine → protocol_bus._route_command. Tests assert this.
+IS_PRODUCTION_PATH = False
+LIVE_OUTPUT_PATH = "show_engine._playback_loop -> protocol_bus._route_command"
 
 
 # ── Bridge State ──────────────────────────────────────────────────────────────

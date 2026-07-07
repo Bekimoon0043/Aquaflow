@@ -36,6 +36,22 @@ As of AF-HUB-013 it is **demoted** (`TIMING_AUTHORITY = False`):
 The `/api/.../transport/*` routes operate on this mirror for display/snapshot purposes;
 they do not run a clock and cannot drive hardware output.
 
+## The live production output path (AF-HUB-020)
+
+The ONE live path from a playing show to hardware is:
+
+```
+show_engine._playback_loop (100 Hz)  →  protocol_bus._route_command  →  real drivers
+                                          (fail-closed routing, AF-HUB-015)
+```
+
+`services/runtime_bridge.py` (ProtocolRouter / RuntimeBridge) is **INTERNAL / TEST-ONLY**
+and is **NOT** part of the supported Tier A production surface. It dispatches through a bus
+interface (`send_artnet`/`send_modbus`/`send_relay`) that only the in-memory
+`VirtualProtocolBus` implements; the real `ProtocolBus` does not, so runtime_bridge is
+exercised by unit tests only and never by the live runtime. `runtime_bridge.IS_PRODUCTION_PATH`
+is `False` (asserted by tests). Completing it against the real bus is a future Option-A task.
+
 ## Safe-shutdown authority: `RuntimeAuthority`
 
 `engine/runtime_authority.py::RuntimeAuthority` (AF-HUB-006B) remains the single

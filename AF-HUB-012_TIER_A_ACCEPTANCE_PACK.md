@@ -59,6 +59,21 @@ The 21 skips are the fix-strategy contract tests, which require the transient
 - `AF-HUB-011_COMMISSIONING_RECORD.md` — blank results record for the bench run.
 - `AF-HUB-009_AUDIT_EVIDENCE.md` — evidence pack for the independent reviewer.
 
+### 2.4 Live production output path (AF-HUB-020)
+
+The ONE supported live path from a playing show to hardware is:
+
+```
+show_engine._playback_loop (single 100 Hz authority) → protocol_bus._route_command → real drivers
+```
+
+`services/runtime_bridge.py` (ProtocolRouter / RuntimeBridge) is **INTERNAL / TEST-ONLY**
+and is **not** part of the supported production surface: it dispatches through a bus
+interface only the in-memory `VirtualProtocolBus` implements, so it runs in unit tests
+only, never in the live runtime (`runtime_bridge.IS_PRODUCTION_PATH == False`, asserted by
+tests). No API route exposes it (the `/runtime/status` endpoint is the unrelated
+compiler-bridge). See `aquaflow/docs/RUNTIME_ARCHITECTURE.md`.
+
 ## 3. Tier A acceptance criteria (checklist)
 
 | # | Criterion | State | Source of truth |
