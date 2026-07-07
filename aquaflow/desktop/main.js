@@ -12,11 +12,13 @@ const fs = require("fs");
 
 const { findFreePort, startEngine, waitForHealth, stopEngine } = require("./launcher");
 const { resolveConfig } = require("./app-config");
+const { buildMenu } = require("./menu");
 
 // LuxuryCon brand.
 const BRAND = { forest: "#0D2A1A", gold: "#C9A227" };
 const WEB_INDEX = path.join(__dirname, "web", "index.html");
 const SPLASH = path.join(__dirname, "splash.html");
+const APP_ICON = path.join(__dirname, "build", "icon.png"); // AF-PKG-005 (placeholder)
 
 let mainWindow = null;
 let splashWindow = null;
@@ -42,7 +44,7 @@ if (!gotLock) {
 function createSplash() {
   splashWindow = new BrowserWindow({
     width: 420, height: 300, frame: false, resizable: false, show: true,
-    backgroundColor: BRAND.forest, center: true, alwaysOnTop: true,
+    backgroundColor: BRAND.forest, center: true, alwaysOnTop: true, icon: APP_ICON,
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   splashWindow.loadFile(SPLASH);
@@ -61,7 +63,7 @@ function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1024, minHeight: 680,
     backgroundColor: BRAND.forest, title: "AquaFlow Studio — LuxuryCon",
-    show: false,
+    icon: APP_ICON, show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
@@ -128,6 +130,7 @@ async function boot() {
     await waitForHealth(enginePort, { timeoutMs: 30000 });
 
     setSplashStatus("Loading interface…");
+    buildMenu(); // AF-PKG-005 — File/View/Help + About
     createMainWindow();
   } catch (err) {
     fatal(String(err && err.message ? err.message : err));

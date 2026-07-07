@@ -26,7 +26,7 @@ extraResources:
 win:
   target:
     - nsis
-  # icon: build/icon.ico            # AF-PKG-005
+  icon: build/icon.png              # AF-PKG-005 — electron-builder converts PNG→ICO (placeholder; CEO swaps the real logo)
   # fileAssociations added in AF-PKG-006
 
 # NSIS installer (fleshed out in AF-PKG-008).
