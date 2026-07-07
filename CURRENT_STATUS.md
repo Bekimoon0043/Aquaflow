@@ -5,6 +5,27 @@
 > `npm run build` green. Single source of truth: `AQUAFLOW_STATUS_CANONICAL.md`. Test/task
 > numbers in the dated entries below are point-in-time snapshots — the line above is current.
 
+**Date:** 2026-07-07
+**Summary (latest — AF-PKG standalone packaging):** AquaFlow now has a full **desktop-app
+packaging layer** in `aquaflow/desktop/` (delivery track, separate from AF-HUB product
+hardening). **All 10 AF-PKG tasks are CODE-COMPLETE and pushed** — 001 scaffolding · 002
+PyInstaller engine bundle (`aquaflow-engine.spec` + frozen `engine_entry.py`) · 003 Vite web
+build (`--base=./`) · 004 startup orchestration (free-port → spawn engine → health-poll →
+window; env scrubbing; graceful shutdown) · 005 branding (placeholder icon/splash/menu/About)
+· 006 `.aquashow` file association · 007 auto-update (electron-updater, admin-only feed URL =
+MITM guard) · 008 NSIS installer config (per-user default, data-preserving upgrade) · 009
+`AF-PKG-VERIFICATION-REPORT.md` · 010 `BUILD.md` + `RELEASE.md`. The existing frontend/backend
+were **wrapped, not modified** (backend still **532 passed**). **Environment ceiling (honest):**
+this sandbox cannot download the Electron binary (an in-sandbox `npm install` failed on exactly
+that), run a PyInstaller `.exe` (PyInstaller needs a 3.10–3.12 build venv, not the repo's 3.14),
+build/run NSIS, or test on a clean machine — so **every GUI/build/installer/clean-machine
+acceptance item is written+wired but marked PENDING for a human on a Windows build machine; none
+self-marked done.** CEO assets still needed: real logo/icon, installer graphics, per-user vs
+per-machine decision, internal HTTPS update-server URL, code-signing cert. Commits `c82b28b →
+b6f629c`; hub `aq-doc-5` updated (migration v28).
+
+---
+
 **Date:** 2026-07-05
 **Summary:** AQ-X-016 — AquaFlow 3D Export Bridge implemented (the last open AQ-X recovery task).
 The live 3D preview scene (pool + water + fixtures + lights) now exports to **glTF/GLB, OBJ+MTL,
