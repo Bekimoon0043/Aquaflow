@@ -5,6 +5,29 @@
 > `npm run build` green. Single source of truth: `AQUAFLOW_STATUS_CANONICAL.md`. Test/task
 > numbers in the dated entries below are point-in-time snapshots — the line above is current.
 
+**Date:** 2026-07-07 (later — branding, update server, license clarification)
+**Summary:** Closed out the CEO's "logo / update-server / license" follow-up. **(1) Branding:**
+new `aquaflow/desktop/scripts/generate_brand_assets.py` (Pillow) builds the real app identity
+from the LuxuryCon shield + an AquaFlow water droplet (blue `#1E88E5`) — `AquaFlow.ico`
+(6 sizes), `aquashow.ico`, `icon.png`, `shield.png`, `splash.png`, and NSIS installer
+sidebar/header BMPs; all generated + committed and wired into `electron-builder.yml`, `main.js`,
+`menu.js`, `splash.html`; `BRAND.md` documents the shield-constant + element + accent system.
+Also **fixed the `files[]` globs** that had omitted `menu.js`/`launcher.js`/`app-config.js`/
+`updater.js`/`splash.html`/`assets` (the packaged app would have failed to load them).
+**(2) Update server:** feed now `https://luxuryconworld.com/updates/aquaflow/` (hardcoded,
+admin-overridable), installer renamed `AquaFlowSetup-<version>.exe`; hub task **LP-UPDATE-001**
+added for the shared LuxuryCon update-server hosting. **(3) License:** confirmed the engine is
+**HMAC-SHA256** (not Ed25519); corrected the hub's 3 Ed25519 claims and the AF-HUB-012 note;
+added a **one-command** non-interactive generator CLI (local — the minting tool is intentionally
+`.gitignore`d) and wrote `LICENSE-ADMIN.md` (CEO self-service issuance) — engine round-trip
+verified (VALID/INVALID_HW/INVALID_SIG), license tests 22/22. **(4) Code signing:** SKIPPED for
+Tier A (CEO decision) — documented SmartScreen "Run anyway" + checksum-only integrity.
+**(5)** `FIRST-BUILD-GUIDE.md` — a zero-experience, copy-paste CEO build guide. Commits
+`765d7e8 → 9541472` (aquaflow) + `f272f4d` (hub). Backend unchanged (532); GUI/installer/
+clean-machine still build-machine-pending.
+
+---
+
 **Date:** 2026-07-07
 **Summary (latest — AF-PKG standalone packaging):** AquaFlow now has a full **desktop-app
 packaging layer** in `aquaflow/desktop/` (delivery track, separate from AF-HUB product
