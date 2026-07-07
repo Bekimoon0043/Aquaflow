@@ -47,7 +47,13 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: AquaFlow Studio
 
-# Auto-update feed (configured in AF-PKG-007; internal for Tier A).
-# publish:
-#   provider: generic
-#   url: https://updates.luxuryconworld.com/aquaflow/
+# AF-PKG-007 — auto-update feed. `publish` makes electron-builder emit latest.yml
+# (with sha512 checksums) next to the installer so electron-updater can verify downloads.
+# This URL is only the DEFAULT baked into the build; the running app reads its feed URL
+# from AQUAFLOW_UPDATE_URL / bundled app-config.json (admin-only — see updater.js), which
+# is the MITM guard. Serve the feed over HTTPS; code-sign the installer (Tier A note in
+# RELEASE.md) for real tamper resistance.
+publish:
+  - provider: generic
+    url: https://updates.luxuryconworld.com/aquaflow/
+    channel: latest

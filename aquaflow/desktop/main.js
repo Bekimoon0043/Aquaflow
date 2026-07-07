@@ -12,7 +12,10 @@ const fs = require("fs");
 
 const { findFreePort, startEngine, waitForHealth, stopEngine } = require("./launcher");
 const { resolveConfig } = require("./app-config");
-const { buildMenu } = require("./menu");
+const { buildMenu, setCheckForUpdatesHook } = require("./menu");
+const { initAutoUpdate, checkForUpdates } = require("./updater");
+
+const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
 
 // LuxuryCon brand.
 const BRAND = { forest: "#0D2A1A", gold: "#C9A227" };
@@ -173,7 +176,13 @@ async function boot() {
 
     setSplashStatus("Loading interface…");
     buildMenu(); // AF-PKG-005 — File/View/Help + About
+    // AF-PKG-007 — menu "Check for Updates…" runs an interactive (non-silent) check.
+    setCheckForUpdatesHook(() => checkForUpdates({ silent: false }, getMainWindow));
     createMainWindow();
+
+    // AF-PKG-007 — configure the update feed and run the silent launch check. Admin-only
+    // URL from resolveConfig(); no-ops cleanly in dev / when unconfigured / offline.
+    initAutoUpdate(getMainWindow, cfg.updateUrl);
   } catch (err) {
     fatal(String(err && err.message ? err.message : err));
   }
