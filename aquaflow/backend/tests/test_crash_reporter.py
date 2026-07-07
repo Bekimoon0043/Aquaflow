@@ -12,8 +12,16 @@ import pytest
 
 from services.crash_reporter import (
     CrashReporter, LogRingBuffer, crash_fingerprint, build_crash_report,
-    report_from_exception, generate_support_report,
+    report_from_exception, generate_support_report, _basename,
 )
+
+
+def test_basename_is_host_agnostic():
+    # AF-HUB-019 — must strip BOTH separators regardless of the host OS (os.path.basename
+    # would only strip the host separator, breaking cross-platform crash de-dup).
+    assert _basename("C:\\opt\\app\\services\\show_engine.py") == "show_engine.py"
+    assert _basename("/opt/app/services/show_engine.py") == "show_engine.py"
+    assert _basename("show_engine.py") == "show_engine.py"
 
 
 def _tb(func, line):

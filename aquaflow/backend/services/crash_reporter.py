@@ -44,13 +44,21 @@ APP_VERSION = "0.1.0"
 _FRAME_RE = re.compile(r'File "([^"]+)", line \d+, in (\S+)')
 
 
+def _basename(p: str) -> str:
+    """AF-HUB-019 — path-style-agnostic basename. os.path.basename only splits on the
+    HOST separator, so on POSIX it does NOT strip a Windows path ('C:\\a\\b.py'), giving
+    the SAME crash two different fingerprints on Windows vs Linux. Split on both."""
+    return (p or "").replace("\\", "/").rsplit("/", 1)[-1]
+
+
 def _normalise_traceback(tb_text: str) -> str:
     """
     Reduce a traceback to a stable signature: one `basename:function` line per frame,
     dropping line numbers, absolute paths and memory addresses so the same bug hashes
-    the same across machines and minor code movement.
+    the same across machines and minor code movement — regardless of the OS path style
+    the traceback was captured with (AF-HUB-019).
     """
-    frames = [f"{os.path.basename(p)}:{fn}" for p, fn in _FRAME_RE.findall(tb_text or "")]
+    frames = [f"{_basename(p)}:{fn}" for p, fn in _FRAME_RE.findall(tb_text or "")]
     if frames:
         return "\n".join(frames)
     s = re.sub(r"0x[0-9a-fA-F]+", "0xADDR", tb_text or "")
