@@ -14,8 +14,14 @@ const { findFreePort, startEngine, waitForHealth, stopEngine } = require("./laun
 const { resolveConfig } = require("./app-config");
 const { buildMenu, setCheckForUpdatesHook } = require("./menu");
 const { initAutoUpdate, checkForUpdates } = require("./updater");
+const { startUiServer } = require("./ui-server");
 
 const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
+
+// Debug logging to stdout (visible in a terminal-launched run). DevTools also auto-open unless
+// AQUAFLOW_DEVTOOLS=0. Set AQUAFLOW_DEVTOOLS=0 to suppress for a clean production run.
+const dbg = (...a) => process.stdout.write(`[aquaflow] ${a.join(" ")}\n`);
+const DEVTOOLS = process.env.AQUAFLOW_DEVTOOLS !== "0";
 
 // LuxuryCon brand.
 const BRAND = { forest: "#0D2A1A", gold: "#C9A227" };
@@ -27,6 +33,7 @@ let mainWindow = null;
 let splashWindow = null;
 let engine = null; // { child, mode, command }
 let enginePort = 0;
+let ui = null;       // loopback UI server { server, port, url, close }
 let shuttingDown = false;
 let pendingOpenPath = null; // AF-PKG-006 — .aquashow path awaiting the ready window
 
@@ -109,15 +116,29 @@ function createMainWindow() {
     },
   });
 
-  const query = {
-    api: `http://127.0.0.1:${enginePort}/api`,
-    ws: `ws://127.0.0.1:${enginePort}/ws`,
-  };
+  // Surface renderer failures in the main-process stdout (visible even without DevTools).
+  const wc = mainWindow.webContents;
+  wc.on("did-fail-load", (_e, code, desc, url) => dbg(`RENDERER did-fail-load ${code} ${desc} — ${url}`));
+  wc.on("render-process-gone", (_e, d) => dbg(`RENDERER gone: ${d && d.reason}`));
+  wc.on("preload-error", (_e, p, err) => dbg(`PRELOAD error ${p}: ${err && err.message}`));
+  wc.on("console-message", (_e, level, message, line, sourceId) =>
+    dbg(`console[${level}] ${message} (${sourceId}:${line})`));
+  if (DEVTOOLS) wc.once("dom-ready", () => { try { wc.openDevTools({ mode: "right" }); } catch {} });
 
-  if (fs.existsSync(WEB_INDEX)) {
-    mainWindow.loadFile(WEB_INDEX, { query });
+  const api = encodeURIComponent(`http://127.0.0.1:${enginePort}/api`);
+  const ws = encodeURIComponent(`ws://127.0.0.1:${enginePort}/ws`);
+
+  if (ui && fs.existsSync(WEB_INDEX)) {
+    // Load over the loopback HTTP server (real origin) — NOT file:// — so the Vite
+    // `type="module" crossorigin` scripts can be fetched (they cannot over file://).
+    const url = `${ui.url("index.html")}?api=${api}&ws=${ws}`;
+    dbg(`engine on 127.0.0.1:${enginePort} · UI server on 127.0.0.1:${ui.port}`);
+    dbg(`loading frontend URL: ${url}`);
+    dbg(`web dir: ${path.join(__dirname, "web")} (index exists: ${fs.existsSync(WEB_INDEX)})`);
+    mainWindow.loadURL(url);
   } else {
-    // UI not built — show a clear message instead of a blank/broken window.
+    // UI not built (or server failed to start) — show a clear message, not a blank window.
+    dbg(`frontend NOT loaded — ui=${!!ui} WEB_INDEX exists=${fs.existsSync(WEB_INDEX)}`);
     mainWindow.loadURL(
       "data:text/html;charset=utf-8," +
         encodeURIComponent(
@@ -129,6 +150,7 @@ function createMainWindow() {
   }
 
   mainWindow.webContents.once("did-finish-load", () => {
+    dbg("renderer did-finish-load");
     // AF-PKG-006 — flush a queued .aquashow (from launch argv) once the UI is ready.
     if (pendingOpenPath) { handleOpenShow(pendingOpenPath); pendingOpenPath = null; }
   });
@@ -175,11 +197,27 @@ async function boot() {
     // may serve on its own default (e.g. 8000) regardless of the port we requested; the
     // frontend and health check must use that real port or the window loads blank.
     enginePort = await engine.whenPort;
+    dbg(`engine reported port: ${enginePort} (${engine.mode})`);
 
     setSplashStatus("Waiting for engine health…");
-    await waitForHealth(enginePort, { timeoutMs: 30000 });
+    try {
+      await waitForHealth(enginePort, { timeoutMs: 30000 });
+      dbg(`health check PASSED on 127.0.0.1:${enginePort}/api/health`);
+    } catch (e) {
+      dbg(`health check FAILED on 127.0.0.1:${enginePort}: ${e && e.message}`);
+      throw e;
+    }
 
     setSplashStatus("Loading interface…");
+    // Serve the frontend build over a loopback HTTP server (real origin) so ES-module scripts
+    // load — they cannot be fetched over file://. See ui-server.js.
+    try {
+      ui = await startUiServer(path.join(__dirname, "web"));
+      dbg(`UI server started on 127.0.0.1:${ui.port}`);
+    } catch (e) {
+      dbg(`UI server failed to start: ${e && e.message}`);
+      ui = null;
+    }
     buildMenu(); // AF-PKG-005 — File/View/Help + About
     // AF-PKG-007 — menu "Check for Updates…" runs an interactive (non-silent) check.
     setCheckForUpdatesHook(() => checkForUpdates({ silent: false }, getMainWindow));
@@ -208,6 +246,7 @@ function fatal(message) {
 async function cleanupAndQuit() {
   if (shuttingDown) return;
   shuttingDown = true;
+  try { if (ui && ui.close) await ui.close(); } catch { /* ignore */ }
   try { if (engine && engine.child) await stopEngine(engine.child); } catch { /* ignore */ }
   if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
   app.quit();
