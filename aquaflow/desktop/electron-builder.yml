@@ -25,6 +25,12 @@ files:
   - package.json
   - "!**/*.map"
 
+# Audit F3: the ui-server streams web/ with plain node fs, which cannot be trusted to read
+# files inside app.asar. Unpack web/ to app.asar.unpacked so it exists as real files on disk
+# (main.js resolveWebRoot() prefers that path).
+asarUnpack:
+  - "web/**"
+
 extraResources:
   - from: resources/engine
     to: engine

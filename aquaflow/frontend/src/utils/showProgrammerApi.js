@@ -2,8 +2,13 @@
 // API helper for Show Programmer backend persistence
 // With timeout handling, retry logic, and error recovery
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const SHOW_PROGRAMMER_API = `${API_BASE_URL}/api/show-programmer`;
+// Audit F5 (AF-PKG blank-screen audit): was `import.meta.env.VITE_API_URL || 'http://localhost:8000'`
+// — a wrong env-var name (canonical is VITE_API_BASE_URL) AND a hardcoded fallback, both of
+// which bypassed the ?api= override the packaged desktop app relies on. Use the shared config
+// origin (query param → localStorage → inferred), same source as every other panel.
+import { BACKEND_ORIGIN } from "../config";
+
+const SHOW_PROGRAMMER_API = `${BACKEND_ORIGIN}/api/show-programmer`;
 
 // Configuration
 const DEFAULT_TIMEOUT_MS = 10000; // 10 seconds
@@ -106,7 +111,7 @@ export function validateProgramData(program) {
  */
 export async function checkBackendHealth() {
   try {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/api/health`, {
+    const response = await fetchWithTimeout(`${BACKEND_ORIGIN}/api/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -287,7 +292,7 @@ export async function compileProgram(programId, outputFormat = 'json', dryRun = 
  */
 export async function testBackendConnection() {
   try {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/api/health`, {
+    const response = await fetchWithTimeout(`${BACKEND_ORIGIN}/api/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });

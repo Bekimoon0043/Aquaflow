@@ -25,7 +25,16 @@ const DEVTOOLS = process.env.AQUAFLOW_DEVTOOLS !== "0";
 
 // LuxuryCon brand.
 const BRAND = { forest: "#0D2A1A", gold: "#C9A227" };
-const WEB_INDEX = path.join(__dirname, "web", "index.html");
+// Audit F3: web/ is asarUnpack'ed (electron-builder.yml) because the ui-server streams it
+// with plain node fs, which cannot be trusted to read inside app.asar. When running from the
+// asar, prefer the real on-disk copy under app.asar.unpacked; in dev __dirname is a plain dir.
+function resolveWebRoot() {
+  const inAsar = path.join(__dirname, "web");
+  const unpacked = inAsar.replace(/app\.asar([\\/])/, "app.asar.unpacked$1");
+  return (unpacked !== inAsar && fs.existsSync(path.join(unpacked, "index.html"))) ? unpacked : inAsar;
+}
+const WEB_ROOT = resolveWebRoot();
+const WEB_INDEX = path.join(WEB_ROOT, "index.html");
 const SPLASH = path.join(__dirname, "splash.html");
 const APP_ICON = path.join(__dirname, "assets", "icon.png"); // shield + water (generate_brand_assets.py)
 
@@ -134,7 +143,7 @@ function createMainWindow() {
     const url = `${ui.url("index.html")}?api=${api}&ws=${ws}`;
     dbg(`engine on 127.0.0.1:${enginePort} · UI server on 127.0.0.1:${ui.port}`);
     dbg(`loading frontend URL: ${url}`);
-    dbg(`web dir: ${path.join(__dirname, "web")} (index exists: ${fs.existsSync(WEB_INDEX)})`);
+    dbg(`web root: ${WEB_ROOT} (index exists: ${fs.existsSync(WEB_INDEX)})`);
     mainWindow.loadURL(url);
   } else {
     // UI not built (or server failed to start) — show a clear message, not a blank window.
@@ -176,6 +185,17 @@ async function boot() {
       );
     }
 
+    // Start the loopback UI server FIRST (no dependencies) so its origin can be injected
+    // into the engine's CORS env below. Serves WEB_ROOT (asar-unpacked in a packaged app).
+    setSplashStatus("Starting UI server…");
+    try {
+      ui = await startUiServer(WEB_ROOT);
+      dbg(`UI server on 127.0.0.1:${ui.port} serving ${WEB_ROOT}`);
+    } catch (e) {
+      dbg(`UI server failed to start: ${e && e.message}`);
+      ui = null;
+    }
+
     setSplashStatus("Selecting port…");
     enginePort = await findFreePort(8000);
 
@@ -183,6 +203,9 @@ async function boot() {
     engine = startEngine({
       port: enginePort,
       licenseSecret: cfg.licenseSecret,
+      // Belt-and-braces: the backend regex already allows any 127.0.0.1 port, but list the
+      // UI server's exact origin too so CORS holds even if the regex ever changes.
+      corsOrigins: ui ? [`http://127.0.0.1:${ui.port}`] : [],
       onLog: (line) => process.stdout.write(`[engine] ${line}`),
     });
 
@@ -209,15 +232,6 @@ async function boot() {
     }
 
     setSplashStatus("Loading interface…");
-    // Serve the frontend build over a loopback HTTP server (real origin) so ES-module scripts
-    // load — they cannot be fetched over file://. See ui-server.js.
-    try {
-      ui = await startUiServer(path.join(__dirname, "web"));
-      dbg(`UI server started on 127.0.0.1:${ui.port}`);
-    } catch (e) {
-      dbg(`UI server failed to start: ${e && e.message}`);
-      ui = null;
-    }
     buildMenu(); // AF-PKG-005 — File/View/Help + About
     // AF-PKG-007 — menu "Check for Updates…" runs an interactive (non-silent) check.
     setCheckForUpdatesHook(() => checkForUpdates({ silent: false }, getMainWindow));

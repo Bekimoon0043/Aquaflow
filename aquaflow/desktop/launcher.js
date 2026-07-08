@@ -57,19 +57,28 @@ function detectPortFromLog(text) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-/** Spawn the engine bound to `port`. Never enables any dev/unsafe flag. */
-function startEngine({ port, licenseSecret, extraEnv = {}, onLog = () => {}, portTimeoutMs = 8000 }) {
-  const { command, args, cwd, mode } = resolveEngine();
-  // Allow the packaged frontend's file:// origin (Origin: null) through the backend CORS.
-  // get_allowed_origins() reads this at startup, so it works on the already-built engine with
-  // no rebuild. Merge with any pre-set value rather than clobbering it.
-  const corsOrigins = [process.env.AQUAFLOW_CORS_ORIGINS, "null"].filter(Boolean).join(",");
+/** Spawn the engine bound to `port`. Never enables any dev/unsafe flag.
+ *  `_engine` overrides resolveEngine() for headless tests only (resolveEngine needs electron). */
+function startEngine({ port, licenseSecret, corsOrigins = [], extraEnv = {}, onLog = () => {}, portTimeoutMs = 8000, _engine = null }) {
+  const { command, args, cwd, mode } = _engine || resolveEngine();
+  // CORS origins the engine must allow, read by get_allowed_origins() at startup (works on
+  // the already-built engine, no rebuild): "null" covers a file:// fallback; callers add the
+  // loopback UI-server origin. (The backend regex already allows any 127.0.0.1 port — this is
+  // belt-and-braces.) Merge with any pre-set value rather than clobbering it.
+  const corsList = [process.env.AQUAFLOW_CORS_ORIGINS, "null"].concat(corsOrigins).filter(Boolean).join(",");
   const env = {
     ...process.env,
     AQUAFLOW_HOST: "127.0.0.1",
     AQUAFLOW_PORT: String(port),
     AQUAFLOW_LICENSE_SECRET: licenseSecret,
-    AQUAFLOW_CORS_ORIGINS: corsOrigins,
+    AQUAFLOW_CORS_ORIGINS: corsList,
+    // CRITICAL (audit F1): with stdout PIPED (as here), Python 3.10-3.12 on Windows encodes
+    // stdout as cp1252 and the backend's startup banner prints "✅ …" — UnicodeEncodeError,
+    // engine dies at import. It runs fine standalone in a terminal (console API handles
+    // Unicode), which is exactly why the crash only appears inside the packaged app. Forcing
+    // UTF-8 for the child fixes the EXISTING engine bundle — env applies before Python starts.
+    PYTHONIOENCODING: "utf-8",
+    PYTHONUTF8: "1",
     ...extraEnv,
   };
   // Belt-and-braces: the desktop app must never run the backend in dev/unsafe mode.

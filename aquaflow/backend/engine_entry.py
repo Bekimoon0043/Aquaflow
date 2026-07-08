@@ -20,6 +20,17 @@ def main() -> None:
     # Required for PyInstaller one-file/one-dir bundles that may spawn processes.
     multiprocessing.freeze_support()
 
+    # Blank-screen audit F1: when the Electron launcher spawns this engine, stdout/stderr are
+    # PIPES — on Windows, Python 3.10-3.12 encodes pipes as cp1252, and the app's startup
+    # banner prints "✅ …" → UnicodeEncodeError → the engine dies at import (while running
+    # fine standalone in a terminal). The launcher sets PYTHONIOENCODING=utf-8; this makes a
+    # rebuilt engine safe even without it. errors="replace" so no print can ever kill us.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     # Force production: the bundle must NEVER run uvicorn's reloader/watchers.
     os.environ.pop("AQUAFLOW_DEV", None)
     os.environ.pop("AQUAFLOW_ENV", None)          # no legacy dev-mode selector in the bundle

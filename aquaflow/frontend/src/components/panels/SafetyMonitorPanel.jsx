@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+import { API_BASE_URL } from "../../config";
 
-const API = "http://localhost:8000/api";
+// Audit F4 (AF-PKG blank-screen audit): was hardcoded "http://localhost:8000/api", which
+// bypassed the ?api= override the packaged desktop app relies on. Use the shared config.
+const API = API_BASE_URL;
 
 const STATE_COLORS = {
   BOOT:            "#556677",
