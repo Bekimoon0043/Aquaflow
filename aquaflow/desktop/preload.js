@@ -24,4 +24,12 @@ contextBridge.exposeInMainWorld("aquaflow", {
     ipcRenderer.on("menu-save", handler);
     return () => ipcRenderer.removeListener("menu-save", handler);
   },
+
+  // AF-PKG-ENABLE-LICENSE: open an OS file dialog, validate the picked license.json, and
+  // copy it to the user's license folder (~/.aquaflow/license.json). Returns
+  // { ok, path } | { canceled: true } | { ok: false, error }. The activation screen then
+  // asks the backend to activate that path.
+  installLicenseFromFile() {
+    return ipcRenderer.invoke("license:install-from-file");
+  },
 });

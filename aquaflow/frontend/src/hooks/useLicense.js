@@ -7,7 +7,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { API_BASE_URL } from "../config";
 
-const LICENSE_API = `${API_BASE_URL}/api/license`;
+// API_BASE_URL already ends in "/api" — the license routes live at /api/license/*, so append
+// only "/license" here. (Appending "/api/license" produced /api/api/license → 404, which
+// silently kept the license gate from ever seeing a VALID status.)
+const LICENSE_API = `${API_BASE_URL}/license`;
 const RECHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
 const DEFAULT_STATE = {

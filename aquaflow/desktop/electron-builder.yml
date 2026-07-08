@@ -35,6 +35,12 @@ extraResources:
   - from: resources/engine
     to: engine
     filter: ["**/*"]
+  # Bundled license secret (+ update URL). resolveConfig() reads this from
+  # <resourcesPath>/app-config.json so employee machines without the AQUAFLOW_LICENSE_SECRET
+  # env var can start the engine and validate licenses. This file is gitignored and MUST exist
+  # locally before a distributable build (see LICENSE-ADMIN.md / resources/app-config.example.json).
+  - from: resources/app-config.json
+    to: app-config.json
 
 # Windows target (Tier A = Windows only).
 win:

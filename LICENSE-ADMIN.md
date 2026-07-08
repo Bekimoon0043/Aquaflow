@@ -39,25 +39,21 @@ setx AQUAFLOW_LICENSE_SECRET "a-long-random-secret-keep-this-private"
 
 ## 1. Issue a license — the 3-step flow
 
-### Step 1 — get the machine fingerprint (on the CLIENT / target PC)
+### Step 1 — get the machine ID (on the employee / target PC)
 
-On the machine that will run AquaFlow, run:
+**Packaged app (the normal case — employees have no Python):** the installed app opens to an
+**Activation screen** that shows the **Machine ID** (a 64-hex fingerprint) with a **Copy
+Machine ID** button. The employee clicks Copy and sends you that value. No license = the app
+stays locked on this screen; the studio does not open until a valid license is loaded.
 
+**From source (dev only):**
 ```powershell
 cd backend
 python -m license.get_fingerprint
 ```
+prints `AQUAFLOW_MACHINE_FINGERPRINT=3f9c…(64 hex)…a1`.
 
-It prints a line like:
-
-```
-AQUAFLOW_MACHINE_FINGERPRINT=3f9c…(64 hex characters)…a1
-```
-
-No secret is needed for this step. Copy that 64-character value and send it to you (the admin).
-
-> In the **packaged app** (no Python on the client) the fingerprint is shown in the app's
-> **licensing/activation screen** — the operator reads it off the screen and sends it to you.
+Either way you get one 64-character Machine ID for that computer.
 
 ### Step 2 — generate the license (on YOUR admin PC, one command)
 
@@ -82,17 +78,27 @@ edition, issue/expiry dates). Options:
 
 Run with **no** `--fingerprint` to get a guided interactive wizard instead.
 
-### Step 3 — deliver + activate (on the CLIENT PC)
+### Step 3 — deliver + activate (on the employee PC)
 
-Send the client the generated `.json`. They place it at **one** of these (first found wins):
+Send the employee the generated `.json`.
+
+**Packaged app (normal case):** on the Activation screen they click **Load License File…**,
+pick the `.json` you sent, and the app validates + unlocks immediately (it copies the file to
+`%USERPROFILE%\.aquaflow\license.json` so it stays activated on every future launch). If the
+license was minted for a different machine, the screen says so and stays locked.
+
+**From source / manual placement:** drop the `.json` at **one** of these (first found wins),
+then restart:
 
 | Location | Use |
 |----------|-----|
-| `%USERPROFILE%\.aquaflow\license.json` | **packaged app — recommended** (user-writable) |
+| `%USERPROFILE%\.aquaflow\license.json` | **packaged app — recommended** (user-writable; where Load License File puts it) |
 | `C:\AquaFlow\license.json` | packaged app alternative |
 | `backend\license\active_license.json` | dev / running from source |
 
-Then **restart AquaFlow**. First launch validates the file and activates. Done.
+> **The build machine's own laptop** is licensed the same way — its `license.json` already
+> lives at `%USERPROFILE%\.aquaflow\license.json`, so the packaged app opens straight to the
+> studio there.
 
 ---
 

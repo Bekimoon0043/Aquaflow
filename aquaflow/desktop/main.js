@@ -6,9 +6,10 @@
 // crashes. A single-instance lock keeps one process group (also needed for .aquashow in
 // AF-PKG-006).
 
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 const { findFreePort, startEngine, waitForHealth, stopEngine } = require("./launcher");
 const { resolveConfig } = require("./app-config");
@@ -171,8 +172,42 @@ function createMainWindow() {
   mainWindow.on("closed", () => { mainWindow = null; });
 }
 
+// ── License activation IPC (AF-PKG-ENABLE-LICENSE) ──────────────────────────────
+// The activation screen calls window.aquaflow.installLicenseFromFile(): pick a license.json
+// via the OS dialog, sanity-check it, and copy it to ~/.aquaflow/license.json (a user-writable
+// path the backend searches). The renderer then asks the backend to activate that path.
+function registerLicenseIpc() {
+  ipcMain.handle("license:install-from-file", async () => {
+    const win = getMainWindow();
+    const res = await dialog.showOpenDialog(win, {
+      title: "Select your AquaFlow license file",
+      filters: [{ name: "AquaFlow License", extensions: ["json"] }, { name: "All Files", extensions: ["*"] }],
+      properties: ["openFile"],
+    });
+    if (res.canceled || !res.filePaths[0]) return { canceled: true };
+    const src = res.filePaths[0];
+    try {
+      const raw = fs.readFileSync(src, "utf8");
+      const lic = JSON.parse(raw);
+      // Shape check only — the backend does the real signature/hardware validation.
+      if (!lic || !lic.signature || !lic.hardware_fingerprint) {
+        return { ok: false, error: "That file is not a valid AquaFlow license." };
+      }
+      const dir = path.join(os.homedir(), ".aquaflow");
+      fs.mkdirSync(dir, { recursive: true });
+      const dest = path.join(dir, "license.json");
+      fs.writeFileSync(dest, raw, "utf8");
+      dbg(`license installed to ${dest}`);
+      return { ok: true, path: dest };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  });
+}
+
 // ── Boot sequence ───────────────────────────────────────────────────────────────
 async function boot() {
+  registerLicenseIpc();
   // AF-PKG-006 — capture a .aquashow passed on the initial launch command line.
   pendingOpenPath = showPathFromArgv(process.argv.slice(1));
   createSplash();
