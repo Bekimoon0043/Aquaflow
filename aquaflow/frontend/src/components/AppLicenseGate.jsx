@@ -8,63 +8,79 @@
  * Designed for the PACKAGED desktop app: the machine ID is read from the backend
  * (/api/license/fingerprint) and shown on-screen with a copy button (employees have no
  * Python to run get_fingerprint), and a license file is loaded via the Electron file dialog
- * (window.aquaflow.installLicenseFromFile) which writes it to ~/.aquaflow/license.json.
+ * (window.aquaflow.installLicenseFromFile) which validates it, then atomically installs it to
+ * ~/.aquaflow/license.json.
  */
 
 import React, { useEffect, useState, useCallback } from "react";
 import { useLicense } from "../hooks/useLicense";
 import { API_BASE_URL } from "../config";
 
-const ERROR_MESSAGES = {
-  INVALID_HW:    "This AquaFlow Studio license is not valid for this computer.",
-  INVALID_SIG:   "This AquaFlow Studio license is not valid for this computer.",
-  EXPIRED:       "This AquaFlow Studio license has expired.",
-  GRACE_EXPIRED: "This AquaFlow Studio license has expired.",
-  ERROR:         "Could not verify the license. Is the engine running?",
+// Per-status wording. INVALID_HW (wrong machine) and INVALID_SIG (corrupt/tampered) are
+// distinct problems and must read differently (Codex audit fix #2).
+const STATUS_INFO = {
+  INVALID_HW:   { msg: "This license was issued for a different computer.",
+                  help: "Send the Machine ID below to LuxuryCon to get a license for THIS machine." },
+  INVALID_SIG:  { msg: "This license file is invalid or damaged.",
+                  help: "The file may be corrupted or incomplete. Ask LuxuryCon to re-send your license file." },
+  INVALID_FILE: { msg: "That file is not a valid AquaFlow license.",
+                  help: "Make sure you selected the license.json file LuxuryCon sent you." },
+  EXPIRED:      { msg: "This AquaFlow Studio license has expired.",
+                  help: "Contact LuxuryCon Fountain Systems to renew your license." },
+  GRACE_EXPIRED:{ msg: "This AquaFlow Studio license has expired.",
+                  help: "Contact LuxuryCon Fountain Systems to renew your license." },
+  ERROR:        { msg: "Could not verify the license. Is the engine running?", help: "" },
 };
 
 export default function AppLicenseGate({ children }) {
-  const { loading, valid, status, message, edition, company_name,
-          daysRemaining, activateLicense, recheckLicense } = useLicense();
+  const { loading, valid, status, activateLicense, recheckLicense } = useLicense();
 
   const [fingerprint, setFingerprint] = useState("");
+  const [fpError, setFpError]         = useState(false);
   const [copied, setCopied]           = useState(false);
   const [busy, setBusy]               = useState(false);
   const [error, setError]             = useState("");
   const [manualPath, setManualPath]   = useState("");
 
-  // Fetch this machine's ID once, so the employee can send it to LuxuryCon.
-  useEffect(() => {
-    let alive = true;
+  // Fetch this machine's ID so the employee can send it to LuxuryCon. On failure the screen
+  // must not silently sit on "reading machine ID" — show an error + Retry (Codex audit fix #3).
+  const fetchFingerprint = useCallback(() => {
+    setFpError(false);
+    setFingerprint("");
     fetch(`${API_BASE_URL}/license/fingerprint`, { signal: AbortSignal.timeout(8000) })
-      .then((r) => r.json())
-      .then((d) => { if (alive && d && d.fingerprint) setFingerprint(d.fingerprint); })
-      .catch(() => {});
-    return () => { alive = false; };
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => {
+        if (d && d.fingerprint) setFingerprint(d.fingerprint);
+        else throw new Error("no fingerprint in response");
+      })
+      .catch(() => setFpError(true));
   }, []);
+
+  useEffect(() => { fetchFingerprint(); }, [fetchFingerprint]);
 
   const copyId = useCallback(async () => {
     try { await navigator.clipboard.writeText(fingerprint); setCopied(true); setTimeout(() => setCopied(false), 1500); }
     catch { /* clipboard may be unavailable; the value is selectable on screen */ }
   }, [fingerprint]);
 
+  // Packaged flow: the OS dialog picks a file, the main process VALIDATES it, and only then
+  // atomically installs it. We just react to the result and re-check.
   const loadLicenseFile = useCallback(async () => {
     setError("");
     setBusy(true);
     try {
-      // Electron: pick a .json via the OS dialog and copy it to ~/.aquaflow/license.json.
       const res = await window.aquaflow?.installLicenseFromFile?.();
       if (!res) { setError("File loading is only available in the desktop app."); return; }
       if (res.canceled) return;
-      if (!res.ok) { setError(res.error || "Could not read that license file."); return; }
-      const act = await activateLicense(res.path || null);
-      if (!act.success) setError(act.error || "Activation failed — is this license for THIS machine?");
+      if (!res.ok) { setError((STATUS_INFO[res.status] && STATUS_INFO[res.status].msg) || res.error || "Could not load that license file."); return; }
+      const ok = await recheckLicense();
+      if (!ok) setError("License installed but could not be verified — click Check Again.");
     } catch (e) {
       setError(String(e && e.message ? e.message : e));
     } finally {
       setBusy(false);
     }
-  }, [activateLicense]);
+  }, [recheckLicense]);
 
   const activateManual = useCallback(async () => {
     if (!manualPath.trim()) return;
@@ -93,7 +109,7 @@ export default function AppLicenseGate({ children }) {
   }
 
   // ── Locked → activation screen ───────────────────────────────────────────────
-  const errorMsg = ERROR_MESSAGES[status];
+  const active = STATUS_INFO[status]; // the CURRENTLY-STORED license is bad (not just NOT_FOUND)
   const hasElectron = typeof window !== "undefined" && !!(window.aquaflow && window.aquaflow.installLicenseFromFile);
 
   return (
@@ -102,30 +118,34 @@ export default function AppLicenseGate({ children }) {
         <Logo />
         <div style={s.divider} />
 
-        {errorMsg && (
+        {active && (
           <div style={s.errorBlock}>
             <div style={s.errorIcon}>⚠</div>
-            <div style={s.errorMsg}>{errorMsg}</div>
-            <div style={s.helpText}>
-              {status === "EXPIRED" || status === "GRACE_EXPIRED"
-                ? "Contact LuxuryCon Fountain Systems to renew your license."
-                : "This license was issued for a different computer. Send the Machine ID below to LuxuryCon to get a license for THIS machine."}
-            </div>
+            <div style={s.errorMsg}>{active.msg}</div>
+            {active.help && <div style={s.helpText}>{active.help}</div>}
           </div>
         )}
 
-        {!errorMsg && (
+        {!active && (
           <div style={s.lead}>Activate AquaFlow Studio to continue.</div>
         )}
 
         {/* Machine ID */}
         <div style={s.idLabel}>Your Machine ID</div>
         <div style={s.idBox} title="Send this to LuxuryCon to receive your license">
-          <span style={s.idText}>{fingerprint || "…reading machine ID…"}</span>
+          {fpError ? (
+            <span style={s.idErr}>⚠ Could not read Machine ID — is the engine running?</span>
+          ) : (
+            <span style={s.idText}>{fingerprint || "…reading machine ID…"}</span>
+          )}
         </div>
-        <button style={s.btnGhost} onClick={copyId} disabled={!fingerprint}>
-          {copied ? "✓ Copied" : "Copy Machine ID"}
-        </button>
+        {fpError ? (
+          <button style={s.btnGhost} onClick={fetchFingerprint}>Retry reading Machine ID</button>
+        ) : (
+          <button style={s.btnGhost} onClick={copyId} disabled={!fingerprint}>
+            {copied ? "✓ Copied" : "Copy Machine ID"}
+          </button>
+        )}
 
         <div style={s.instr}>
           1. Send your Machine ID to LuxuryCon.<br/>
@@ -190,6 +210,7 @@ const s = {
            border: "1px solid var(--border, #223)", borderRadius: 6, boxSizing: "border-box" },
   idText: { fontFamily: "var(--font-mono, monospace)", fontSize: 11, color: "var(--accent, #00d4ff)",
             wordBreak: "break-all", userSelect: "all", lineHeight: 1.5 },
+  idErr: { fontSize: 11, color: "var(--red, #e0685f)", lineHeight: 1.5 },
   instr: { fontSize: 11, color: "var(--text-muted, #7c8a90)", lineHeight: 1.9, alignSelf: "flex-start" },
   code: { fontFamily: "var(--font-mono, monospace)", fontSize: 10, color: "var(--accent, #00d4ff)",
           background: "rgba(0,212,255,0.08)", padding: "1px 5px", borderRadius: 3 },

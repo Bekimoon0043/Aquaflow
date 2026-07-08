@@ -10,6 +10,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const http = require("http");
 
 const { findFreePort, startEngine, waitForHealth, stopEngine } = require("./launcher");
 const { resolveConfig } = require("./app-config");
@@ -174,8 +175,28 @@ function createMainWindow() {
 
 // ── License activation IPC (AF-PKG-ENABLE-LICENSE) ──────────────────────────────
 // The activation screen calls window.aquaflow.installLicenseFromFile(): pick a license.json
-// via the OS dialog, sanity-check it, and copy it to ~/.aquaflow/license.json (a user-writable
-// path the backend searches). The renderer then asks the backend to activate that path.
+// via the OS dialog, VALIDATE it against the backend, and only then atomically replace the
+// active license (~/.aquaflow/license.json). A wrong/corrupt file NEVER destroys a previously
+// valid license — validation happens against a temp copy first (Codex audit fix #1).
+
+// POST the license to the engine's stateless validator (/api/license/validate) — no side
+// effects — so we can decide whether it is safe to replace the active license.
+function validateWithEngine(licenseData) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({ license_data: licenseData });
+    const req = http.request(
+      { host: "127.0.0.1", port: enginePort, path: "/api/license/validate", method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        timeout: 8000 },
+      (res) => { let b = ""; res.on("data", (d) => (b += d));
+        res.on("end", () => { try { resolve(JSON.parse(b || "{}")); } catch { resolve(null); } }); }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => { req.destroy(); reject(new Error("engine timeout")); });
+    req.write(body); req.end();
+  });
+}
+
 function registerLicenseIpc() {
   ipcMain.handle("license:install-from-file", async () => {
     const win = getMainWindow();
@@ -186,21 +207,37 @@ function registerLicenseIpc() {
     });
     if (res.canceled || !res.filePaths[0]) return { canceled: true };
     const src = res.filePaths[0];
+
+    // 1) Read + shape-check the picked file — do NOT touch the active license yet.
+    let raw, lic;
+    try { raw = fs.readFileSync(src, "utf8"); lic = JSON.parse(raw); }
+    catch { return { ok: false, status: "INVALID_FILE", error: "That file could not be read as JSON." }; }
+    if (!lic || !lic.signature || !lic.hardware_fingerprint) {
+      return { ok: false, status: "INVALID_FILE", error: "That file is not a valid AquaFlow license." };
+    }
+
+    // 2) VALIDATE against the backend BEFORE overwriting anything (signature + this machine).
+    let v;
+    try { v = await validateWithEngine(lic); }
+    catch { return { ok: false, status: "ERROR", error: "Could not reach the engine to validate the license." }; }
+    if (!v || !v.valid) {
+      return { ok: false, status: (v && v.status) || "INVALID_SIG", error: (v && v.message) || "License is not valid." };
+    }
+
+    // 3) Valid — write to a temp file, then atomically rename over the active license. A prior
+    //    valid license is only ever replaced once the new one is confirmed good.
     try {
-      const raw = fs.readFileSync(src, "utf8");
-      const lic = JSON.parse(raw);
-      // Shape check only — the backend does the real signature/hardware validation.
-      if (!lic || !lic.signature || !lic.hardware_fingerprint) {
-        return { ok: false, error: "That file is not a valid AquaFlow license." };
-      }
       const dir = path.join(os.homedir(), ".aquaflow");
       fs.mkdirSync(dir, { recursive: true });
       const dest = path.join(dir, "license.json");
-      fs.writeFileSync(dest, raw, "utf8");
-      dbg(`license installed to ${dest}`);
-      return { ok: true, path: dest };
+      const tmp = path.join(dir, `license.json.tmp-${process.pid}-${Date.now()}`);
+      fs.writeFileSync(tmp, raw, "utf8");
+      try { fs.renameSync(tmp, dest); }            // atomic on the same volume
+      catch { fs.copyFileSync(tmp, dest); fs.rmSync(tmp, { force: true }); }
+      dbg(`license installed to ${dest} (validated: ${v.status})`);
+      return { ok: true, path: dest, status: v.status };
     } catch (e) {
-      return { ok: false, error: String(e && e.message ? e.message : e) };
+      return { ok: false, status: "ERROR", error: String(e && e.message ? e.message : e) };
     }
   });
 }
