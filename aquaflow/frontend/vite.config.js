@@ -15,15 +15,17 @@ export default defineConfig({
     chunkSizeWarningLimit: 750,
     rollupOptions: {
       output: {
+        // BLANK-SCREEN FIX (desktop packaging): the previous react-vendor/vendor split was
+        // CIRCULAR — zustand sat in react-vendor while its dependency use-sync-external-store
+        // (which itself imports react) fell through to vendor, giving vendor ⇄ react-vendor.
+        // Rollup then evaluated vendor before React had initialised → "Cannot read properties
+        // of undefined (reading 'useState')" at runtime → React never mounted (black #root).
+        // Rule now: three.js (self-contained, imports no other vendor) gets its own chunk;
+        // EVERYTHING else in node_modules — React included — shares ONE vendor chunk, so no
+        // vendor⇄vendor edge can exist. The build must stay free of "Circular chunk" warnings.
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
           if (id.includes('/three/') || id.includes('\\three\\')) return 'three'
-          if (
-            id.includes('/react/') || id.includes('\\react\\') ||
-            id.includes('/react-dom/') || id.includes('\\react-dom\\') ||
-            id.includes('/scheduler/') || id.includes('\\scheduler\\') ||
-            id.includes('zustand')
-          ) return 'react-vendor'
           return 'vendor'
         },
       },
