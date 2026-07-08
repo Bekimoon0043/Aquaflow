@@ -45,14 +45,31 @@ function resolveEngine() {
   return { command: py, args: [path.join(backendDir, "engine_entry.py")], cwd: backendDir, mode: "dev" };
 }
 
+/**
+ * Detect the port the engine ACTUALLY bound, from its startup log. The engine prints
+ * "…serving on 127.0.0.1:<port>" (and uvicorn prints "Uvicorn running on http://…:<port>").
+ * We read that rather than assume the requested port, so the frontend + health check use the
+ * real port even if a bundled engine serves on its own default (e.g. 8000) instead of the
+ * port we asked for. Returns the captured port, or null.
+ */
+function detectPortFromLog(text) {
+  const m = /(?:serving on|running on)\s+(?:https?:\/\/)?[^\s:/]+:(\d+)/i.exec(String(text));
+  return m ? parseInt(m[1], 10) : null;
+}
+
 /** Spawn the engine bound to `port`. Never enables any dev/unsafe flag. */
-function startEngine({ port, licenseSecret, extraEnv = {}, onLog = () => {} }) {
+function startEngine({ port, licenseSecret, extraEnv = {}, onLog = () => {}, portTimeoutMs = 8000 }) {
   const { command, args, cwd, mode } = resolveEngine();
+  // Allow the packaged frontend's file:// origin (Origin: null) through the backend CORS.
+  // get_allowed_origins() reads this at startup, so it works on the already-built engine with
+  // no rebuild. Merge with any pre-set value rather than clobbering it.
+  const corsOrigins = [process.env.AQUAFLOW_CORS_ORIGINS, "null"].filter(Boolean).join(",");
   const env = {
     ...process.env,
     AQUAFLOW_HOST: "127.0.0.1",
     AQUAFLOW_PORT: String(port),
     AQUAFLOW_LICENSE_SECRET: licenseSecret,
+    AQUAFLOW_CORS_ORIGINS: corsOrigins,
     ...extraEnv,
   };
   // Belt-and-braces: the desktop app must never run the backend in dev/unsafe mode.
@@ -62,9 +79,29 @@ function startEngine({ port, licenseSecret, extraEnv = {}, onLog = () => {} }) {
   delete env.AQUAFLOW_DEV_MODE;
 
   const child = spawn(command, args, { cwd, env, windowsHide: true });
-  child.stdout.on("data", (d) => onLog(String(d)));
-  child.stderr.on("data", (d) => onLog(String(d)));
-  return { child, mode, command };
+
+  // whenPort resolves with the engine's ACTUAL bound port (from its log), or falls back to the
+  // requested port after portTimeoutMs so startup never hangs on an unrecognised log format.
+  let resolvePort;
+  const whenPort = new Promise((resolve) => { resolvePort = resolve; });
+  let settled = false;
+  const settle = (p) => { if (!settled) { settled = true; resolvePort(p); } };
+
+  child.stdout.on("data", (d) => {
+    const s = String(d);
+    onLog(s);
+    const detected = detectPortFromLog(s);
+    if (detected) settle(detected);
+  });
+  child.stderr.on("data", (d) => {
+    const s = String(d);
+    onLog(s);
+    const detected = detectPortFromLog(s); // uvicorn logs the running line to stderr
+    if (detected) settle(detected);
+  });
+  setTimeout(() => settle(port), portTimeoutMs);
+
+  return { child, mode, command, port, whenPort };
 }
 
 /** Poll /api/health until it answers 200, or reject after timeout. */
@@ -102,4 +139,4 @@ function stopEngine(child, { graceMs = 4000 } = {}) {
   });
 }
 
-module.exports = { findFreePort, resolveEngine, startEngine, waitForHealth, stopEngine };
+module.exports = { findFreePort, resolveEngine, startEngine, waitForHealth, stopEngine, detectPortFromLog };

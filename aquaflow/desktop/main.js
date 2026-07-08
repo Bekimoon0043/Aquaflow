@@ -171,6 +171,11 @@ async function boot() {
       }
     });
 
+    // Adopt the port the engine ACTUALLY bound (read from its startup log). A bundled engine
+    // may serve on its own default (e.g. 8000) regardless of the port we requested; the
+    // frontend and health check must use that real port or the window loads blank.
+    enginePort = await engine.whenPort;
+
     setSplashStatus("Waiting for engine health…");
     await waitForHealth(enginePort, { timeoutMs: 30000 });
 

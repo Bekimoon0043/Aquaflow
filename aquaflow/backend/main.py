@@ -88,6 +88,11 @@ DEFAULT_CORS_ORIGINS = [
     "http://127.0.0.1:3003",
     "http://127.0.0.1:4173",
     "http://127.0.0.1:5173",
+    # Packaged desktop app (AF-PKG): the frontend is loaded from file://, whose Origin header
+    # is the literal string "null". Allow it so the Electron renderer can reach the loopback
+    # engine. (The Electron launcher also injects this via AQUAFLOW_CORS_ORIGINS for already-
+    # built engines; keeping it in the defaults covers future rebuilds too.)
+    "null",
 ]
 
 
