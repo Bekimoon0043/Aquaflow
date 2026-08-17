@@ -9,19 +9,64 @@ const net = require("net");
 const path = require("path");
 const fs = require("fs");
 
-/** Resolve a free TCP port at or after `start` (bounded scan). */
-function findFreePort(start = 8000, attempts = 50) {
-  return new Promise((resolve, reject) => {
-    let port = start;
-    const tryPort = () => {
-      if (port >= start + attempts) return reject(new Error("no free port found"));
-      const srv = net.createServer();
-      srv.once("error", () => { port += 1; tryPort(); });
-      srv.once("listening", () => srv.close(() => resolve(port)));
-      srv.listen(port, "127.0.0.1");
-    };
-    tryPort();
+// Addresses a candidate port is probed on before we call it free.
+//
+// WHY MORE THAN 127.0.0.1 (live incident, Aug 2026): on an operator machine
+// Docker Desktop held [::]:8000 and the WSL relay held [::1]:8000 while the
+// engine bound 127.0.0.1:8000. Probing ONLY 127.0.0.1 declared 8000 free, so
+// the engine was handed a port it SHARED with two foreign services. Anything
+// reaching the backend over ::1 — or over the name "localhost", which Chromium
+// resolves to ::1 before IPv4 — hit Docker/WSL instead of the engine: no CORS
+// headers (the browser calls that a CORS failure) and a 403 on /ws.
+//
+// Both families, wildcard and loopback, so a port held by anyone on any of
+// them is treated as taken.
+const PROBE_HOSTS = ["0.0.0.0", "::", "127.0.0.1", "::1"];
+
+// Bind errors that mean "someone else has this port". Anything else (notably
+// EAFNOSUPPORT / EADDRNOTAVAIL / EINVAL on a host with IPv6 disabled) means
+// the FAMILY is unavailable, which is not a conflict — otherwise an IPv4-only
+// machine could never find a free port.
+const PORT_TAKEN_CODES = new Set(["EADDRINUSE", "EACCES"]);
+
+/** Probe one (port, host). Resolves true if that address is bindable or the
+ *  family simply does not exist here; false only on a real conflict. */
+function probePort(port, host) {
+  return new Promise((resolve) => {
+    let srv;
+    try {
+      srv = net.createServer();
+    } catch {
+      return resolve(true); // cannot probe — do not veto the port
+    }
+    srv.once("error", (err) => {
+      resolve(!PORT_TAKEN_CODES.has(err && err.code));
+    });
+    srv.once("listening", () => srv.close(() => resolve(true)));
+    try {
+      srv.listen(port, host);
+    } catch {
+      resolve(true); // e.g. IPv6 literal rejected outright on an IPv4-only host
+    }
   });
+}
+
+/** Resolve a free TCP port at or after `start` (bounded scan).
+ *  A port counts as free only when it is bindable on EVERY address family
+ *  available on this host (see PROBE_HOSTS).
+ *  `_probe` overrides the prober for headless tests only — same convention as
+ *  startEngine's `_engine`. */
+async function findFreePort(start = 8000, attempts = 50, _probe = probePort) {
+  for (let port = start; port < start + attempts; port += 1) {
+    let free = true;
+    for (const host of PROBE_HOSTS) {
+      // Sequential on purpose: stop at the first conflict rather than opening
+      // four sockets per candidate port.
+      if (!(await _probe(port, host))) { free = false; break; }
+    }
+    if (free) return port;
+  }
+  throw new Error("no free port found");
 }
 
 /**
@@ -148,4 +193,4 @@ function stopEngine(child, { graceMs = 4000 } = {}) {
   });
 }
 
-module.exports = { findFreePort, resolveEngine, startEngine, waitForHealth, stopEngine, detectPortFromLog };
+module.exports = { findFreePort, probePort, PROBE_HOSTS, resolveEngine, startEngine, waitForHealth, stopEngine, detectPortFromLog };
