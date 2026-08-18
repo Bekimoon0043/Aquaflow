@@ -131,6 +131,50 @@ class NetworkScanner:
                 subnets.append(auto)
         return subnets
 
+    def _arp_live_hosts(self, subnets: list[str], exclude: set) -> list[DiscoveredDevice]:
+        """Every live host the scan just touched, read from the OS ARP table.
+
+        The TCP probes force ARP resolution for each address they try, so by the
+        time this runs, every powered device on the scanned subnets has left its
+        MAC here — including phones and devices with no open ports at all. This
+        is what lets an operator SEE that discovery reaches the network even
+        when nothing speaks a fountain protocol. Zero extra network traffic.
+        """
+        hosts: list[DiscoveredDevice] = []
+        try:
+            import re
+            import subprocess
+            nets = []
+            for sn in subnets:
+                try:
+                    nets.append(ipaddress.IPv4Network(sn, strict=False))
+                except ValueError:
+                    continue
+            flags = {"creationflags": 0x08000000} if hasattr(subprocess, "STARTUPINFO") else {}
+            out = subprocess.check_output(
+                ["arp", "-a"], encoding="utf-8", errors="ignore",
+                stderr=subprocess.DEVNULL, timeout=10, **flags,
+            )
+            local = set(self._local_ipv4_addresses())
+            for m in re.finditer(r"(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F]{2}(?:[-:][0-9a-fA-F]{2}){5})", out):
+                ip, mac = m.group(1), m.group(2).lower().replace("-", ":")
+                if ip in exclude or ip in local:
+                    continue
+                if mac == "ff:ff:ff:ff:ff:ff" or mac.startswith("01:00:5e"):
+                    continue  # broadcast / multicast table entries, not devices
+                addr = ipaddress.IPv4Address(ip)
+                if not any(addr in n and addr != n.broadcast_address for n in nets):
+                    continue
+                exclude.add(ip)
+                hosts.append(DiscoveredDevice(
+                    ip=ip, protocol="ip", port=0,
+                    label=f"Network host @ {ip}",
+                    device_type="network", mac=mac,
+                ))
+        except Exception as e:
+            logger.debug(f"ARP host discovery error: {e}")
+        return hosts
+
     async def scan_network(
         self,
         subnet: str = "192.168.1.0/24",
@@ -187,6 +231,11 @@ class NetworkScanner:
                 self._progress = min(0.99, progress)
                 if progress_callback:
                     await progress_callback(self._progress, f"Scanned {i + batch_size}/{total} hosts...")
+
+            # Phase 3: every remaining live host, from the ARP table the probes
+            # above just populated (covers devices with no open ports at all).
+            found_now = {d.ip for d in self._results}
+            self._results.extend(self._arp_live_hosts(subnets, found_now))
 
             self._progress = 1.0
             if progress_callback:
@@ -361,9 +410,10 @@ class NetworkScanner:
 
             # Scan only .1-.50 of each subnet for speed — the requested one plus
             # the /24 around every local address, deduplicated.
+            subnets = self._subnets_to_scan(subnet)
             quick_ips: list[str] = []
             ip_seen: set[str] = set()
-            for sn in self._subnets_to_scan(subnet):
+            for sn in subnets:
                 try:
                     network = ipaddress.IPv4Network(sn, strict=False)
                 except ValueError:
@@ -380,6 +430,11 @@ class NetworkScanner:
             for r in results:
                 if isinstance(r, list):
                     self._results.extend(r)
+
+            # Live hosts from the ARP table the probes above just populated —
+            # shows every powered device, even with no open ports.
+            found_now = {d.ip for d in self._results}
+            self._results.extend(self._arp_live_hosts(subnets, found_now))
 
             return self._results
         finally:
