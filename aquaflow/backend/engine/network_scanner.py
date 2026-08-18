@@ -87,6 +87,40 @@ class NetworkScanner:
     def progress(self) -> float:
         return self._progress
 
+    @staticmethod
+    def _local_ipv4_addresses() -> list[str]:
+        """Every non-loopback IPv4 address on this host, across all interfaces."""
+        ips: set[str] = set()
+        try:
+            for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                ip = info[4][0]
+                if not ip.startswith("127."):
+                    ips.add(ip)
+        except OSError:
+            pass
+        # Default-route address as a fallback when hostname resolution is empty.
+        try:
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.connect(("8.8.8.8", 80))  # no traffic sent — just selects a route
+            ips.add(probe.getsockname()[0])
+            probe.close()
+        except OSError:
+            pass
+        return sorted(ips)
+
+    def _subnets_to_scan(self, requested: Optional[str]) -> list[str]:
+        """The requested subnet (if any) plus the /24 around every local address,
+        so a scan always covers every network this host is actually connected to —
+        not just the one the caller guessed."""
+        subnets: list[str] = []
+        if requested:
+            subnets.append(requested)
+        for ip in self._local_ipv4_addresses():
+            auto = ip.rsplit(".", 1)[0] + ".0/24"
+            if auto not in subnets:
+                subnets.append(auto)
+        return subnets
+
     async def scan_network(
         self,
         subnet: str = "192.168.1.0/24",
@@ -105,10 +139,21 @@ class NetworkScanner:
             self._progress = 0.15
             if progress_callback: await progress_callback(0.15, f"Found {len(artnet_devices)} Art-Net devices")
 
-            # Phase 2: TCP port scan
-            logger.info(f"Phase 2: TCP scan of {subnet}...")
-            network = ipaddress.IPv4Network(subnet, strict=False)
-            hosts = list(network.hosts())
+            # Phase 2: TCP port scan — requested subnet PLUS every local subnet
+            subnets = self._subnets_to_scan(subnet)
+            logger.info(f"Phase 2: TCP scan of {', '.join(subnets)}...")
+            hosts: list[str] = []
+            host_seen: set[str] = set()
+            for sn in subnets:
+                try:
+                    network = ipaddress.IPv4Network(sn, strict=False)
+                except ValueError:
+                    continue  # a malformed subnet must not kill the whole scan
+                for h in network.hosts():
+                    ip = str(h)
+                    if ip not in host_seen:
+                        host_seen.add(ip)
+                        hosts.append(ip)
             total = len(hosts)
 
             # Skip already found IPs
@@ -144,8 +189,19 @@ class NetworkScanner:
             self._scanning = False
 
     async def _discover_artnet(self) -> list[DiscoveredDevice]:
-        """Art-Net ArtPoll broadcast discovery"""
-        devices = []
+        """Art-Net ArtPoll broadcast discovery, on every connected network.
+
+        Two hard-won rules (verified against a live responder, Aug 2026):
+        1. The socket MUST be bound to udp/6454. Art-Net nodes send ArtPollReply
+           to port 6454, not back to the poll's source port — an unbound socket
+           polls from an ephemeral port and every spec-compliant reply is
+           delivered somewhere we are not listening.
+        2. Never call setblocking(False) after settimeout() — it zeroes the
+           timeout, so the first recvfrom raises BlockingIOError immediately and
+           the listen loop dies before any node can answer.
+        """
+        devices: list[DiscoveredDevice] = []
+        seen: set[str] = set()
         try:
             loop = asyncio.get_event_loop()
 
@@ -159,26 +215,42 @@ class NetworkScanner:
             )
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sock.settimeout(2.0)
-            sock.setblocking(False)
+            sock.bind(("", self.ARTNET_PORT))  # rule 1: own the reply port
+            sock.settimeout(0.3)               # rule 2: timeout only, stay blocking
 
-            await loop.run_in_executor(None, lambda: sock.sendto(artpoll, ("255.255.255.255", self.ARTNET_PORT)))
-
-            # Listen for ArtPollReply packets
-            deadline = asyncio.get_event_loop().time() + 2.0
-            while asyncio.get_event_loop().time() < deadline:
+            # Poll the global broadcast plus the directed broadcast of every
+            # local subnet, so discovery leaves through every interface — not
+            # just the default route.
+            targets = {("255.255.255.255", self.ARTNET_PORT)}
+            for ip in self._local_ipv4_addresses():
+                targets.add((ip.rsplit(".", 1)[0] + ".255", self.ARTNET_PORT))
+            for target in targets:
                 try:
-                    data, addr = await asyncio.wait_for(
-                        loop.run_in_executor(None, lambda: sock.recvfrom(512)),
-                        timeout=0.5
-                    )
-                    if data[:8] == b"Art-Net\x00" and len(data) > 10:
-                        device = self._parse_artpoll_reply(data, addr[0])
-                        if device:
-                            devices.append(device)
-                except (asyncio.TimeoutError, OSError):
-                    break
+                    await loop.run_in_executor(None, sock.sendto, artpoll, target)
+                except OSError:
+                    continue  # that interface can't broadcast — not fatal
+
+            # Listen for ArtPollReply packets until the deadline.
+            deadline = loop.time() + 2.5
+            while loop.time() < deadline:
+                try:
+                    data, addr = await loop.run_in_executor(None, sock.recvfrom, 1024)
+                except socket.timeout:
+                    continue  # nothing yet — keep listening until the deadline
+                except OSError:
+                    break     # socket genuinely dead
+                if addr[0] in seen:
+                    continue
+                if data[:8] == b"Art-Net\x00" and len(data) > 10:
+                    opcode = struct.unpack("<H", data[8:10])[0]
+                    if opcode != 0x2100:  # only ArtPollReply (not our own polls)
+                        continue
+                    device = self._parse_artpoll_reply(data, addr[0])
+                    if device:
+                        seen.add(addr[0])
+                        devices.append(device)
 
             sock.close()
         except Exception as e:
@@ -260,18 +332,29 @@ class NetworkScanner:
         )
 
     async def quick_scan(self, subnet: str = "192.168.1.0/24") -> list[DiscoveredDevice]:
-        """Fast scan — only Art-Net broadcast + common IPs"""
+        """Fast scan — Art-Net broadcast + common IPs on every connected subnet"""
         self._scanning = True
         self._results = []
         try:
-            # Art-Net broadcast
+            # Art-Net broadcast (already polls out of every interface)
             artnet = await self._discover_artnet()
             self._results.extend(artnet)
 
-            # Scan only .1-.50 range for speed
-            network = ipaddress.IPv4Network(subnet, strict=False)
-            base = str(network.network_address).rsplit(".", 1)[0]
-            quick_ips = [f"{base}.{i}" for i in range(1, 51)]
+            # Scan only .1-.50 of each subnet for speed — the requested one plus
+            # the /24 around every local address, deduplicated.
+            quick_ips: list[str] = []
+            ip_seen: set[str] = set()
+            for sn in self._subnets_to_scan(subnet):
+                try:
+                    network = ipaddress.IPv4Network(sn, strict=False)
+                except ValueError:
+                    continue
+                base = str(network.network_address).rsplit(".", 1)[0]
+                for i in range(1, 51):
+                    ip = f"{base}.{i}"
+                    if ip not in ip_seen:
+                        ip_seen.add(ip)
+                        quick_ips.append(ip)
 
             tasks = [self._scan_host(ip) for ip in quick_ips]
             results = await asyncio.gather(*tasks, return_exceptions=True)
