@@ -74,6 +74,16 @@ class NetworkScanner:
         20000:("dnp3",    "industrial"),
     }
 
+    # Generic IP devices (the module docstring has always promised these).
+    # Surfaces routers, printers, etc. as plain "network" devices so an
+    # operator can see that discovery is reaching the network at all, even
+    # before any fountain hardware is attached. Kept separate from
+    # KNOWN_PORTS so a web port never masquerades as fountain gear.
+    GENERIC_PORTS = {
+        80:   ("http",  "network"),
+        443:  ("https", "network"),
+    }
+
     def __init__(self):
         self._scanning = False
         self._progress = 0.0
@@ -276,33 +286,42 @@ class NetworkScanner:
             return None
 
     async def _scan_host(self, ip: str) -> list[DiscoveredDevice]:
-        """Scan a single host for known fountain control ports"""
+        """Scan a single host: fountain control ports first, then generic ports."""
         devices = []
-        for port, (protocol, device_type) in self.KNOWN_PORTS.items():
-            try:
-                conn = asyncio.open_connection(ip, port)
-                reader, writer = await asyncio.wait_for(conn, timeout=self.SCAN_TIMEOUT)
-                writer.close()
+        generic = []
+        for ports, bucket in ((self.KNOWN_PORTS, devices), (self.GENERIC_PORTS, generic)):
+            for port, (protocol, device_type) in ports.items():
                 try:
-                    await writer.wait_closed()
-                except Exception:
+                    conn = asyncio.open_connection(ip, port)
+                    reader, writer = await asyncio.wait_for(conn, timeout=self.SCAN_TIMEOUT)
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+
+                    # Port is open — identify device
+                    device = await self._identify_device(ip, port, protocol, device_type)
+                    bucket.append(device)
+                    logger.debug(f"Found {protocol} device at {ip}:{port}")
+
+                except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
                     pass
+                except Exception as e:
+                    logger.debug(f"Scan error {ip}:{port}: {e}")
 
-                # Port is open — identify device
-                device = await self._identify_device(ip, port, protocol, device_type)
-                devices.append(device)
-                logger.debug(f"Found {protocol} device at {ip}:{port}")
-
-            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
-                pass
-            except Exception as e:
-                logger.debug(f"Scan error {ip}:{port}: {e}")
-
+        # A real fountain device that also serves a web UI should appear once,
+        # as fountain gear — only hosts with NO fountain protocol are reported
+        # as generic network devices (one entry per host is enough).
+        if not devices and generic:
+            devices.append(generic[0])
         return devices
 
     async def _identify_device(self, ip: str, port: int, protocol: str, device_type: str) -> DiscoveredDevice:
         """Try to identify device details via protocol handshake"""
         label = f"{protocol.upper()} Device"
+        if device_type == "network":
+            label = f"Network device (web interface) @ {ip}"
         manufacturer = ""
         model = ""
 
