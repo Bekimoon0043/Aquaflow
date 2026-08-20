@@ -12,8 +12,19 @@ from typing import Optional
 
 from engine import ican_discovery as disco
 from engine.ican_connection import ICANConnection, ICANConfig
+from engine.ican_mapping import ChannelMap
 
 router = APIRouter()
+
+# One persistent channel map for the app, loaded from disk on first use.
+_channel_map: Optional[ChannelMap] = None
+
+
+def _map() -> ChannelMap:
+    global _channel_map
+    if _channel_map is None:
+        _channel_map = ChannelMap().load()
+    return _channel_map
 
 # One process-wide manager for the connection panel. dry_run defaults False; the
 # manager only ever transmits the SAFE probe until output is explicitly enabled.
@@ -111,3 +122,48 @@ async def auto_reconnect(req: ReconnectToggle):
 async def audit():
     """The output-command audit trail, for support/diagnostics export."""
     return {"entries": _manager().audit_log}
+
+
+# ── channel mapping (pure data; the method to label each channel) ────────────
+class AssignRequest(BaseModel):
+    group: int
+    channel: int
+    label: Optional[str] = None
+    device_type: Optional[str] = None      # lighting|jet|pump|valve|flame|fog|...
+    safety_max: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class ImportRequest(BaseModel):
+    detections: list[dict]                  # [{"group": int, "channels": [int,...]}]
+
+
+@router.get("/map")
+async def get_map():
+    return _map().to_dict()
+
+
+@router.post("/map/assign")
+async def assign(req: AssignRequest):
+    try:
+        a = _map().assign(req.group, req.channel, label=req.label,
+                          device_type=req.device_type, safety_max=req.safety_max,
+                          notes=req.notes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _map().save()
+    return a.to_dict()
+
+
+@router.post("/map/import")
+async def import_detections(req: ImportRequest):
+    """Seed the map from a decoded capture's detected channels."""
+    added = _map().import_detections(req.detections)
+    _map().save()
+    return {"added": added, "summary": _map().summary()}
+
+
+@router.get("/map/registry")
+async def map_registry():
+    """The labelled channels as AquaFlow device-registry entries."""
+    return {"devices": _map().to_device_registry()}
