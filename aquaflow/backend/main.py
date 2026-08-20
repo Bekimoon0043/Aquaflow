@@ -26,6 +26,7 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from api.routes import shows, devices, ai_engine, protocols, audio, plc, scheduler as scheduler_routes, runtime
+from api.routes.ican_routes import router as ican_router
 from api.routes.ai_learning_routes import router as ai_learning_router
 from api.routes.phase6_routes import phase6_router
 from api.routes.phase7_routes import phase7_router
@@ -417,6 +418,7 @@ app.include_router(cloud_router,            prefix="/api/cloud",      tags=["Clo
 app.include_router(generative_router,       prefix="/api/generative", tags=["Generative"])
 app.include_router(show_programmer_router,    prefix="/api/show-programmer", tags=["Show-Programmer"])  
 app.include_router(license_router, tags=["License"])
+app.include_router(ican_router,             prefix="/api/ican",       tags=["I-CAN"])
 
 class ConnectionManager:
     def __init__(self):
