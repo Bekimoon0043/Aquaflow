@@ -292,7 +292,24 @@ class GeometryService:
             nx = float(n.get("x") or cx); ny = float(n.get("y") or cy)
             length = max(1.0, math.hypot(nx - cx, ny - cy))
             dia = float(eng.get("pipe_diameter_m", 0.05) or 0.05)
-            nodes.append({"id": f"NOZ{i}", "elevation": 0.0, "demand": demand})
+
+            # AQ-S2-002 Phase 2 — model the nozzle as a pressure-dependent EMITTER
+            # rather than a fixed demand, so its flow (and therefore its jet height)
+            # is solved from the head actually available at that point in the
+            # network. The emitter coefficient is derived from the fixture's design
+            # duty: k = Q_design / sqrt(p_design), i.e. the nozzle is calibrated to
+            # pass its rated flow at its rated pressure and then behaves physically
+            # away from that point. Falls back to a fixed demand when the fixture
+            # carries no usable design pressure.
+            design_head = float(eng.get("design_pressure_m", 0.0) or 0.0)
+            elevation = float(eng.get("elevation_m", 0.0) or 0.0)
+            node = {"id": f"NOZ{i}", "elevation": elevation}
+            if demand > 0 and design_head > 0:
+                node["emitter_k"] = demand / math.sqrt(design_head)
+                node["discharge_coeff"] = float(eng.get("discharge_coeff", 0.97) or 0.97)
+            else:
+                node["demand"] = demand
+            nodes.append(node)
             pipes.append({"id": f"P{i}", "from": "MANIFOLD", "to": f"NOZ{i}",
                           "length": length, "diameter": dia, "roughness": 130})
 
@@ -309,7 +326,30 @@ class GeometryService:
             solution = solve_network(network)
         except Exception as exc:                     # solver stays non-fatal for export
             return {**base, "hydraulic_solution": None, "note": f"solver error: {exc}"}
-        return {**base, "converged": solution.get("converged"), "hydraulic_solution": solution}
+
+        # AQ-S2-002 Phase 2 — per-nozzle physics for the 3D preview, keyed by the
+        # DESIGN nozzle id so the renderer can look each one up directly. Present
+        # only for nozzles solved as emitters (pressure-dependent); demand-only
+        # nozzles are omitted rather than given a fabricated velocity.
+        node_by_id = {n.get("id"): n for n in solution.get("nodes", [])}
+        nozzle_physics: dict = {}
+        for i, n in enumerate(nozzles):
+            node = node_by_id.get(f"NOZ{i}")
+            if not node or not node.get("is_nozzle"):
+                continue
+            design_id = n.get("id") or f"NOZ{i}"
+            nozzle_physics[str(design_id)] = {
+                "exitVelocityMs": node.get("exit_velocity_ms"),
+                "jetHeightM": node.get("jet_height_m"),
+                "flowLpm": node.get("nozzle_flow_lpm"),
+                "basis": node.get("jet_height_basis", "ESTIMATED"),
+            }
+
+        return {**base,
+                "converged": solution.get("converged"),
+                "hydraulic_solution": solution,
+                "nozzle_physics": nozzle_physics,
+                "validation": solution.get("validation", [])}
 
 
 _service: Optional[GeometryService] = None

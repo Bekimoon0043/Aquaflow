@@ -64,6 +64,8 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+// AQ-S2-002 Phase 2 — solver-driven jet physics (pure, unit-tested, single definition).
+import { launchSpeed as JP_launchSpeed, normalizePhysics as JP_normalizePhysics } from "./jetPhysics";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 export const NOZZLE_TYPES = {
@@ -803,6 +805,20 @@ class NozzleV2 {
 
   setIntensity(v) { this.intensity = Math.max(0, Math.min(1, v)); }
 
+  /** Attach solved hydraulics for this nozzle (AQ-S2-002 Phase 2).
+   *  `rec` = { exitVelocityMs, jetHeightM }; `sink` collects over-demand reports. */
+  setPhysics(rec, sink) {
+    this.physics = JP_normalizePhysics(rec);
+    this._overDemandSink = sink || null;
+  }
+
+  /** Launch speed for this frame — see jetPhysics.js for the rule. Unsolved
+   *  nozzles return the caller's legacy per-type estimate unchanged. */
+  _launchSpeed(demand, fallbackSpeed) {
+    return JP_launchSpeed(this.physics, demand, fallbackSpeed,
+                          this._overDemandSink, this.config?.id);
+  }
+
   /**
    * Drive all 4 layers each frame.
    * @param delta seconds since last frame
@@ -854,7 +870,7 @@ class NozzleV2 {
         const spawnN = Math.floor(delta * 280 * ix);
         for (let s=0; s<spawnN; s++) {
           const jit = 0.015;
-          const vy = 4.5 + ix * 5.5 + (Math.random()-0.5)*0.3;
+          const vy = this._launchSpeed(ix, 4.5 + ix * 5.5) + (Math.random()-0.5)*0.3;
           const vx = (Math.random()-0.5)*jit + wind.x*0.08;
           const vz = (Math.random()-0.5)*jit + wind.z*0.08;
           const life = vy * 2.04 / 9.81;
@@ -871,7 +887,7 @@ class NozzleV2 {
         const tiltX = (cfg.tiltX||0)*Math.PI/180;
         const tiltZ = (cfg.tiltZ||0)*Math.PI/180;
         for (let s=0; s<spawnN; s++) {
-          const speed = 5.5 + ix*7.0;
+          const speed = this._launchSpeed(ix, 5.5 + ix*7.0);
           const vy = Math.cos(tiltX)*Math.cos(tiltZ)*speed;
           const vx = Math.sin(tiltX)*speed + (Math.random()-0.5)*0.06 + wind.x*0.1;
           const vz = Math.sin(tiltZ)*speed + (Math.random()-0.5)*0.06 + wind.z*0.1;
@@ -881,7 +897,7 @@ class NozzleV2 {
   	    vx, vy, vz, waterR, waterG, waterB, 0.88, life, sc, 0.6);
         }
         if (ix > 0.35) {
-          const speed = 5.5 + ix*7.0;
+          const speed = this._launchSpeed(ix, 5.5 + ix*7.0);
           const apex = (Math.cos((cfg.tiltX||0)*Math.PI/180)*speed)**2/(2*9.81);
           this._spawnApexMist(ox, apex, oz, ix, 0.20);
         }
@@ -893,7 +909,7 @@ class NozzleV2 {
         const tiltX = (cfg.tiltX||0)*Math.PI/180;
         const tiltZ = (cfg.tiltZ||0)*Math.PI/180;
         for (let s=0; s<spawnN; s++) {
-          const speed = 6.5 + ix*8.5;
+          const speed = this._launchSpeed(ix, 6.5 + ix*8.5);
           const spread = 0.055 + ix*0.04;
           const vy = Math.cos(tiltX)*speed;
           const vx = Math.sin(tiltX)*speed + (Math.random()-0.5)*spread + wind.x*0.12;
@@ -1041,7 +1057,7 @@ class NozzleV2 {
         const rot = elapsed * 2.5;
         for (let s=0; s<spawnN; s++) {
           const a = rot + (Math.random()-0.5)*0.4;
-          const speed = 5.5 + ix*7.0;
+          const speed = this._launchSpeed(ix, 5.5 + ix*7.0);
           const vy = Math.cos(0.4)*speed;
           const vx = Math.sin(0.4)*Math.cos(a)*speed + wind.x*0.1;
           const vz = Math.sin(0.4)*Math.sin(a)*speed + wind.z*0.1;
@@ -1157,7 +1173,7 @@ class NozzleV2 {
         const tiltX = ((cfg.tiltX || 0) + animPhase * 30) * Math.PI / 180;
         const spawnN = Math.floor(delta * 380 * ix);
         for (let s = 0; s < spawnN; s++) {
-          const speed = 5.5 + ix * 7.0;
+          const speed = this._launchSpeed(ix, 5.5 + ix * 7.0);
           const vy = Math.cos(tiltX) * speed;
           const vx = Math.sin(tiltX) * speed + (Math.random()-0.5)*0.1 + wind.x*0.1;
           const vz = (Math.random()-0.5)*0.1 + wind.z*0.1;
@@ -1176,7 +1192,7 @@ class NozzleV2 {
         const tiltZ = ((cfg.tiltZ || 0) + animZ * 25) * Math.PI / 180;
         const spawnN = Math.floor(delta * 400 * ix);
         for (let s = 0; s < spawnN; s++) {
-          const speed = 5.5 + ix * 7.0;
+          const speed = this._launchSpeed(ix, 5.5 + ix * 7.0);
           const vy = Math.cos(tiltX) * Math.cos(tiltZ) * speed;
           const vx = Math.sin(tiltX) * speed + (Math.random()-0.5)*0.12 + wind.x*0.1;
           const vz = Math.sin(tiltZ) * speed + (Math.random()-0.5)*0.12 + wind.z*0.1;
@@ -1228,7 +1244,7 @@ case 'screen': {
         // Center height = v²/2g; envelope is 4:1, compressed 0.75 → 3:1 (15m×5m).
         // Size scales with pump intensity, keeping the 3:1 proportion.
 
-        const v      = 7.5 + ix * 3.5;       // launch speed (m/s) — pump dependent
+        const v      = this._launchSpeed(ix, 7.5 + ix * 3.5);  // solved exit velocity when available
         const HCOMP  = 0.75;                 // horizontal compression → 15:5 (3:1) ratio
         const thMin  = 14 * Math.PI / 180;   // skip degenerate near-horizontal jets
         const thMax  = 166 * Math.PI / 180;
@@ -1444,6 +1460,10 @@ export class FountainScene {
     };
     this._perNozzle = null;
     this.userNozzles= null;   // null = use default layout, array = engineering override
+    // Solver-supplied per-nozzle physics (AQ-S2-002 Phase 2). null = unsolved, so
+    // jets fall back to the legacy per-type heuristic and report basis ESTIMATED.
+    this._nozzlePhysics = null;
+    this._overDemand    = {};
     this.nozzles    = [];
     this._initialized = false;
 
@@ -1683,6 +1703,55 @@ export class FountainScene {
     } catch (e) { /* disposal is best-effort */ }
     this.composer = null;
     this._postEnabled = false;
+  }
+
+  // ── Solver-driven jet physics (AQ-S2-002 Phase 2) ───────────────────────────
+  /**
+   * Feed per-nozzle results from the backend hydraulic solver.
+   *
+   * `physics` is { [nozzleId]: { exitVelocityMs, jetHeightM, basis } } as returned
+   * by POST /api/hydraulics (services/hydraulic_solver.py). Once set, a nozzle's
+   * launch speed is CALCULATED from its solved exit velocity instead of the old
+   * per-type guess, and the solved height becomes a hard physical ceiling.
+   *
+   * Passing null/{} reverts every nozzle to the legacy heuristic — the preview
+   * still runs without a solve, it is just no longer physically backed.
+   */
+  setNozzlePhysics(physics) {
+    this._nozzlePhysics = (physics && typeof physics === "object") ? physics : null;
+    this._overDemand = {};   // recomputed as frames render
+    this._applyNozzlePhysics();
+  }
+
+  /** Push the solved records onto the live nozzle instances. Called whenever the
+   *  physics changes AND after nozzles are rebuilt, so a re-layout keeps its solve. */
+  _applyNozzlePhysics() {
+    const map = this._nozzlePhysics;
+    (this.nozzles || []).forEach(nz => {
+      const rec = map ? (map[nz?.config?.id] || null) : null;
+      nz.setPhysics?.(rec, this._overDemand);
+    });
+  }
+
+  /**
+   * Diagnostics for the honesty layer: which nozzles are being asked for more
+   * height than the solved hydraulics can deliver, and on what basis the jets are
+   * currently drawn. `basis` is CALCULATED once a solve has been supplied,
+   * ESTIMATED otherwise — the preview must never imply more rigour than it has.
+   */
+  getPhysicsStatus() {
+    const solved = !!this._nozzlePhysics;
+    const over = Object.entries(this._overDemand || {}).map(([id, o]) => ({
+      nozzleId: id,
+      demand: Number(o.demand.toFixed(3)),
+      maxJetHeightM: Number((o.jetHeightM || 0).toFixed(3)),
+      message: `Show demands ${o.demand.toFixed(2)}x design height — hydraulics cap this jet at ${(o.jetHeightM || 0).toFixed(2)} m.`,
+    }));
+    return {
+      basis: solved ? "CALCULATED" : "ESTIMATED",
+      solvedNozzles: solved ? Object.keys(this._nozzlePhysics).length : 0,
+      overDemand: over,
+    };
   }
 
   /** Render through the composer when available, else straight to the canvas. */
@@ -2062,6 +2131,10 @@ export class FountainScene {
       if (nz.glow) this.scene.add(nz.glow);
       this.nozzles.push(nz);
     });
+
+    // Re-attach any solved hydraulics to the freshly built nozzle instances, so a
+    // re-layout does not silently drop back to the estimated jet heights.
+    this._applyNozzlePhysics();
 
     if (this._initialized) this._buildReviewOverlays();
   }
