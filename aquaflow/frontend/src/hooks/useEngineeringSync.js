@@ -11,6 +11,8 @@ import {
 } from "./fixtureTypeMap";
 // AF-HUB-003 — the engineering→3D centering shift goes through the one canonical helper.
 import { centerToWorld } from "../engineering/geometryContract";
+// AQ-S2-002 Phase 2 — solved hydraulics feed the preview's jet physics.
+import { apiPost } from "../utils/apiClient";
 
 export function useEngineeringSync(sceneRef) {
   const lastKeyRef   = useRef(null);
@@ -136,6 +138,36 @@ if (scene.setEngineeringEffects) {
 
 if (scene.setEngineeringPipes) {
   scene.setEngineeringPipes(manualPipes);
+}
+
+// 5. AQ-S2-002 Phase 2 — solve the design's hydraulics and hand the per-nozzle
+// results to the renderer, so jet heights become CALCULATED rather than
+// estimated. Fire-and-forget: the preview must keep rendering (on the legacy
+// estimates) if the backend is unreachable or the design is not solvable.
+if (scene.setNozzlePhysics && nozzleConfigs.length) {
+  const solvePayload = {
+    nozzles: nozzleConfigs.map(n => ({
+      id: n.id, x: n.x, y: n.z,          // scene z is the plan-view y
+      engineering: n.engineering || {},
+    })),
+    params: { design_head_m: Number(params?.design_head_m) || 40.0 },
+    volume_litres: Number(useEngineeringStore.getState().poolVolumeLitres) || 0,
+  };
+  apiPost("/hydraulics/preview-physics", solvePayload)
+    .then(res => {
+      const phys = res?.nozzle_physics;
+      if (phys && Object.keys(phys).length) {
+        scene.setNozzlePhysics(phys);
+        if (Array.isArray(res.validation) && res.validation.length) {
+          // Surface engineering findings without blocking the render.
+          console.info("[aquaflow] hydraulic validation:",
+            res.validation.map(v => `${v.severity}: ${v.message}`).join(" | "));
+        }
+      } else {
+        scene.setNozzlePhysics(null);   // unsolved -> honest fallback to estimates
+      }
+    })
+    .catch(() => { scene.setNozzlePhysics(null); });
 }
   }, [geometry, params, poolType, fixtures, manualPipes, layers]);
 
