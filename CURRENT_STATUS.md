@@ -14,7 +14,8 @@ background with deterministic seeded placement, softened the floor/grid treatmen
 review overlay layer for pool bounds plus fixture reach/safety rings, added a fit-to-design
 camera helper, and exposed Review UI / Scale Overlays controls with a client-facing 3D Review
 HUD in the preview panel. Verification: `npm run build` green; frontend `npm test` green
-with **231 passed (20 files)**.
+with **231 passed (20 files)**. Packaged a slim local install ZIP at
+`release/AquaFlow-3DPreview-ReviewUpgrade-SLIM-20260821-053944.zip`.
 
 ---
 
