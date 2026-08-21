@@ -1,4 +1,34 @@
-export function calculateHydraulics(fixtures = []) {
+/**
+ * hydraulicEngine.js — equipment aggregation for the pool geometry designer.
+ *
+ * AQ-S2-002 — SCOPE CHANGE. This module used to compute hydraulics client-side.
+ * It no longer does, because that maths contradicted the real solver:
+ *
+ *   staticHeadM   = 3                      // hardcoded, ignored the geometry
+ *   frictionHeadM = totalFlowM3Hr * 0.05   // LINEAR in Q
+ *
+ * Friction head is not linear in flow. Hazen-Williams gives h ∝ Q^1.852 (Darcy
+ * gives Q²), so the linear form under-predicts badly at high flow and over-
+ * predicts at low flow. Pipe sizing, dynamic head, hydraulic power, required
+ * pump kW and the pump status flags were all derived from those two numbers, so
+ * all of them were unreliable.
+ *
+ * THE SINGLE SOURCE OF HYDRAULIC TRUTH is now the backend solver
+ * (backend/services/hydraulic_solver.py) — a Global Gradient Algorithm
+ * (Todini & Pilati 1988) network solve, the method EPANET uses, with
+ * pressure-dependent nozzle emitters (q = k·√p), Torricelli exit velocity and
+ * engineering validation. Reach it via POST /api/hydraulics.
+ *
+ * What remains here is pure aggregation of authored nameplate specs — counting
+ * up what the designer placed. That is legitimately a frontend concern and has
+ * no physics in it.
+ */
+
+/**
+ * Sum the nameplate specs of the placed fixtures. NON-HYDRAULIC: this counts
+ * installed capacity and control I/O, it does not solve anything.
+ */
+export function calculateEquipmentTotals(fixtures = []) {
   let totalNozzleFlowLpm = 0;
   let totalProcessFlowLpm = 0;
   let totalPumpCapacityM3Hr = 0;
@@ -69,61 +99,54 @@ export function calculateHydraulics(fixtures = []) {
   const totalFlowLpm = totalNozzleFlowLpm + totalProcessFlowLpm;
   const totalFlowM3Hr = totalFlowLpm * 0.06;
 
-  let recommendedPipeMm = 50;
-  if (totalFlowM3Hr > 20) recommendedPipeMm = 65;
-  if (totalFlowM3Hr > 40) recommendedPipeMm = 80;
-  if (totalFlowM3Hr > 70) recommendedPipeMm = 100;
-  if (totalFlowM3Hr > 120) recommendedPipeMm = 150;
-
-  const staticHeadM = 3;
-  const frictionHeadM = totalFlowM3Hr * 0.05;
-  const totalDynamicHeadM = staticHeadM + frictionHeadM;
-
-  const hydraulicPowerKw = (totalFlowM3Hr * totalDynamicHeadM) / 367;
-  const recommendedPumpKw = hydraulicPowerKw * 1.25;
-
-  const pumpCapacityStatus =
-    totalPumpCapacityM3Hr <= 0
-      ? "NO_PUMP_SELECTED"
-      : totalPumpCapacityM3Hr >= totalFlowM3Hr
-      ? "OK"
-      : "UNDERSIZED";
-
-  const pumpPowerStatus =
-    totalPumpPowerKw <= 0
-      ? "NO_PUMP_SELECTED"
-      : totalPumpPowerKw >= recommendedPumpKw
-      ? "OK"
-      : "UNDERSIZED";
-
   return {
+    // Installed capacity — sums of what the designer placed (nameplate specs).
     totalFlowLpm,
     totalNozzleFlowLpm,
     totalProcessFlowLpm,
     totalFlowM3Hr,
-
-    recommendedPipeMm,
-
-    staticHeadM,
-    frictionHeadM,
-    totalDynamicHeadM,
-
-    hydraulicPowerKw,
-    recommendedPumpKw,
-
     totalPumpCapacityM3Hr,
     totalPumpPowerKw,
-    pumpCapacityStatus,
-    pumpPowerStatus,
 
+    // Electrical / media / control I/O — never were hydraulics.
     totalWatts,
     totalAirFlowLpm,
     totalFuelFlow,
-
     totalDmxChannels,
     totalDigitalInputs,
     totalDigitalOutputs,
     totalAnalogInputs,
-    totalAnalogOutputs
+    totalAnalogOutputs,
+
+    // These are SUMS OF AUTHORED SPECS, not a solved duty point.
+    flowBasis: "SPEC_SUM",
+  };
+}
+
+/**
+ * @deprecated Client-side hydraulics have been retired (AQ-S2-002).
+ *
+ * Returns the equipment totals plus the former hydraulic fields pinned to null,
+ * so any consumer that still reads them gets an explicit "not calculated here"
+ * rather than a plausible-looking wrong number. Fetch the real values from the
+ * backend solver (POST /api/hydraulics) — see the module header.
+ */
+export function calculateHydraulics(fixtures = []) {
+  return {
+    ...calculateEquipmentTotals(fixtures),
+
+    // Retired: these were derived from a hardcoded static head and a linear
+    // friction approximation. The backend solver computes them properly.
+    recommendedPipeMm: null,
+    staticHeadM: null,
+    frictionHeadM: null,
+    totalDynamicHeadM: null,
+    hydraulicPowerKw: null,
+    recommendedPumpKw: null,
+    pumpCapacityStatus: null,
+    pumpPowerStatus: null,
+
+    hydraulicsBasis: "BACKEND_SOLVER_REQUIRED",
+    hydraulicsSource: "POST /api/hydraulics (services/hydraulic_solver.py)",
   };
 }

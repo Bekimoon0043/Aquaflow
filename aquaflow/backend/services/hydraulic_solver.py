@@ -37,7 +37,12 @@ GRAVITY = 9.81          # m/s^2
 WATER_DENSITY = 1000.0  # kg/m^3
 
 HW_EXPONENT = 1.852     # Hazen-Williams flow exponent
+# Fraction of the ideal ballistic height v^2/2g a real vertical jet reaches. Air drag
+# and jet break-up cost roughly 10-15%; 0.87 is the mid of the range quoted for
+# fountain nozzles. ESTIMATED, not measured — labelled as such downstream.
+JET_EFFICIENCY = 0.87
 _Q_FLOOR = 1e-6         # m^3/s — floors |Q| in the derivative to keep it non-singular
+_P_FLOOR = 1e-9         # m — floors emitter head so p^(alpha-1) stays finite at p=0
 
 
 @dataclass
@@ -46,6 +51,16 @@ class HydraulicNode:
     elevation: float = 0.0          # m
     demand: float = 0.0             # m^3/s, positive = water drawn from the node
     fixed_head: Optional[float] = None  # m — set for reservoirs / pump-discharge / tanks
+    # ── Emitter (AQ-S2-002) ──────────────────────────────────────────────────
+    # A fountain nozzle is NOT a fixed demand: it discharges to atmosphere, so its
+    # flow is whatever the available pressure pushes through its orifice —
+    #     q = k_emit * p^alpha,  p = head - elevation  (the free-discharge head)
+    # with alpha = 0.5 for an orifice (Torricelli). Setting emitter_k makes the
+    # node pressure-dependent and its flow becomes a SOLVED result, not an input.
+    emitter_k: Optional[float] = None    # m^3/s per m^alpha
+    emitter_exponent: float = 0.5
+    # Discharge coefficient used to turn the solved head into a jet exit velocity.
+    discharge_coeff: float = 0.97
 
 
 @dataclass
@@ -72,6 +87,10 @@ class HydraulicResult:
     max_continuity_residual: float
     max_loop_residual: float
     topology: dict = field(default_factory=dict)
+    # Emitter (nozzle) results — populated only for nodes carrying emitter_k.
+    emitter_flow: dict = field(default_factory=dict)        # id -> m^3/s (SOLVED)
+    emitter_exit_velocity: dict = field(default_factory=dict)  # id -> m/s
+    emitter_jet_height: dict = field(default_factory=dict)   # id -> m (free vertical jet)
 
 
 class HydraulicNetworkSolver:
@@ -145,6 +164,13 @@ class HydraulicNetworkSolver:
         H0 = np.array([n.fixed_head for n in fixed], dtype=float)
         demand = np.array([n.demand for n in unknown], dtype=float)
 
+        # Emitter (nozzle) coefficients for the unknown-head nodes. A node with
+        # emitter_k contributes a HEAD-DEPENDENT outflow on top of any fixed demand.
+        emit_k = np.array([(n.emitter_k or 0.0) for n in unknown], dtype=float)
+        emit_a = np.array([n.emitter_exponent for n in unknown], dtype=float)
+        emit_z = np.array([n.elevation for n in unknown], dtype=float)
+        has_emitters = bool(np.any(emit_k > 0.0))
+
         # Initial guess: small positive flows; junction heads at mean fixed head.
         Q = np.full(nl, 1e-3)
         H = np.full(nn, float(np.mean(H0)))
@@ -161,11 +187,33 @@ class HydraulicNetworkSolver:
 
             # Residuals of the current iterate.
             energy_res = a * Q - A12 @ H - A10 @ H0        # nl
-            cont_res = A21 @ Q + demand                    # nn
+
+            # Emitter outflow q_e = k * p^alpha (p = free-discharge head above the
+            # node) and its derivative dq/dH = alpha * k * p^(alpha-1). p is floored
+            # at 0: a nozzle above the hydraulic grade line discharges nothing (it
+            # cannot suck air back in), and the floor keeps the derivative finite.
+            if has_emitters:
+                p_head = np.maximum(H - emit_z, 0.0)
+                p_safe = np.maximum(p_head, _P_FLOOR)
+                q_emit = emit_k * p_safe ** emit_a
+                dq_dH = emit_a * emit_k * p_safe ** (emit_a - 1.0)
+                # Nodes that are dry contribute no flow and no slope.
+                dry = p_head <= 0.0
+                q_emit = np.where(dry, 0.0, q_emit)
+                dq_dH = np.where(dry, 0.0, dq_dH)
+            else:
+                q_emit = np.zeros(nn)
+                dq_dH = np.zeros(nn)
+
+            cont_res = A21 @ Q + demand + q_emit           # nn
 
             Dinv = 1.0 / g
-            # Schur-complement (weighted graph Laplacian) for the head update.
+            # Schur-complement (weighted graph Laplacian) for the head update. With
+            # pressure-dependent demand the node block gains the emitter slope on its
+            # diagonal — this is what keeps Newton quadratic instead of oscillating.
             F = A21 @ (Dinv[:, None] * A12)                # nn x nn, SPD
+            if has_emitters:
+                F = F + np.diag(dq_dH)
             rhs = A21 @ (Dinv * energy_res) - cont_res
             try:
                 dH = np.linalg.solve(F, rhs)
@@ -202,6 +250,21 @@ class HydraulicNetworkSolver:
 
         # Continuity residual at every node (including the balance that the fixed
         # nodes must supply): recompute from final flows.
+        # ── Emitter (nozzle) discharge, from the SOLVED head ──────────────────
+        # q = k·p^alpha ; exit velocity from Torricelli v = Cd·sqrt(2·g·p) ; the
+        # free vertical jet then rises h = v²/(2g). JET_EFFICIENCY accounts for air
+        # drag and jet break-up, which the ideal ballistic height ignores.
+        emitter_flow, emitter_v, emitter_h = {}, {}, {}
+        for n in nodes:
+            if not n.emitter_k:
+                continue
+            p_head = max(head_all[n.id] - n.elevation, 0.0)
+            q_e = float(n.emitter_k * (p_head ** n.emitter_exponent)) if p_head > 0 else 0.0
+            v_e = float(n.discharge_coeff * math.sqrt(2.0 * GRAVITY * p_head))
+            emitter_flow[n.id] = q_e
+            emitter_v[n.id] = v_e
+            emitter_h[n.id] = float(JET_EFFICIENCY * v_e * v_e / (2.0 * GRAVITY))
+
         max_cont = 0.0
         for n in unknown:
             net_out = 0.0
@@ -210,7 +273,7 @@ class HydraulicNetworkSolver:
                     net_out += Q[p_i]
                 elif p.to_node == n.id:
                     net_out -= Q[p_i]
-            max_cont = max(max_cont, abs(net_out + n.demand))
+            max_cont = max(max_cont, abs(net_out + n.demand + emitter_flow.get(n.id, 0.0)))
 
         # Loop (energy) residual: for any closed loop the signed head-loss sum is
         # zero. We verify the stronger equivalent — every pipe's head loss equals
@@ -234,6 +297,9 @@ class HydraulicNetworkSolver:
             max_continuity_residual=float(max_cont),
             max_loop_residual=float(max_loop),
             topology=topo,
+            emitter_flow=emitter_flow,
+            emitter_exit_velocity=emitter_v,
+            emitter_jet_height=emitter_h,
         )
 
     # ── Topology classification ───────────────────────────────────────────────
@@ -269,6 +335,101 @@ class HydraulicNetworkSolver:
 
 
 # ── Convenience: solve from a plain dict payload ───────────────────────────────
+# ── Engineering validation (AQ-S2-002) ───────────────────────────────────────
+# Recommended pipe velocities for fountain/pool service. Below the floor, solids
+# settle and the line silts up; above the ceiling you get noise, erosion and steep
+# friction losses. These are design-guidance limits, not hard physics — flagged as
+# warnings so a designer sees the problem, which pre-viz tools do not do at all.
+VELOCITY_MIN_MS = 0.6
+VELOCITY_MAX_MS = 3.0
+CAVITATION_VELOCITY_MS = 6.0     # beyond this, suction-side cavitation risk is real
+
+
+def validate_network(res: "HydraulicResult", nodes: list, pipes: list) -> list[dict]:
+    """Turn a solved network into actionable engineering warnings.
+
+    Every finding carries severity, the offending element, the measured value and
+    the limit it broke, so the UI can explain WHY something is wrong rather than
+    just colouring it red.
+    """
+    findings: list[dict] = []
+
+    if not res.converged:
+        findings.append({
+            "severity": "error", "code": "NO_CONVERGENCE", "element": "network",
+            "message": (f"Hydraulic solve did not converge in {res.iterations} iterations — "
+                        "results are not trustworthy."),
+        })
+
+    for p in pipes:
+        v = abs(res.pipe_velocity.get(p.id, 0.0))
+        if v >= CAVITATION_VELOCITY_MS:
+            sev, code = "error", "VELOCITY_CAVITATION"
+            msg = (f"Pipe '{p.id}' velocity {v:.2f} m/s risks cavitation and erosion "
+                   f"(limit {CAVITATION_VELOCITY_MS} m/s). Increase the diameter.")
+        elif v > VELOCITY_MAX_MS:
+            sev, code = "warning", "VELOCITY_HIGH"
+            msg = (f"Pipe '{p.id}' velocity {v:.2f} m/s exceeds the {VELOCITY_MAX_MS} m/s "
+                   "design guideline — expect noise and high friction loss.")
+        elif 0.0 < v < VELOCITY_MIN_MS:
+            sev, code = "info", "VELOCITY_LOW"
+            msg = (f"Pipe '{p.id}' velocity {v:.2f} m/s is below {VELOCITY_MIN_MS} m/s — "
+                   "sediment may settle in this line.")
+        else:
+            continue
+        findings.append({"severity": sev, "code": code, "element": p.id,
+                         "value": round(v, 3), "limit": VELOCITY_MAX_MS, "message": msg})
+
+    # Starved nozzles: an emitter with no head produces nothing. This is the check
+    # that catches "the design looks fine but that jet will never run".
+    for n in nodes:
+        if not getattr(n, "emitter_k", None):
+            continue
+        p_head = res.node_head.get(n.id, 0.0) - n.elevation
+        if p_head <= 0.0:
+            findings.append({
+                "severity": "error", "code": "NOZZLE_STARVED", "element": n.id,
+                "value": round(p_head, 3), "limit": 0.0,
+                "message": (f"Nozzle '{n.id}' sits above the hydraulic grade line "
+                            f"({p_head:.2f} m of head) — it will not flow at all."),
+            })
+        elif res.emitter_jet_height.get(n.id, 0.0) < 0.05:
+            findings.append({
+                "severity": "warning", "code": "NOZZLE_WEAK", "element": n.id,
+                "value": round(res.emitter_jet_height.get(n.id, 0.0), 3), "limit": 0.05,
+                "message": (f"Nozzle '{n.id}' has only {p_head:.2f} m of head — "
+                            "the jet will barely leave the orifice."),
+            })
+
+    return findings
+
+
+def check_pump_adequacy(required_head_m: float, required_flow_m3s: float,
+                        pump_head_m: float, pump_flow_m3s: float) -> Optional[dict]:
+    """Flag an undersized pump against the duty the solved network actually needs.
+
+    This is the headline engineering-truth check: a pre-viz tool will happily render
+    a fountain whose pump cannot deliver the design height.
+    """
+    if pump_head_m <= 0 or pump_flow_m3s <= 0:
+        return None
+    head_ratio = required_head_m / pump_head_m if pump_head_m else float("inf")
+    flow_ratio = required_flow_m3s / pump_flow_m3s if pump_flow_m3s else float("inf")
+    worst = max(head_ratio, flow_ratio)
+    if worst <= 1.0:
+        return None
+    shortfall = (worst - 1.0) * 100.0
+    limiting = "head" if head_ratio >= flow_ratio else "flow"
+    return {
+        "severity": "error", "code": "PUMP_UNDERSIZED", "element": "pump",
+        "value": round(worst, 3), "limit": 1.0,
+        "message": (f"Pump is {shortfall:.0f}% undersized on {limiting}: the network needs "
+                    f"{required_head_m:.1f} m @ {required_flow_m3s*3600:.1f} m3/h but the pump "
+                    f"delivers {pump_head_m:.1f} m @ {pump_flow_m3s*3600:.1f} m3/h. "
+                    "Jets will fall short of design height."),
+    }
+
+
 def solve_network(payload: dict) -> dict:
     """Solve a network described by a JSON-friendly dict and return a dict result."""
     nodes = [
@@ -277,6 +438,9 @@ def solve_network(payload: dict) -> dict:
             elevation=float(n.get("elevation", 0.0)),
             demand=float(n.get("demand", 0.0)),
             fixed_head=(None if n.get("fixed_head") is None else float(n["fixed_head"])),
+            emitter_k=(None if n.get("emitter_k") in (None, "") else float(n["emitter_k"])),
+            emitter_exponent=float(n.get("emitter_exponent", 0.5)),
+            discharge_coeff=float(n.get("discharge_coeff", 0.97)),
         )
         for n in payload.get("nodes", [])
     ]
@@ -318,9 +482,22 @@ def solve_network(payload: dict) -> dict:
                 "pressure_bar": round(WATER_DENSITY * GRAVITY * res.node_pressure_m[nid] / 1e5, 5),
                 "demand": node_by_id[nid].demand,
                 "fixed": node_by_id[nid].fixed_head is not None,
+                # Emitter (nozzle) results. Flow/velocity are CALCULATED from the
+                # solved head; jet_height_m is ESTIMATED (drag factor) — the UI must
+                # keep that distinction visible.
+                **({
+                    "is_nozzle": True,
+                    "nozzle_flow_m3s": round(res.emitter_flow.get(nid, 0.0), 9),
+                    "nozzle_flow_lpm": round(res.emitter_flow.get(nid, 0.0) * 60000.0, 3),
+                    "exit_velocity_ms": round(res.emitter_exit_velocity.get(nid, 0.0), 4),
+                    "jet_height_m": round(res.emitter_jet_height.get(nid, 0.0), 4),
+                    "jet_height_basis": "ESTIMATED",
+                    "flow_basis": "CALCULATED",
+                } if node_by_id[nid].emitter_k else {}),
             }
             for nid in res.node_head
         ],
+        "validation": validate_network(res, nodes, pipes),
         "pipes": [
             {
                 "id": pid,

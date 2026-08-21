@@ -1578,6 +1578,12 @@ setFixtures(prev => [...prev, {
     capacityStatus: hydraulicSummary.pumpCapacityStatus,
     powerStatus: hydraulicSummary.pumpPowerStatus,
   },
+  // AQ-S2-002 — flow figures here are SPEC SUMS (installed capacity), and the
+  // pump/pipe hydraulics are null because client-side hydraulics were retired:
+  // the backend solver (POST /api/hydraulics) is the single source of truth.
+  // Null is deliberate — better an honest gap than a plausible wrong number.
+  hydraulicsBasis: hydraulicSummary.hydraulicsBasis,
+  hydraulicsSource: hydraulicSummary.hydraulicsSource,
   pipe:{
     recommendedPipeMm: hydraulicSummary.recommendedPipeMm,
     totalDynamicHeadM: hydraulicSummary.totalDynamicHeadM,
