@@ -63,6 +63,8 @@ export default function PreviewPanel() {
   const [lightCol, setLightCol] = useState("#0066ff");
   const [windX,    setWindX]    = useState(0);
   const [windZ,    setWindZ]    = useState(0);
+  const [reviewMode, setReviewMode] = useState(true);
+  const [reviewOverlays, setReviewOverlays] = useState(true);
 
   // Panel visibility
   const [tab, setTab] = useState("render"); // render | signals | info
@@ -213,6 +215,8 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
       environment: env, quality, cameraMode: cam, lightColor: lightCol,
     });
     scene.init();
+    scene.setReviewOverlays?.(reviewOverlays);
+    scene.fitCameraToDesign?.();
     sceneRef.current = scene;
     // VR Walkthrough (AQ-S3-006): probe headset availability for the toolbar.
     if (scene.supportsVR) scene.supportsVR().then(setVrSupported).catch(() => setVrSupported(false));
@@ -229,6 +233,7 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
   useEffect(() => { sceneRef.current?.setCameraMode(cam); }, [cam]);
   useEffect(() => { sceneRef.current?.setLightColor(lightCol); }, [lightCol]);
   useEffect(() => { sceneRef.current?.setWind(windX, windZ); }, [windX, windZ]);
+  useEffect(() => { sceneRef.current?.setReviewOverlays?.(reviewOverlays); }, [reviewOverlays]);
   useEffect(() => {
   if (!sceneRef.current) return;
 
@@ -281,6 +286,28 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
       {/* ── 3D Canvas ── */}
       <canvas ref={canvasRef} style={{ flex:1, display:"block", minWidth:0 }} />
 
+      {reviewMode && (
+        <div style={{
+          position:"absolute", top:12, left:12, zIndex:14, pointerEvents:"none",
+          minWidth:190, padding:"10px 12px", borderRadius:6,
+          background:"rgba(4,10,16,0.76)", border:"1px solid rgba(215,185,87,0.34)",
+          boxShadow:"0 12px 34px rgba(0,0,0,0.34)", backdropFilter:"blur(6px)",
+        }}>
+          <div style={{ color:"#d7b957", fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>
+            3D Review
+          </div>
+          <div style={{ color:"#e8eef6", fontSize:13, fontWeight:700, lineHeight:1.2, marginBottom:6 }}>
+            {projectName || "AquaFlow Scene"}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, fontFamily:"monospace", fontSize:10 }}>
+            <div style={{ color:"#8ea4b8" }}>Fixtures <span style={{ color:"#58c7ff" }}>{fixtureCount}</span></div>
+            <div style={{ color:"#8ea4b8" }}>Pool <span style={{ color:"#58c7ff" }}>{poolDesc}</span></div>
+            <div style={{ color:"#8ea4b8" }}>Signal <span style={{ color:"#58c7ff" }}>{engineSignals?.source || "manual"}</span></div>
+            <div style={{ color:"#8ea4b8" }}>Flow <span style={{ color:"#58c7ff" }}>{(hydraulics?.totalFlowM3Hr||0).toFixed(1)} m3/h</span></div>
+          </div>
+        </div>
+      )}
+
       {/* ── Presentation caption overlay (AQ-S3-006) ── */}
       {presenting && tourCaption && (
         <div style={{
@@ -326,11 +353,24 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
 
             <div style={sectionLabel}>Camera</div>
             <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:10 }}>
+              <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} style={{
+                ...btnSm(false,"#00ff88"), textAlign:"left", padding:"4px 6px",
+              }}>Fit design</button>
               {CAMS.map(c=>(
                 <button key={c.key} onClick={()=>setCam(c.key)} style={{
                   ...btnSm(cam===c.key), textAlign:"left", padding:"4px 6px",
                 }}>{c.icon} {c.label}</button>
               ))}
+            </div>
+
+            <div style={sectionLabel}>Review</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:3, marginBottom:10 }}>
+              <button onClick={() => setReviewMode(v => !v)} style={{
+                ...btnSm(reviewMode,"#d7b957"), textAlign:"left", padding:"4px 6px",
+              }}>{reviewMode ? "Review UI on" : "Review UI off"}</button>
+              <button onClick={() => setReviewOverlays(v => !v)} style={{
+                ...btnSm(reviewOverlays,"#58c7ff"), textAlign:"left", padding:"4px 6px",
+              }}>{reviewOverlays ? "Scale overlays on" : "Scale overlays off"}</button>
             </div>
 
             <div style={sectionLabel}>Walkthrough</div>

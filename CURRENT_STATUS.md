@@ -5,6 +5,19 @@
 > `npm run build` green. Single source of truth: `AQUAFLOW_STATUS_CANONICAL.md`. Test/task
 > numbers in the dated entries below are point-in-time snapshots — the line above is current.
 
+**Date:** 2026-08-21 (3D preview review upgrade)
+**Summary:** Improved the 3D Preview after reviewing current Three.js/WebGL preview practices
+and the runtime screenshot showing a WebGL shader compile failure. Fixed the glow billboard
+shader by removing duplicate built-in `position`/`uv` declarations, added sRGB renderer output
+color handling, made quality presets affect pixel ratio/shadows/exposure, stabilized the venue
+background with deterministic seeded placement, softened the floor/grid treatment, added a
+review overlay layer for pool bounds plus fixture reach/safety rings, added a fit-to-design
+camera helper, and exposed Review UI / Scale Overlays controls with a client-facing 3D Review
+HUD in the preview panel. Verification: `npm run build` green; frontend `npm test` green
+with **231 passed (20 files)**.
+
+---
+
 **Date:** 2026-07-07 (later — branding, update server, license clarification)
 **Summary:** Closed out the CEO's "logo / update-server / license" follow-up. **(1) Branding:**
 new `aquaflow/desktop/scripts/generate_brand_assets.py` (Pillow) builds the real app identity

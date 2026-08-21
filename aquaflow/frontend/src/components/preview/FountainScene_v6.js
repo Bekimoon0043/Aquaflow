@@ -72,6 +72,16 @@ export const RENDER_QUALITY = { LOW:"low", MEDIUM:"medium", HIGH:"high" };
 
 // Max RGB fixture lights uploaded to the spatial light field shader
 const MAX_FIELD_LIGHTS = 16;
+const QUALITY_CONFIG = {
+  low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00 },
+  medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00 },
+  high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08 },
+};
+
+function seededNoise(i, salt = 0) {
+  const x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
 
 // ─── SPRITE SHADER — anisotropic, velocity-aligned droplet w/ RGB light field ─
 const SPRITE_VERT = /* glsl */`
@@ -264,8 +274,6 @@ void main(){
 
 // ─── LOCALIZED LIT-VOLUME GLOW (camera-facing billboard above each jet) ──────
 const GLOW_VERT = /* glsl */`
-attribute vec3 position;
-attribute vec2 uv;
 uniform vec3   uOrigin;
 uniform float  uHeight;
 uniform float  uRadius;
@@ -1387,7 +1395,8 @@ export class FountainScene {
   init() {
     const T=this.THREE;
     const W=this.canvas.clientWidth||900, H=this.canvas.clientHeight||600;
-    const PR=Math.min(window.devicePixelRatio||1, 2);
+    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
+    const PR=Math.min(window.devicePixelRatio||1, q.pixelRatio);
 
     this.renderer = new T.WebGLRenderer({
       canvas:this.canvas, antialias:true, alpha:false,
@@ -1396,10 +1405,11 @@ export class FountainScene {
     });
     this.renderer.setSize(W, H, false);
     this.renderer.setPixelRatio(PR);
-    this.renderer.shadowMap.enabled = true;
+    if (T.SRGBColorSpace) this.renderer.outputColorSpace = T.SRGBColorSpace;
+    this.renderer.shadowMap.enabled = q.shadows;
     this.renderer.shadowMap.type    = T.PCFSoftShadowMap;
     this.renderer.toneMapping       = T.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 2.1;
+    this.renderer.toneMappingExposure = 2.1 * q.exposure;
     this.renderer.xr.enabled = true;   // VR Walkthrough (AQ-S3-006)
 
     this.scene  = new T.Scene();
@@ -1442,6 +1452,7 @@ export class FountainScene {
     this._buildUnderwaterLights();
     this._buildLasers();
     this._buildNozzles();
+    this._buildReviewOverlays();
     this._setupEvents();
 
     this._initialized = true;
@@ -1527,7 +1538,7 @@ export class FountainScene {
     }
     this._poolRadius=poolRadius; this._poolW=poolW; this._poolL=poolL; this._poolType=poolType;
 
-    const deckMat = new T.MeshStandardMaterial({ color:0x151520, roughness:0.88, metalness:0.08 });
+    const deckMat = new T.MeshStandardMaterial({ color:0x10151b, roughness:0.78, metalness:0.12 });
     const deck = new T.Mesh(new T.PlaneGeometry(80,80), deckMat);
     deck.rotation.x=-Math.PI/2; deck.position.y=-0.02; deck.receiveShadow=true;
     this.scene.add(deck); this._poolObjects.push(deck);
@@ -1562,7 +1573,9 @@ export class FountainScene {
     floor.rotation.x=-Math.PI/2; floor.position.y=-0.45;
     this.scene.add(floor); this._poolObjects.push(floor);
 
-    const gridHelper = new T.GridHelper(40,40,0x1a1a28,0x1a1a28);
+    const gridHelper = new T.GridHelper(40,40,0x263447,0x101b29);
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.32;
     gridHelper.position.y=0.001; this.scene.add(gridHelper); this._poolObjects.push(gridHelper);
   }
 
@@ -1655,22 +1668,44 @@ export class FountainScene {
     const T=this.THREE;
     if (this._venueGroup) { this.scene.remove(this._venueGroup); }
     this._venueGroup = new T.Group();
+
+    const stageMat = new T.MeshStandardMaterial({
+      color: 0x11161b,
+      roughness: 0.72,
+      metalness: 0.18,
+    });
+    const stage = new T.Mesh(new T.CylinderGeometry(11.5, 12.2, 0.22, 96), stageMat);
+    stage.position.y = -0.12;
+    stage.receiveShadow = true;
+    this._venueGroup.add(stage);
+
+    const rimMat = new T.MeshStandardMaterial({
+      color: 0x27313c,
+      emissive: 0x041526,
+      roughness: 0.35,
+      metalness: 0.65,
+    });
+    const rim = new T.Mesh(new T.TorusGeometry(12.35, 0.045, 8, 128), rimMat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.03;
+    this._venueGroup.add(rim);
+
     for (let i=0;i<16;i++){
       const a=(i/16)*Math.PI*2;
-      const d=24+Math.random()*10;
-      const h=3+Math.random()*6;
+      const d=24+seededNoise(i, 1)*10;
+      const h=3+seededNoise(i, 2)*6;
       const tg=new T.CylinderGeometry(0.15,0.9,h,5);
-      const tm=new T.MeshStandardMaterial({color:0x080e06,roughness:1});
+      const tm=new T.MeshStandardMaterial({color:0x101716,roughness:0.92});
       const t=new T.Mesh(tg,tm);
       t.position.set(Math.cos(a)*d,h/2,Math.sin(a)*d);
       this._venueGroup.add(t);
     }
     for (let i=0;i<6;i++){
       const a=(i/6)*Math.PI*2+0.2;
-      const d=35+Math.random()*15;
-      const h=8+Math.random()*20;
-      const bg=new T.BoxGeometry(4+Math.random()*5,h,4+Math.random()*5);
-      const bm=new T.MeshStandardMaterial({color:0x05080f,roughness:1});
+      const d=35+seededNoise(i, 3)*15;
+      const h=8+seededNoise(i, 4)*20;
+      const bg=new T.BoxGeometry(4+seededNoise(i, 5)*5,h,4+seededNoise(i, 6)*5);
+      const bm=new T.MeshStandardMaterial({color:0x070b12,roughness:0.95,metalness:0.05});
       const b=new T.Mesh(bg,bm);
       b.position.set(Math.cos(a)*d,h/2,Math.sin(a)*d);
       this._venueGroup.add(b);
@@ -1783,6 +1818,76 @@ export class FountainScene {
       if (nz.glow) this.scene.add(nz.glow);
       this.nozzles.push(nz);
     });
+
+    if (this._initialized) this._buildReviewOverlays();
+  }
+
+  _buildReviewOverlays() {
+    const T = this.THREE;
+    if (this._reviewGroup) this.scene.remove(this._reviewGroup);
+    this._reviewGroup = new T.Group();
+    this._reviewGroup.visible = this.reviewOverlays !== false;
+
+    const ringMat = new T.LineBasicMaterial({
+      color: 0x58c7ff,
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+    });
+    const safetyMat = new T.LineBasicMaterial({
+      color: 0xffcc55,
+      transparent: true,
+      opacity: 0.26,
+      depthWrite: false,
+    });
+    const boundsMat = new T.LineBasicMaterial({
+      color: 0xd7b957,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+    });
+
+    const circleLine = (radius, mat, y = 0.055) => {
+      const pts = [];
+      const segs = 96;
+      for (let i = 0; i <= segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        pts.push(new T.Vector3(Math.cos(a) * radius, y, Math.sin(a) * radius));
+      }
+      return new T.Line(new T.BufferGeometry().setFromPoints(pts), mat);
+    };
+
+    if (this._poolType === "circular") {
+      this._reviewGroup.add(circleLine((this._poolRadius || 6) + 0.2, boundsMat, 0.075));
+    } else {
+      const w = (this._poolW || 12) / 2 + 0.18;
+      const l = (this._poolL || 8) / 2 + 0.18;
+      const pts = [
+        new T.Vector3(-w, 0.075, -l), new T.Vector3(w, 0.075, -l),
+        new T.Vector3(w, 0.075, l), new T.Vector3(-w, 0.075, l),
+        new T.Vector3(-w, 0.075, -l),
+      ];
+      this._reviewGroup.add(new T.Line(new T.BufferGeometry().setFromPoints(pts), boundsMat));
+    }
+
+    const nozzles = this.getNozzles();
+    nozzles.forEach((n) => {
+      const type = String(n.type || "");
+      if (type === NOZZLE_TYPES.LASER || type === NOZZLE_TYPES.FLAME) return;
+      const radius =
+        type === NOZZLE_TYPES.GEYSER ? 1.15 :
+        type === NOZZLE_TYPES.ARCH || type === NOZZLE_TYPES.LAMINAR ? 2.3 :
+        type === NOZZLE_TYPES.MIST ? 0.9 :
+        1.55;
+      const reach = circleLine(radius, ringMat, 0.07);
+      reach.position.set(n.x || 0, 0, n.z || 0);
+      this._reviewGroup.add(reach);
+      const safety = circleLine(radius * 1.55, safetyMat, 0.065);
+      safety.position.set(n.x || 0, 0, n.z || 0);
+      this._reviewGroup.add(safety);
+    });
+
+    this.scene.add(this._reviewGroup);
   }
 
   // ── Engineering: REPLACE layout entirely with the designer's nozzles ────
@@ -2336,6 +2441,20 @@ export class FountainScene {
   }
   setEnvironment(env){ this.environment=env; if(this._initialized) this._applyEnvironment(); }
   setCameraMode(m)  { this.cameraMode=m; this._pathTime=0; if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true; }
+  setReviewOverlays(visible) {
+    this.reviewOverlays = visible !== false;
+    if (this._reviewGroup) this._reviewGroup.visible = this.reviewOverlays;
+  }
+  fitCameraToDesign() {
+    const r = this._poolType === "circular"
+      ? (this._poolRadius || 6)
+      : Math.max((this._poolW || 12) / 2, (this._poolL || 8) / 2);
+    this.orbitRadius = Math.max(8, Math.min(32, r * 2.45));
+    this.orbitHeight = Math.max(5.2, Math.min(18, r * 0.95));
+    this.orbitAngle = -0.72;
+    this.setCameraMode(CAMERA_MODES.ORBIT);
+    this.orbitAuto = false;
+  }
 
   // ── VR Walkthrough (AQ-S3-006) ────────────────────────────────────────────
   /** Is an immersive-vr session available in this browser/device? */
@@ -2411,6 +2530,7 @@ export class FountainScene {
       this._buildUnderwaterLights();
       this._buildLasers();
       this._buildNozzles();
+      this._buildReviewOverlays();
     }
   }
   addNozzle(cfg) {
