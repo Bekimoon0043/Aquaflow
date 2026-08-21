@@ -91,9 +91,9 @@ const QUALITY_CONFIG = {
   low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
             postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false },
   medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00,
-            postfx: true,  bloom: 0.62, smaa: false, ibl: true,  ao: false },
+            postfx: true,  bloom: 0.35, smaa: false, ibl: true,  ao: false },
   high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
-            postfx: true,  bloom: 0.85, smaa: true,  ibl: true,  ao: true },
+            postfx: true,  bloom: 0.48, smaa: true,  ibl: true,  ao: true },
 };
 
 // ── Camera-response pass ────────────────────────────────────────────────────
@@ -1600,10 +1600,9 @@ export class FountainScene {
 
       composer.addPass(new RenderPass(this.scene, this.camera));
 
-      // Ambient occlusion — the largest single realism gain left. Without it, the
-      // pool floor, kerb and nozzle bases all meet with no contact darkening, which
-      // is what makes CG geometry read as "floating". Solid geometry only: the water
-      // particles are transparent and do not write depth, so they are unaffected.
+      // Ambient occlusion — contact darkening where floor/kerb/nozzle bases meet.
+      // Runs on the LINEAR scene buffer, before tone mapping. Solid geometry only:
+      // the water particles are transparent and do not write depth.
       if (q.ao) {
         try {
           const gtao = new GTAOPass(this.scene, this.camera, W, H);
@@ -1624,15 +1623,21 @@ export class FountainScene {
         }
       }
 
-      // Bloom operates on PRE-exposure linear HDR (OutputPass applies tone mapping and
-      // toneMappingExposure at the end of the chain), so the threshold is low in
-      // absolute terms — it still only catches lit water, fixtures and flame, not the
-      // deck or the night sky. All three values are live-tunable via setPostFX().
+      // Tone mapping + sRGB conversion BEFORE bloom (lesson from the first cut,
+      // verified against live screenshots): this scene's water/spray are additive
+      // particle shaders whose linear-HDR sum runs far above 1.0 across most of the
+      // frame, so bloom thresholded in pre-tonemap HDR bloomed *everything* and the
+      // night scene washed out into white fog. Tone-mapping first means bloom sees
+      // exactly the image the user sees, and the threshold below reliably selects
+      // only genuinely bright screen content — jet cores, fixtures, flame.
+      composer.addPass(new OutputPass());
+
+      // Display-referred bloom: threshold 0.82 catches only near-white pixels.
       const bloom = new UnrealBloomPass(
         new T.Vector2(W, H),
         q.bloom,        // strength
-        0.70,           // radius — soft halo, reads as light scattering in mist
-        0.30            // threshold
+        0.42,           // radius — tight halo; wider smears the dense jet core
+        0.86            // threshold — display-referred, only true highlights
       );
       composer.addPass(bloom);
       this._bloomPass = bloom;
@@ -1642,10 +1647,6 @@ export class FountainScene {
       grade.uniforms.uResolution.value.set(W * this._pr, H * this._pr);
       composer.addPass(grade);
       this._gradePass = grade;
-
-      // OutputPass owns tone mapping + sRGB conversion at the end of the chain
-      // (three skips tone mapping when rendering into a render target).
-      composer.addPass(new OutputPass());
 
       if (q.smaa) {
         const smaa = new SMAAPass(W * this._pr, H * this._pr);
