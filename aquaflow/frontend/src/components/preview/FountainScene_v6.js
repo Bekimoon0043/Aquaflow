@@ -54,6 +54,17 @@ import {
 } from "../../walkthrough";
 // 4K Video Export Engine (AQ-S3-007) — export config + A/V sync.
 import { buildExportConfig as VE_buildExportConfig, combineStreams as VE_combineStreams } from "../../video/videoExport";
+// AQ-S3-010 — cinematic post-processing chain. A fountain is emissive water, light and
+// flame against a night sky: bloom is what makes it read as *light* rather than bright
+// pixels, so the composer is the single biggest visual win available here.
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
+import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -72,10 +83,76 @@ export const RENDER_QUALITY = { LOW:"low", MEDIUM:"medium", HIGH:"high" };
 
 // Max RGB fixture lights uploaded to the spatial light field shader
 const MAX_FIELD_LIGHTS = 16;
+// postFX per tier: `low` stays on the direct render path (no composer) so weak GPUs keep
+// their frame rate; `medium` gets bloom + grade; `high` adds SMAA and a wider bloom.
 const QUALITY_CONFIG = {
-  low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00 },
-  medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00 },
-  high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08 },
+  low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
+            postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false },
+  medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00,
+            postfx: true,  bloom: 0.62, smaa: false, ibl: true,  ao: false },
+  high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
+            postfx: true,  bloom: 0.85, smaa: true,  ibl: true,  ao: true },
+};
+
+// ── Camera-response pass ────────────────────────────────────────────────────
+// Applied after bloom, before OutputPass (which owns tone mapping + colour space).
+// These are lens/sensor behaviours a real camera exhibits — optical vignetting,
+// lateral chromatic aberration and sensor noise — not a stylistic "filter". Values
+// are deliberately near the threshold of perception: they make the image read as
+// photographed rather than synthetic, without altering what an engineer can measure.
+const CINEMATIC_SHADER = {
+  uniforms: {
+    tDiffuse:    { value: null },
+    uTime:       { value: 0 },
+    uVignette:   { value: 0.42 },   // gentle optical falloff, not a dark tunnel
+    uAberration: { value: 0.30 },   // slight edge-only RGB split, as a real lens
+    uGrain:      { value: 0.012 },  // faint sensor noise in the shadows
+    uSaturation: { value: 1.03 },
+    uContrast:   { value: 1.02 },
+    uResolution: { value: new THREE.Vector2(1, 1) },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float uTime, uVignette, uAberration, uGrain, uSaturation, uContrast;
+    uniform vec2  uResolution;
+    varying vec2 vUv;
+
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+
+    void main(){
+      vec2 uv = vUv;
+      vec2 toCenter = uv - 0.5;
+      float r2 = dot(toCenter, toCenter);          // 0 at centre -> 0.5 at corners
+
+      // Chromatic aberration: zero in the middle, grows toward the frame edge, the way
+      // a real lens behaves. Scaled to pixels so it is resolution-independent.
+      vec2 px = (uAberration / max(uResolution.x, 1.0)) * r2 * 4.0 * normalize(toCenter + 1e-6);
+      vec3 col;
+      col.r = texture2D(tDiffuse, uv + px).r;
+      col.g = texture2D(tDiffuse, uv).g;
+      col.b = texture2D(tDiffuse, uv - px).b;
+
+      // Saturation + contrast, around mid grey.
+      float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(luma), col, uSaturation);
+      col = (col - 0.5) * uContrast + 0.5;
+
+      // Vignette — smooth, keeps the pool centre bright. Written as 1.0 - smoothstep
+      // with increasing edges: reversed edges (edge0 > edge1) are undefined in GLSL.
+      float vig = 1.0 - smoothstep(0.18, 0.95, r2 * uVignette * 2.4);
+      col *= mix(1.0, vig, clamp(uVignette, 0.0, 1.0));
+
+      // Animated fine grain; strongest in the shadows so highlights stay clean.
+      float g = hash(uv * uResolution + fract(uTime) * 137.0) - 0.5;
+      col += g * uGrain * (1.0 - smoothstep(0.0, 0.75, luma));
+
+      gl_FragColor = vec4(max(col, 0.0), 1.0);
+    }
+  `,
 };
 
 function seededNoise(i, salt = 0) {
@@ -1455,8 +1532,167 @@ export class FountainScene {
     this._buildReviewOverlays();
     this._setupEvents();
 
+    this._buildEnvironmentIBL();
+    this._buildPostFX();
+
     this._initialized = true;
     this._animate();
+  }
+
+  // ── Image-based lighting ────────────────────────────────────────────────────
+  // The pool, deck and nozzle bodies are MeshStandardMaterial. Without an environment
+  // they can only respond to the punctual lights, which reads flat and plastic. A
+  // pre-filtered room probe gives their roughness something to reflect, so wet stone
+  // and metal look like wet stone and metal. Cheap: generated once, no runtime cost.
+  _buildEnvironmentIBL() {
+    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
+    if (!q.ibl || this._envRT) return;
+    const T = this.THREE;
+    try {
+      const pmrem = new T.PMREMGenerator(this.renderer);
+      pmrem.compileEquirectangularShader?.();
+      const room = new RoomEnvironment();   // r165: takes an optional renderer, not THREE
+      this._envRT = pmrem.fromScene(room, 0.04);
+      this.scene.environment = this._envRT.texture;
+      // Keep the authored sky/background — the probe is for material response only.
+      // Held deliberately low: a full-strength studio probe would flatten the night
+      // mood we want. This is enough for wet stone and metal to catch a highlight.
+      const nightish = this.environment === ENVIRONMENTS.NIGHT;
+      this.scene.environmentIntensity = nightish ? 0.16 : 0.42;
+      room.dispose?.();
+      pmrem.dispose();
+    } catch (e) {
+      this._envRT = null;   // IBL is an enhancement: never fatal
+    }
+  }
+
+  // ── Post-processing chain ───────────────────────────────────────────────────
+  _buildPostFX() {
+    const T = this.THREE;
+    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
+    this._postEnabled = false;
+    if (!q.postfx || this._postDisabledByUser) return;
+    try {
+      const W = this.canvas.clientWidth || 900, H = this.canvas.clientHeight || 600;
+      const composer = new EffectComposer(this.renderer);
+      composer.setPixelRatio?.(this._pr);
+      composer.setSize(W, H);
+
+      composer.addPass(new RenderPass(this.scene, this.camera));
+
+      // Ambient occlusion — the largest single realism gain left. Without it, the
+      // pool floor, kerb and nozzle bases all meet with no contact darkening, which
+      // is what makes CG geometry read as "floating". Solid geometry only: the water
+      // particles are transparent and do not write depth, so they are unaffected.
+      if (q.ao) {
+        try {
+          const gtao = new GTAOPass(this.scene, this.camera, W, H);
+          gtao.output = GTAOPass.OUTPUT.Default;
+          if (typeof gtao.updateGtaoMaterial === "function") {
+            gtao.updateGtaoMaterial({
+              radius: 0.55,        // metres — tight contact shadows, not global dimming
+              distanceExponent: 1.0,
+              thickness: 1.0,
+              scale: 0.9,
+              samples: 16,
+            });
+          }
+          composer.addPass(gtao);
+          this._aoPass = gtao;
+        } catch (e) {
+          this._aoPass = null;   // AO is an enhancement, never fatal
+        }
+      }
+
+      // Bloom operates on PRE-exposure linear HDR (OutputPass applies tone mapping and
+      // toneMappingExposure at the end of the chain), so the threshold is low in
+      // absolute terms — it still only catches lit water, fixtures and flame, not the
+      // deck or the night sky. All three values are live-tunable via setPostFX().
+      const bloom = new UnrealBloomPass(
+        new T.Vector2(W, H),
+        q.bloom,        // strength
+        0.70,           // radius — soft halo, reads as light scattering in mist
+        0.30            // threshold
+      );
+      composer.addPass(bloom);
+      this._bloomPass = bloom;
+
+      // Cinematic grade (vignette / aberration / grain / saturation).
+      const grade = new ShaderPass(CINEMATIC_SHADER);
+      grade.uniforms.uResolution.value.set(W * this._pr, H * this._pr);
+      composer.addPass(grade);
+      this._gradePass = grade;
+
+      // OutputPass owns tone mapping + sRGB conversion at the end of the chain
+      // (three skips tone mapping when rendering into a render target).
+      composer.addPass(new OutputPass());
+
+      if (q.smaa) {
+        const smaa = new SMAAPass(W * this._pr, H * this._pr);
+        composer.addPass(smaa);
+        this._smaaPass = smaa;
+      }
+
+      this.composer = composer;
+      this._postEnabled = true;
+    } catch (e) {
+      // Any failure (old GPU, missing extension) falls back to the direct render path.
+      this.composer = null;
+      this._postEnabled = false;
+    }
+  }
+
+  /** Toggle / tune the post chain at runtime. setPostFX(false) restores direct render. */
+  setPostFX(opts) {
+    if (opts === false || opts === true) opts = { enabled: opts };
+    const o = opts || {};
+    if (o.enabled === false) {
+      this._postDisabledByUser = true;
+      this._disposePostFX();
+      return;
+    }
+    if (o.enabled === true) {
+      this._postDisabledByUser = false;
+      if (!this.composer && this._initialized) this._buildPostFX();
+    }
+    if (this._bloomPass) {
+      if (typeof o.bloom === "number")     this._bloomPass.strength  = o.bloom;
+      if (typeof o.bloomRadius === "number")    this._bloomPass.radius    = o.bloomRadius;
+      if (typeof o.bloomThreshold === "number") this._bloomPass.threshold = o.bloomThreshold;
+    }
+    if (this._gradePass) {
+      const u = this._gradePass.uniforms;
+      if (typeof o.vignette === "number")   u.uVignette.value   = o.vignette;
+      if (typeof o.aberration === "number") u.uAberration.value = o.aberration;
+      if (typeof o.grain === "number")      u.uGrain.value      = o.grain;
+      if (typeof o.saturation === "number") u.uSaturation.value = o.saturation;
+      if (typeof o.contrast === "number")   u.uContrast.value   = o.contrast;
+    }
+  }
+
+  _disposePostFX() {
+    try {
+      this._smaaPass = null;
+      this._aoPass?.dispose?.();
+      this._aoPass = null;
+      this._bloomPass?.dispose?.();
+      this._bloomPass = null;
+      this._gradePass?.material?.dispose?.();
+      this._gradePass = null;
+      this.composer?.dispose?.();
+    } catch (e) { /* disposal is best-effort */ }
+    this.composer = null;
+    this._postEnabled = false;
+  }
+
+  /** Render through the composer when available, else straight to the canvas. */
+  _renderFrame() {
+    if (this._postEnabled && this.composer) {
+      if (this._gradePass) this._gradePass.uniforms.uTime.value = this.clock?.elapsedTime || 0;
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   // ── Fog ─────────────────────────────────────────────────────────────────
@@ -1716,6 +1952,11 @@ export class FountainScene {
     const T=this.THREE; const env=this.environment;
     if (this._envGroup) this.scene.remove(this._envGroup);
     this._envGroup = new T.Group();
+    // Keep the IBL probe in step with the preset: a night scene wants only a hint of
+    // reflection, a daylit one can take much more before it looks artificial.
+    if (this._envRT && this.scene) {
+      this.scene.environmentIntensity = (env === ENVIRONMENTS.NIGHT) ? 0.16 : 0.42;
+    }
 
     if (env===ENVIRONMENTS.NIGHT){
       this.scene.background = new T.Color(0x020610);
@@ -1723,6 +1964,9 @@ export class FountainScene {
       const amb  = new T.AmbientLight(0x0d1a30, 2.0);
       const moon = new T.DirectionalLight(0x7788bb, 1.2);
       moon.position.set(-10,30,-10); moon.castShadow=true; moon.shadow.mapSize.set(2048,2048);
+      // normalBias removes the shadow acne that otherwise stipples the curved pool
+      // walls, without the "floating object" gap a large constant bias introduces.
+      moon.shadow.normalBias = 0.035; moon.shadow.bias = -0.0004;
       this._envGroup.add(amb, moon);
       if (this.renderer) this.renderer.toneMappingExposure = 2.3;
       this.waterMat?.uniforms.uSkyColor.value.set(0x020610);
@@ -2227,7 +2471,7 @@ export class FountainScene {
       cam.position.set(0, 5, 17); cam.lookAt(0, 4, 0);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    this._renderFrame();
   }
 
   _setupEvents() {
@@ -2474,6 +2718,8 @@ export class FountainScene {
           const delta=Math.min(this.clock.getDelta(),0.05);
           const elapsed=this.clock.elapsedTime||0;
           this._update(delta, elapsed);
+          // Direct render on purpose: EffectComposer cannot target the WebXR
+          // framebuffer, so headset sessions bypass the post chain.
           this.renderer.render(this.scene, this.camera);
         }catch(e){}
       });
@@ -2554,6 +2800,15 @@ export class FountainScene {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // The composer owns its own render targets — they must track the canvas or the
+    // post chain renders at the old size and the image goes soft/stretched.
+    if (this.composer) {
+      // setSize propagates to every pass (scaled by the composer's pixel ratio), so
+      // only the custom grade uniform needs updating by hand.
+      this.composer.setSize(w, h);
+      const pr = this._pr || 1;
+      this._gradePass?.uniforms?.uResolution?.value?.set(w * pr, h * pr);
+    }
   }
 
   dispose() {
@@ -2573,6 +2828,9 @@ export class FountainScene {
     this.spraySys?.dispose?.();
     this.foamSys?.dispose?.();
     this.flameSys?.dispose?.();
+    this._disposePostFX();
+    this._envRT?.dispose?.();
+    this._envRT = null;
     this.renderer?.dispose();
   }
 }
