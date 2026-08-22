@@ -10,6 +10,17 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { generatePipework } from "../../engineering/pipeworkEngine";
 import { calculateHydraulics } from "../../engineering/hydraulicEngine";
+
+// AQ-S2-002 — client-side hydraulics were retired, so head/pump-sizing figures are
+// null until the backend solver supplies them. Render that as an explicit dash
+// rather than a fabricated number (and never crash on .toFixed of null, which is
+// what previously blanked this whole panel).
+const HYD_NOT_CALCULATED = "—";
+function hydFmt(value, digits = 1, suffix = "", prefix = "") {
+  return Number.isFinite(value)
+    ? `${prefix}${Number(value).toFixed(digits)}${suffix}`
+    : HYD_NOT_CALCULATED;
+}
 import { generateBOM } from "../../engineering/bomEngine";
 import { useEngineeringPublisher } from "../../hooks/engineeringPublisher";
 import useEngineeringStore from "../../store/engineeringStore";
@@ -1673,12 +1684,13 @@ rows.push(["", "", "", "", "", "", ""]);
 rows.push(["", "Nozzle Flow", "L/min", "", hydraulicSummary.totalNozzleFlowLpm.toFixed(1), "", ""]);
 rows.push(["", "Process Flow", "L/min", "", hydraulicSummary.totalProcessFlowLpm.toFixed(1), "", ""]);
 rows.push(["", "Total Flow", "m³/hr", "", hydraulicSummary.totalFlowM3Hr.toFixed(2), "", ""]);
-rows.push(["", "Recommended Pipe", "DN", "", hydraulicSummary.recommendedPipeMm, "", ""]);
-rows.push(["", "Total Dynamic Head", "m", "", hydraulicSummary.totalDynamicHeadM.toFixed(1), "", ""]);
-rows.push(["", "Required Pump", "kW", "", hydraulicSummary.recommendedPumpKw.toFixed(2), "", ""]);
+rows.push(["", "Recommended Pipe", "DN", "", hydFmt(hydraulicSummary.recommendedPipeMm, 0), "", ""]);
+rows.push(["", "Total Dynamic Head", "m", "", hydFmt(hydraulicSummary.totalDynamicHeadM, 1), "", ""]);
+rows.push(["", "Required Pump", "kW", "", hydFmt(hydraulicSummary.recommendedPumpKw, 2), "", ""]);
 rows.push(["", "Installed Pump Power", "kW", "", hydraulicSummary.totalPumpPowerKw.toFixed(2), "", ""]);
 rows.push(["", "Installed Pump Capacity", "m³/hr", "", hydraulicSummary.totalPumpCapacityM3Hr.toFixed(1), "", ""]);
-rows.push(["", "Pump Status", "", "", `${hydraulicSummary.pumpCapacityStatus} / ${hydraulicSummary.pumpPowerStatus}`, "", ""]);
+rows.push(["", "Pump Status", "", "", (hydraulicSummary.pumpCapacityStatus && hydraulicSummary.pumpPowerStatus)
+  ? `${hydraulicSummary.pumpCapacityStatus} / ${hydraulicSummary.pumpPowerStatus}` : HYD_NOT_CALCULATED, "", ""]);
 rows.push(["", "Electrical Load", "W", "", hydraulicSummary.totalWatts.toFixed(0), "", ""]);
 rows.push(["", "Air Demand", "L/min", "", hydraulicSummary.totalAirFlowLpm.toFixed(0), "", ""]);
 rows.push(["", "Fuel Demand", "", "", hydraulicSummary.totalFuelFlow.toFixed(2), "", ""]);
@@ -3161,12 +3173,14 @@ onRemoveNode={removeNode}
     ["Nozzle Flow", `${hydraulicSummary.totalNozzleFlowLpm.toFixed(1)} L/min`],
     ["Process Flow", `${hydraulicSummary.totalProcessFlowLpm.toFixed(1)} L/min`],
     ["Total Flow", `${hydraulicSummary.totalFlowM3Hr.toFixed(2)} m³/hr`],
-    ["Recommended Pipe", `DN${hydraulicSummary.recommendedPipeMm}`],
-    ["TDH", `${hydraulicSummary.totalDynamicHeadM.toFixed(1)} m`],
-    ["Required Pump", `${hydraulicSummary.recommendedPumpKw.toFixed(2)} kW`],
+    ["Recommended Pipe", hydFmt(hydraulicSummary.recommendedPipeMm, 0, "", "DN")],
+    ["TDH", hydFmt(hydraulicSummary.totalDynamicHeadM, 1, " m")],
+    ["Required Pump", hydFmt(hydraulicSummary.recommendedPumpKw, 2, " kW")],
     ["Installed Pump", `${hydraulicSummary.totalPumpPowerKw.toFixed(2)} kW`],
     ["Pump Capacity", `${hydraulicSummary.totalPumpCapacityM3Hr.toFixed(1)} m³/hr`],
-    ["Pump Status", `${hydraulicSummary.pumpCapacityStatus} / ${hydraulicSummary.pumpPowerStatus}`],
+    ["Pump Status", (hydraulicSummary.pumpCapacityStatus && hydraulicSummary.pumpPowerStatus)
+      ? `${hydraulicSummary.pumpCapacityStatus} / ${hydraulicSummary.pumpPowerStatus}`
+      : HYD_NOT_CALCULATED],
     ["Electrical Load", `${hydraulicSummary.totalWatts.toFixed(0)} W`],
     ["Air Demand", `${hydraulicSummary.totalAirFlowLpm.toFixed(0)} L/min`],
     ["Fuel Demand", `${hydraulicSummary.totalFuelFlow.toFixed(2)}`],
