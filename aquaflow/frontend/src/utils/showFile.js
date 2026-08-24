@@ -4,12 +4,17 @@
  * Format: JSON with versioning, metadata, and full show state.
  */
 
+import { normalizeEngineeringProject } from "../engineering/engineeringProject.js";
+
 export const AQUA_VERSION = "1.0";
 
 /**
  * Serialize current store state into a .aqua file object
  */
-export function serializeShow(state) {
+export function serializeShow(state, engineeringProject = null) {
+  const engineering = normalizeEngineeringProject(
+    engineeringProject || state.engineeringProject || state.engineering || {}
+  );
   return {
     aquaflow: AQUA_VERSION,
     savedAt: new Date().toISOString(),
@@ -47,6 +52,10 @@ export function serializeShow(state) {
       health: d.health,
       last_seen: d.last_seen,
     })),
+    // The physical design is part of the same project as the show. Keeping it in the
+    // .aqua envelope makes Save/Open/Auto-save atomic: choreography can never be loaded
+    // without the geometry and fixture registry it was authored against.
+    engineering,
     ui: {
       timelineZoom: state.timelineZoom,
       showGrid: state.showGrid,
@@ -78,6 +87,7 @@ export function deserializeShow(data) {
       health: d.health ?? 0,
       last_seen: d.last_seen || null,
     })),
+    engineeringProject: normalizeEngineeringProject(data.engineering || data.engineeringProject || {}),
     timelineZoom: data.ui?.timelineZoom || 4,
     showGrid: data.ui?.showGrid ?? true,
     snapToGrid: data.ui?.snapToGrid ?? true,
@@ -87,8 +97,8 @@ export function deserializeShow(data) {
 /**
  * Download a .aqua file to the user's computer
  */
-export function downloadShowFile(state) {
-  const data = serializeShow(state);
+export function downloadShowFile(state, engineeringProject = null) {
+  const data = serializeShow(state, engineeringProject);
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -152,9 +162,9 @@ export function getRecentShows() {
 /**
  * Auto-save to localStorage
  */
-export function autoSave(state) {
+export function autoSave(state, engineeringProject = null) {
   try {
-    const data = serializeShow(state);
+    const data = serializeShow(state, engineeringProject);
     localStorage.setItem("aquaflow_autosave", JSON.stringify(data));
     localStorage.setItem("aquaflow_autosave_ts", new Date().toISOString());
   } catch (e) {

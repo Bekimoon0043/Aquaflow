@@ -165,6 +165,12 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
     const h = (e) => {
       const tag = document.activeElement?.tagName?.toLowerCase();
       if (["input", "textarea", "select"].includes(tag)) return;
+      // The engineering workspace owns its complete project history. Letting the
+      // global show history also consume Ctrl/Cmd+Z mutated two unrelated domains.
+      if (document.body.dataset.activeWorkspace === "engineering") {
+        if (e.key === "Escape") setOpenMenu(null);
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         undo();

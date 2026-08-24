@@ -13,6 +13,9 @@ import {
 import { centerToWorld } from "../engineering/geometryContract";
 // AQ-S2-002 Phase 2 — solved hydraulics feed the preview's jet physics.
 import { apiPost } from "../utils/apiClient";
+import { buildHydraulicPreviewPayload } from "../engineering/hydraulicAdapter";
+import { geometryMetrics } from "../engineering/poolGeometry";
+import { selectEngineeringPipes } from "../engineering/engineeringProject";
 
 export function useEngineeringSync(sceneRef) {
   const lastKeyRef   = useRef(null);
@@ -22,7 +25,7 @@ export function useEngineeringSync(sceneRef) {
   const params      = useEngineeringStore(s => s.params);
   const poolType    = useEngineeringStore(s => s.poolType);
   const fixtures    = useEngineeringStore(s => s.fixtures);
-  const manualPipes = useEngineeringStore(s => s.manualPipes || s.pipes || []);
+  const manualPipes = useEngineeringStore(s => selectEngineeringPipes(s));
   const layers      = useEngineeringStore(s => s.layers);
   const lastUpdated = useEngineeringStore(s => s.lastUpdated);
 
@@ -145,14 +148,13 @@ if (scene.setEngineeringPipes) {
 // estimated. Fire-and-forget: the preview must keep rendering (on the legacy
 // estimates) if the backend is unreachable or the design is not solvable.
 if (scene.setNozzlePhysics && nozzleConfigs.length) {
-  const solvePayload = {
-    nozzles: nozzleConfigs.map(n => ({
-      id: n.id, x: n.x, y: n.z,          // scene z is the plan-view y
-      engineering: n.engineering || {},
-    })),
-    params: { design_head_m: Number(params?.design_head_m) || 40.0 },
-    volume_litres: Number(useEngineeringStore.getState().poolVolumeLitres) || 0,
-  };
+  const storeState = useEngineeringStore.getState();
+  const metrics = geometryMetrics(geometry, params, storeState.depthZones || []);
+  const solvePayload = buildHydraulicPreviewPayload({
+    fixtures: nozzleFixtures,
+    params,
+    volumeLitres: metrics.capacityLitres,
+  });
   apiPost("/hydraulics/preview-physics", solvePayload)
     .then(res => {
       const phys = res?.nozzle_physics;

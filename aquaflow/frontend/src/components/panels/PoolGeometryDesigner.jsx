@@ -28,7 +28,25 @@ import { useShowStore } from "../../store/showStore";
 import { usePipeDrawing, PIPE_COLORS } from "../../engineering/usePipeDrawing";
 import { getSymbolForType, drawSymbol } from "../../engineering/fixtureSymbols";
 import PipePropertiesPanel from "./PipePropertiesPanel";
-import { API_BASE_URL } from "../../config";
+import FixtureLibraryBrowser, { fixtureMatchesTool } from "./FixtureLibraryBrowser";
+import { apiPost } from "../../utils/apiClient";
+import {
+  geometryForPoolType,
+  synchronizePoolGeometry,
+  geometryMetrics,
+  pointInGeometry,
+  validateDepthZone,
+} from "../../engineering/poolGeometry";
+import { buildHydraulicPreviewPayload, normalizeHydraulicResult } from "../../engineering/hydraulicAdapter";
+import {
+  createEngineeringHistory,
+  commitEngineeringHistory,
+  undoEngineeringHistory,
+  redoEngineeringHistory,
+  canUndoEngineering,
+  canRedoEngineering,
+} from "../../engineering/engineeringHistory";
+import { DEFAULT_DEPTH_ZONES } from "../../engineering/engineeringProject";
 import {
   FIXTURE_LIBRARY,
   getDefaultEngineering
@@ -38,8 +56,6 @@ import {
 // `fixture.groupId || resolveFixtureGroup(type)`, so the groupId we STORE here must
 // come from that same resolver — not a divergent inline copy.
 import { resolveFixtureGroup } from "../../hooks/fixtureTypeMap";
-
-const API = API_BASE_URL;
 
 const POOL_TYPES = [
   { key:"rectangular", label:"Rectangular",  icon:"▭" },
@@ -51,14 +67,6 @@ const POOL_TYPES = [
   { key:"false_river", label:"False River",  icon:"~≈" },
 ];
 
-const DEPTH_ZONES = [
-  { key:"shallow",  label:"Shallow",  depth:0.3, color:"#7ec8e3" },
-  { key:"medium",   label:"Medium",   depth:0.8, color:"#0077b6" },
-  { key:"deep",     label:"Deep",     depth:1.5, color:"#03045e" },
-  { key:"display",  label:"Display",  depth:0.2, color:"#90e0ef" },
-];
-
-
 // ========== END ENGINEERING SYMBOL RENDERER SYSTEM ==========
 
 const FIXTURE_TYPES = Array.isArray(FIXTURE_LIBRARY)
@@ -66,7 +74,9 @@ const FIXTURE_TYPES = Array.isArray(FIXTURE_LIBRARY)
       key: f.key,
       label: f.label,
       color: f.color,
-      icon: f.icon
+      icon: f.icon,
+      category: f.category || "Other",
+      manufacturer: f.manufacturer || "",
     }))
   : [
       { key: "nozzle_geyser", label: "Geyser Nozzle", color: "#00ccaa", icon: "⬆" },
@@ -212,28 +222,6 @@ const MOTION_TYPES = [
   { key: "motion_2d", label: "2D Motion", color: "#ffcc00", icon: "☖" },
   { key: "motion_3d", label: "3D Motion", color: "#ffcc00", icon: "⬚" },
 ];
-const getToolFixtureTypes = (tool) => {
-  if (tool === "nozzle") {
-    return FIXTURE_TYPES.filter(f => f.key.startsWith("nozzle"));
-  }
-
-  if (tool === "light") {
-    return FIXTURE_TYPES.filter(f =>
-      f.key.startsWith("light") || f.key.startsWith("laser")
-    );
-  }
-
-  if (tool === "equipment") {
-    return FIXTURE_TYPES.filter(f =>
-      !f.key.startsWith("nozzle") &&
-      !f.key.startsWith("light") &&
-      !f.key.startsWith("laser")
-    );
-  }
-
-  return FIXTURE_TYPES;
-};
-
 // AF-HUB-002 — delegate to the canonical resolver (resolveFixtureGroup). Non-show
 // equipment (pumps/valves/sensors/…) has no show group (resolver returns null); we
 // keep the "engineering_equipment" tag for those, matching prior behavior.
@@ -360,13 +348,18 @@ function generatePoolShape(type, params) {
 
 export default function PoolGeometryDesigner() {
   const canvasRef = useRef(null);
+  const canvasHostRef = useRef(null);
+  const projectLoadRevision = useEngineeringStore((state) => state.loadRevision);
   const [tool, setTool] = useState("select");
   const [poolType, setPoolType] = useState(() => useEngineeringStore.getState().poolType || "rectangular");
   const [params, setParams] = useState(() => useEngineeringStore.getState().params || { width:12, length:8, radius:6, depth:0.8 });
   const [fixtures, setFixtures] = useState(() => useEngineeringStore.getState().fixtures || []);
 const hydraulicSummary = useMemo(() => calculateHydraulics(fixtures), [fixtures]);
 
-const [geometry, setGeometry] = useState(() => useEngineeringStore.getState().geometry || null);
+const [geometry, setGeometry] = useState(() => {
+  const store = useEngineeringStore.getState();
+  return store.geometry || geometryForPoolType(store.poolType || "rectangular", store.params || {});
+});
 
 const pipework = useMemo(() => generatePipework(fixtures, geometry), [fixtures, geometry]);
 
@@ -390,8 +383,9 @@ const bomItems = [
 ];
   const [showGrid, setShowGrid] = useState(true);
   const [showDepth, setShowDepth] = useState(true);
-  const [projectName, setProjectName] = useState("New Pool Project");
+  const [projectName, setProjectName] = useState(() => useEngineeringStore.getState().projectName || "New Pool Project");
   const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
   const [isSpaceDown, setIsSpaceDown] = useState(false);
   const [cursorWorld, setCursorWorld] = useState({ x:0, y:0 });
   const [isDraggingGeometry, setIsDraggingGeometry] = useState(false);
@@ -403,7 +397,19 @@ const bomItems = [
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [gridStep, setGridStep] = useState(0.5);
   const [showDimensions, setShowDimensions] = useState(true);
-  const [layers, setLayers] = useState(DEFAULT_LAYERS);
+  const [layers, setLayers] = useState(() => {
+    const savedLayers = useEngineeringStore.getState().layers;
+    return savedLayers?.length ? savedLayers : DEFAULT_LAYERS;
+  });
+  const [depthZones, setDepthZones] = useState(() => {
+    const saved = useEngineeringStore.getState().depthZones;
+    return saved?.length ? saved : DEFAULT_DEPTH_ZONES;
+  });
+  const [depthDrawPoints, setDepthDrawPoints] = useState([]);
+  const [depthZoneError, setDepthZoneError] = useState("");
+  const [solvedHydraulics, setSolvedHydraulics] = useState(() => useEngineeringStore.getState().solvedHydraulics || null);
+  const [hydraulicRunState, setHydraulicRunState] = useState({ loading: false, error: "" });
+  const [canvasViewport, setCanvasViewport] = useState({ width: 900, height: 600, dpr: 1 });
   const [showLayerPanel, setShowLayerPanel] = useState(true);
   const [arrayMode, setArrayMode] = useState("centerline");
   const [arrayCount, setArrayCount] = useState(8);
@@ -412,8 +418,14 @@ const bomItems = [
   const [arrayInset, setArrayInset] = useState(1.0);
   const [exportStatus, setExportStatus] = useState("");
 const [pipeContextMenu, setPipeContextMenu] = useState(null);
-  const undoStackRef = useRef([]);
-  const redoStackRef = useRef([]);
+
+  useEffect(() => {
+    if (!["nozzle", "light", "equipment"].includes(tool)) return;
+    const selected = FIXTURE_TYPES.find((fixture) => fixture.key === fixtureType);
+    if (selected && fixtureMatchesTool(selected, tool)) return;
+    const firstMatch = FIXTURE_TYPES.find((fixture) => fixtureMatchesTool(fixture, tool));
+    if (firstMatch) setFixtureType(firstMatch.key);
+  }, [tool, fixtureType]);
 
   const pushFixturesToDevices = useCallback(() => {
     const { devices, addTimelineTrack, timelineTracks } = useShowStore.getState();
@@ -477,42 +489,10 @@ const [pipeContextMenu, setPipeContextMenu] = useState(null);
     alert(`✓ Mapped ${mapped.length} fixture type(s) to timeline tracks:\n${mapped.map(m => `• ${m.device.label}`).join("\n")}`);
   }, [fixtures]);
 
-  const takeSnapshot = useCallback(() => ({
-    fixtures: JSON.parse(JSON.stringify(fixtures)),
-    geometry: JSON.parse(JSON.stringify(geometry || {})),
-    params: JSON.parse(JSON.stringify(params)),
-    poolType,
-  }), [fixtures, geometry, params, poolType]);
-
-  const pushUndo = useCallback(() => {
-    undoStackRef.current.push(takeSnapshot());
-    if (undoStackRef.current.length > 50) undoStackRef.current.shift();
-    redoStackRef.current = [];
-  }, [takeSnapshot]);
-
-  const handleUndo = useCallback(() => {
-    if (!undoStackRef.current.length) return;
-    redoStackRef.current.push(takeSnapshot());
-    const prev = undoStackRef.current.pop();
-    setFixtures(prev.fixtures);
-    setGeometry(prev.geometry?.type || prev.geometry?.points ? prev.geometry : null);
-    setParams(prev.params);
-    setPoolType(prev.poolType);
-  }, [takeSnapshot]);
-
-  const handleRedo = useCallback(() => {
-    if (!redoStackRef.current.length) return;
-    undoStackRef.current.push(takeSnapshot());
-    const next = redoStackRef.current.pop();
-    setFixtures(next.fixtures);
-    setGeometry(next.geometry?.type || next.geometry?.points ? next.geometry : null);
-    setParams(next.params);
-    setPoolType(next.poolType);
-  }, [takeSnapshot]);
-
   const pipeSystem = usePipeDrawing({ zoom, pan, snapToGrid, gridStep, fixtures });
   const {
   pipes: manualPipes,
+  setPipes: replacePipes,
   pipeDiameter, setPipeDiameter,
   pipeType, setPipeType,
   pipeDrawMode, setPipeDrawMode,
@@ -548,7 +528,140 @@ const activePipeForPanel =
   manualPipes.find(p => p.id === selectedSegment?.pipeId) ||
   null;
 
-  // Generate geometry when type/params change
+  const engineeringSnapshot = useMemo(() => ({
+    projectName, geometry, poolType, params, fixtures, manualPipes, layers,
+    measurements, depthZones, solvedHydraulics,
+    arraySettings: { arrayMode, arrayCount, arrayRows, arrayCols, arrayInset },
+  }), [
+    projectName, geometry, poolType, params, fixtures, manualPipes, layers,
+    measurements, depthZones, solvedHydraulics, arrayMode, arrayCount, arrayRows, arrayCols, arrayInset,
+  ]);
+  const historyRef = useRef(null);
+  if (!historyRef.current) historyRef.current = createEngineeringHistory(engineeringSnapshot);
+  const historyTimerRef = useRef(null);
+  const [, setHistoryVersion] = useState(0);
+
+  const flushHistory = useCallback((snapshot = engineeringSnapshot) => {
+    clearTimeout(historyTimerRef.current);
+    historyRef.current = commitEngineeringHistory(historyRef.current, snapshot);
+    setHistoryVersion((version) => version + 1);
+  }, [engineeringSnapshot]);
+
+  useEffect(() => {
+    clearTimeout(historyTimerRef.current);
+    historyTimerRef.current = setTimeout(() => flushHistory(engineeringSnapshot), 220);
+    return () => clearTimeout(historyTimerRef.current);
+  }, [engineeringSnapshot, flushHistory]);
+
+  const restoreEngineeringSnapshot = useCallback((snapshot) => {
+    setProjectName(snapshot.projectName);
+    setGeometry(snapshot.geometry);
+    setPoolType(snapshot.poolType);
+    setParams(snapshot.params);
+    setFixtures(snapshot.fixtures);
+    replacePipes(snapshot.manualPipes || []);
+    setLayers(snapshot.layers || DEFAULT_LAYERS);
+    setMeasurements(snapshot.measurements || []);
+    setDepthZones(snapshot.depthZones || DEFAULT_DEPTH_ZONES);
+    setSolvedHydraulics(snapshot.solvedHydraulics || null);
+    const arrays = snapshot.arraySettings || {};
+    setArrayMode(arrays.arrayMode || "centerline");
+    setArrayCount(arrays.arrayCount || 8);
+    setArrayRows(arrays.arrayRows || 3);
+    setArrayCols(arrays.arrayCols || 5);
+    setArrayInset(arrays.arrayInset ?? 1);
+    setSelectedFixture(null);
+    setSelectedObject(null);
+  }, [replacePipes]);
+
+  const handleUndo = useCallback(() => {
+    flushHistory(engineeringSnapshot);
+    const next = undoEngineeringHistory(historyRef.current);
+    if (next === historyRef.current) return;
+    historyRef.current = next;
+    restoreEngineeringSnapshot(next.present);
+    setHistoryVersion((version) => version + 1);
+  }, [engineeringSnapshot, flushHistory, restoreEngineeringSnapshot]);
+
+  const handleRedo = useCallback(() => {
+    flushHistory(engineeringSnapshot);
+    const next = redoEngineeringHistory(historyRef.current);
+    if (next === historyRef.current) return;
+    historyRef.current = next;
+    restoreEngineeringSnapshot(next.present);
+    setHistoryVersion((version) => version + 1);
+  }, [engineeringSnapshot, flushHistory, restoreEngineeringSnapshot]);
+
+  // Existing call sites mark transaction boundaries; the complete auto-history above
+  // captures every changed field (including pipes/layers/depth zones) after the action.
+  const pushUndo = flushHistory;
+
+  // `.aqua` open/new actions can happen while this workspace stays mounted.
+  // Rehydrate every local editor field from the canonical engineering store and
+  // start a fresh history branch for that loaded project.
+  useEffect(() => {
+    if (!projectLoadRevision) return;
+    const store = useEngineeringStore.getState();
+    const loadedGeometry = store.geometry || geometryForPoolType(store.poolType, store.params);
+    const loadedSnapshot = {
+      projectName: store.projectName,
+      geometry: loadedGeometry,
+      poolType: store.poolType,
+      params: store.params,
+      fixtures: store.fixtures || [],
+      manualPipes: store.manualPipes || store.pipes || [],
+      layers: store.layers?.length ? store.layers : DEFAULT_LAYERS,
+      measurements: store.measurements || [],
+      depthZones: store.depthZones?.length ? store.depthZones : DEFAULT_DEPTH_ZONES,
+      solvedHydraulics: store.solvedHydraulics || null,
+      arraySettings: { arrayMode:"centerline", arrayCount:8, arrayRows:3, arrayCols:5, arrayInset:1 },
+    };
+    historyRef.current = createEngineeringHistory(loadedSnapshot);
+    restoreEngineeringSnapshot(loadedSnapshot);
+    setSaved(false);
+    setSaveStatus("");
+    setHistoryVersion((version) => version + 1);
+  }, [projectLoadRevision, restoreEngineeringSnapshot]);
+
+  useEffect(() => {
+    document.body.dataset.activeWorkspace = "engineering";
+    return () => { delete document.body.dataset.activeWorkspace; };
+  }, []);
+
+  const poolMetrics = useMemo(
+    () => geometryMetrics(geometry, params, depthZones),
+    [geometry, params, depthZones]
+  );
+
+  // Keep the canvas drawing buffer matched to its CSS size and device pixel
+  // ratio. Drawing still uses CSS pixels, which keeps hit-testing and labels
+  // consistent while making lines crisp on high-DPI displays.
+  useEffect(() => {
+    const host = canvasHostRef.current;
+    const canvas = canvasRef.current;
+    if (!host || !canvas) return undefined;
+    const resize = () => {
+      const rect = host.getBoundingClientRect();
+      const width = Math.max(320, Math.round(rect.width));
+      const height = Math.max(240, Math.round(rect.height));
+      const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      setCanvasViewport((current) => (
+        current.width === width && current.height === height && current.dpr === dpr
+          ? current
+          : { width, height, dpr }
+      ));
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(host);
+    window.addEventListener("resize", resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
 
   // â”€â”€ Engineering â†” 3D Bridge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    // Publish to engineering store — SINGLE sync path.
@@ -562,21 +675,11 @@ const activePipeForPanel =
   manualPipes,
   layers,
   measurements,
+  depthZones,
   hydraulicSummary,
+  solvedHydraulics,
   bomItems,
 });
-    useEffect(() => {
-  if (poolType === "freeform") return;
-
-  setGeometry(prev => {
-    // If geometry already exists, keep its current world position.
-    // This prevents the pool from jumping back to 0,0 while fixtures stay behind.
-    if (prev?.points?.length) return prev;
-    if (prev?.center) return prev;
-
-    return generatePoolShape(poolType, params);
-  });
-}, [poolType]);
 
   // Draw canvas
 
@@ -586,8 +689,10 @@ const activePipeForPanel =
     const canvas = canvasRef.current;
     if(!canvas) return;
     const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0,0,W,H);
+    const { width: W, height: H, dpr } = canvasViewport;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Background
     ctx.fillStyle = "#020810";
@@ -816,7 +921,7 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
           // Area/depth label inside
           ctx.fillStyle = "rgba(255,204,0,0.85)";
           ctx.font = "10px monospace";
-          ctx.fillText(`A=${(width*length).toFixed(3)} m²`, wx((minX+maxX)/2), wy((minY+maxY)/2)-8);
+          ctx.fillText(`A=${poolMetrics.area.toFixed(3)} m²`, wx((minX+maxX)/2), wy((minY+maxY)/2)-8);
           ctx.fillText(`D=${Number(params.depth || 0).toFixed(3)} m`, wx((minX+maxX)/2), wy((minY+maxY)/2)+8);
         }
 
@@ -854,6 +959,53 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
 
         ctx.restore();
       }
+    }
+
+    // Validated depth-zone polygons. These are real project geometry, not just a
+    // fixture tag, and participate in the volume calculation.
+    if (showDepth) {
+      depthZones.filter((zone) => zone.points?.length >= 3).forEach((zone) => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(wx(zone.points[0].x), wy(zone.points[0].y));
+        zone.points.slice(1).forEach((point) => ctx.lineTo(wx(point.x), wy(point.y)));
+        ctx.closePath();
+        ctx.globalAlpha = 0.38;
+        ctx.fillStyle = zone.color || "#0077b6";
+        ctx.fill();
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = zone.color || "#7ec8e3";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        const cx = zone.points.reduce((sum, point) => sum + point.x, 0) / zone.points.length;
+        const cy = zone.points.reduce((sum, point) => sum + point.y, 0) / zone.points.length;
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "9px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(`${zone.label} ${Number(zone.depth).toFixed(2)}m`, wx(cx), wy(cy));
+        ctx.restore();
+      });
+    }
+
+    if (depthDrawPoints.length) {
+      const activeZone = depthZones.find((zone) => (zone.zone || zone.key) === depthZone);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(wx(depthDrawPoints[0].x), wy(depthDrawPoints[0].y));
+      depthDrawPoints.slice(1).forEach((point) => ctx.lineTo(wx(point.x), wy(point.y)));
+      if (drawPreview) ctx.lineTo(wx(drawPreview.x), wy(drawPreview.y));
+      ctx.strokeStyle = activeZone?.color || "#ffcc00";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      depthDrawPoints.forEach((point) => {
+        ctx.beginPath();
+        ctx.arc(wx(point.x), wy(point.y), 4, 0, Math.PI * 2);
+        ctx.fillStyle = activeZone?.color || "#ffcc00";
+        ctx.fill();
+      });
+      ctx.restore();
     }
 
     // Freeform drawing preview
@@ -1013,14 +1165,21 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
   manualPipes,
   selectedPipeId,
   selectedNode,
-renderPipes
+  renderPipes,
+  showDimensions,
+  depthZones,
+  depthDrawPoints,
+  depthZone,
+  drawPreview,
+  canvasViewport,
+  poolMetrics,
 ]);
 
   // Canvas coordinate helpers
   const toCanvas = (clientX, clientY) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const cx = (clientX - rect.left) * (canvasRef.current.width / rect.width);
-    const cy = (clientY - rect.top) * (canvasRef.current.height / rect.height);
+    const cx = clientX - rect.left;
+    const cy = clientY - rect.top;
     return { cx, cy };
   };
 
@@ -1092,16 +1251,18 @@ renderPipes
     const padding = 80;
     const bw = Math.max(1, bounds.maxX - bounds.minX);
     const bh = Math.max(1, bounds.maxY - bounds.minY);
-    const nextZoom = Math.max(10, Math.min(140, Math.min((canvas.width - padding*2) / bw, (canvas.height - padding*2) / bh)));
+    const width = canvas.clientWidth || canvasViewport.width;
+    const height = canvas.clientHeight || canvasViewport.height;
+    const nextZoom = Math.max(10, Math.min(140, Math.min((width - padding*2) / bw, (height - padding*2) / bh)));
     const cx = (bounds.minX + bounds.maxX) / 2;
     const cy = (bounds.minY + bounds.maxY) / 2;
 
     setZoom(nextZoom);
     setPan({
-      x: canvas.width / 2 - cx * nextZoom,
-      y: canvas.height / 2 - cy * nextZoom,
+      x: width / 2 - cx * nextZoom,
+      y: height / 2 - cy * nextZoom,
     });
-  }, [getGeometryBounds, resetView]);
+  }, [getGeometryBounds, resetView, canvasViewport]);
 
   // CAD-style keyboard navigation
     useEffect(() => {
@@ -1141,6 +1302,8 @@ if(e.key === "Escape") {
   setDrawStart(null);
   setDrawPreview(null);
   setPolylinePoints([]);
+  setDepthDrawPoints([]);
+  setDepthZoneError("");
   cancelPipeDrawing();
 
 setSelectedPipeId(null);
@@ -1271,6 +1434,33 @@ setSelectedSegment(null);
     setFixtures(prev => prev.map(f => ({ ...f, x:f.x + dx, y:f.y + dy })));
   };
 
+  const finishDepthZone = () => {
+    const validation = validateDepthZone(
+      depthDrawPoints,
+      geometry,
+      depthZones.filter((zone) => (zone.zone || zone.key) !== depthZone && zone.points?.length >= 3)
+    );
+    if (!validation.valid) {
+      setDepthZoneError(validation.errors.join(" "));
+      return false;
+    }
+    setDepthZones((zones) => zones.map((zone) => (
+      (zone.zone || zone.key) === depthZone
+        ? { ...zone, points: depthDrawPoints.map((point) => ({ ...point })) }
+        : zone
+    )));
+    setDepthDrawPoints([]);
+    setDrawPreview(null);
+    setDepthZoneError("");
+    return true;
+  };
+
+  const cancelDepthZone = () => {
+    setDepthDrawPoints([]);
+    setDrawPreview(null);
+    setDepthZoneError("");
+  };
+
 const onCanvasContextMenu = (e) => {
   e.preventDefault();
 
@@ -1318,6 +1508,16 @@ if (tool === "select") {
       return;
     }
 if (tool === "pipe") { onPipeClick(world); return; }
+    if (tool === "depth") {
+      if (!pointInGeometry(world, geometry)) {
+        setDepthZoneError("Depth-zone points must be inside the pool.");
+        return;
+      }
+      setDepthZoneError("");
+      setDepthDrawPoints((points) => [...points, world]);
+      setDrawPreview(world);
+      return;
+    }
     if(tool === "rectangle") {
       if(isLayerLocked("pool_outline")) return;
       if(!drawStart) {
@@ -1419,6 +1619,7 @@ if (tool === "pipe") { onPipeClick(world); return; }
   (tool === "equipment" && isLayerLocked("equipment"))
 )
   return;
+      if (!pointInGeometry(world, geometry)) return;
       pushUndo();
       const ft = FIXTURE_TYPES.find(t => t.key === fixtureType) || {
   key: fixtureType,
@@ -1484,6 +1685,7 @@ setFixtures(prev => [...prev, {
     if((tool === "rectangle" || tool === "circle") && drawStart) {
       setDrawPreview(world);
     }
+    if (tool === "depth" && depthDrawPoints.length) setDrawPreview(world);
     if(tool === "polyline") {
       if(isLayerLocked("pool_outline")) return;
       setDrawPreview(world);
@@ -1558,6 +1760,7 @@ setFixtures(prev => [...prev, {
     setDrawPreview(null);
     setPolylinePoints([]);
     setMeasureStart(null);
+    cancelDepthZone();
   };
 
   const clearMeasurements = () => setMeasurements([]);
@@ -1574,6 +1777,9 @@ setFixtures(prev => [...prev, {
    manualPipes,
    measurements,
    layers,
+   depth_zones: depthZones,
+   solved_hydraulics: solvedHydraulics,
+   metrics: poolMetrics,
     array_settings:{ arrayMode, arrayCount, arrayRows, arrayCols, arrayInset },
     engineering_summary:{
   flow:{
@@ -1801,18 +2007,34 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
 
   const saveProject = async () => {
     const project = buildProjectPayload();
+    setSaveStatus("Saving engineering project…");
     try {
-      await fetch(`${API}/diagnostics/record`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          level:"info", category:"system", source:"geometry_designer",
-          message:`Pool geometry saved: ${projectName} — ${fixtures.length} fixtures`,
-          data: project,
-        }),
-      });
+      const result = await apiPost("/geometry/projects", project);
       setSaved(true);
+      setSaveStatus(`Saved as ${result.id}`);
       setTimeout(() => setSaved(false), 2000);
-    } catch {}
+    } catch (error) {
+      setSaved(false);
+      setSaveStatus(`Save failed: ${error.message}`);
+    }
+  };
+
+  const runHydraulics = async () => {
+    setHydraulicRunState({ loading:true, error:"" });
+    try {
+      const payload = buildHydraulicPreviewPayload({
+        fixtures,
+        params,
+        volumeLitres: poolMetrics.capacityLitres,
+      });
+      if (!payload.nozzles.length) throw new Error("Place at least one hydraulic nozzle before solving.");
+      const result = await apiPost("/hydraulics/preview-physics", payload);
+      const normalized = normalizeHydraulicResult(result);
+      setSolvedHydraulics(normalized);
+      setHydraulicRunState({ loading:false, error:"" });
+    } catch (error) {
+      setHydraulicRunState({ loading:false, error:error.message });
+    }
   };
 
   const getArrayBounds = () => {
@@ -1943,7 +2165,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
     }
 
     pushUndo();
-    setFixtures(prev => [...prev, ...made]);
+    setFixtures(prev => [...prev, ...made.filter((fixture) => pointInGeometry(fixture, geometry))]);
   };
 
   const autoPlaceNozzles = () => {
@@ -1952,14 +2174,14 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
     const newFixtures = [];
     if(geometry.type === "circle") {
       // Center geyser + ring
-      newFixtures.push({ id:Date.now(), x:0, y:0, type:"nozzle_geyser", label:"Center Geyser", zone:"deep", rotation:0 });
+      newFixtures.push({ id:Date.now(), x:geometry.center.x, y:geometry.center.y, type:"nozzle_geyser", label:"Center Geyser", zone:"deep", rotation:0 });
       for(let i=0;i<6;i++) {
         const a=(i/6)*Math.PI*2;
-        newFixtures.push({ id:Date.now()+i, x:Math.cos(a)*geometry.radius*0.5, y:Math.sin(a)*geometry.radius*0.5, type:"nozzle_arch", label:`Arch ${i+1}`, zone:"medium", rotation:0 });
+        newFixtures.push({ id:Date.now()+i, x:geometry.center.x+Math.cos(a)*geometry.radius*0.5, y:geometry.center.y+Math.sin(a)*geometry.radius*0.5, type:"nozzle_arch", label:`Arch ${i+1}`, zone:"medium", rotation:0 });
       }
       for(let i=0;i<8;i++) {
         const a=(i/8)*Math.PI*2;
-        newFixtures.push({ id:Date.now()+10+i, x:Math.cos(a)*geometry.radius*0.8, y:Math.sin(a)*geometry.radius*0.8, type:"nozzle_fan", label:`Fan ${i+1}`, zone:"shallow", rotation:0 });
+        newFixtures.push({ id:Date.now()+10+i, x:geometry.center.x+Math.cos(a)*geometry.radius*0.8, y:geometry.center.y+Math.sin(a)*geometry.radius*0.8, type:"nozzle_fan", label:`Fan ${i+1}`, zone:"shallow", rotation:0 });
       }
     } else if(geometry.points) {
       const xs = geometry.points.map(p=>p.x), ys = geometry.points.map(p=>p.y);
@@ -2129,10 +2351,32 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
   const totalNozzleFlow = fixtures.reduce((sum,f)=> f.type?.startsWith("nozzle") ? sum + Number((f.engineering || getDefaultEngineering(f.type)).flowLpm || 0) : sum, 0);
   const totalLightWattage = fixtures.reduce((sum,f)=> f.type?.startsWith("light") ? sum + Number((f.engineering || getDefaultEngineering(f.type)).wattage || 0) : sum, 0);
 
+  const changePoolType = (nextType) => {
+    if (nextType === poolType) return;
+    const nextGeometry = synchronizePoolGeometry({
+      geometry,
+      previousType: poolType,
+      poolType: nextType,
+      params,
+    });
+    setPoolType(nextType);
+    setGeometry(nextGeometry);
+    setSelectedObject("pool");
+  };
+
   const setNumericParam = (key, value, min, max) => {
     const n = Number(value);
     if(Number.isNaN(n)) return;
-    setParams(p => ({ ...p, [key]: Math.max(min, Math.min(max, n)) }));
+    const nextParams = { ...params, [key]: Math.max(min, Math.min(max, n)) };
+    setParams(nextParams);
+    if (key !== "depth" && poolType !== "freeform") {
+      setGeometry(synchronizePoolGeometry({
+        geometry,
+        previousType: poolType,
+        poolType,
+        params: nextParams,
+      }));
+    }
   };
 
   const safePoolTypes = Array.isArray(typeof POOL_TYPES !== "undefined" ? POOL_TYPES : null)
@@ -2147,14 +2391,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
         { key:"false_river", label:"False River", icon:"~≈" },
       ];
 
-  const safeDepthZones = Array.isArray(DEPTH_ZONES)
-    ? DEPTH_ZONES
-    : [
-        { key:"shallow",  label:"Shallow",  depth:0.3, color:"#7ec8e3" },
-        { key:"medium",   label:"Medium",   depth:0.8, color:"#0077b6" },
-        { key:"deep",     label:"Deep",     depth:1.5, color:"#03045e" },
-        { key:"display",  label:"Display",  depth:0.2, color:"#90e0ef" },
-      ];
+  const safeDepthZones = depthZones.map((zone) => ({ ...zone, key: zone.zone || zone.key || zone.id }));
 
   return (
     <div style={{ display:"flex", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px", overflow:"hidden" }}>
@@ -2174,7 +2411,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
           <div style={{ color:"#556677", fontSize:9, marginBottom:5 }}>POOL TYPE</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:3 }}>
             {safePoolTypes.map(t => (
-              <button key={t.key} onClick={()=>setPoolType(t.key)} style={{
+              <button key={t.key} onClick={()=>changePoolType(t.key)} style={{
                 padding:"5px 6px",
                 background: poolType===t.key
                   ? "linear-gradient(135deg,#00402a,#002818)"
@@ -2198,7 +2435,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
         {/* Dimensions */}
         <div style={{ padding:"8px 10px", borderBottom:"1px solid #0a2030" }}>
           <div style={{ color:"#556677", fontSize:9, marginBottom:5 }}>DIMENSIONS</div>
-          {poolType !== "circular" && (
+          {poolType !== "circular" && poolType !== "false_lake" && (
             <>
               {[["Width (m)","width",1,100],["Length (m)","length",1,200]].map(([label,key,min,max]) => (
                 <div key={key} style={{ marginBottom:6 }}>
@@ -2207,7 +2444,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
                     <span style={{ color:"#00ccaa", fontSize:9 }}>{params[key]}m</span>
                   </div>
                   <input type="range" min={min} max={max} step="0.5" value={params[key]}
-                    onChange={e=>setParams(p=>({...p,[key]:parseFloat(e.target.value)}))}
+                    onChange={e=>setNumericParam(key, e.target.value, min, max)}
                     style={{ width:"100%" }} />
                   <input type="number" min={min} max={max} step="0.001" value={params[key]}
                     onChange={e=>setNumericParam(key, e.target.value, min, max)}
@@ -2223,7 +2460,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
                 <span style={{ color:"#00ccaa", fontSize:9 }}>{params.radius}m</span>
               </div>
               <input type="range" min="1" max="50" step="0.5" value={params.radius}
-                onChange={e=>setParams(p=>({...p,radius:parseFloat(e.target.value)}))}
+                onChange={e=>setNumericParam("radius", e.target.value, 1, 50)}
                 style={{ width:"100%" }} />
               <input type="number" min="1" max="50" step="0.001" value={params.radius}
                 onChange={e=>setNumericParam("radius", e.target.value, 1, 50)}
@@ -2236,7 +2473,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
               <span style={{ color:"#00ccaa", fontSize:9 }}>{params.depth}m</span>
             </div>
             <input type="range" min="0.1" max="3" step="0.05" value={params.depth}
-              onChange={e=>setParams(p=>({...p,depth:parseFloat(e.target.value)}))}
+              onChange={e=>setNumericParam("depth", e.target.value, 0.1, 3)}
               style={{ width:"100%" }} />
             <input type="number" min="0.1" max="3" step="0.001" value={params.depth}
               onChange={e=>setNumericParam("depth", e.target.value, 0.1, 3)}
@@ -2249,10 +2486,10 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
           {/* Computed stats */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:3, marginTop:6 }}>
             {[
-              ["Surface area", poolType==="circular" ? `${(Math.PI*params.radius**2).toFixed(1)}m²` : `${(params.width*params.length).toFixed(1)}m²`],
-              ["Volume", poolType==="circular" ? `${(Math.PI*params.radius**2*params.depth).toFixed(1)}m³` : `${(params.width*params.length*params.depth).toFixed(1)}m³`],
-              ["Perimeter", poolType==="circular" ? `${(2*Math.PI*params.radius).toFixed(1)}m` : `${(2*(params.width+params.length)).toFixed(1)}m`],
-              ["Capacity", poolType==="circular" ? `${(Math.PI*params.radius**2*params.depth*1000).toFixed(0)}L` : `${(params.width*params.length*params.depth*1000).toFixed(0)}L`],
+              ["Surface area", `${poolMetrics.area.toFixed(1)}m²`],
+              ["Volume", `${poolMetrics.volume.toFixed(1)}m³`],
+              ["Perimeter", `${poolMetrics.perimeter.toFixed(1)}m`],
+              ["Capacity", `${poolMetrics.capacityLitres.toFixed(0)}L`],
             ].map(([k,v]) => (
               <div key={k} style={{ padding:"3px 5px", background:"#0a1520", borderRadius:3 }}>
                 <div style={{ fontSize:8, color:"#334455" }}>{k}</div>
@@ -2355,6 +2592,36 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
           {tool==="measure" && measureStart && (
             <div style={{ color:"#ffcc00", fontSize:9, marginTop:4 }}>Click to set end point</div>
           )}
+          {tool === "depth" && (
+            <div style={{ marginTop:6, padding:6, background:"#050d14", border:"1px solid #0a3040", borderRadius:4 }}>
+              <div style={{ color:"#7ec8e3", fontSize:9, fontWeight:"bold", marginBottom:5 }}>DEPTH-ZONE DRAWING</div>
+              <select value={depthZone} onChange={(event) => { setDepthZone(event.target.value); cancelDepthZone(); }}
+                aria-label="Active depth zone"
+                style={{ width:"100%", padding:4, background:"#06121c", color:"#cce8ff", border:"1px solid #0a3040", borderRadius:3, fontSize:9, marginBottom:5 }}>
+                {safeDepthZones.map((zone) => <option key={zone.key} value={zone.key}>{zone.label} · {zone.depth}m</option>)}
+              </select>
+              <div style={{ color:"#7890a0", fontSize:8, lineHeight:1.5, marginBottom:5 }}>
+                Click at least three points inside the pool, then validate and close the zone.
+              </div>
+              {depthZoneError && <div role="alert" style={{ color:"#ff8888", fontSize:8, marginBottom:5 }}>{depthZoneError}</div>}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+                <button type="button" onClick={finishDepthZone} disabled={depthDrawPoints.length < 3}
+                  style={{ padding:4, background:depthDrawPoints.length >= 3?"#002b26":"#081018", color:depthDrawPoints.length >= 3?"#7fffd4":"#334455", border:"1px solid #0a5045", borderRadius:3, fontSize:8, cursor:"pointer" }}>
+                  CLOSE ({depthDrawPoints.length})
+                </button>
+                <button type="button" onClick={cancelDepthZone}
+                  style={{ padding:4, background:"#1a0808", color:"#ff9999", border:"1px solid #552222", borderRadius:3, fontSize:8, cursor:"pointer" }}>
+                  CANCEL
+                </button>
+              </div>
+              {safeDepthZones.find((zone) => zone.key === depthZone)?.points?.length >= 3 && (
+                <button type="button" onClick={() => setDepthZones((zones) => zones.map((zone) => (zone.zone || zone.key) === depthZone ? { ...zone, points:[] } : zone))}
+                  style={{ width:"100%", marginTop:4, padding:3, background:"transparent", color:"#ff8888", border:"1px solid #552222", borderRadius:3, fontSize:8, cursor:"pointer" }}>
+                  CLEAR SAVED ZONE
+                </button>
+              )}
+            </div>
+          )}
           {measurements.length > 0 && (
             <button onClick={clearMeasurements} style={{ width:"100%", marginTop:4, padding:"3px", background:"#1a0808", color:"#ff4444", border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontSize:9 }}>
               ✕ Clear measurements
@@ -2363,38 +2630,19 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
         </div>
 
         {/* Fixture type picker */}
-        <div style={{ padding:"8px 10px", borderBottom:"1px solid #0a2030" }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:5 }}>FIXTURE TYPE</div>
-          {getToolFixtureTypes(tool).map(ft => (
-  <button
-    key={ft.key}
-    onClick={() => {
-      setFixtureType(ft.key);
-    }}
-    style={{
-      display:"flex",
-      alignItems:"center",
-      gap:6,
-      width:"100%",
-      padding:"4px 6px",
-      marginBottom:2,
-      background: fixtureType===ft.key ? "#002030" : "#0a1825",
-      color: fixtureType===ft.key ? ft.color : "#556677",
-      border:`1px solid ${fixtureType===ft.key ? ft.color+"44" : "#0a2030"}`,
-      borderRadius:3,
-      cursor:"pointer",
-      fontFamily:"monospace",
-      fontSize:10,
-      textAlign:"left",
-    }}
-  >
-    <span style={{ color:ft.color }}>{ft.icon}</span>
-    {ft.label}
-  </button>
-))}
-          <button onClick={autoPlaceNozzles} style={{ width:"100%", marginTop:6, padding:"5px", background:"#001530", color:"#00aaff", border:"1px solid #00aaff44", borderRadius:3, cursor:"pointer", fontSize:9 }}>
-            ⬡ AUTO-PLACE NOZZLES
-          </button>
+        <div style={{ display:["nozzle","light","equipment"].includes(tool)?"block":"none", borderBottom:"1px solid #0a2030" }}>
+          <FixtureLibraryBrowser
+            fixtures={FIXTURE_TYPES}
+            tool={tool}
+            selectedKey={fixtureType}
+            onSelect={setFixtureType}
+          />
+          <div style={{ padding:"0 10px 8px" }}>
+          {tool === "nozzle" && (
+            <button onClick={autoPlaceNozzles} style={{ width:"100%", marginTop:6, padding:"5px", background:"#001530", color:"#00aaff", border:"1px solid #00aaff44", borderRadius:3, cursor:"pointer", fontSize:9 }}>
+              ⬡ AUTO-PLACE NOZZLES
+            </button>
+          )}
 
           <div style={{ marginTop:8, padding:"6px", background:"#050d14", border:"1px solid #0a3040", borderRadius:4 }}>
             <div style={{ color:"#ffcc00", fontSize:9, fontWeight:"bold", marginBottom:5 }}>ARRAY PLACEMENT</div>
@@ -2444,6 +2692,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
               style={{ width:"100%", padding:"5px", background:"#002030", color:"#00ccaa", border:"1px solid #00aa8844", borderRadius:3, cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>
               APPLY ARRAY
             </button>
+          </div>
           </div>
         </div>
 
@@ -3164,6 +3413,36 @@ onRemoveNode={removeNode}
     ))}
   </div>
 )}
+          <div style={{ padding:6, background:"#041018", border:"1px solid #16415a", borderRadius:4, marginBottom:6 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, marginBottom:5 }}>
+              <div style={{ color:"#7ec8e3", fontSize:9, fontWeight:"bold" }}>SOLVED HYDRAULICS</div>
+              <span style={{ color:solvedHydraulics?.converged?"#00dd88":"#ffcc00", fontSize:8 }}>
+                {solvedHydraulics ? solvedHydraulics.status.toUpperCase() : "NOT RUN"}
+              </span>
+            </div>
+            <button type="button" onClick={runHydraulics} disabled={hydraulicRunState.loading}
+              style={{ width:"100%", padding:5, background:"#072b40", color:"#8de0ff", border:"1px solid #176181", borderRadius:3, cursor:"pointer", fontSize:9, fontFamily:"monospace", marginBottom:5 }}>
+              {hydraulicRunState.loading ? "SOLVING…" : "RUN HYDRAULIC SOLVER"}
+            </button>
+            {hydraulicRunState.error && <div role="alert" style={{ color:"#ff8888", fontSize:8, marginBottom:4 }}>{hydraulicRunState.error}</div>}
+            {solvedHydraulics && [
+              ["Method", solvedHydraulics.method],
+              ["Design flow", `${solvedHydraulics.totalDesignFlowLpm.toFixed(1)} L/min`],
+              ["Turnover", solvedHydraulics.turnoverTimeHours == null ? "—" : `${solvedHydraulics.turnoverTimeHours.toFixed(2)} h`],
+              ["Solved nozzles", Object.keys(solvedHydraulics.nozzlePhysics || {}).length],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", padding:"2px 0", borderBottom:"1px solid #0a304044", fontSize:8 }}>
+                <span style={{ color:"#587286" }}>{label}</span><span style={{ color:"#8de0ff", textAlign:"right" }}>{value}</span>
+              </div>
+            ))}
+            {solvedHydraulics?.validation?.length > 0 && (
+              <div style={{ marginTop:5, color:"#ffcc88", fontSize:8 }}>
+                {solvedHydraulics.validation.slice(0, 3).map((finding, index) => (
+                  <div key={`${finding.code || "finding"}-${index}`}>• {finding.message || String(finding)}</div>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ padding:"6px", background:"#041018", border:"1px solid #0a3040", borderRadius:4, marginBottom:6 }}>
   <div style={{ color:"#ffcc00", fontSize:9, fontWeight:"bold", marginBottom:6 }}>
     ENGINEERING SUMMARY
@@ -3229,6 +3508,9 @@ onRemoveNode={removeNode}
           {exportStatus && (
             <div style={{ color:"#00ccaa", fontSize:9, marginBottom:5 }}>{exportStatus}</div>
           )}
+          {saveStatus && (
+            <div role="status" style={{ color:saveStatus.startsWith("Save failed")?"#ff8888":"#7fffd4", fontSize:9, marginBottom:5 }}>{saveStatus}</div>
+          )}
 
           <button onClick={saveProject} style={{ width:"100%", padding:"6px", background:"#003520", color:"#00ff88", border:"1px solid #00aa4444", borderRadius:4, cursor:"pointer", fontSize:10, fontFamily:"monospace" }}>
             {saved ? "✓ SAVED" : "SAVE PROJECT"}
@@ -3237,7 +3519,7 @@ onRemoveNode={removeNode}
       </div>
 
       {/* Main canvas */}
-      <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
+      <div ref={canvasHostRef} style={{ flex:1, minWidth:0, minHeight:0, position:"relative", overflow:"hidden" }}>
             <div
               style={{
                 position: "absolute",
@@ -3296,8 +3578,9 @@ onRemoveNode={removeNode}
             </div>
         <canvas
           ref={canvasRef}
-          width={900} 
-height={600} 
+          role="application"
+          aria-label="Engineering pool plan canvas"
+          tabIndex={0}
 onContextMenu={onCanvasContextMenu}
           style={{
             width:"100%",
@@ -3316,6 +3599,11 @@ onContextMenu={onCanvasContextMenu}
 
   if (tool === "pipe") {
     onPipeDoubleClick(w);
+    return;
+  }
+
+  if (tool === "depth") {
+    finishDepthZone();
     return;
   }
 
@@ -3406,8 +3694,8 @@ onContextMenu={onCanvasContextMenu}
           <button onClick={resetView} style={{ background:"none", border:"none", color:"#7ab", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>⌂ HOME</button>
           <button onClick={fitView} style={{ background:"none", border:"none", color:"#7ab", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>FIT</button>
           <div style={{ width:1, height:14, background:"#0a2030" }}/>
-          <button onClick={handleUndo} disabled={!undoStackRef.current.length} style={{ background:"none", border:"none", color: undoStackRef.current.length?"#00ccaa":"#334455", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>↶ UNDO</button>
-          <button onClick={handleRedo} disabled={!redoStackRef.current.length} style={{ background:"none", border:"none", color: redoStackRef.current.length?"#00ccaa":"#334455", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>↷ REDO</button>
+          <button onClick={handleUndo} disabled={!canUndoEngineering(historyRef.current)} style={{ background:"none", border:"none", color:canUndoEngineering(historyRef.current)?"#00ccaa":"#334455", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>↶ UNDO</button>
+          <button onClick={handleRedo} disabled={!canRedoEngineering(historyRef.current)} style={{ background:"none", border:"none", color:canRedoEngineering(historyRef.current)?"#00ccaa":"#334455", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>↷ REDO</button>
           <div style={{ width:1, height:14, background:"#0a2030" }}/>
           <button onClick={pushFixturesToDevices} disabled={!fixtures.length} style={{ background:"none", border:"none", color: fixtures.length?"#ffcc00":"#334455", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>⇒ PUSH TO DEVICES</button>
           <div style={{ width:1, height:14, background:"#0a2030" }}/>
@@ -3463,4 +3751,3 @@ onContextMenu={onCanvasContextMenu}
     </div>
   );
 }
-

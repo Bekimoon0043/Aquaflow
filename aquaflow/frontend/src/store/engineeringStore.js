@@ -16,12 +16,30 @@ import { create } from "zustand";
 // AF-HUB-003 — pool bounds/center come from the single canonical geometry contract,
 // so the 3D-centering shift here and the conversion in useEngineeringSync can't drift.
 import { poolBounds as canonicalPoolBounds } from "../engineering/geometryContract";
+import {
+  DEFAULT_DEPTH_ZONES,
+  createDefaultEngineeringProject,
+  normalizeEngineeringProject,
+  selectEngineeringPipes,
+} from "../engineering/engineeringProject";
+
+const DEFAULT_ENGINEERING_LAYERS = [
+  { key: "pool_outline", label: "Pool Outline", visible: true, locked: false, color: "#00aaff" },
+  { key: "water_surface", label: "Water Surface", visible: true, locked: false, color: "#0044aa" },
+  { key: "nozzles", label: "Nozzles", visible: true, locked: false, color: "#00ccaa" },
+  { key: "lights", label: "Lights", visible: true, locked: false, color: "#ffcc00" },
+  { key: "measurements", label: "Measurements", visible: true, locked: false, color: "#ffcc00" },
+  { key: "annotations", label: "Annotations", visible: true, locked: false, color: "#ffcc00" },
+  { key: "pipework", label: "Pipework", visible: true, locked: false, color: "#ff8800" },
+  { key: "equipment", label: "Equipment", visible: true, locked: false, color: "#888888" },
+];
 
 const useEngineeringStore = create((set, get) => ({
   // ─── Project metadata ────────────────────────────────────────────────────────
   projectName: "New Pool Project",
   projectId:   null,
   lastUpdated:  null,
+  loadRevision: 0,
 
   // ─── Pool geometry ───────────────────────────────────────────────────────────
   // geometry: { type, points?, center?, radius?, rx?, ry?, closed? }
@@ -35,12 +53,7 @@ const useEngineeringStore = create((set, get) => ({
   params: { width: 12, length: 8, radius: 6, depth: 0.8 },
 
   // ─── Depth zones ─────────────────────────────────────────────────────────────
-  depthZones: [
-    { zone: "shallow", depth: 0.3 },
-    { zone: "medium",  depth: 0.8 },
-    { zone: "deep",    depth: 1.5 },
-    { zone: "display", depth: 0.2 },
-  ],
+  depthZones: DEFAULT_DEPTH_ZONES.map((zone) => ({ ...zone, points: [] })),
 
   // ─── Fixtures ────────────────────────────────────────────────────────────────
   // Each fixture: { id, type, label, x, y, z, rotation, zone, engineering:{}, symbol:{} }
@@ -49,16 +62,7 @@ const useEngineeringStore = create((set, get) => ({
 
   // ─── Layers ──────────────────────────────────────────────────────────────────
   // Each layer: { key, label, visible, locked, color }
-  layers: [
-    { key: "pool_outline",  label: "Pool Outline",   visible: true,  locked: false, color: "#00aaff" },
-    { key: "water_surface", label: "Water Surface",  visible: true,  locked: false, color: "#0044aa" },
-    { key: "nozzles",       label: "Nozzles",        visible: true,  locked: false, color: "#00ccaa" },
-    { key: "lights",        label: "Lights",         visible: true,  locked: false, color: "#ffcc00" },
-    { key: "measurements",  label: "Measurements",   visible: true,  locked: false, color: "#ffcc00" },
-    { key: "annotations",   label: "Annotations",    visible: true,  locked: false, color: "#ffcc00" },
-        { key: "pipework",      label: "Pipework",       visible: true,  locked: false, color: "#ff8800" },
-    { key: "equipment",     label: "Equipment",      visible: true,  locked: false, color: "#888888" },
-  ],
+  layers: DEFAULT_ENGINEERING_LAYERS.map((layer) => ({ ...layer })),
 
   // ─── Hydraulic results (from hydraulic engine) ───────────────────────────────
   hydraulicSummary: {
@@ -68,6 +72,7 @@ const useEngineeringStore = create((set, get) => ({
     recommendedPumpKw:   0,
     totalWatts:          0,
   },
+  solvedHydraulics: null,
 
   // ─── BOM (from BOM engine) ───────────────────────────────────────────────────
     bomItems: [],
@@ -97,21 +102,33 @@ pipes: [],
    * Full project load — replaces entire state.
    */
     loadProject: (project) => {
+    const normalized = normalizeEngineeringProject(project);
+    const projectPipes = selectEngineeringPipes(normalized);
     set({
-      projectName:       project.name        || "Untitled",
-      projectId:         project.id          || null,
-      geometry:          project.geometry    || null,
-      poolType:          project.pool_type   || "rectangular",
-      params:            project.params      || { width:12, length:8, radius:6, depth:0.8 },
-      fixtures:          project.fixtures    || [],
-      layers:            project.layers      || get().layers,
-      measurements:      project.measurements|| [],
-      hydraulicSummary:  project.hydraulics  || get().hydraulicSummary,
-      bomItems:          project.bom         || [],
-      manualPipes:       project.manualPipes || project.pipes || [],
-      pipes:             project.manualPipes || project.pipes || [],
+      projectName:       normalized.name,
+      projectId:         normalized.id,
+      geometry:          normalized.geometry || null,
+      poolType:          normalized.pool_type,
+      params:            normalized.params,
+      fixtures:          normalized.fixtures,
+      layers:            normalized.layers.length
+        ? normalized.layers
+        : DEFAULT_ENGINEERING_LAYERS.map((layer) => ({ ...layer })),
+      measurements:      normalized.measurements,
+      depthZones:        normalized.depth_zones,
+      hydraulicSummary:  normalized.hydraulics || get().hydraulicSummary,
+      solvedHydraulics:   normalized.solved_hydraulics,
+      bomItems:          normalized.bom,
+      manualPipes:       projectPipes,
+      pipes:             projectPipes,
       lastUpdated:       Date.now(),
+      loadRevision:      get().loadRevision + 1,
     });
+  },
+
+  resetProject: () => {
+    const project = createDefaultEngineeringProject();
+    get().loadProject(project);
   },
 
   /**
@@ -130,8 +147,11 @@ pipes: [],
       fixtures:    s.fixtures,
       layers:      s.layers,
       measurements:s.measurements,
+      depth_zones: s.depthZones,
       hydraulics:  s.hydraulicSummary,
+      solved_hydraulics: s.solvedHydraulics,
       bom:         s.bomItems,
+      manualPipes: s.manualPipes,
       pipes:       s.pipes,
       exported_at: new Date().toISOString(),
     };

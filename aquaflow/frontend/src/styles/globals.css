@@ -99,6 +99,20 @@ html, body, #root {
   gap: 0;
 }
 
+.engineering-workspace {
+  min-width: 0;
+  min-height: 0;
+  background: #020810;
+}
+
+.engineering-workspace-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
 /* Center stack */
 .center-stack {
   flex: 1;

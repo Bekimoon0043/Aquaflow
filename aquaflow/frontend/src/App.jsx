@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import { Component } from "react";
 import { WebSocketProvider } from "./hooks/WebSocketContext";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -44,6 +44,8 @@ const PoolGeometryDesigner = lazy(() => import("./components/panels/PoolGeometry
 const PatternDesignerPanel = lazy(() => import("./components/panels/PatternDesignerPanel"));
 const Export3DPanel = lazy(() => import("./components/panels/Export3DPanel"));
 const ShowProgrammerPanel = lazy(() => import("./components/programmer/ShowProgrammerPanel"));
+import ResizeHandle from "./components/layout/ResizeHandle";
+import { useResizableLayout } from "./components/layout/useResizableLayout";
 import StatusBar from "./components/StatusBar";
 import ConnectionBanner from "./components/ConnectionBanner";
 import CommissioningBanner from "./components/CommissioningBanner";
@@ -55,7 +57,15 @@ import "./styles/globals.css";
 
 
 function StudioApp() {
-  const [layout] = useState({ leftWidth: 260, rightWidth: 300, timelineHeight: 280 });
+  // Panel sizes are now draggable and persisted, rather than the frozen literal this
+  // used to be. Defaults are unchanged (260 / 300 / 280), so a first run looks identical.
+  const { layout, resize, beginDrag, endDrag, resetPanel } = useResizableLayout();
+  // Measured at drag time so a panel can never be dragged wide enough to collapse the
+  // centre workspace — the limit depends on the current window, not on a fixed constant.
+  const workspaceRef = useRef(null);
+  const centerRef = useRef(null);
+  const workspacePx = () => workspaceRef.current?.clientWidth || 0;
+  const centerHeightPx = () => centerRef.current?.clientHeight || 0;
   const [activePanel, setActivePanel] = useState("nodes");
   const [showLogs, setShowLogs] = useState(false);
   const [showBrowser, setShowBrowser] = useState(null);
@@ -76,9 +86,26 @@ function StudioApp() {
         isDirty={isDirty}
         lastSaved={lastSaved}
       />
-      <div className="workspace">
+      <div className={`workspace${activePanel === "geometry" ? " engineering-workspace" : ""}`} ref={workspaceRef}>
+        {activePanel === "geometry" ? (
+          <div className="engineering-workspace-content">
+            <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
+              <PoolGeometryDesigner />
+            </Suspense>
+          </div>
+        ) : (<>
         <DevicePanel width={layout.leftWidth} />
-        <div className="center-stack">
+        <ResizeHandle
+          axis="x"
+          title="Drag to resize the device panel · double-click to reset"
+          onStart={() => beginDrag("leftWidth")}
+          onEnd={endDrag}
+          onReset={() => resetPanel("leftWidth")}
+          onResize={(d) => resize("leftWidth", d, {
+            containerPx: workspacePx(), otherPanelsPx: layout.rightWidth,
+          })}
+        />
+        <div className="center-stack" ref={centerRef}>
           <div className="editor-area">
            <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
             {activePanel === "nodes"        && <NodeEditor />}
@@ -110,15 +137,38 @@ function StudioApp() {
             {activePanel === "presets"      && <PresetBrowser />}
             {activePanel === "calibration"  && <CalibrationPanel />}
             {activePanel === "keyframes"    && <KeyframeEditor durationMs={8000} />}
-            {activePanel === "geometry"     && <PoolGeometryDesigner />}
             {activePanel === "patterns" && <PatternDesignerPanel />}
             {activePanel === "show_programmer" && <ShowProgrammerPanel />}
             {activePanel === "export3d"     && <Export3DPanel />}
            </Suspense>
           </div>
+          <ResizeHandle
+            axis="y"
+            title="Drag to resize the timeline · double-click to reset"
+            onStart={() => beginDrag("timelineHeight")}
+            onEnd={endDrag}
+            onReset={() => resetPanel("timelineHeight")}
+            // Inverted: the handle sits on the timeline's TOP edge, so dragging down
+            // must make it shorter, not taller.
+            onResize={(d) => resize("timelineHeight", d, {
+              invert: true, containerPx: centerHeightPx(), otherPanelsPx: 0,
+            })}
+          />
           <Timeline height={layout.timelineHeight} />
         </div>
+        <ResizeHandle
+          axis="x"
+          title="Drag to resize the inspector · double-click to reset"
+          onStart={() => beginDrag("rightWidth")}
+          onEnd={endDrag}
+          onReset={() => resetPanel("rightWidth")}
+          // Inverted: this handle is on the inspector's LEFT edge.
+          onResize={(d) => resize("rightWidth", d, {
+            invert: true, containerPx: workspacePx(), otherPanelsPx: layout.leftWidth,
+          })}
+        />
         <InspectorPanel width={layout.rightWidth} />
+        </>)}
       </div>
       {showLogs && <LogPanel onClose={() => setShowLogs(false)} />}
       {showBrowser && <ShowBrowser mode={showBrowser} onClose={() => setShowBrowser(null)} />}

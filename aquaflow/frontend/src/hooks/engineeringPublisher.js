@@ -38,7 +38,9 @@ export function useEngineeringPublisher(data) {
         pipes:            data.manualPipes      || [],
         layers:           data.layers           || [],
         measurements:     data.measurements     || [],
+        depthZones:       data.depthZones       || [],
         hydraulicSummary: data.hydraulicSummary || {},
+        solvedHydraulics:  data.solvedHydraulics || null,
         bomItems:         data.bomItems         || [],
      });
     }, 80);
@@ -49,9 +51,12 @@ export function useEngineeringPublisher(data) {
     data.poolType,
     data.params,
     data.fixtures,
+    data.manualPipes,
     data.layers,
     data.measurements,
+    data.depthZones,
     data.hydraulicSummary,
+    data.solvedHydraulics,
     data.bomItems,
   ]);
 }

@@ -49,10 +49,12 @@ async def preview_physics(payload: dict):
         raise HTTPException(500, f"hydraulic solve failed: {exc}")
     return {
         "converged": res.get("converged"),
+        "method": res.get("method", "hazen-williams"),
         "nozzle_physics": res.get("nozzle_physics", {}),
         "validation": res.get("validation", []),
         "total_design_flow_lpm": res.get("total_design_flow_lpm"),
         "turnover_time_hours": res.get("turnover_time_hours"),
+        "hydraulic_solution": res.get("hydraulic_solution"),
     }
 
 

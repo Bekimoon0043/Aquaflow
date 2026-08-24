@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useShowStore } from "../store/showStore";
+import useEngineeringStore from "../store/engineeringStore";
+import { createDefaultEngineeringProject } from "../engineering/engineeringProject";
 import {
   downloadShowFile,
   readShowFile,
@@ -36,6 +38,12 @@ export default function ShowBrowser({ mode, onClose }) {
   const fileInputRef = useRef(null);
   const autoSave = loadAutoSave();
   const backendAvailable = connectionState === "connected";
+  const engineeringRevision = useEngineeringStore((s) => s.lastUpdated);
+  const loadEngineeringProject = useEngineeringStore((s) => s.loadProject);
+  const currentEngineering = useMemo(
+    () => useEngineeringStore.getState().getProjectPayload(),
+    [engineeringRevision]
+  );
 
   useEffect(() => {
     setRecentShows(getRecentShows());
@@ -78,6 +86,7 @@ export default function ShowBrowser({ mode, onClose }) {
     const state = useShowStore.getState();
     return {
       ...state,
+      engineeringProject: currentEngineering,
       currentShow: {
         ...state.currentShow,
         name: showName || "Untitled Show",
@@ -85,12 +94,12 @@ export default function ShowBrowser({ mode, onClose }) {
         duration: parseFloat(duration) || 240,
       },
     };
-  }, [showName, bpm, duration]);
+  }, [showName, bpm, duration, currentEngineering]);
 
   const handleSave = async () => {
     setError(null);
     try {
-      const payload = serializeShow(saveState);
+      const payload = serializeShow(saveState, currentEngineering);
 
       if (backendAvailable) {
         setSavingRemote(true);
@@ -130,7 +139,7 @@ export default function ShowBrowser({ mode, onClose }) {
   const handleDownload = () => {
     setError(null);
     try {
-      downloadShowFile(saveState);
+      downloadShowFile(saveState, currentEngineering);
       addServerLog({ level: "info", msg: `Local export created: ${(showName || "show").replace(/\s+/g, "_")}.aqua` });
     } catch (e) {
       setError("Download failed: " + e.message);
@@ -142,6 +151,7 @@ export default function ShowBrowser({ mode, onClose }) {
     try {
       const { state, meta } = await readShowFile(file);
       loadShow(state);
+      loadEngineeringProject(state.engineeringProject);
       saveToRecent({ name: meta.name, savedAt: meta.savedAt });
       addServerLog({ level: "info", msg: `Opened local file: ${meta.name}` });
       onClose();
@@ -158,6 +168,7 @@ export default function ShowBrowser({ mode, onClose }) {
       const data = await res.json();
       const state = deserializeShow(data);
       loadShow(state);
+      loadEngineeringProject(state.engineeringProject);
       saveToRecent({
         name: data.show?.name || showId,
         savedAt: data.savedAt,
@@ -209,6 +220,7 @@ export default function ShowBrowser({ mode, onClose }) {
       showGrid: true,
       snapToGrid: true,
     });
+    loadEngineeringProject(createDefaultEngineeringProject());
     addServerLog({ level: "info", msg: `New show created: ${showName || "New Show"}` });
     onClose();
   };
@@ -377,6 +389,7 @@ export default function ShowBrowser({ mode, onClose }) {
                       style={{ fontSize: 11 }}
                       onClick={() => {
                         loadShow(autoSave.state);
+                        loadEngineeringProject(autoSave.state.engineeringProject);
                         addServerLog({ level: "info", msg: "Auto-saved session restored" });
                         onClose();
                       }}
@@ -524,6 +537,8 @@ export default function ShowBrowser({ mode, onClose }) {
                   ["Connections", useShowStore.getState().connections.length],
                   ["Timeline Tracks", useShowStore.getState().timelineTracks.length],
                   ["Devices", useShowStore.getState().devices.length],
+                  ["Engineering Fixtures", currentEngineering.fixtures.length],
+                  ["Engineering Pipes", currentEngineering.pipes.length],
                 ].map(([label, count]) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>
                     <span>{label}</span>
