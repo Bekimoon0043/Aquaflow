@@ -167,3 +167,68 @@ async def import_detections(req: ImportRequest):
 async def map_registry():
     """The labelled channels as AquaFlow device-registry entries."""
     return {"devices": _map().to_device_registry()}
+
+
+# ── AF-ICAN-003 — join the gateway to the runtime output path ────────────────
+# Discovery and mapping alone never let a show reach the cabinet: the bus had no
+# I-CAN route at all. These two endpoints are the operator's remaining steps, kept
+# separate on purpose — attaching decides WHERE output would go, arming decides
+# WHETHER it may go at all. Neither is implied by connecting.
+
+class ArmRequest(BaseModel):
+    enabled: bool
+    confirm: str = ""          # must be exactly "ARM OUTPUT" to enable
+
+
+@router.post("/output/attach")
+async def attach_output():
+    """Route this gateway's labelled channels onto the runtime protocol bus."""
+    from app_state import protocol_bus
+
+    m = _manager()
+    if m.state.value != "connected":
+        raise HTTPException(status_code=409,
+                            detail=f"gateway not connected (state={m.state.value})")
+
+    devices = _map().to_device_registry()
+    if not devices:
+        raise HTTPException(status_code=409,
+                            detail="no labelled channels — assign channels before attaching")
+
+    from engine.ican_connection import ICANDriver
+    routed = protocol_bus.attach_ican(ICANDriver(m), devices)
+    return {
+        "attached": True,
+        "channels_routed": routed,
+        "devices": [d["device_id"] for d in devices],
+        # Attaching does not arm. Say so explicitly so nobody reads this as "live".
+        "output_armed": m.status().get("output_enabled", False),
+        "note": "Attached to the output bus. Output remains DISABLED until /output/arm.",
+    }
+
+
+@router.post("/output/arm")
+async def arm_output(req: ArmRequest):
+    """
+    Arm or disarm the physical output path.
+
+    Arming requires an explicit confirmation phrase because this is the step that
+    lets software close real relays. The 0x08 output semantics are capture-derived
+    and unproven on hardware, so this must never be reachable by accident.
+    Disarming is always allowed and needs no confirmation — stopping is never gated.
+    """
+    m = _manager()
+    if req.enabled and req.confirm != "ARM OUTPUT":
+        raise HTTPException(
+            status_code=400,
+            detail='arming requires confirm="ARM OUTPUT"',
+        )
+    m.enable_output(bool(req.enabled))
+    if not req.enabled:
+        # Disarming should also drop anything currently energised, not merely stop
+        # future frames.
+        try:
+            await m.blackout()
+        except Exception:
+            pass
+    return {"output_armed": bool(req.enabled), "status": m.status()}

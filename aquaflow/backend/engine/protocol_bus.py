@@ -31,6 +31,14 @@ PROTOCOL_SUPPORT = {
     "artnet": "REAL",
     "sacn":   "REAL",
     "modbus": "REAL",
+    # AF-ICAN-003 — the I-CAN/NETCAN relay gateway, the protocol the actual site
+    # cabinet speaks. REAL per this table's own definition: the driver is implemented
+    # and exercised end to end against a gateway. Whether real fixtures move is a
+    # separate question governed by the commissioning flag — and for I-CAN the 0x08
+    # output SEMANTICS are still capture-derived rather than hardware-proven, so the
+    # output path additionally requires an explicit arm (enable_output) before it can
+    # emit anything. See engine/ican_protocol.py for what is proven vs inferred.
+    "ican":   "REAL",
     "mqtt":   "GATED",        # MQTTDriver is a stub — explicitly disabled below
     "opcua":  "UNSUPPORTED",  # no implementation exists
     "bacnet": "UNSUPPORTED",  # no implementation exists
@@ -328,6 +336,18 @@ class ProtocolBus:
         self._global_intensity_cap: float = 1.0
         # Flame hardware-level duration enforcement.
         self._flame_max_duration: float = self.FLAME_MAX_DURATION
+
+        # ── AF-ICAN-003 — I-CAN/NETCAN relay gateway routing ──────────────────
+        # I-CAN is not a per-device protocol: a single 0x08 frame carries the whole
+        # channel bitmask for a device group. Emitting once per command would make
+        # each device clear every other device in its group, so commands accumulate
+        # into a desired state here and are flushed one frame per group per batch.
+        self._ican_driver = None
+        self._ican_devices: dict[str, dict] = {}      # device_id → {group, channel, safety_max}
+        self._ican_state: dict[int, set] = {}          # group → set of channels currently ON
+        self._ican_dirty: set = set()                  # groups whose state changed this batch
+        # Relay banks (SSR-8Y-A) are binary: a channel is on or off, not dimmed.
+        self._ican_on_threshold: float = 0.5
         self._flame_on_since: dict[str, float] = {}   # device_id → burst start (monotonic)
         self._flame_last_cmd: dict[str, float] = {}   # device_id → last flame command time
         self._flame_lockout: set = set()              # device_ids latched off after cutoff
@@ -560,10 +580,108 @@ class ProtocolBus:
             self._drivers[key] = driver
         return driver
 
+    # ── AF-ICAN-003 — I-CAN gateway attachment and flush ─────────────────────
+    def attach_ican(self, driver, devices=None, *, on_threshold: float = 0.5) -> int:
+        """
+        Join an I-CAN gateway driver to the runtime output path.
+
+        This is a deliberate, explicit step rather than a default: until it is called
+        the bus has no I-CAN route at all, and the driver itself still refuses to emit
+        until its output is separately armed. Both gates are intentional — the 0x08
+        output semantics are capture-derived, so nothing should be able to drive the
+        site's relay cabinet by accident.
+
+        @param devices  registry-shaped entries, exactly as ChannelMap.to_device_registry()
+                        produces: {device_id, ican_group, ican_channel, safety_max}
+        @returns number of devices routed
+        """
+        self._ican_driver = driver
+        self._ican_devices = {}
+        for entry in (devices or []):
+            did = str(entry.get("device_id") or "")
+            if not did:
+                continue
+            try:
+                group = int(entry.get("ican_group", 0))
+                channel = int(entry.get("ican_channel", 0))
+            except (TypeError, ValueError):
+                continue
+            if channel <= 0:
+                continue   # channel numbers are 1-based; 0 would alias the whole group
+            self._ican_devices[did] = {
+                "group": group,
+                "channel": channel,
+                "safety_max": float(entry.get("safety_max", 1.0) or 1.0),
+            }
+        self._ican_on_threshold = max(0.0, min(1.0, float(on_threshold)))
+        logger.info("I-CAN attached to protocol bus: %d channel(s) routed",
+                    len(self._ican_devices))
+        return len(self._ican_devices)
+
+    def _ican_apply(self, device_id: str, intensity: float) -> bool:
+        """Record a device's desired relay state. Returns True if this was an I-CAN device."""
+        entry = self._ican_devices.get(str(device_id))
+        if not entry:
+            return False
+        group, channel = entry["group"], entry["channel"]
+        eff = min(float(intensity), entry["safety_max"])
+        want_on = eff >= self._ican_on_threshold
+        cur = self._ican_state.setdefault(group, set())
+        was_on = channel in cur
+        if want_on:
+            cur.add(channel)
+        else:
+            cur.discard(channel)
+        if was_on != want_on:
+            self._ican_dirty.add(group)
+        return True
+
+    async def _flush_ican(self):
+        """
+        Emit one 0x08 frame per group whose channel set changed.
+
+        A group stays DIRTY until its frame is actually accepted. This matters more
+        than it looks: the frame carries absolute channel state, not a delta, so if a
+        send is dropped — gateway down, output not yet armed, socket error — and the
+        group were marked clean anyway, the bus would believe the gateway already has
+        a state it never received. Every later command that did not itself change the
+        mask would then flush nothing, and the channel would stay wrong until something
+        unrelated happened to dirty the group again. On a fountain that is a jet stuck
+        on or a jet that never fires.
+        """
+        if not self._ican_driver or not self._ican_dirty:
+            return
+        groups = sorted(self._ican_dirty)
+        for group in groups:
+            channels = sorted(self._ican_state.get(group, set()))
+            try:
+                ok = await self._ican_driver.send({
+                    "group": group,
+                    "channels": channels,
+                    # The driver's own arm/confirm gate still applies; this only says the
+                    # command came from the runtime rather than from arbitrary input.
+                    "confirmed": True,
+                    "user": "runtime",
+                })
+            except Exception as e:
+                # A gateway fault must never abort the rest of the output batch — the
+                # other protocols still need to reach their hardware, and the connection
+                # layer handles its own reconnect.
+                logger.error("I-CAN send failed for group %d: %s", group, e)
+                ok = False
+            if ok:
+                self._ican_dirty.discard(group)
+                logger.debug("I-CAN → group=%d channels=%s", group, channels)
+            else:
+                logger.warning("I-CAN group %d not accepted — will re-send next flush", group)
+
     async def send_batch(self, commands: list[dict]):
         """Route a batch of commands to appropriate drivers"""
         for cmd in commands:
             await self._route_command(cmd)
+        # I-CAN accumulates per-command and emits once per group, so the flush happens
+        # after the whole batch is routed.
+        await self._flush_ican()
     def _normalize_device_type(self, raw_type) -> str:
         key = str(raw_type or "").strip().lower()
 
@@ -603,6 +721,15 @@ class ProtocolBus:
         # kernel permit + enables, and enforce the flame duration cutoff — the
         # single choke point every hardware emit passes through.
         intensity   = self._safety_gate(device_id, device_type, cmd.get("intensity", 0.0))
+
+        # ── I-CAN relay gateway ───────────────────────────────────────────────
+        # Checked FIRST and keyed on device identity, not device type: an I-CAN relay
+        # bank drives whatever is wired to it — a pump on one channel, a light on the
+        # next. Routing by type would send a relay-backed pump down the Modbus path and
+        # it would arrive nowhere. This only records state; the frame is emitted by
+        # _flush_ican() once the batch is routed.
+        if self._ican_apply(device_id, intensity):
+            return
 
         # ── Modbus (pumps, valves, flame) ─────────────────────────────────────
         if device_type in ("pump", "valve", "flame", "flame_units"):
@@ -724,6 +851,12 @@ class ProtocolBus:
             return True
         if device_id in self._fixture_registers:
             return True
+        # AF-ICAN-003 — a fixture wired to an I-CAN relay channel IS mapped. Without
+        # this the fail-closed check in show_engine.play() would classify every
+        # relay-driven fixture as unmapped and refuse to start the show on exactly the
+        # commissioned hardware the fountain actually runs on.
+        if did in self._ican_devices:
+            return True
         dk = self._device_map.get(device_id)
         if dk and dk in self._drivers:
             return True
@@ -794,6 +927,17 @@ class ProtocolBus:
         """All outputs to zero"""
         for driver in self._drivers.values():
             await driver.blackout()
+        # I-CAN is not in self._drivers (it is attached explicitly), so blacking it out
+        # has to be done here. Clear the desired state FIRST: if the all-off frame fails
+        # to reach the gateway, the next flush must still not re-assert channels that a
+        # stop was meant to drop.
+        if self._ican_driver:
+            self._ican_state = {}
+            self._ican_dirty = set()
+            try:
+                await self._ican_driver.blackout()
+            except Exception as e:
+                logger.error("I-CAN blackout failed: %s", e)
 
     async def emergency_stop(self):
         """Immediate hardware blackout + pump stop"""

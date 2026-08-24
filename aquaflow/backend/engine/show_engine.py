@@ -138,6 +138,8 @@ class ShowEngine:
         self.fixtures = payload.get("fixtures", payload.get("engineeringFixtures", self.fixtures)) or []
         self.groups = self._normalize_groups(payload.get("groups"), self.fixtures)
         self.last_error = ""  # fresh show — clear any prior conflict block
+        # A new show owes no releases to the previous one.
+        self._held_devices = {}
         self._recording_buffer = []
 
         inferred_duration = max(
@@ -312,6 +314,10 @@ class ShowEngine:
         self._sync_transport(False)   # AF-HUB-013 — mirror the stop into the transport
         if self.protocol_bus:
             await self.protocol_bus.blackout()
+        # Nothing is held once playback ends — the blackout above already
+        # dropped every output, and a stale hold would emit a release for a
+        # device the next show may not even contain.
+        self._held_devices = {}
         print("⏹  Playback stopped")
 
     async def pause(self):
@@ -336,6 +342,7 @@ class ShowEngine:
                 self.transport.emergency_stop()
             except Exception:  # pragma: no cover - mirror must not block the E-stop
                 pass
+        self._held_devices = {}
         print("🚨 EMERGENCY STOP")
 
     async def _playback_loop(self):
@@ -398,6 +405,18 @@ class ShowEngine:
         return aliases.get(key, key)
 
     def _evaluate_timeline(self, t: float) -> list[dict]:
+        """
+        Commands for playhead position `t`.
+
+        Emits an explicit RELEASE (intensity 0) for any device that was driven on the
+        previous evaluation and is not covered by a clip now.
+
+        Without that release nothing ever tells a device to stop. Every output protocol
+        here is stateful — a relay stays closed, a DMX channel holds its last value —
+        so "no command" means "hold", not "off". A jet whose clip ended simply stayed on
+        for the rest of the show, and the next clip added to it rather than replacing it.
+        Ending the show was the only thing that ever turned anything off.
+        """
         commands = []
         solo_tracks = [track for track in self.timeline_tracks if track.get("solo")]
         active_tracks = solo_tracks if solo_tracks else [track for track in self.timeline_tracks if not track.get("muted")]
@@ -423,6 +442,29 @@ class ShowEngine:
                             or track.get("color")
                         ),
                 })
+
+        # ── Release devices whose clips have ended ────────────────────────────
+        held = getattr(self, "_held_devices", None)
+        if held is None:
+            held = self._held_devices = {}
+        now_active = {
+            str(c["device_id"]): c["type"]
+            for c in commands
+            if c.get("device_id") is not None
+        }
+        for device_id, device_type in held.items():
+            if device_id not in now_active:
+                commands.append({
+                    "track_id": None,
+                    "device_id": device_id,
+                    "type": device_type,
+                    "label": "release",
+                    "intensity": 0.0,
+                    "progress": 1.0,
+                    "clip_id": None,
+                    "color": None,
+                })
+        self._held_devices = now_active
         return commands
 
     def update_node_param(self, node_id: str, key: str, value):
