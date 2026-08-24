@@ -66,6 +66,9 @@ import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 // AQ-S2-002 Phase 2 — solver-driven jet physics (pure, unit-tested, single definition).
 import { launchSpeed as JP_launchSpeed, normalizePhysics as JP_normalizePhysics } from "./jetPhysics";
+// AQ-S3-012 — a real mirror image in the pool, and a record of where the water lands.
+import { WaterReflectionProbe } from "./waterReflection";
+import { SplashMap, insidePool as SM_insidePool, litresPerImpact as SM_litresPerImpact } from "./splashMap";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 export const NOZZLE_TYPES = {
@@ -87,13 +90,19 @@ export const RENDER_QUALITY = { LOW:"low", MEDIUM:"medium", HIGH:"high" };
 const MAX_FIELD_LIGHTS = 16;
 // postFX per tier: `low` stays on the direct render path (no composer) so weak GPUs keep
 // their frame rate; `medium` gets bloom + grade; `high` adds SMAA and a wider bloom.
+// `reflect` is the planar-reflection target size in px, 0 = off. `reflectEvery` renders
+// it on every Nth frame: the mirror image is low-frequency and tolerates staleness far
+// better than the direct image, so medium buys the effect at half the cost.
 const QUALITY_CONFIG = {
   low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
-            postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false },
+            postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false,
+            reflect: 0,   reflectEvery: 1 },
   medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00,
-            postfx: true,  bloom: 0.35, smaa: false, ibl: true,  ao: false },
+            postfx: true,  bloom: 0.35, smaa: false, ibl: true,  ao: false,
+            reflect: 512, reflectEvery: 2 },
   high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
-            postfx: true,  bloom: 0.48, smaa: true,  ibl: true,  ao: true },
+            postfx: true,  bloom: 0.48, smaa: true,  ibl: true,  ao: true,
+            reflect: 1024, reflectEvery: 1 },
 };
 
 // ── Camera-response pass ────────────────────────────────────────────────────
@@ -255,7 +264,19 @@ void main(){
   }
 
   float alpha = edge * vColor.a * (0.30 + vLife * 0.70);
-  gl_FragColor = vec4(col, alpha);
+
+  // PREMULTIPLIED output. The blend factors on the material then decide whether this
+  // droplet OCCLUDES what is behind it (water) or only adds to it (flame).
+  //
+  // Why this matters more than any other line in the renderer: water spray is a
+  // scattering medium, not a light source. Under straight additive blending a dense
+  // jet is the SUM of every droplet along the view ray, which is unbounded — six
+  // thousand droplets drove the column to pure white and erased its shape. A real
+  // jet saturates instead, exactly as a cloud does: past a certain optical depth you
+  // simply see the medium's own colour. Premultiplied source-over gives that
+  // convergence for free, while still letting a droplet carry colour above 1.0 so the
+  // bloom pass has genuine highlights to find.
+  gl_FragColor = vec4(col * alpha, alpha);
 }`;
 
 // ─── WATER CORE COLUMN SHADER — coherent pressurized body ───────────────────
@@ -393,11 +414,13 @@ const WATER_VERT_V2 = /* glsl */`
 uniform float uTime;
 uniform float uIntensity;
 uniform float uWind;
+uniform mat4  uReflectMatrix;
 varying vec2  vUv;
 varying vec3  vWorldPos;
 varying vec3  vNormal;
 varying float vDepth;
 varying float vFoam;
+varying vec4  vReflectCoord;
 
 vec3 gerstner(vec2 p, vec2 dir, float amp, float freq, float speed, float steep, float t){
   float phase = dot(dir, p) * freq + t * speed;
@@ -422,6 +445,11 @@ void main(){
   vDepth  = 1.0 - length(uv - 0.5) * 2.2;
   vec4 wp = modelMatrix * vec4(pos, 1.0);
   vWorldPos = wp.xyz;
+  // Project against the FLAT plane, not the wave-displaced point: the mirror lives at
+  // the mean waterline, and projecting the displaced position would double-count the
+  // wave (once here, once via the normal perturbation in the fragment stage) and make
+  // the reflection swim.
+  vReflectCoord = uReflectMatrix * (modelMatrix * vec4(position, 1.0));
   gl_Position = projectionMatrix * viewMatrix * wp;
 }`;
 
@@ -435,6 +463,9 @@ uniform vec3  uShallowColor;
 uniform vec3  uSkyColor;
 uniform float uRoughness;
 uniform vec3  uCameraPos;
+uniform sampler2D uReflectTex;
+uniform float uReflectStrength;   // 0 disables the sample and falls back to flat sky
+uniform float uIntensity;         // surface agitation — drives reflection break-up
 uniform int   uFieldCount;
 uniform vec3  uFieldPos[${MAX_FIELD_LIGHTS}];
 uniform vec3  uFieldCol[${MAX_FIELD_LIGHTS}];
@@ -445,6 +476,7 @@ varying vec3  vWorldPos;
 varying vec3  vNormal;
 varying float vDepth;
 varying float vFoam;
+varying vec4  vReflectCoord;
 
 void main(){
   float depth = clamp(vDepth, 0.0, 1.0);
@@ -490,10 +522,33 @@ void main(){
   // Colored specular spike under strong RGB fixtures
   base += fieldContrib * ggx * 1.8;
 
-  // Fresnel reflection
+  // ── Fresnel reflection ────────────────────────────────────────────────────
+  // Schlick against water's true normal-incidence reflectance. For IOR 1.333,
+  // F0 = ((1.333-1)/(1.333+1))^2 = 0.02: looking straight down, water reflects
+  // almost nothing and you see the basin; at a grazing angle it becomes a mirror.
+  // That enormous swing is the single strongest cue that a surface IS water, so it
+  // is worth getting exactly right rather than approximating with a tuned power.
   float NdotV   = max(dot(vNormal, viewDir), 0.0);
-  float fresnel = pow(1.0 - NdotV, 4.0) * 0.9;
-  base = mix(base, uSkyColor * 0.55 + uLightColor * 0.10, fresnel);
+  const float F0 = 0.02;
+  float fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
+
+  // The mirror image, projected from the reflection pass and perturbed by the wave
+  // normal so it breaks up and streams with the surface.
+  vec3 skyFallback = uSkyColor * 0.55 + uLightColor * 0.10;
+  vec3 reflected   = skyFallback;
+  if (uReflectStrength > 0.0 && vReflectCoord.w > 0.0) {
+    vec2 ruv = vReflectCoord.xy / vReflectCoord.w;
+    // Perturbation shrinks as the surface calms, and with distance, so a still pool
+    // gives a clean mirror and a driven one gives broken light.
+    vec2 distort = vNormal.xz * (0.055 + 0.10 * uIntensity);
+    vec2 suv = clamp(ruv + distort, vec2(0.001), vec2(0.999));
+    vec3 mirrorCol = texture2D(uReflectTex, suv).rgb;
+    // Water is not a perfect mirror: it tints what it reflects and loses a little
+    // energy doing it.
+    mirrorCol *= mix(vec3(1.0), uShallowColor * 2.2 + vec3(0.35), 0.28);
+    reflected = mix(skyFallback, mirrorCol, uReflectStrength);
+  }
+  base = mix(base, reflected, fresnel);
 
   // Underwater light bleed
   base += uLightColor * uLightIntensity * 0.3 * depth;
@@ -505,7 +560,11 @@ void main(){
   // Edge darkening
   base *= 0.85 + depth * 0.15;
 
-  gl_FragColor = vec4(base, 0.88);
+  // Opacity follows the same fresnel term. Looking down you see INTO the water, so it
+  // is translucent; at a grazing angle the surface is a mirror and nothing behind it
+  // shows through. A constant alpha makes water look like tinted glass.
+  float alpha = mix(0.86, 1.0, fresnel);
+  gl_FragColor = vec4(base, alpha);
 }`;
 
 // ─── FOG SHADER ──────────────────────────────────────────────────────────────
@@ -563,11 +622,18 @@ const MAX_FLAME  = 3000;
 const MAX_FOG    = 2000;
 
 class GPUParticleSystem {
-  constructor(T, maxCount, pixelRatio) {
+  /**
+   * @param {"scatter"|"emissive"} blendMode
+   *   "scatter" — water, spray, foam. Premultiplied source-over: the medium occludes
+   *   and saturates, which is how a cloud of droplets actually behaves.
+   *   "emissive" — flame. Genuinely radiating, so it adds and does not occlude.
+   */
+  constructor(T, maxCount, pixelRatio, blendMode = "scatter") {
     this.T = T;
     this.maxCount = maxCount;
     this.active   = 0;
     this.px = pixelRatio;
+    this.blendMode = blendMode;
 
     this.positions  = new Float32Array(maxCount * 3);
     this.velocities = new Float32Array(maxCount * 3);
@@ -604,7 +670,13 @@ class GPUParticleSystem {
       vertexShader: SPRITE_VERT,
       fragmentShader: SPRITE_FRAG,
       transparent: true, depthWrite: false,
-      blending: T.AdditiveBlending,
+      // The shader emits premultiplied colour, so both modes share blendSrc = ONE and
+      // differ only in what they do to the destination.
+      blending: T.CustomBlending,
+      blendEquation: T.AddEquation,
+      blendSrc: T.OneFactor,
+      blendDst: blendMode === "emissive" ? T.OneFactor : T.OneMinusSrcAlphaFactor,
+      premultipliedAlpha: true,
       uniforms: this.uniforms,
     });
     this.mesh = new T.Points(geo, this.mat);
@@ -649,16 +721,42 @@ class GPUParticleSystem {
       this.positions[i*3+1] += this.velocities[i*3+1] * delta;
       this.positions[i*3+2] += this.velocities[i*3+2] * delta;
 
-      // Surface splash bounce
+      // ── Impact ──────────────────────────────────────────────────────────────
+      // Landing in the basin and landing on the deck are different events, and the
+      // old code treated the whole world as one infinite water plane. Water hitting
+      // stone shatters and scatters sideways; water hitting water punches in and
+      // throws a compact splash back up. Getting this wrong is very visible at the
+      // pool edge, which is exactly where a viewer looks to judge whether the
+      // fountain is contained.
       if (this.positions[i*3+1] < 0.05 && this.bounced[i] === 0 && vy < -0.5) {
+        const px = this.positions[i*3], pz = this.positions[i*3+2];
+        const inside = this.poolBounds ? SM_insidePool(px, pz, this.poolBounds()) : true;
+
         this.bounced[i] = 1;
-        this.positions[i*3+1] = 0.05;
-        this.velocities[i*3+1] = Math.abs(vy) * 0.15;
-        this.velocities[i*3]   *= 0.8;
-        this.velocities[i*3+2] *= 0.8;
-        this.scales[i] *= 2.0;
-        this.colors[i*4+3] *= 0.7;
-        this.stretches[i]   *= 0.4;
+        this.positions[i*3+1] = inside ? 0.05 : 0.012;
+
+        if (inside) {
+          // Water into water: elastic-ish vertical return, splash broadens.
+          this.velocities[i*3+1] = Math.abs(vy) * 0.15;
+          this.velocities[i*3]   *= 0.8;
+          this.velocities[i*3+2] *= 0.8;
+          this.scales[i] *= 2.0;
+          this.colors[i*4+3] *= 0.7;
+          this.stretches[i]   *= 0.4;
+        } else {
+          // Water onto stone: most of the vertical momentum is lost to the surface,
+          // and the drop breaks into a low, fast lateral sheet.
+          this.velocities[i*3+1] = Math.abs(vy) * 0.06;
+          this.velocities[i*3]   *= 1.35;
+          this.velocities[i*3+2] *= 1.35;
+          this.scales[i] *= 1.5;
+          this.colors[i*4+3] *= 0.5;
+          this.stretches[i]   *= 0.25;
+          this.lives[i] = Math.min(this.lives[i], 0.5);
+        }
+
+        // Record it. This is what drives the wetness field and the containment figures.
+        if (this.impactSink) this.impactSink(px, pz, 1, inside);
       }
 
       // Alpha fade
@@ -1526,10 +1624,10 @@ export class FountainScene {
     };
 
     // GPU particle systems — share the light-field uniforms
-    this.waterSys = new GPUParticleSystem(T, MAX_WATER, PR);
-    this.spraySys = new GPUParticleSystem(T, MAX_SPRAY, PR);
-    this.foamSys  = new GPUParticleSystem(T, MAX_FOAM,  PR);
-    this.flameSys = new GPUParticleSystem(T, MAX_FLAME, PR);
+    this.waterSys = new GPUParticleSystem(T, MAX_WATER, PR, "scatter");
+    this.spraySys = new GPUParticleSystem(T, MAX_SPRAY, PR, "scatter");
+    this.foamSys  = new GPUParticleSystem(T, MAX_FOAM,  PR, "scatter");
+    this.flameSys = new GPUParticleSystem(T, MAX_FLAME, PR, "emissive");
     [this.waterSys, this.spraySys, this.foamSys].forEach(ps => {
       ps.uniforms.uGlobalLight  = this._lightField.uGlobalLight;
       ps.uniforms.uGlobalLightI = this._lightField.uGlobalLightI;
@@ -1542,6 +1640,11 @@ export class FountainScene {
 
     this._buildFogSystem();
     this.scene.add(this.waterSys.mesh, this.spraySys.mesh, this.foamSys.mesh, this.flameSys.mesh);
+
+    // AQ-S3-012 — the mirror image and the landing record. Both must exist before the
+    // water surface is built, because its material binds their texture and matrix.
+    this._buildReflection();
+    this._buildSplashMap();
 
     this._buildEnvironment();
     this._buildPool();
@@ -1557,6 +1660,382 @@ export class FountainScene {
 
     this._initialized = true;
     this._animate();
+  }
+
+  // ── Planar reflection ───────────────────────────────────────────────────────
+  _buildReflection() {
+    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
+    this._reflection?.dispose?.();
+    this._reflection = null;
+    if (!q.reflect) return;   // `low` stays on the flat-sky fallback by design
+    try {
+      this._reflection = new WaterReflectionProbe(this.THREE, this.renderer, {
+        resolution: q.reflect,
+        interval: q.reflectEvery,
+      });
+    } catch (err) {
+      // A reflection is an enhancement, never a dependency. If the target cannot be
+      // allocated (old GPU, no half-float support) the water keeps its flat sky term.
+      console.warn("[FountainScene] planar reflection unavailable:", err?.message || err);
+      this._reflection = null;
+    }
+  }
+
+  // ── Splash map: where the water lands ───────────────────────────────────────
+  // Two products from one grid: a wetness field that darkens and glosses the deck and
+  // then dries, and a cumulative containment heatmap. See splashMap.js for the physics.
+  _buildSplashMap() {
+    const T = this.THREE;
+    const extent = 32, res = 128;
+    this._splash = new SplashMap({ extent, resolution: res });
+    this._splashExtent = extent;
+    this._splashRes = res;
+    this._showHeatmap = false;
+    this._wetEnabled = true;
+
+    this._wetBytes  = new Uint8Array(res * res * 4);
+    this._heatBytes = new Uint8Array(res * res * 4);
+
+    const mkTex = (bytes) => {
+      const tx = new T.DataTexture(bytes, res, res, T.RGBAFormat);
+      tx.minFilter = T.LinearFilter;
+      tx.magFilter = T.LinearFilter;
+      tx.wrapS = tx.wrapT = T.ClampToEdgeWrapping;
+      tx.needsUpdate = true;
+      return tx;
+    };
+    this._wetTex  = mkTex(this._wetBytes);
+    this._heatTex = mkTex(this._heatBytes);
+
+    // Deck overlay. World-space UV rather than geometry UV, so the mapping is correct
+    // regardless of what shape the deck happens to be.
+    const deckR = 12.2;
+    const geo = new T.CircleGeometry(deckR, 96);
+    this._wetMat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false,
+      // Sits a few millimetres above the deck; polygon offset keeps it off the z-fighting
+      // knife-edge with the stage top.
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      uniforms: {
+        uWetTex:    { value: this._wetTex },
+        uHeatTex:   { value: this._heatTex },
+        uHeatMode:  { value: 0.0 },
+        uExtent:    { value: extent },
+        uCameraPos: { value: new T.Vector3() },
+        uTime:      { value: 0 },
+      },
+      vertexShader: /* glsl */`
+        varying vec3 vWorld;
+        void main(){
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorld = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`,
+      fragmentShader: /* glsl */`
+        precision highp float;
+        uniform sampler2D uWetTex;
+        uniform sampler2D uHeatTex;
+        uniform float uHeatMode;
+        uniform float uExtent;
+        uniform vec3  uCameraPos;
+        uniform float uTime;
+        varying vec3  vWorld;
+
+        void main(){
+          vec2 uv = (vWorld.xz + uExtent * 0.5) / uExtent;
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
+
+          if (uHeatMode > 0.5) {
+            vec4 h = texture2D(uHeatTex, uv);
+            if (h.a <= 0.003) discard;
+            gl_FragColor = h;
+            return;
+          }
+
+          float wet = texture2D(uWetTex, uv).r;
+          if (wet <= 0.004) discard;
+
+          // A wet surface is darker because the water film fills surface pores: light
+          // that would have scattered straight back off the roughness now enters,
+          // bounces inside and is partly absorbed. Hence darker AND glossier, together.
+          vec3  viewDir = normalize(uCameraPos - vWorld);
+          float NdotV   = max(viewDir.y, 0.0);          // deck normal is +Y
+          float fres    = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
+
+          // Sheen: a broad highlight the dry stone does not have.
+          float sheen = pow(1.0 - NdotV, 3.0) * wet;
+
+          vec3  darken = vec3(0.015, 0.022, 0.030);
+          float alpha  = clamp(wet * (0.55 + 0.45 * fres), 0.0, 0.92);
+          vec3  col    = darken + vec3(0.28, 0.36, 0.45) * sheen * 0.9;
+
+          gl_FragColor = vec4(col, alpha);
+        }`,
+    });
+    this._wetOverlay = new T.Mesh(geo, this._wetMat);
+    this._wetOverlay.rotation.x = -Math.PI / 2;
+    this._wetOverlay.position.y = 0.001;
+    this._wetOverlay.renderOrder = 2;
+    this.scene.add(this._wetOverlay);
+
+    // Give the particle systems somewhere to report their impacts.
+    const sink = (x, z, amount, inside) => this._splash?.deposit(x, z, amount, inside);
+    const bounds = () => this._poolBoundsForSplash();
+    [this.waterSys, this.spraySys].forEach(ps => { ps.impactSink = sink; ps.poolBounds = bounds; });
+  }
+
+  /**
+   * Pool bounds for the impact test. Cached and mutated in place rather than rebuilt:
+   * this is read once per particle impact — thousands per second — and allocating a
+   * fresh object each time is pure garbage-collector pressure on the hottest loop in
+   * the renderer.
+   */
+  _poolBoundsForSplash() {
+    const b = this._splashBounds || (this._splashBounds = {});
+    if (this._poolType === "circular") {
+      b.type = "circular";
+      b.radius = this._poolRadius || 6;
+    } else {
+      b.type = "rect";
+      b.width = this._poolW || 12;
+      b.length = this._poolL || 8;
+    }
+    return b;
+  }
+
+  _updateSplashMap(delta) {
+    if (!this._splash) return;
+    this._splash.dry(delta);
+
+    // Uploading 64 KB every frame to depict a field that changes over tens of seconds
+    // is wasted bandwidth. ~12 Hz is well above what drying needs and is invisible.
+    this._splashUploadT = (this._splashUploadT || 0) + delta;
+    if (this._splashUploadT < 1 / 12) return;
+    this._splashUploadT = 0;
+
+    if (this._wetEnabled && !this._showHeatmap) {
+      this._splash.writeWetRGBA(this._wetBytes);
+      this._wetTex.needsUpdate = true;
+    }
+    if (this._showHeatmap) {
+      this._splash.writeHeatRGBA(this._heatBytes);
+      this._heatTex.needsUpdate = true;
+    }
+    if (this._wetMat) {
+      this._wetMat.uniforms.uCameraPos.value.copy(this.camera.position);
+      this._wetMat.uniforms.uHeatMode.value = this._showHeatmap ? 1.0 : 0.0;
+    }
+    if (this._wetOverlay) {
+      this._wetOverlay.visible = this._showHeatmap || this._wetEnabled;
+    }
+  }
+
+  // ── Quad View ───────────────────────────────────────────────────────────────
+  // Depence splits the render view into four independently configured viewports. It is
+  // not a luxury: a perspective view is the wrong instrument for placing a nozzle on an
+  // exact coordinate, and the orthographic Top/Front/Side views are where that work
+  // actually happens. Ours mirrors that layout.
+  //
+  // Quad view renders directly rather than through the composer. Bloom and AO are
+  // presentation; these panes are for measuring, and four composited passes would cost
+  // four times the post-processing for no benefit to the task.
+  _buildQuadCameras() {
+    const T = this.THREE;
+    if (this._quadCams) return;
+    const mk = (pos, up) => {
+      const c = new T.OrthographicCamera(-10, 10, 10, -10, -500, 500);
+      c.position.set(pos.x, pos.y, pos.z);
+      if (up) c.up.set(up.x, up.y, up.z);
+      c.lookAt(0, 0, 0);
+      return c;
+    };
+    this._quadCams = {
+      top:   mk({ x: 0, y: 60, z: 0 }, { x: 0, y: 0, z: -1 }),
+      front: mk({ x: 0, y: 0, z: 60 }, { x: 0, y: 1, z: 0 }),
+      side:  mk({ x: 60, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }),
+    };
+    this._quadZoom = 9;
+  }
+
+  /** Turn the four-pane layout on or off. */
+  setQuadView(on) {
+    this._quadView = !!on;
+    if (this._quadView) this._buildQuadCameras();
+    return this._quadView;
+  }
+
+  isQuadView() { return !!this._quadView; }
+
+  /** Extent, in metres, that the orthographic panes cover. */
+  setQuadZoom(metres) {
+    this._quadZoom = Math.max(1.5, Math.min(80, metres || 9));
+  }
+
+  /**
+   * The four panes, as fractions of the canvas. Shared with the editor so a click can be
+   * routed to the camera of whichever pane it landed in — otherwise picking in an
+   * orthographic pane would silently use the perspective camera and select the wrong thing.
+   */
+  quadLayout() {
+    return [
+      { key: "persp", label: "Perspective", x: 0,   y: 0.5, w: 0.5, h: 0.5 },
+      { key: "top",   label: "Top",         x: 0.5, y: 0.5, w: 0.5, h: 0.5 },
+      { key: "front", label: "Front",       x: 0,   y: 0,   w: 0.5, h: 0.5 },
+      { key: "side",  label: "Side",        x: 0.5, y: 0,   w: 0.5, h: 0.5 },
+    ];
+  }
+
+  /** The camera driving a given pane. */
+  quadCamera(key) {
+    if (key === "persp") return this.camera;
+    return this._quadCams?.[key] || this.camera;
+  }
+
+  /**
+   * Objects that belong only to the presentation view. The orthographic panes are
+   * construction views — Depence calls its equivalent the CAD View and draws it as
+   * wireframe — so the water simulation has no business in them. Hiding it is not only
+   * truer to the task, it is what makes four panes affordable at all: drawing six
+   * thousand particles, the fog volume and the water surface four times over collapsed
+   * the frame rate to under one frame a second.
+   */
+  _cadHiddenObjects() {
+    return [
+      this.waterSys?.mesh, this.spraySys?.mesh, this.foamSys?.mesh, this.flameSys?.mesh,
+      this._fogMesh, this.waterSurface, this._wetOverlay,
+      ...(this.nozzles || []).map(n => n.glow),
+    ].filter(Boolean);
+  }
+
+  _renderQuad() {
+    const T = this.THREE;
+    const r = this.renderer;
+    const W = this.canvas.clientWidth || 900, H = this.canvas.clientHeight || 600;
+    const panes = this.quadLayout();
+
+    // Keep the ortho frusta square-correct for their pane's aspect, or the scene shears.
+    const z = this._quadZoom || 9;
+    for (const key of ["top", "front", "side"]) {
+      const c = this._quadCams[key];
+      const pw = W * 0.5, ph = H * 0.5;
+      const aspect = pw / Math.max(1, ph);
+      c.left = -z * aspect; c.right = z * aspect;
+      c.top = z; c.bottom = -z;
+      c.updateProjectionMatrix();
+    }
+
+    const cadHidden = this._cadHiddenObjects();
+
+    r.setScissorTest(true);
+    for (const p of panes) {
+      const x = Math.floor(p.x * W), y = Math.floor(p.y * H);
+      const w = Math.floor(p.w * W), h = Math.floor(p.h * H);
+      r.setViewport(x, y, w, h);
+      r.setScissor(x, y, w, h);
+
+      // Construction panes drop the water simulation; the perspective pane keeps it.
+      const restore = [];
+      if (p.key !== "persp") {
+        for (const o of cadHidden) { restore.push([o, o.visible]); o.visible = false; }
+      }
+      r.render(this.scene, this.quadCamera(p.key));
+      for (const [o, v] of restore) o.visible = v;
+    }
+    r.setScissorTest(false);
+    r.setViewport(0, 0, W, H);
+    r.setScissor(0, 0, W, H);
+  }
+
+  // ── Public: 3D editing workspace ────────────────────────────────────────────
+  /**
+   * Attach the scene editor, turning the viewport from a render into a workspace.
+   * Kept as an opt-in attachment rather than something init() always builds, so a
+   * client-presentation view or a headless export still runs without editor overhead.
+   *
+   * @param {SceneEditor} editor
+   */
+  attachEditor(editor) {
+    this._editor = editor || null;
+    return this._editor;
+  }
+
+  /**
+   * Hand the viewport to the editor. While on, the legacy orbit/wheel handlers stand
+   * down and the camera is driven by the editor's navigation instead, so the two cannot
+   * fight over the same pointer.
+   */
+  setEditorMode(on) {
+    this._editorMode = !!on;
+    if (this._editorMode) {
+      // A camera that drifts while you are trying to place a fixture is unusable.
+      this.orbitAuto = false;
+      this.cameraMode = CAMERA_MODES.ORBIT;
+    }
+    this._editor?.setEnabled?.(this._editorMode);
+    return this._editorMode;
+  }
+
+  isEditorMode() { return !!this._editorMode; }
+
+  // ── Public: splash containment ──────────────────────────────────────────────
+
+  /**
+   * Show or hide the containment heatmap — where water has cumulatively landed.
+   * Replaces the wetness view while active, because the two occupy the same surface.
+   */
+  setSplashHeatmap(on) {
+    this._showHeatmap = !!on;
+    if (this._wetMat) this._wetMat.uniforms.uHeatMode.value = this._showHeatmap ? 1.0 : 0.0;
+    // Force an immediate rebuild so the toggle is instant rather than up to 1/12 s late.
+    this._splashUploadT = 999;
+    return this._showHeatmap;
+  }
+
+  /** Turn the wet-deck effect on or off (it is on by default). */
+  setWetSurfaces(on) {
+    this._wetEnabled = !!on;
+    if (this._wetOverlay) this._wetOverlay.visible = this._showHeatmap || this._wetEnabled;
+    return this._wetEnabled;
+  }
+
+  /**
+   * Calibrate the splash map against the SOLVED design flow, so containment is
+   * reported in litres rather than in particles.
+   *
+   * @param {number} solvedFlowLpm total nozzle flow from the hydraulic solve, L/min
+   */
+  calibrateSplash(solvedFlowLpm) {
+    if (!this._splash) return false;
+    // The spawn rate the renderer actually used, measured rather than assumed — the
+    // emitters vary their rate with intensity, so a hardcoded constant would drift.
+    const pps = this._measuredSpawnRate();
+    const lpi = SM_litresPerImpact(solvedFlowLpm, pps);
+    this._splash.setCalibration(lpi);
+    return lpi != null;
+  }
+
+  _measuredSpawnRate() {
+    // Impacts per second observed so far. Every particle that leaves a nozzle
+    // eventually lands, so over a window longer than a jet's flight time the impact
+    // rate converges on the spawn rate.
+    const s = this._splash;
+    if (!s || s.elapsedS < 2) return null;   // too early to be meaningful
+    return s.totalImpacts / s.elapsedS;
+  }
+
+  /**
+   * Containment analysis. Volumetric figures are present only when calibrated;
+   * otherwise they are null and `calibrated` is false — never a fabricated number.
+   */
+  getSplashContainment() {
+    if (!this._splash) return null;
+    return { ...this._splash.containment(), peakWetness: this._splash.peakWetness() };
+  }
+
+  /** Clear the accumulated splash record and dry the deck immediately. */
+  resetSplash() {
+    this._splash?.reset();
+    this._splashUploadT = 999;
   }
 
   // ── Image-based lighting ────────────────────────────────────────────────────
@@ -1757,6 +2236,33 @@ export class FountainScene {
 
   /** Render through the composer when available, else straight to the canvas. */
   _renderFrame() {
+    // The mirror image is rendered first, from a camera reflected through the
+    // waterline. It must run after the camera has been placed for this frame and
+    // before the main pass, which samples its result. Skipped in quad view: that layout
+    // already costs four scene passes, and a reflection is presentation, not construction.
+    if (this._reflection && this.waterSurface && !this._quadView) {
+      this.camera.updateMatrixWorld();
+      const waterY = this.waterSurface.position.y;
+      const rendered = this._reflection.update(
+        this.scene, this.camera, waterY,
+        // The water cannot reflect itself; the analysis overlays and the editor's
+        // gizmos and handles are annotation rather than scene. None belongs in the
+        // mirror image — a reflected gizmo would be both wrong and distracting.
+        [this.waterSurface, this._wetOverlay, this._reviewGroup, this._editor?.root]
+      );
+      const u = this.waterMat?.uniforms;
+      if (u) {
+        if (rendered && u.uReflectStrength.value === 0) {
+          // Only trust the target once it actually holds a frame.
+          u.uReflectTex.value = this._reflection.texture;
+          u.uReflectMatrix.value = this._reflection.textureMatrix;
+        }
+        if (rendered || u.uReflectStrength.value > 0) u.uReflectStrength.value = 1.0;
+      }
+    }
+
+    if (this._quadView) { this._renderQuad(); return; }
+
     if (this._postEnabled && this.composer) {
       if (this._gradePass) this._gradePass.uniforms.uTime.value = this.clock?.elapsedTime || 0;
       this.composer.render();
@@ -1907,6 +2413,12 @@ export class FountainScene {
         uSkyColor:       {value:new T.Color(0x030810)},
         uRoughness:      {value:0.3},
         uCameraPos:      {value:new T.Vector3()},
+        // Planar reflection. Strength stays 0 until a probe has actually rendered a
+        // frame, so the water falls back to the flat sky term rather than sampling an
+        // empty target and going black.
+        uReflectTex:      {value: this._reflection ? this._reflection.texture : null},
+        uReflectMatrix:   {value: this._reflection ? this._reflection.textureMatrix : new T.Matrix4()},
+        uReflectStrength: {value: 0.0},
         uFieldCount:     this._lightField.uFieldCount,
         uFieldPos:       this._lightField.uFieldPos,
         uFieldCol:       this._lightField.uFieldCol,
@@ -2436,6 +2948,7 @@ export class FountainScene {
     this._updateFog(delta, elapsed);
     this._emitFlame(delta, I.flame || 0);
     this._emitGroundFog(delta, I.fog || 0);
+    this._updateSplashMap(delta);
 
     // ─── Lasers ────────────────────────────────────────────────────────
     const laserI = I.laser || 0;
@@ -2530,6 +3043,13 @@ export class FountainScene {
     this._update(delta, elapsed);
 
     const cam = this.camera;
+    // In editor mode the editor owns the camera. Re-deriving it from orbitAngle every
+    // frame here would undo every pan and orbit the designer just made.
+    if (this._editorMode) {
+      this._editor?.update?.();
+      this._renderFrame();
+      return;
+    }
     const cinematic = [CAMERA_MODES.AERIAL, CAMERA_MODES.FLYTHROUGH, CAMERA_MODES.DRAMATIC, CAMERA_MODES.AUDIENCE];
     if (cinematic.includes(this.cameraMode)) {
       this._pathTime = (this._pathTime + delta*0.08) % 1;
@@ -2550,8 +3070,15 @@ export class FountainScene {
 
   _setupEvents() {
     const c = this.canvas;
-    this._onDown = e => { this._isDragging=true; this._dragStart={x:e.clientX,y:e.clientY}; };
+    // When the editor owns the viewport it also owns navigation (Depence's scheme:
+    // ALT+drag orbits, right-drag pans, wheel dollies toward the picked point). The
+    // legacy spin-on-drag would fight it, so every handler below stands down.
+    this._onDown = e => {
+      if (this._editorMode) return;
+      this._isDragging=true; this._dragStart={x:e.clientX,y:e.clientY};
+    };
     this._onMove = e => {
+      if (this._editorMode) return;
       if (!this._isDragging) return;
       const dx=e.clientX-this._dragStart.x, dy=e.clientY-this._dragStart.y;
       this._dragStart={x:e.clientX,y:e.clientY};
@@ -2560,9 +3087,16 @@ export class FountainScene {
       this.orbitAuto=false; this.cameraMode=CAMERA_MODES.ORBIT;
     };
     this._onUp = () => { this._isDragging=false; };
-    this._onWheel = e => { this.orbitRadius = Math.max(3, Math.min(25, this.orbitRadius + e.deltaY*0.012)); };
-    this._onTouchstart = e => { if(e.touches[0]) this._dragStart={x:e.touches[0].clientX,y:e.touches[0].clientY}; this._isDragging=true; };
+    this._onWheel = e => {
+      if (this._editorMode) return;
+      this.orbitRadius = Math.max(3, Math.min(25, this.orbitRadius + e.deltaY*0.012));
+    };
+    this._onTouchstart = e => {
+      if (this._editorMode) return;
+      if(e.touches[0]) this._dragStart={x:e.touches[0].clientX,y:e.touches[0].clientY}; this._isDragging=true;
+    };
     this._onTouchmove = e => {
+      if (this._editorMode) return;
       if(!this._isDragging || !e.touches[0]) return;
       const dx=e.touches[0].clientX-this._dragStart.x, dy=e.touches[0].clientY-this._dragStart.y;
       this._dragStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
@@ -2903,6 +3437,12 @@ export class FountainScene {
     this.foamSys?.dispose?.();
     this.flameSys?.dispose?.();
     this._disposePostFX();
+    this._reflection?.dispose?.();
+    this._reflection = null;
+    this._wetTex?.dispose?.();
+    this._heatTex?.dispose?.();
+    this._wetMat?.dispose?.();
+    this._wetOverlay?.geometry?.dispose?.();
     this._envRT?.dispose?.();
     this._envRT = null;
     this.renderer?.dispose();

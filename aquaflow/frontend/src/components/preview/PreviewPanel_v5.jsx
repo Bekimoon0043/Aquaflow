@@ -12,6 +12,15 @@ import { FountainScene, ENVIRONMENTS, CAMERA_MODES, RENDER_QUALITY } from "./Fou
 import { useEngineeringSync } from "../../hooks/useEngineeringSync";
 import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
+// AQ-S3-013 — the 3D view as an editing workspace, not just a render.
+import { SceneEditor } from "./editor/sceneEditor";
+import { SceneGraph } from "./editor/sceneGraph";
+import { importDesign, graphToNozzles, graphToLights } from "./editor/fixtureBridge";
+import {
+  EditorToolbar, LibraryPalette, SceneTree, Inspector, ShortcutHint, useLibraryDrop,
+} from "./editor/ui/workspaceUI";
+import ResizeHandle from "../layout/ResizeHandle";
+import { useResizableLayout } from "../layout/useResizableLayout";
 
 // ─── NEW: Dry-run preview support ──────────────────────────────────────────
 // This will be populated by ShowProgrammerPanel via prop or context
@@ -67,7 +76,36 @@ export default function PreviewPanel() {
   const [reviewOverlays, setReviewOverlays] = useState(true);
 
   // Panel visibility
-  const [tab, setTab] = useState("render"); // render | signals | info
+  const [tab, setTab] = useState("render"); // render | design | signals | info
+
+  // Sidebar width is draggable and shared with the shell's persisted layout, so the
+  // preview remembers it the same way every other panel does.
+  const { layout, resize, beginDrag, endDrag, resetPanel } = useResizableLayout();
+
+  /**
+   * Match the renderer's drawing buffer and camera aspect to the canvas's real size.
+   * Measured after a frame so the browser has finished laying the flex row out —
+   * reading immediately returns the pre-drag width and the 3D view stays stretched.
+   */
+  const syncCanvasSize = useCallback(() => {
+    requestAnimationFrame(() => {
+      const c = canvasRef.current, s = sceneRef.current;
+      if (!c || !s) return;
+      const w = c.clientWidth, h = c.clientHeight;
+      if (w > 0 && h > 0) s.resize(w, h);
+    });
+  }, []);
+
+  // A sidebar drag changes the canvas width without any event the observer above sees,
+  // so drive the resize from the width itself.
+  useEffect(() => { syncCanvasSize(); }, [layout.previewSidebar, syncCanvasSize]);
+
+  // ── 3D editing workspace (AQ-S3-013) ──────────────────────────────────────
+  const editorRef = useRef(null);
+  const [editMode, setEditMode] = useState(false);
+  // Bumped once the editor exists, so the workspace panels mount after it rather than
+  // rendering against a null ref on the first pass.
+  const [editorReady, setEditorReady] = useState(0);
 
   // Signals for manual override
   const [signals, setSignals] = useState({
@@ -218,16 +256,78 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     scene.setReviewOverlays?.(reviewOverlays);
     scene.fitCameraToDesign?.();
     sceneRef.current = scene;
+
+    // ── Editing workspace ────────────────────────────────────────────────────
+    // Seed the scene graph from whatever design already exists, so switching into
+    // edit mode never presents an empty scene to someone who has already laid out
+    // a fountain in the Engineering Designer.
+    const graph = new SceneGraph();
+    try {
+      const eng = useEngineeringStore.getState?.();
+      importDesign(graph, {
+        nozzles: eng?.design?.nozzles || eng?.nozzles || scene.getNozzles?.() || [],
+        lights: eng?.design?.lights || eng?.lights || [],
+      });
+    } catch {
+      // A malformed store must not stop the workspace opening; it just starts empty.
+    }
+    const editor = new SceneEditor({
+      THREE: scene.THREE, scene: scene.scene, camera: scene.camera,
+      renderer: scene.renderer, canvas: canvasRef.current, graph,
+    });
+    scene.attachEditor(editor);
+    editor.attachViewportSource(scene);
+    editor.syncProxies();
+    editorRef.current = editor;
+    setEditorReady(n => n + 1);
+
+    // Push the imported design once up front. Without this the viewport shows nothing
+    // until the first edit fires an event, which reads as "my design disappeared".
+    if (graph.count() > 0) {
+      scene.setNozzlesFromEngineering(graphToNozzles(graph));
+      scene.setEngineeringLights?.(graphToLights(graph));
+    }
+
+    // The graph is the source of truth for layout; push every structural change
+    // straight into the renderer so the viewport always shows the real model.
+    const offEditor = editor.subscribe((reason) => {
+      if (reason === "structure" || reason === "transform" || reason === "transform-live"
+        || reason === "props" || reason === "visibility") {
+        scene.setNozzlesFromEngineering(graphToNozzles(graph));
+        scene.setEngineeringLights?.(graphToLights(graph));
+      }
+    });
+
     // VR Walkthrough (AQ-S3-006): probe headset availability for the toolbar.
     if (scene.supportsVR) scene.supportsVR().then(setVrSupported).catch(() => setVrSupported(false));
-    const ro = new ResizeObserver(() => {
-      if (!containerRef.current || !sceneRef.current) return;
-      const { clientWidth:w, clientHeight:h } = containerRef.current;
-      sceneRef.current.resize(w, h);
-    });
+    // Size the renderer from the CANVAS, not the container. The container includes the
+    // sidebar, so feeding its width to the renderer sized the drawing buffer and camera
+    // aspect for a viewport ~200px wider than the canvas really is — a stretch that was
+    // easy to miss with a fixed sidebar and impossible to miss once it became draggable.
+    //
+    // The observer is attached to the CONTAINER rather than the canvas: a ResizeObserver
+    // on a flex-sized <canvas> does not reliably re-fire when a sibling's width changes,
+    // so watching the canvas alone silently left the drawing buffer at its old size.
+    // The container reliably reports window resizes; sidebar drags are handled by the
+    // effect below, which calls the same function.
+    const ro = new ResizeObserver(() => syncCanvasSize());
     if (containerRef.current) ro.observe(containerRef.current);
-    return () => { ro.disconnect(); scene.dispose(); sceneRef.current = null; };
+    syncCanvasSize();
+    return () => {
+      ro.disconnect();
+      offEditor();
+      editor.dispose();
+      editorRef.current = null;
+      scene.dispose();
+      sceneRef.current = null;
+    };
   }, [quality]);
+
+  // Entering edit mode hands the viewport's pointer and camera to the editor.
+  useEffect(() => {
+    sceneRef.current?.setEditorMode?.(editMode);
+    if (editMode) editorRef.current?.focusSelection?.();
+  }, [editMode]);
 
   useEffect(() => { sceneRef.current?.setEnvironment(env); }, [env]);
   useEffect(() => { sceneRef.current?.setCameraMode(cam); }, [cam]);
@@ -268,6 +368,10 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     ? `Ø ${((params?.radius||6)*2).toFixed(1)}m`
     : `${(params?.width||12).toFixed(1)}×${(params?.length||8).toFixed(1)}m`;
 
+  // Library drag-and-drop into the viewport. Declared here so the container element
+  // below can carry the handlers; a no-op until edit mode is on.
+  const libraryDrop = useLibraryDrop(editorRef.current);
+
   // ── Styles ──────────────────────────────────────────────────────────────────
   const btnSm = (active, color="#00aaff") => ({
     padding:"3px 8px", fontSize:10, cursor:"pointer", borderRadius:3,
@@ -281,10 +385,19 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     textTransform:"uppercase", marginBottom:5, fontFamily:"monospace" };
 
   return (
-    <div ref={containerRef} style={{ position:"relative", width:"100%", height:"100%", background:"#020610", overflow:"hidden", display:"flex" }}>
+    <div ref={containerRef}
+      onDragOver={libraryDrop.onDragOver}
+      onDrop={libraryDrop.onDrop}
+      style={{ position:"relative", width:"100%", height:"100%", background:"#020610", overflow:"hidden", display:"flex" }}>
 
       {/* ── 3D Canvas ── */}
       <canvas ref={canvasRef} style={{ flex:1, display:"block", minWidth:0 }} />
+
+      {/* ── Editing workspace chrome ── */}
+      {editMode && editorRef.current && (
+        <EditorToolbar editor={editorRef.current} scene={sceneRef.current}
+          onExitEditor={() => { sceneRef.current?.setQuadView?.(false); setEditMode(false); }} />
+      )}
 
       {reviewMode && (
         <div style={{
@@ -322,12 +435,22 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
         </div>
       )}
 
-      {/* ── Right sidebar ── */}
-      <div style={{ width:200, flexShrink:0, background:"#030812", borderLeft:"1px solid #0a2030", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      {/* ── Right sidebar (drag its left edge to resize) ── */}
+      <ResizeHandle
+        axis="x"
+        title="Drag to resize the preview sidebar · double-click to reset"
+        onStart={() => beginDrag("previewSidebar")}
+        onEnd={endDrag}
+        onReset={() => resetPanel("previewSidebar")}
+        onResize={(d) => resize("previewSidebar", d, {
+          invert: true, containerPx: containerRef.current?.clientWidth || 0,
+        })}
+      />
+      <div style={{ width:layout.previewSidebar, flexShrink:0, background:"#030812", borderLeft:"1px solid #0a2030", display:"flex", flexDirection:"column", overflow:"hidden" }}>
 
         {/* Tabs */}
         <div style={{ display:"flex", borderBottom:"1px solid #0a2030" }}>
-          {[["render","◈ Render"],["signals","⚡ Live"],["info","⬡ Eng"]].map(([key,label])=>(
+          {[["render","◈ Render"],["design","✥ Design"],["signals","⚡ Live"],["info","⬡ Eng"]].map(([key,label])=>(
             <button key={key} onClick={()=>setTab(key)} style={{
               flex:1, padding:"6px 0", background:"transparent", border:"none",
               borderBottom: tab===key ? "2px solid #00aaff" : "2px solid transparent",
@@ -338,6 +461,33 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding:"8px 10px" }}>
+
+          {/* ── DESIGN TAB — the 3D editing workspace ── */}
+          {tab==="design" && (<>
+            <button
+              onClick={() => setEditMode(v => !v)}
+              style={{
+                ...btnSm(editMode), width:"100%", textAlign:"center",
+                padding:"6px 0", marginBottom:8, fontSize:11,
+              }}>
+              {editMode ? "◼ Exit Edit Mode" : "✥ Enter Edit Mode"}
+            </button>
+
+            {!editMode && (
+              <div style={{ color:"#334455", fontSize:10, fontFamily:"monospace", lineHeight:1.5, marginBottom:10 }}>
+                Edit mode makes the viewport a workspace: click a fixture to select it,
+                drag the gizmo to move or rotate it, drag new fixtures in from the
+                library, and type exact coordinates.
+              </div>
+            )}
+
+            {editMode && editorRef.current && (<>
+              <div style={{ marginBottom:10 }}><LibraryPalette editor={editorRef.current} /></div>
+              <div style={{ marginBottom:10 }}><SceneTree editor={editorRef.current} /></div>
+              <div style={{ marginBottom:10 }}><Inspector editor={editorRef.current} /></div>
+              <div style={{ marginBottom:10 }}><ShortcutHint /></div>
+            </>)}
+          </>)}
 
           {/* ── RENDER TAB ── */}
           {tab==="render" && (<>
