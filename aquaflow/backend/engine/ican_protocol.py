@@ -14,14 +14,23 @@ TRANSPORT — PROVEN by packet capture (20 Aug 2026, olympia.pcap / ican_map.pca
     site-specific and MUST NOT be hard-coded as a permanent dependency.
   * Every application-layer payload observed was EXACTLY 13 bytes.
 
-FRAME LAYOUT:
-  byte[0]      command / opcode                              — PROVEN (varies per command)
-  byte[1]      for cmd 0x08: 0 = PC request, 1 = gateway reply — INFERRED from paired frames
-  byte[2..3]   always 0x00 in every captured frame            — UNKNOWN (reserved?)
-  byte[4]      device-group / channel selector                — PROVEN to select device groups
-  byte[5..9]   payload; for cmd 0x08 a channel bitmask         — PROVEN (bit set = channel active)
-  byte[10..12] trailer, almost always 0x00                     — UNKNOWN (nonzero only in a
-                                                                 handshake frame)
+FRAME LAYOUT (PC->GW):
+  byte[0]      command / opcode                              — PROVEN
+  byte[1..4]   group id, BIG-ENDIAN uint32 (group 9 -> 00 00 00 09)
+                                                             — PROVEN on real hardware
+  byte[5..9]   5-byte channel bitmask (40 channels).
+               bit b of mask byte i => channel i*8 + b + 1   — PROVEN (drives real relays)
+  byte[10..12] trailer, 00 00 00 for every ordinary frame    — PROVEN; the only non-zero
+               trailer ever seen (A9 03 21) was on a single group-0 handshake frame that
+               never reappeared in 8085 captured frames, so it is not needed for control.
+
+  NOTE ON byte[1]: an earlier reading of a smaller capture treated byte[1] as a
+  "0 = request / 1 = reply" flag and byte[4] alone as the group. For every group in
+  0..255 the two readings produce IDENTICAL bytes, which is why that reading survived
+  as long as it did. The big-endian uint32 is the correct one — it is what the working
+  client sends and what the gateway acts on. GW->PC 0x08 frames are a different shape
+  (they carry telemetry, not a group id), and byte[1] == 1 remains a usable heuristic
+  for recognising one, which is all `is_reply` is used for.
 
 COMMANDS OBSERVED:
   0x08  PC->GW  main output / state stream. Carries the channel bitmask, so a 0x08
@@ -32,8 +41,14 @@ COMMANDS OBSERVED:
                 stride 8, matching the 8-channel SSR-8Y-A relay banks).
   0x07  GW->PC  status reply to a 0x03 (payload had an 0xAA pattern = a status bitmap).
 
-CAPTURE-DERIVED TEST VECTORS — direction is proven, SEMANTICS ARE NOT. Do not treat
-these as verified control commands (see validate-on-real-hardware note in the codec):
+PROVEN ON REAL HARDWARE (31 Aug 2026, site gateway 192.168.5.2:200 from 192.168.5.200:2002):
+  A cmd 0x08 frame built exactly as described above RUNS THE FOUNTAIN. Sent
+  fire-and-forget over UDP with NO reply read back; the gateway does NOT acknowledge
+  ordinary per-group 0x08 frames. Any code path that requires an ack before it will
+  transmit cannot control this hardware.
+
+CAPTURE-DERIVED TEST VECTORS (direction and framing proven; the 0x03/0x07 pair is a
+read-only poll/status exchange and is the only exchange the gateway does answer):
   PC->GW : 08 00 00 00 09 00 02 00 00 40 00 00 00
   GW->PC : 08 01 00 00 00 87 80 0B A5 B5 AF AD 0A
   PC->GW : 03 00 00 00 01 00 00 00 00 00 00 00 00
@@ -66,10 +81,14 @@ SIGNATURE_COMMANDS = frozenset({CMD_OUTPUT, CMD_STATUS_REPLY})
 
 # Byte offsets within the frame.
 _OFF_CMD = 0
-_OFF_FLAG = 1
-_OFF_GROUP = 4
+_OFF_FLAG = 1                  # GW->PC 0x08 telemetry marker only (see module docstring)
+_OFF_GROUP32 = slice(1, 5)     # group id, big-endian uint32 — PROVEN on hardware
+_OFF_GROUP = 4                 # low byte of the group; equal to the group for 0..255
 _OFF_MASK = slice(5, 10)       # 5 bytes = 40 channel bits
 _OFF_TRAILER = slice(10, 13)
+
+MAX_CHANNEL = 40               # 5 mask bytes x 8 bits
+MAX_GROUP = 0xFFFFFFFF
 
 
 @dataclass
@@ -78,10 +97,11 @@ class ParsedResponse:
     raw: bytes
     command: int
     is_reply: bool                 # byte[1] == 1 (meaningful for cmd 0x08)
-    group: int                     # byte[4]
+    group: int                     # byte[4] — the group for every id 0..255
     channels: list[int]            # decoded active channels (for bitmask frames)
     payload: bytes                 # bytes[5..9] verbatim
     trailer: bytes                 # bytes[10..12] verbatim (UNKNOWN meaning)
+    group32: int = 0               # bytes[1..4] big-endian, the full group field
     hex: str = ""
 
     def __post_init__(self):
@@ -115,30 +135,67 @@ def channels_from_mask(mask: bytes) -> list[int]:
     return out
 
 
+def group_to_bytes(group: int) -> bytes:
+    """Encode a group id as the 4-byte big-endian field at bytes[1..4].
+
+    Big-endian is not a guess: `group 9 -> 00 00 00 09` is what the working client
+    sends and what the site gateway acts on.
+    """
+    g = int(group)
+    if not 0 <= g <= MAX_GROUP:
+        raise ValueError(f"group {g} out of range 0..{MAX_GROUP}")
+    return g.to_bytes(4, "big")
+
+
+def group_from_bytes(data: bytes) -> int:
+    """Decode the 4-byte big-endian group field."""
+    return int.from_bytes(bytes(data)[:4], "big")
+
+
 def mask_from_channels(channels) -> bytes:
     """Inverse of channels_from_mask — build a 5-byte bitmask from channel numbers."""
     m = bytearray(5)
     for ch in channels or ():
         idx = int(ch) - 1
-        if 0 <= idx < 40:
-            m[idx // 8] |= 1 << (idx % 8)
+        # Refuse rather than drop. Silently ignoring channel 41 would mean an operator
+        # maps a jet, arms the output, presses the button and watches nothing happen
+        # with no error anywhere — the worst possible failure on real equipment.
+        if not 0 <= idx < MAX_CHANNEL:
+            raise ValueError(f"channel {ch} out of range 1..{MAX_CHANNEL}")
+        m[idx // 8] |= 1 << (idx % 8)
     return bytes(m)
 
 
 # ── probe frames (discovery) ─────────────────────────────────────────────────
-def safe_probe_frame() -> bytes:
-    """The smallest, safest read-only-shaped discovery probe.
+def encode_channel_address(group: int = 1) -> bytes:
+    """Build a cmd 0x03 channel-address frame — the read-only poll.
 
-    A cmd 0x08 frame for group 0 with an ALL-ZERO channel mask. Because no channel
-    bit is set, it activates nothing (all-off shape) — the least risky frame we can
-    send while still soliciting the gateway's reply. NOTE: its read-only nature is
-    ASSUMED from the frame shape, not proven; the real-hardware test procedure must
-    confirm it with the vendor software closed and outputs in a safe state.
+    This is the ONE exchange the gateway is observed to answer: 0x03 out, 0x07 status
+    back (payload AA AA AA AA 00 when idle). It carries no channel mask and does not
+    use the output opcode at all, so it cannot actuate a relay.
     """
     frame = bytearray(FRAME_LEN)
-    frame[_OFF_CMD] = CMD_OUTPUT   # 0x08
-    # everything else stays 0x00 -> group 0, empty mask, empty trailer
+    frame[_OFF_CMD] = CMD_CHANNEL          # 0x03
+    frame[_OFF_GROUP32] = group_to_bytes(group)
     return bytes(frame)
+
+
+def safe_probe_frame(group: int = 1) -> bytes:
+    """The discovery / liveness probe: a cmd 0x03 channel-address poll.
+
+    This used to be a cmd 0x08 frame with an empty mask. That was the wrong choice on
+    two counts. It sprayed the OUTPUT opcode — the one that closes relays — across
+    every host on the subnet during a scan, relying on an all-zero mask to make it
+    harmless. And the gateway does not answer 0x08 at all, so every probe timed out
+    and no real gateway was ever discovered or connected. 0x03 is both safer and the
+    frame that actually gets a reply.
+    """
+    return encode_channel_address(group)
+
+
+def all_off_frame(group: int = 0) -> bytes:
+    """A cmd 0x08 frame with an empty mask: every channel of `group` off."""
+    return encode_output(group, mask=bytes(5))
 
 
 def captured_probe_frame() -> bytes:
@@ -153,16 +210,21 @@ def encode_output(group: int, channels=None, *, mask: Optional[bytes] = None) ->
     through the connection manager's gated, audited output path, never send it raw."""
     frame = bytearray(FRAME_LEN)
     frame[_OFF_CMD] = CMD_OUTPUT
-    frame[_OFF_GROUP] = int(group) & 0xFF
+    # Big-endian uint32 across bytes[1..4]. The old code wrote `group & 0xFF` into
+    # byte[4] alone, which is byte-identical for groups 0..255 but silently WRAPPED
+    # above that — group 256 would have driven group 0's relays.
+    frame[_OFF_GROUP32] = group_to_bytes(group)
     m = mask if mask is not None else mask_from_channels(channels)
-    frame[5:5 + len(m[:5])] = m[:5]
+    if len(m) != 5:
+        raise ValueError(f"mask must be 5 bytes, got {len(m)}")
+    frame[_OFF_MASK] = m
     return bytes(frame)
 
 
 def encode_all_off(group: int = 0) -> bytes:
     """A cmd 0x08 frame with an empty mask = all channels of `group` off. Used by
-    blackout. Same shape as the safe probe (for group 0)."""
-    return encode_output(group, mask=bytes(5))
+    blackout."""
+    return all_off_frame(group)
 
 
 def parse_response(data: bytes) -> ParsedResponse:
@@ -177,6 +239,7 @@ def parse_response(data: bytes) -> ParsedResponse:
         command=cmd,
         is_reply=(b[_OFF_FLAG] == 1),
         group=b[_OFF_GROUP],
+        group32=group_from_bytes(b[_OFF_GROUP32]),
         channels=channels_from_mask(b[_OFF_MASK]) if cmd == CMD_OUTPUT else [],
         payload=b[_OFF_MASK],
         trailer=b[_OFF_TRAILER],

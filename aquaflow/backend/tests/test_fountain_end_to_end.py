@@ -256,3 +256,48 @@ def test_operator_can_attach_and_arm_the_gateway_over_the_api(tmp_path, monkeypa
         r = client.post("/api/ican/output/arm", json={"enabled": False})
         assert r.status_code == 200
         assert r.json()["output_armed"] is False
+
+
+def test_operator_can_toggle_a_channel_and_stop_over_the_api(tmp_path, monkeypatch):
+    """The panel's test buttons. Driving a channel must go through the real bus, and an
+    unarmed refusal must be reported as a refusal — not as a success the UI then shows
+    as a lit button."""
+    from fastapi.testclient import TestClient
+    import api.routes.ican_routes as routes
+    from engine.ican_mapping import ChannelMap
+    from main import app
+    import app_state
+
+    monkeypatch.setattr(routes, "_channel_map", ChannelMap(path=tmp_path / "m.json"))
+    monkeypatch.setattr(routes, "_conn", None)
+    app_state.protocol_bus._safety_kernel = armed_kernel()
+
+    with FakeICANGateway() as gw:
+        client = TestClient(app)
+        client.post("/api/ican/connect",
+                    json={"gateway_ip": "127.0.0.1", "gateway_port": gw.port, "local_port": 0})
+        client.post("/api/ican/map/assign",
+                    json={"group": 0, "channel": 1, "label": "Jet 1", "device_type": "pump"})
+        client.post("/api/ican/output/attach")
+
+        # An unknown channel is a 404, not a silent no-op.
+        assert client.post("/api/ican/output/channel",
+                           json={"device_id": "nope", "on": True}).status_code == 404
+
+        # Not armed yet: the command is accepted but the channel must NOT go live.
+        r = client.post("/api/ican/output/channel",
+                        json={"device_id": "ican-0-1", "on": True})
+        assert r.status_code == 200
+        assert r.json()["live_channels"] == [], "channel went live while disarmed"
+
+        client.post("/api/ican/output/arm", json={"enabled": True, "confirm": "ARM OUTPUT"})
+        r = client.post("/api/ican/output/channel",
+                        json={"device_id": "ican-0-1", "on": True})
+        assert r.json()["live_channels"] == [1]
+
+        r = client.post("/api/ican/output/channel",
+                        json={"device_id": "ican-0-1", "on": False})
+        assert r.json()["live_channels"] == []
+
+        # Stop is always allowed.
+        assert client.post("/api/ican/output/stop").status_code == 200

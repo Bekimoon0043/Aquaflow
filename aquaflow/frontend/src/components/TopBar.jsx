@@ -49,6 +49,7 @@ const MENU_ITEMS = {
   ],
   Devices: [
     ["Device Discovery", "panel", "devices"],
+    ["Fountain Control (I-CAN)", "panel", "fountain"],
     ["Audio", "panel", "audio"],
     ["PLC", "panel", "plc"],
     ["Calibration", "panel", "calibration"],

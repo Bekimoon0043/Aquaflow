@@ -81,7 +81,11 @@ async def connect(req: ManualConnect):
     m.cfg.local_port = req.local_port
     ok = await m.connect()
     if not ok:
-        raise HTTPException(503, m.last_error or "gateway did not answer probe")
+        # Only a local failure lands here now (no IP, socket refused to open). A gateway
+        # that simply does not answer the read-only poll connects UNVERIFIED — I-CAN
+        # control is fire-and-forget and does not need a reply. `verified` in the
+        # returned status is what tells the operator which of the two they have.
+        raise HTTPException(503, m.last_error or "could not open the local UDP socket")
     return m.status()
 
 
@@ -205,6 +209,62 @@ async def attach_output():
         "output_armed": m.status().get("output_enabled", False),
         "note": "Attached to the output bus. Output remains DISABLED until /output/arm.",
     }
+
+
+class ChannelDrive(BaseModel):
+    device_id: str
+    on: bool
+
+
+@router.post("/output/channel")
+async def drive_channel(req: ChannelDrive):
+    """
+    Drive one attached channel on or off — the operator's commissioning toggle.
+
+    Deliberately scoped to channels already attached to the bus rather than exposing a
+    general "command any device at any intensity" endpoint: this is a test control, and
+    a route that can actuate arbitrary hardware over HTTP is a far larger surface than
+    the task needs. The command goes through the normal bus path, so the safety kernel
+    permit, the per-fixture ceilings and the driver's arm gate all still apply — this is
+    the same route a show uses, not a private bypass that could pass while playback is
+    broken.
+    """
+    from app_state import protocol_bus
+
+    if req.device_id not in getattr(protocol_bus, "_ican_devices", {}):
+        raise HTTPException(status_code=404,
+                            detail=f"{req.device_id} is not an attached I-CAN channel")
+
+    entry = protocol_bus._ican_devices[req.device_id]
+    await protocol_bus.send_batch([{
+        "device_id": req.device_id,
+        "type": entry.get("device_type", "pump"),
+        "intensity": 1.0 if req.on else 0.0,
+    }])
+    group = entry["group"]
+    confirmed = sorted(protocol_bus._ican_confirmed.get(group, set()))
+    desired = sorted(protocol_bus._ican_state.get(group, set()))
+    return {
+        "device_id": req.device_id,
+        "requested": "on" if req.on else "off",
+        "group": group,
+        # What was SENT, not what was intended. If the frame was refused — output not
+        # armed, safety permit withdrawn, socket error — the channel is absent here even
+        # though it is present in `desired`. The caller must show this one, or it would
+        # light a button for a command that never left the machine. Note this is not an
+        # acknowledgement: the gateway does not ack 0x08 frames.
+        "live_channels": confirmed,
+        "desired_channels": desired,
+        "pending": group in protocol_bus._ican_dirty,
+    }
+
+
+@router.post("/output/stop")
+async def stop_output():
+    """Blackout every attached channel. Never gated — stopping is always allowed."""
+    from app_state import protocol_bus
+    await protocol_bus.blackout()
+    return {"stopped": True}
 
 
 @router.post("/output/arm")

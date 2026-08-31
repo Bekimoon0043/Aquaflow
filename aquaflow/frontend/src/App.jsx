@@ -44,6 +44,7 @@ const PoolGeometryDesigner = lazy(() => import("./components/panels/PoolGeometry
 const PatternDesignerPanel = lazy(() => import("./components/panels/PatternDesignerPanel"));
 const Export3DPanel = lazy(() => import("./components/panels/Export3DPanel"));
 const ShowProgrammerPanel = lazy(() => import("./components/programmer/ShowProgrammerPanel"));
+const FountainControlPanel = lazy(() => import("./components/panels/FountainControlPanel"));
 import ResizeHandle from "./components/layout/ResizeHandle";
 import { useResizableLayout } from "./components/layout/useResizableLayout";
 import StatusBar from "./components/StatusBar";
@@ -112,6 +113,7 @@ function StudioApp() {
             {activePanel === "preview"      && <PreviewPanel />}
             {activePanel === "ai"           && <AIPanel />}
             {activePanel === "devices"      && <DeviceDiscoveryPanel />}
+            {activePanel === "fountain"     && <FountainControlPanel />}
             {activePanel === "audio"        && <AudioPanel />}
             {activePanel === "plc"          && <PLCPanel />}
             {activePanel === "scheduler"    && <SchedulerPanel />}

@@ -16,6 +16,8 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Optional
 
+from engine import ican_protocol as proto
+
 logger = logging.getLogger("ican.mapping")
 
 # Device types AquaFlow understands. 'unknown' = detected but not yet identified.
@@ -60,6 +62,15 @@ class ChannelMap:
         """Create or update one channel's mapping. Only the fields passed are changed."""
         if device_type is not None and device_type not in DEVICE_TYPES:
             raise ValueError(f"device_type must be one of {DEVICE_TYPES}")
+        # Reject an unaddressable channel HERE, where the operator is looking at the
+        # form, rather than at flush time where it would surface as a jet that silently
+        # never fires. The 0x08 frame has a 5-byte mask: channels 1..40 and nothing else.
+        if not 1 <= int(channel) <= proto.MAX_CHANNEL:
+            raise ValueError(
+                f"channel must be 1..{proto.MAX_CHANNEL} (the I-CAN frame carries a "
+                f"{proto.MAX_CHANNEL}-bit channel mask), got {channel}")
+        if not 0 <= int(group) <= proto.MAX_GROUP:
+            raise ValueError(f"group must be 0..{proto.MAX_GROUP}, got {group}")
         key = f"{int(group)}:{int(channel)}"
         cur = self._items.get(key) or ChannelAssignment(int(group), int(channel))
         if label is not None:

@@ -41,13 +41,29 @@ class FakeICANGateway:
         self._thread: threading.Thread | None = None
         self.received: list[bytes] = []
 
-    # a valid gateway reply: echo the command with the reply flag set (byte[1]=1)
+    # A faithful gateway reply. The real unit answers a 0x03 channel-address poll with
+    # a 0x07 status frame echoing the group (idle payload AA AA AA AA 00), and does NOT
+    # acknowledge 0x08 output frames at all. Modelling that silence is the whole point:
+    # a fake that politely acked everything is exactly why a connect path that required
+    # an ack passed every test here and could not control the real fountain.
     @staticmethod
     def _valid_reply(probe: bytes) -> bytes:
+        cmd = probe[0] if probe else proto.CMD_CHANNEL
+        if cmd == proto.CMD_CHANNEL:
+            r = bytearray(proto.FRAME_LEN)
+            r[0] = proto.CMD_STATUS_REPLY
+            r[1:5] = probe[1:5]                       # echo the group field
+            r[8:11] = bytes([0xAA, 0xAA, 0xAA])   # idle status bitmap
+            return bytes(r)
+        # Anything else (notably 0x08) gets the telemetry-shaped frame the older
+        # capture showed, so tests that still want a reply to a 0x08 have one.
         r = bytearray(proto.FRAME_LEN)
-        r[0] = probe[0] if probe else proto.CMD_OUTPUT
+        r[0] = cmd
         r[1] = 1
         return bytes(r)
+
+    #: When True the fake behaves like the real gateway and stays silent on 0x08.
+    answer_output_frames: bool = False
 
     def _serve(self):
         self._sock.settimeout(0.2)
@@ -64,6 +80,9 @@ class FakeICANGateway:
             if f.ignore_unrelated and len(data) != proto.FRAME_LEN:
                 continue
             if f.silent:
+                continue
+            # The real gateway never acks an output frame. Control is fire-and-forget.
+            if data and data[0] == proto.CMD_OUTPUT and not self.answer_output_frames:
                 continue
             if f.delay_s:
                 time.sleep(f.delay_s)

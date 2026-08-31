@@ -21,8 +21,14 @@ from engine.fake_ican_gateway import FakeICANGateway, FakeFaults
 def test_frame_length_and_safe_probe():
     f = proto.safe_probe_frame()
     assert len(f) == proto.FRAME_LEN == 13
-    assert f[0] == proto.CMD_OUTPUT
+    # The probe must NOT be the output opcode. It used to be a 0x08 frame relying on an
+    # empty mask to be harmless, which meant a subnet scan sprayed the relay-driving
+    # opcode at every host. 0x03 is a channel-address poll and carries no mask at all.
+    assert f[0] == proto.CMD_CHANNEL
+    assert f[0] != proto.CMD_OUTPUT
     assert proto.channels_from_mask(f[5:10]) == []       # SAFE probe drives nothing
+    # Byte-for-byte the PC->GW probe seen in the site capture.
+    assert f == bytes.fromhex("03000000010000000000000000")
 
 
 def test_channel_mask_roundtrip():
@@ -110,6 +116,7 @@ def test_discovery_sends_no_output_frame():
     assert sent
     for f in sent:
         assert f == proto.safe_probe_frame()
+        assert f[0] == proto.CMD_CHANNEL                 # never the relay-driving opcode
         assert proto.channels_from_mask(f[5:10]) == []
 
 
@@ -170,8 +177,12 @@ def test_output_rate_limit_and_duplicate_suppression():
         b = await conn.send_output(1, [1], confirmed=True)    # identical, immediate
         return a, b, conn
     a, b, conn = asyncio.run(run())
-    assert a is True and b is False
+    # Both report success: the second call asked for a state the gateway already holds.
+    # Reporting False made the bus keep the group dirty and re-send the identical frame
+    # every flush, where this same rate window suppressed it again — a wedge loop.
+    assert a is True and b is True
     assert any("SUPPRESSED" in r["result"] for r in conn.audit_log)
+    assert sum(1 for r in conn.audit_log if r["result"] == "dry-run OK") == 1
 
 
 # ── integration against the real fake UDP gateway ────────────────────────────
@@ -191,36 +202,52 @@ def test_integration_real_socket_probe():
     assert all(proto.channels_from_mask(r[5:10]) == [] for r in recv)
 
 
-def test_integration_timeout_silent_gateway():
+def test_silent_gateway_connects_unverified_and_can_still_drive_output():
+    """THE REGRESSION TEST FOR THE REAL FOUNTAIN.
+
+    The site gateway does not acknowledge 0x08 output frames — control is
+    fire-and-forget UDP, which is exactly how the proven working client drives it.
+    connect() used to demand a reply, drop to ERROR and close the socket, after which
+    every send_output was refused with "REFUSED: state error". The hardware could never
+    open that gate, so AquaFlow could not run the fountain while a 40-line script could.
+
+    Silence must therefore mean UNVERIFIED, not unusable.
+    """
     async def run():
         with FakeICANGateway(faults=FakeFaults(silent=True)) as gw:
             conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1",
                                              gateway_port=gw.port, local_port=0,
                                              timeout=0.2, retries=1))
             ok = await conn.connect()
-            return ok, conn.state
-    ok, state = asyncio.run(run())
-    assert ok is False and state == ConnectionState.ERROR
+            conn.enable_output(True)
+            sent = await conn.send_output(1, [9, 13], confirmed=True)
+            await asyncio.sleep(0.05)
+            received = [r for r in gw.received if r[0] == proto.CMD_OUTPUT]
+            status = conn.status()
+            await conn.close()
+            return ok, sent, received, status
+    ok, sent, received, status = asyncio.run(run())
+    assert ok is True, "a silent gateway must not block connecting"
+    assert status["verified"] is False, "and must be reported as unverified"
+    assert sent is True, "output must reach the wire without an acknowledgement"
+    # The exact bytes the working client puts on the wire for group 1, channels 9 and 13.
+    assert received == [bytes.fromhex("08000000010011000000000000")]
 
 
-def test_integration_malformed_reply_rejected():
-    async def run():
-        with FakeICANGateway(faults=FakeFaults(malformed=True)) as gw:
-            conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1",
-                                             gateway_port=gw.port, local_port=0,
-                                             timeout=0.2, retries=1))
-            return await conn.connect()
-    assert asyncio.run(run()) is False
-
-
-def test_integration_wrong_source_port_ignored():
-    async def run():
-        with FakeICANGateway(faults=FakeFaults(wrong_source_port=True)) as gw:
-            conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1",
-                                             gateway_port=gw.port, local_port=0,
-                                             timeout=0.2, retries=1))
-            return await conn.connect()
-    assert asyncio.run(run()) is False
+def test_unvalidated_reply_leaves_the_link_unverified():
+    """Junk on the port must never be *called* a validated gateway. That claim now lives
+    in `verified` rather than in connect(), so a wrong device is visible to the operator
+    instead of silently blocking a link that fire-and-forget control does not need."""
+    for fault in (FakeFaults(malformed=True), FakeFaults(wrong_source_port=True)):
+        async def run(f=fault):
+            with FakeICANGateway(faults=f) as gw:
+                conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1",
+                                                 gateway_port=gw.port, local_port=0,
+                                                 timeout=0.2, retries=1))
+                ok = await conn.connect()
+                return ok, conn.verified
+        ok, verified = asyncio.run(run())
+        assert ok is True and verified is False
 
 
 def test_integration_duplicate_reply_still_connects():
@@ -241,3 +268,134 @@ def test_integration_delayed_reply_within_timeout():
                                              timeout=0.5, retries=2))
             return await conn.connect()
     assert asyncio.run(run()) is True
+
+
+# ── byte-for-byte parity with the proven working client ──────────────────────
+# The reference is ican_client.py, run against the site gateway (192.168.5.2:200 from
+# 192.168.5.200:2002) on 31 Aug 2026, where it drove the real fountain. Every frame
+# AquaFlow emits must be identical to what that client emits, or "it works from the
+# terminal but not from the app" comes straight back.
+
+def test_group_is_big_endian_uint32_like_the_working_client():
+    # ican_client.encode_frame: group.to_bytes(4, "big") at bytes[1..4].
+    for group in (0, 1, 9, 255, 256, 70000):
+        f = proto.encode_output(group, [])
+        assert f[1:5] == group.to_bytes(4, "big")
+        assert proto.group_from_bytes(f[1:5]) == group
+    # The old code wrote `group & 0xFF` into byte[4] alone. Identical below 256, which
+    # is why it survived, but group 256 silently drove group 0's relays.
+    assert proto.encode_output(256, [1])[1:5] != proto.encode_output(0, [1])[1:5]
+
+
+def test_frames_match_the_captured_wire_bytes():
+    # PC->GW capture vector: group 9, channels 10 and 39.
+    assert proto.encode_output(9, [10, 39]) == bytes.fromhex("08000000090002000040000000")
+    # ican_client --group 1 --on 9,13  ->  mask byte 1 = 0x11
+    assert proto.encode_output(1, [9, 13]) == bytes.fromhex("08000000010011000000000000")
+    # all-off for a group is the same frame with an empty mask
+    assert proto.encode_all_off(1) == bytes.fromhex("08000000010000000000000000")
+
+
+def test_channel_mask_matches_the_client_bit_order():
+    # ican_client.channels_to_mask: bit i of byte b = channel b*8 + i + 1
+    for ch in range(1, 41):
+        mask = proto.mask_from_channels([ch])
+        byte_i, bit_i = divmod(ch - 1, 8)
+        assert mask[byte_i] == (1 << bit_i)
+        assert proto.channels_from_mask(mask) == [ch]
+
+
+def test_out_of_range_channel_is_refused_not_dropped():
+    # The client raises; silently dropping would mean a mapped jet that never fires and
+    # never errors.
+    for bad in (0, 41, 100):
+        try:
+            proto.mask_from_channels([bad])
+        except ValueError:
+            continue
+        raise AssertionError(f"channel {bad} was accepted")
+
+
+def test_blackout_turns_off_every_group_driven_not_just_group_zero():
+    """The 0x08 frame carries absolute state for ONE group. A blackout that only sent
+    group 0 left jets on groups 1 and 9 running — an E-stop that stopped nothing."""
+    async def run():
+        conn = ICANConnection(ICANConfig(gateway_ip="10.0.0.2", dry_run=True))
+        await conn.connect()
+        conn.enable_output(True)
+        await conn.send_output(1, [1], confirmed=True)
+        await conn.send_output(9, [10], confirmed=True)
+        await conn.blackout()
+        return conn
+    conn = asyncio.run(run())
+    blacked = [r for r in conn.audit_log if r["action"] == "blackout"]
+    groups = {proto.group_from_bytes(bytes.fromhex(r["frame_hex"].replace(" ", ""))[1:5])
+              for r in blacked}
+    assert {0, 1, 9} <= groups
+    for r in blacked:
+        frame = bytes.fromhex(r["frame_hex"].replace(" ", ""))
+        assert proto.channels_from_mask(frame[5:10]) == []      # every one is all-off
+
+
+# ── differential test against the hardware-proven client ─────────────────────
+# aquaflow/tools/reference/ican_client.py is the script that actually drove the site
+# fountain. Rather than trusting that the constants were copied across correctly, import
+# it and compare frame for frame. If the two ever diverge, this fails.
+
+def _reference_client():
+    import importlib.util
+    from pathlib import Path
+    ref = (Path(__file__).resolve().parents[2] / "tools" / "reference" / "ican_client.py")
+    assert ref.exists(), f"reference client missing at {ref}"
+    spec = importlib.util.spec_from_file_location("ican_client_reference", ref)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_aquaflow_frames_are_identical_to_the_reference_client():
+    ref = _reference_client()
+    assert (proto.CMD_OUTPUT, proto.CMD_CHANNEL, proto.CMD_STATUS_REPLY) == (
+        ref.CMD_OUTPUT, ref.CMD_CHANNEL_ADDRESS, ref.CMD_STATUS_REPLY)
+    assert proto.FRAME_LEN == 13
+    assert proto.MAX_CHANNEL == ref.MASK_BYTES * 8
+
+    cases = [
+        (0, []), (0, [1]), (1, []), (1, [9, 13]), (1, [9, 13, 17, 21]),
+        (9, [10, 39]), (9, list(range(1, 41))), (255, [40]), (256, [1]),
+        (1000, [1, 8, 9, 16, 17, 24, 25, 32, 33, 40]),
+    ]
+    for group, channels in cases:
+        mine = proto.encode_output(group, channels)
+        theirs = ref.encode_frame(ref.CMD_OUTPUT, group, ref.channels_to_mask(channels))
+        assert mine == theirs, (
+            f"group={group} channels={channels}\n"
+            f"  aquaflow : {proto.hexdump(mine)}\n"
+            f"  reference: {proto.hexdump(theirs)}")
+
+    # the read-only poll
+    for group in (0, 1, 9, 17, 25):
+        assert proto.encode_channel_address(group) == ref.encode_frame(
+            ref.CMD_CHANNEL_ADDRESS, group, bytes(ref.MASK_BYTES))
+
+    # decoding agrees in both directions
+    for group, channels in cases:
+        frame = proto.encode_output(group, channels)
+        decoded = ref.decode_frame(frame)
+        assert decoded["cmd"] == proto.CMD_OUTPUT
+        assert decoded["group"] == group
+        assert decoded["channels"] == sorted(channels)
+        assert proto.channels_from_mask(frame[5:10]) == sorted(channels)
+        assert proto.group_from_bytes(frame[1:5]) == group
+
+
+def test_reference_client_rejects_what_aquaflow_rejects():
+    ref = _reference_client()
+    for bad in (0, 41, 100):
+        for fn in (lambda: ref.channels_to_mask([bad]),
+                   lambda: proto.mask_from_channels([bad])):
+            try:
+                fn()
+            except ValueError:
+                continue
+            raise AssertionError(f"channel {bad} accepted")

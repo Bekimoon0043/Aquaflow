@@ -98,6 +98,13 @@ class ICANConnection:
         self.state = ConnectionState.IDLE
         self.last_error: str = ""
         self.last_reply: Optional[proto.ParsedResponse] = None
+        # Did the gateway answer our read-only poll? Control does not require it —
+        # see connect() — but the operator must be able to tell the two apart.
+        self.verified: bool = False
+        self.local_port_fallback: bool = False
+        # Every group we have transmitted to, so blackout can turn off all of them
+        # rather than only group 0.
+        self._groups_seen: set[int] = set()
         self._sock: Optional[socket.socket] = None
         self._output_enabled = False           # must be turned on deliberately
         self._last_output: Optional[bytes] = None
@@ -130,10 +137,12 @@ class ICANConnection:
                 s.bind(("", self.cfg.local_port))
             except OSError as e:
                 s.bind(("", 0))
-                logger.warning("local port %s busy (%s); bound ephemeral %s — LOGGED, "
-                               "not silent", self.cfg.local_port, e.errno,
+                logger.warning("local port %s busy (%s); bound ephemeral %s — the "
+                               "gateway expects 2002; if the vendor I-CAN software is "
+                               "running, close it", self.cfg.local_port, e.errno,
                                s.getsockname()[1])
                 self.cfg.local_port = s.getsockname()[1]
+                self.local_port_fallback = True
             s.settimeout(self.cfg.timeout)
             self._sock = s
             return True
@@ -175,13 +184,25 @@ class ICANConnection:
             return False
         ok, reply, latency = await self._exchange(proto.safe_probe_frame(),
                                                   message_type="probe")
+        self.verified = bool(ok)
         if ok:
             self.last_reply = reply
             self._set_state(ConnectionState.CONNECTED)
             return True
-        self._close_socket()
-        self._set_state(ConnectionState.ERROR, error="gateway did not answer probe")
-        return False
+        # An unanswered probe used to mean ERROR, socket closed, and every later
+        # send_output refused with "REFUSED: state error". That made the real fountain
+        # uncontrollable: I-CAN control is fire-and-forget UDP and the gateway does not
+        # acknowledge output frames, so demanding a reply before transmitting is a gate
+        # the hardware can never open. The proven working client reads nothing back at
+        # all. So: reachability is not a precondition for control, it is a QUALITY
+        # SIGNAL. We connect, and `verified` records that nothing answered so the
+        # operator sees it rather than being told a lie in either direction.
+        self.last_error = ("gateway did not answer the 0x03 poll — link unverified; "
+                           "output frames are sent fire-and-forget")
+        self._set_state(ConnectionState.CONNECTED)
+        logger.warning("icann connected UNVERIFIED to %s:%s — %s",
+                       self.cfg.gateway_ip, self.cfg.gateway_port, self.last_error)
+        return True
 
     # ── the read/verify exchange (READ-ONLY) ──────────────────────────────────
     async def _exchange(self, frame: bytes, *, message_type: str,
@@ -241,10 +262,15 @@ class ICANConnection:
             return False
         ok, reply, _ = await self._exchange(proto.safe_probe_frame(),
                                             message_type="probe")
+        was_verified = self.verified
+        self.verified = bool(ok)
         if ok:
             self.last_reply = reply
-        elif self.state == ConnectionState.CONNECTED and self._auto_reconnect:
-            await self._on_loss("probe unanswered")
+        elif was_verified and self.state == ConnectionState.CONNECTED and self._auto_reconnect:
+            # Only a link that HAD been answering and then stopped counts as a loss.
+            # A gateway that never answered has not "gone away" — treating silence as
+            # loss would drop a working fire-and-forget link on its first poll.
+            await self._on_loss("probe unanswered after previously replying")
         return ok
 
     async def _on_loss(self, why: str):
@@ -291,10 +317,16 @@ class ICANConnection:
             return False
         now = time.monotonic()
         if frame == self._last_output and (now - self._last_output_ts) < self.cfg.output_min_interval:
+            # Suppressed, but REPORTED AS SUCCESS: the gateway already holds exactly
+            # this state, which is what the caller asked for. Reporting False made the
+            # bus keep the group dirty and re-send the identical frame on every flush,
+            # where this same rate window suppressed it again — a group that failed once
+            # could wedge in a retry loop its own rate limiter refused to let out of.
             self._audit("send_output", frame, "SUPPRESSED: duplicate within rate window", user)
-            return False
+            return True
         if (now - self._last_output_ts) < self.cfg.output_min_interval:
             await asyncio.sleep(self.cfg.output_min_interval - (now - self._last_output_ts))
+        self._groups_seen.add(int(group))
         if self.cfg.dry_run:
             self._last_output, self._last_output_ts = frame, time.monotonic()
             self._audit("send_output", frame, "dry-run OK", user)
@@ -311,20 +343,34 @@ class ICANConnection:
             return False
 
     async def blackout(self) -> bool:
-        """Send all-off to every group seen. Allowed even when output is not 'enabled'
-        because it only ever turns things OFF (safety action)."""
-        frame = proto.encode_all_off(0)
-        if self.cfg.dry_run or self.state == ConnectionState.CONNECTED:
+        """All-off to EVERY group we have driven. Allowed even when output is not
+        'enabled' because it only ever turns things OFF (safety action).
+
+        This used to send a single all-off for group 0 and call it done. The 0x08 frame
+        carries absolute state for ONE group, so with jets mapped on groups 1 and 9 that
+        blackout turned off nothing at all — an E-stop that left the fountain running.
+        """
+        if not (self.cfg.dry_run or self.state == ConnectionState.CONNECTED):
+            return False
+        # Group 0 is always included: it costs one datagram and covers a group that was
+        # mapped but never yet driven, so it is absent from _groups_seen.
+        groups = sorted(self._groups_seen | {0})
+        all_ok = True
+        for group in groups:
+            frame = proto.encode_all_off(group)
             if not self.cfg.dry_run:
                 try:
                     async with ICANConnection._tx_lock():
                         self._sock.sendto(frame, (self.cfg.gateway_ip, self.cfg.gateway_port))
                 except OSError as e:
                     self._audit("blackout", frame, f"error: {e}")
-                    return False
-            self._audit("blackout", frame, "sent")
-            return True
-        return False
+                    all_ok = False
+                    continue
+            self._audit("blackout", frame, f"sent (group {group})")
+        # A blackout invalidates the duplicate-suppression memory: the next command
+        # must go out even if it happens to match the frame sent before the blackout.
+        self._last_output = None
+        return all_ok
 
     def set_auto_reconnect(self, enabled: bool):
         self._auto_reconnect = bool(enabled)
@@ -342,6 +388,14 @@ class ICANConnection:
             "gateway_port": self.cfg.gateway_port,
             "local_port": self.cfg.local_port,
             "output_enabled": self._output_enabled,
+            # Did the gateway answer the read-only poll? Control works either way
+            # (fire-and-forget), but "connected" alone must not be read as "reachable".
+            "verified": self.verified,
+            # True when local_port was busy and we fell back to an ephemeral port. The
+            # site gateway is known to talk to 2002; if the original vendor software is
+            # still running it owns that port and our frames may be ignored.
+            "local_port_fallback": self.local_port_fallback,
+            "groups_driven": sorted(self._groups_seen),
             "auto_reconnect": self._auto_reconnect,
             "last_error": self.last_error,
             "dry_run": self.cfg.dry_run,

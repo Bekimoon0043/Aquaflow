@@ -1,9 +1,48 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-07-06, AF-HUB Stage 7):** backend pytest **532 passed, 21 skipped,
-> 0 errors** · backend line coverage **59%** · frontend vitest **231 passed (20 files)** ·
-> `npm run build` green. Single source of truth: `AQUAFLOW_STATUS_CANONICAL.md`. Test/task
-> numbers in the dated entries below are point-in-time snapshots — the line above is current.
+> **AUTHORITATIVE (2026-08-31, AF-ICAN-005):** backend pytest **581 passed, 21 skipped,
+> 0 failures, 0 errors (602 collected)** · frontend vitest **391 passed (29 files)** ·
+> `npm run build` green · desktop **1.1.2**. Single source of truth:
+> `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
+> point-in-time snapshots — the line above is current.
+
+**Date:** 2026-08-31 (AF-ICAN-005 — protocol parity with the hardware-proven client)
+**Summary:** The fountain ran from a 40-line standalone script (`ican_client.py`) against the
+site gateway (192.168.5.2:200 from 192.168.5.200:2002) and would not run from AquaFlow. This
+closes that gap. **Root cause: `ICANConnection.connect()` demanded a reply.** It sent a `0x08`
+probe and dropped to `ERROR` with the socket closed unless the gateway answered — but the
+gateway does **not** acknowledge `0x08` output frames. I-CAN control is fire-and-forget UDP,
+which is exactly why the script works: it never reads anything back. AquaFlow could never open
+that gate, so every `send_output` was refused with `REFUSED: state error`. Discovery had the
+same flaw, and worse — it probed with the *output* opcode, spraying the relay-driving command
+across every host on the subnet during a scan.
+
+Fixed, with the working client as the authority:
+- **Group is a big-endian uint32 at bytes[1..4]**, not `group & 0xFF` in byte[4]. Identical for
+  groups 0–255 (which is why the old reading survived), but group 256 silently drove group 0.
+- **Probe is now `0x03` channel-address**, the only exchange the gateway answers (`0x07` back,
+  idle payload `AA AA AA AA 00`). Safer *and* it actually gets a reply.
+- **A silent gateway connects UNVERIFIED, not ERROR.** Reachability is a quality signal, not a
+  precondition for control. `verified` is surfaced in `/api/ican/status` and in the panel.
+- **Blackout covers every group driven**, not just group 0 — the previous behaviour was an
+  E-stop that left jets on groups 1 and 9 running.
+- **A suppressed duplicate reports success.** Reporting failure kept the group dirty so the bus
+  re-sent the identical frame every flush, where the same rate window suppressed it again.
+- **Out-of-range channels are refused** at map time (400) instead of silently dropped, which
+  had meant a mapped jet that never fires and never errors.
+- The fake gateway now models the real one — answers `0x03`, stays silent on `0x08`. A fake that
+  politely acked everything is why the broken connect path passed every test.
+- "Confirmed" language corrected throughout: a lit button means the frame was **sent**, not that
+  the relay closed. The gateway does not ack.
+
+**Verification:** byte-for-byte parity tests against the working client and the captured wire
+vectors (`08 00 00 00 09 00 02 00 00 40 00 00 00`; `--group 1 --on 9,13` →
+`08 00 00 00 01 00 11 00 00 00 00 00 00`), plus a regression test that drives output through a
+*silent* gateway and asserts the exact bytes reach the wire. Backend **581 passed / 21 skipped /
+0 failures**; frontend **391 passed (29 files)**; `npm run build` green. Packaged as **1.1.2**.
+**Not yet run against the real gateway — hardware validation is pending on the site PC.**
+
+---
 
 **Date:** 2026-08-21 (3D preview review upgrade)
 **Summary:** Improved the 3D Preview after reviewing current Three.js/WebGL preview practices

@@ -344,8 +344,18 @@ class ProtocolBus:
         # into a desired state here and are flushed one frame per group per batch.
         self._ican_driver = None
         self._ican_devices: dict[str, dict] = {}      # device_id → {group, channel, safety_max}
-        self._ican_state: dict[int, set] = {}          # group → set of channels currently ON
+        self._ican_state: dict[int, set] = {}          # group → DESIRED set of channels ON
         self._ican_dirty: set = set()                  # groups whose state changed this batch
+        # What was actually PUT ON THE WIRE, as distinct from what we want the gateway to
+        # have. The two diverge whenever a frame is refused — output not armed, safety
+        # permit withdrawn, socket error — and an operator UI must show this set, not the
+        # desired one, or it lights a button for a relay whose frame was never sent.
+        #
+        # It is NOT an acknowledgement. The gateway does not ack 0x08 output frames; I-CAN
+        # control is fire-and-forget. This says "the frame left this machine", which is the
+        # strongest claim the protocol allows. Confirming that a relay physically closed
+        # requires looking at the cabinet.
+        self._ican_confirmed: dict[int, set] = {}
         # Relay banks (SSR-8Y-A) are binary: a channel is on or off, not dimmed.
         self._ican_on_threshold: float = 0.5
         self._flame_on_since: dict[str, float] = {}   # device_id → burst start (monotonic)
@@ -612,6 +622,9 @@ class ProtocolBus:
                 "group": group,
                 "channel": channel,
                 "safety_max": float(entry.get("safety_max", 1.0) or 1.0),
+                # Carried so a direct channel command can be routed with the same device
+                # type the safety gate would see during playback, rather than guessing.
+                "device_type": entry.get("device_type") or "pump",
             }
         self._ican_on_threshold = max(0.0, min(1.0, float(on_threshold)))
         logger.info("I-CAN attached to protocol bus: %d channel(s) routed",
@@ -671,6 +684,8 @@ class ProtocolBus:
                 ok = False
             if ok:
                 self._ican_dirty.discard(group)
+                # Sent, not acknowledged — see _ican_confirmed above.
+                self._ican_confirmed[group] = set(channels)
                 logger.debug("I-CAN → group=%d channels=%s", group, channels)
             else:
                 logger.warning("I-CAN group %d not accepted — will re-send next flush", group)
@@ -934,6 +949,7 @@ class ProtocolBus:
         if self._ican_driver:
             self._ican_state = {}
             self._ican_dirty = set()
+            self._ican_confirmed = {}
             try:
                 await self._ican_driver.blackout()
             except Exception as e:
