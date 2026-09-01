@@ -232,7 +232,10 @@ def test_silent_gateway_connects_unverified_and_can_still_drive_output():
     assert status["verified"] is False, "and must be reported as unverified"
     assert sent is True, "output must reach the wire without an acknowledgement"
     # The exact bytes the working client puts on the wire for group 1, channels 9 and 13.
-    assert received == [bytes.fromhex("08000000010011000000000000")]
+    # There may be more than one: the state is STREAMED while armed, so a repeat of the
+    # identical frame is correct — every frame carries absolute state.
+    assert received, "no output frame reached the wire"
+    assert set(received) == {bytes.fromhex("08000000010011000000000000")}
 
 
 def test_malformed_reply_leaves_the_link_unverified():
@@ -455,3 +458,64 @@ def test_the_live_transport_is_the_reference_client():
     # Check the CALLS, not the prose — the docstrings explain why SO_REUSEADDR is gone.
     assert "setsockopt(" not in src, "SO_REUSEADDR is what made a busy port look free"
     assert "_sock.sendto(" not in src, "no hand-rolled sends alongside the client"
+
+
+def test_output_state_is_streamed_continuously_while_armed():
+    """The original software does not send one frame and stop — it STREAMS the output
+    state (19,152 OUTPUT frames in the site capture, ~250 ms apart). A relay controller
+    with an output watchdog drops its relays when that stream stops, which looks exactly
+    like "AquaFlow said it sent the frame and nothing happened".
+
+    Art-Net in this same codebase already re-sends on a keepalive. I-CAN did not.
+    """
+    async def run():
+        with FakeICANGateway(faults=FakeFaults(silent=True)) as gw:
+            conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1", gateway_port=gw.port,
+                                             local_port=0, timeout=0.1,
+                                             refresh_interval=0.02))
+            await conn.connect()
+            conn.enable_output(True)
+            await conn.send_output(0, [9], confirmed=True)
+            await asyncio.sleep(0.25)                 # ~12 refreshes at 50 Hz
+            armed = list(gw.received)
+            status = conn.status()
+            conn.enable_output(False)
+            await asyncio.sleep(0.1)
+            after_disarm = len(gw.received)
+            await asyncio.sleep(0.15)                 # stream must stay stopped
+            await conn.close()
+            return armed, status, after_disarm, len(gw.received)
+
+    armed, status, after_disarm, final = asyncio.run(run())
+    outputs = [f for f in armed if f[0] == proto.CMD_OUTPUT]
+    assert len(outputs) > 3, f"state was not streamed — only {len(outputs)} frame(s)"
+    # Every streamed frame is the same absolute state, exactly as the vendor streams it.
+    assert set(outputs) == {bytes.fromhex("08000000000001000000000000")}
+    assert status["streaming"] is True
+    assert status["frames_streamed"] > 0
+    # Disarming stops the stream and it stays stopped.
+    assert final == after_disarm, "stream kept running after disarm"
+
+
+def test_blackout_streams_off_rather_than_going_silent():
+    """Silence is not an off command. If the controller latches its last state, simply
+    stopping would leave the relays closed — the stream has to keep saying 'off'."""
+    async def run():
+        with FakeICANGateway(faults=FakeFaults(silent=True)) as gw:
+            conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1", gateway_port=gw.port,
+                                             local_port=0, timeout=0.1,
+                                             refresh_interval=0.02))
+            await conn.connect()
+            conn.enable_output(True)
+            await conn.send_output(0, [9], confirmed=True)
+            await asyncio.sleep(0.1)
+            await conn.blackout()
+            gw.received.clear()
+            await asyncio.sleep(0.15)
+            tail = [f for f in gw.received if f[0] == proto.CMD_OUTPUT]
+            await conn.close()
+            return tail
+    tail = asyncio.run(run())
+    assert tail, "nothing streamed after blackout"
+    for f in tail:
+        assert proto.channels_from_mask(f[5:10]) == [], "blackout must keep streaming OFF"

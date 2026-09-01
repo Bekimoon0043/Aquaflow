@@ -1,10 +1,45 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-01, AF-ICAN-007):** backend pytest **591 passed, 21 skipped,
-> 0 failures, 0 errors (612 collected)** · frontend vitest **391 passed (29 files)** ·
-> `npm run build` green · desktop **1.1.4**. Single source of truth:
+> **AUTHORITATIVE (2026-09-01, AF-ICAN-008):** backend pytest **593 passed, 21 skipped,
+> 0 failures, 0 errors (614 collected)** · frontend vitest **391 passed (29 files)** ·
+> `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-01 (AF-ICAN-008 — stream the output state, the way the vendor software does)
+**Summary:** The 1.1.4 site screenshot closed out most of the remaining possibilities and
+pointed at the one thing left undone. It showed **`gateway replied`** (the relaxed
+source-port filter from AF-ICAN-006 fixed the false `unverified` — the link is two-way),
+**`sending from local port 2002`** (so `SO_REUSEADDR` was not the cause after all), and a
+successful capture import listing ~30 channels, **all on group 0**. The capture tool decodes
+the group from `payload[4]`, which is the correct byte, so group 0 is real. Correct frames,
+leaving the machine, to a gateway that answers — and still nothing moving.
+
+**The remaining difference: the vendor software STREAMS.** The site capture holds **19,152
+OUTPUT frames**, roughly 250 ms apart, each carrying the full absolute channel state.
+AquaFlow sent exactly one frame per command and then went silent. A relay controller with an
+output watchdog drops its relays when that stream stops, which is indistinguishable from
+"the command was sent and nothing happened". `protocols/artnet_driver.py:231` already
+re-sends on a keepalive for precisely this reason; I-CAN never did.
+
+`ICANConnection` now streams the current state of every driven group at **10 Hz** the whole
+time output is armed (`refresh_interval`, replacing the dead `keepalive_interval`), through
+the reference client's `set_channels()`. Blackout streams **off** rather than going quiet —
+silence is not an off command if the controller latches. Refresh frames are not audited (10 Hz
+would bury the operator's real commands); `status()` exposes `streaming` / `refresh_hz` /
+`frames_streamed`, and the panel shows a live counter next to OUTPUT ARMED so a stalled
+stream is visible rather than assumed.
+
+Two end-to-end tests asserted an exact frame count per batch and were rewritten to compare
+**state transitions** with streamed repeats collapsed — the invariant they actually protect
+(a group's channels never accumulate `[1] → [1,2] → [1,2,3]`) is unchanged and still enforced.
+
+Backend **593 passed / 21 skipped / 0 failures (614)**; frontend **391 passed**; build green;
+packaged **1.1.5**. **Still not confirmed on hardware.** The decisive site test is now single-
+shot vs streaming replay from `ican_client.py` — if the replay drives the fountain and a single
+`--on` does not, the watchdog theory is confirmed and this build is the fix.
+
+---
 
 **Date:** 2026-09-01 (AF-ICAN-007 — build the channel map from the original software's capture)
 **Summary:** Follow-on to AF-ICAN-006. The remaining unknown was never the protocol, it was

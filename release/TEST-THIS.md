@@ -1,108 +1,103 @@
-# AquaFlow Studio 1.1.4 — I-CAN fountain control
+# AquaFlow Studio 1.1.5 — I-CAN fountain control
 
-Two builds ago AquaFlow connected, armed, reported every frame as sent, and the fountain
-did not move. This build changes two things: **what does the sending**, and **where the
-channel numbers come from**.
+Your 1.1.4 screenshot ruled out most of what was left, and pointed at one thing I had
+not done.
 
----
+## What your screenshot proved
 
-## 1. Your script is now the transport
+- **`gateway replied`** in green — the gateway answers now. The link is genuinely
+  two-way. Network, socket and protocol are all confirmed working.
+- **`sending from local port 2002`** — port 2002 was never the problem.
+- **The import worked** — every channel your real show drove, all on group 0.
 
-`ican_client.py` is no longer a reference sitting beside the app — it **is** the code that
-sends. It lives at `engine/ican_reference_client.py` inside the engine, and AquaFlow
-instantiates its `ICANClient` and calls `set_channels()` / `all_off()` / `poll()`. The
-bytes that reach the gateway come out of the file that ran your fountain. A test fails the
-build if anyone puts a hand-rolled socket back next to it.
+So the frames are correct, they leave the machine, and the gateway is alive and talking.
+One difference was left.
 
-## 2. The likely cause of the silent failure
+## What this build changes: AquaFlow now streams, like the original software does
 
-AquaFlow set `SO_REUSEADDR` on its socket. Your client does not. That one option means:
+Your capture contains **19,152 output frames**. The original software does not send a
+frame once and stop — it **streams the output state continuously**, several times a
+second, every frame carrying the full absolute channel state. The frames in your capture
+are about 250 ms apart.
 
-- **Your client:** if port 2002 is taken, the bind **fails**, loudly, naming the cause.
-- **Old AquaFlow:** if port 2002 was taken, the bind **succeeded anyway** — no error, a
-  healthy-looking connection, every frame logged as sent, nothing the gateway would act on.
+AquaFlow sent **one** frame per button press and then went silent.
 
-The vendor I-CAN software owns 2002 whenever it is running. If it was open — or had been —
-that fully explains green everywhere and no movement.
+If the relay controller has an output watchdog — very common in fountain controllers —
+it drops its relays when that stream stops. That produces exactly what you saw: correct
+bytes, gateway alive, everything green, nothing moving.
 
-> **1.1.4 now refuses to connect in that case and tells you why.** If Connect fails with a
-> message about port 2002, that was the bug. Close the original I-CAN software — check
-> Task Manager, not just the window — and connect again.
+AquaFlow now re-sends the current state at **10 Hz** the whole time the output is armed.
+(Art-Net in AquaFlow already did this. I-CAN never did.)
 
-## 3. Import the channel map from your capture — do this instead of typing numbers
+Blackout streams **off** rather than going quiet, for the same reason: if the controller
+latches its last state, silence would leave the relays closed.
 
-`group 1 / channel 9` was **my example**, not a channel anyone confirmed is wired to
-equipment. If nothing is connected to it, AquaFlow does everything correctly and nothing
-moves. That is very likely what you saw.
+### How to see it
 
-Your capture already knows the right answer. Every (group, channel) the **original**
-software drove is, by definition, wired to something.
+When you arm the output the header now shows:
 
-In step 2 there is now **`Import from capture…`**. Point it at either file from the capture
-tool folder:
+```
+OUTPUT ARMED   streaming 10Hz · 1483 frames
+```
 
-- `changes.txt` — parsed with the same regex your client uses for `--replay`, so a file
-  that replays correctly imports correctly
-- `capture.jsonl` — the machine-readable log
-
-It creates every real channel at once, labelled `G1 C9`, `G1 C13`, … ready to attach. Rename
-them as you identify what each one actually is.
+If that counter is climbing, AquaFlow is streaming. If it says **NOT STREAMING**, tell me.
 
 ---
 
 ## Install
 
 1. Close AquaFlow Studio.
-2. Run `AquaFlowSetup-1.1.4.exe`. SmartScreen → More info → Run anyway.
-3. **Help → About must say 1.1.4.**
-4. **Close the original I-CAN software.** Most important step.
-
-Network unchanged, and yours was already correct: `192.168.5.200 / 255.255.255.0`.
+2. Run `AquaFlowSetup-1.1.5.exe`. SmartScreen → More info → Run anyway.
+3. **Help → About must say 1.1.5.**
+4. Close the original I-CAN software.
 
 ## Test
 
 **Devices → Fountain Control (I-CAN)**
 
-0. **Arm the safety system** → `permit GRANTED`
-1. **Connect** to `192.168.5.2` / `200` / `2002`.
-   Check the new line underneath: **`sending from local port 2002 → 192.168.5.2:200`**.
-   If it does not say **2002**, stop — something else has the port.
-2. **Import from capture…** → pick `changes.txt`. Channels appear.
-3. **Attach**
-4. **Arm the output** — type `ARM OUTPUT`. Water off.
-5. **Press one channel button.** Then **STOP ALL**.
+0. Arm the safety system → `permit GRANTED`
+1. Connect `192.168.5.2` / `200` / `2002` → check `gateway replied` and `local port 2002`
+2. **Import from capture…** → `changes.txt`
+3. Attach
+4. Arm the output (`ARM OUTPUT`) → confirm the **streaming** counter is climbing
+5. Press one channel button — leave it on for **10 seconds**, don't tap it
 
-Every command now prints the bytes it sent:
+Step 5 matters. If the old behaviour was a watchdog dropping the relay, a quick tap would
+have looked identical to nothing happening. Hold it on and watch the cabinet.
 
-```
-4:16:10 PM  G1 C9 → ON  [08 00 00 00 01 00 01 00 00 00 00 00 00]
-```
+---
 
-That is the same frame `ican_client.py --group 1 --on 9` produces. If a channel does
-nothing, the hex tells you whether AquaFlow sent what you think it sent.
+## The one test that settles it, if it still does not move
 
-## If it still does not move
-
-With AquaFlow **closed**, on the same PC, using a channel that came from the import:
+This distinguishes "AquaFlow is wrong" from "single frames don't work on this hardware".
+With AquaFlow **closed**:
 
 ```
-python ican_client.py --gateway 192.168.5.2 --group 1 --on 9
-python ican_client.py --gateway 192.168.5.2 --group 1 --all-off
+# A. single shot — one frame, then silence (what AquaFlow used to do)
+python ican_client.py --gateway 192.168.5.2 --group 0 --on 9
+
+# B. the streaming replay — many frames (what you ran when it worked)
+python ican_client.py --gateway 192.168.5.2 --replay changes.txt
 ```
 
-- **Neither moves** → that channel is not the one; try another from the import.
-- **Script moves it, AquaFlow does not** → send me the hex line and the port line. With
-  identical bytes and port 2002, the difference has to be something I can still find.
-- **Both move** → done.
+Use a channel that came from the import.
+
+- **B moves the fountain, A does not** → the controller needs the continuous stream.
+  That is exactly what 1.1.5 adds, and it should now work.
+- **A moves it too** → single frames are fine, my streaming theory is wrong, and the
+  problem is elsewhere. Tell me and I will keep looking.
+- **Neither moves** → that channel is not the one. Try another from the import, or a
+  whole group at once.
+
+**Please run A and B.** Whichever way it comes out, it tells me something I cannot
+determine from here, and it is the fastest way to the end of this.
 
 ## Send back
 
 1. Version in Help → About
-2. The `sending from local port …` line
-3. Any error from Connect
-4. How many channels the import created, and from which file
+2. Does the **streaming** counter climb while armed?
+3. What happened on a 10-second hold of one channel
+4. **Result of A vs B above** — the important one
 5. One hex line from the Activity log
-6. Whether the script moves that same channel
 
-Send it exactly as it happened, including if it failed. The hex line and the port line are
-what I need.
+If it still does not run, send it exactly as it happened. That is information, not failure.

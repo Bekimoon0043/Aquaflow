@@ -58,8 +58,15 @@ class ICANConfig:
     timeout: float = 0.5
     retries: int = 2
     dry_run: bool = False                     # simulate all I/O (dev/tests)
-    output_min_interval: float = 0.02         # rate limit: >= 20 ms between output frames
-    keepalive_interval: float = 2.0
+    output_min_interval: float = 0.02         # retained for API compatibility; unused
+    # How often the CURRENT state of every driven group is re-sent. The original
+    # fountain software does not send a frame once and stop — it streams the output
+    # state continuously (19,152 OUTPUT frames in the site capture; frames ~250 ms
+    # apart). A relay controller with a watchdog drops its outputs when that stream
+    # stops, which looks exactly like "the command was sent and nothing happened".
+    # The Art-Net driver in this same codebase already re-sends on a keepalive for the
+    # same reason; I-CAN never did.
+    refresh_interval: float = 0.1             # 10 Hz, comfortably inside any plausible watchdog
 
     def to_dict(self) -> dict:
         d = self.__dict__.copy()
@@ -110,6 +117,10 @@ class ICANConnection:
         # rather than only group 0.
         self._groups_seen: set[int] = set()
         self._client: Optional[ICANClient] = None
+        # The state being STREAMED, per group. Re-sent continuously while armed.
+        self._last_channels: dict[int, list] = {}
+        self._refresh_task = None
+        self._refresh_count = 0
         self._sock: Optional[socket.socket] = None
         self._output_enabled = False           # must be turned on deliberately
         self._last_output: Optional[bytes] = None
@@ -305,6 +316,10 @@ class ICANConnection:
         """Deliberately arm/disarm the output path. Connecting never calls this."""
         self._output_enabled = bool(enabled)
         logger.warning("icann output %s", "ENABLED" if enabled else "disabled")
+        if self._output_enabled:
+            self._start_refresh()
+        else:
+            self._stop_refresh()
 
     def _audit(self, action: str, frame: bytes, result: str, user: str = "system"):
         rec = {
@@ -358,12 +373,53 @@ class ICANConnection:
                 # The proven call. Not our own sendto.
                 self._client.set_channels(group, channels)
             self._last_output, self._last_output_ts = frame, time.monotonic()
+            self._last_channels[int(group)] = list(channels)      # keep streaming it
             _netlog("tx", self.cfg, frame, message_type="output", result="sent")
             self._audit("send_output", frame, "sent", user)
             return True
         except OSError as e:
             self._audit("send_output", frame, f"error: {e}", user)
             return False
+
+    async def _refresh_loop(self):
+        """Re-send the current state of every driven group, continuously, while armed.
+
+        This is not a keepalive ping — each frame carries the full absolute channel
+        state, exactly as the vendor software streams it. If the controller has an
+        output watchdog, this is what holds the relays closed; if it does not, this is
+        harmless repetition of a state that is already true.
+
+        Refresh frames are deliberately NOT audited. At 10 Hz they would bury the
+        operator's actual commands in the audit trail within seconds. `frames_streamed`
+        in status() is the visible evidence that the stream is running.
+        """
+        while self._output_enabled and self.state == ConnectionState.CONNECTED:
+            try:
+                for group, channels in list(self._last_channels.items()):
+                    async with ICANConnection._tx_lock():
+                        self._client.set_channels(group, channels)
+                    self._refresh_count += 1
+            except (OSError, ValueError) as e:
+                logger.warning("icann refresh failed: %s", e)
+            except asyncio.CancelledError:
+                raise
+            await asyncio.sleep(max(0.01, self.cfg.refresh_interval))
+
+    def _start_refresh(self):
+        if self.cfg.dry_run or self._refresh_task is not None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return                                   # no loop (sync test context)
+        self._refresh_task = loop.create_task(self._refresh_loop())
+        logger.info("icann output stream started at %.0f Hz", 1.0 / self.cfg.refresh_interval)
+
+    def _stop_refresh(self):
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
+            self._refresh_task = None
+            logger.info("icann output stream stopped after %d frame(s)", self._refresh_count)
 
     async def blackout(self) -> bool:
         """All-off to EVERY group we have driven. Allowed even when output is not
@@ -391,8 +447,10 @@ class ICANConnection:
                     all_ok = False
                     continue
             self._audit("blackout", frame, f"sent (group {group})")
-        # A blackout invalidates the duplicate-suppression memory: the next command
-        # must go out even if it happens to match the frame sent before the blackout.
+        # Keep streaming, but stream OFF. Silence is not the same as an off command:
+        # if the controller latches its last state, going quiet would leave the relays
+        # closed. The stream now holds them open.
+        self._last_channels = {g: [] for g in groups}
         self._last_output = None
         return all_ok
 
@@ -402,6 +460,7 @@ class ICANConnection:
     async def close(self):
         """Clean shutdown: no lingering socket, safe disconnected state."""
         self._closing = True
+        self._stop_refresh()
         self._close_socket()
         self._set_state(ConnectionState.DISCONNECTED)
 
@@ -420,6 +479,11 @@ class ICANConnection:
             # still running it owns that port and our frames may be ignored.
             "local_port_fallback": self.local_port_fallback,
             "groups_driven": sorted(self._groups_seen),
+            # Proof the output stream is alive. The vendor software streams state
+            # continuously; a frame count stuck at 0 while armed means it is not.
+            "streaming": self._refresh_task is not None and not self._refresh_task.done(),
+            "refresh_hz": round(1.0 / self.cfg.refresh_interval, 1) if self.cfg.refresh_interval else 0,
+            "frames_streamed": self._refresh_count,
             "auto_reconnect": self._auto_reconnect,
             "last_error": self.last_error,
             "dry_run": self.cfg.dry_run,

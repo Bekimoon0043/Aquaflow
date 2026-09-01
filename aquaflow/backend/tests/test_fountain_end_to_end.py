@@ -82,6 +82,21 @@ def test_channel_on_reaches_the_wire():
     asyncio.run(run())
 
 
+def transitions(frames):
+    """The sequence of distinct output states, collapsing streamed repeats.
+
+    The output state is streamed continuously while armed (each frame carries absolute
+    state, exactly as the vendor software sends it), so the raw frame list is mostly
+    repetition. What carries the information is where the state CHANGES.
+    """
+    out = []
+    for f in frames:
+        c = channels(f)
+        if not out or out[-1] != c:
+            out.append(c)
+    return out
+
+
 def test_one_frame_per_group_per_batch():
     """I-CAN carries a whole group's bitmask in one frame; emitting per device would
     make each command clear the ones before it."""
@@ -92,8 +107,11 @@ def test_one_frame_per_group_per_batch():
             await bus.send_batch([cmd("jet-1", 1.0), cmd("jet-2", 1.0), cmd("jet-3", 1.0)])
             await asyncio.sleep(0.05)
             produced = outputs(gw)[before:]
-            assert len(produced) == 1
-            assert channels(produced[-1]) == [1, 2, 3]
+            assert produced, "no frame emitted for the batch"
+            # Every frame carries the whole group. A per-device emission would put
+            # [1] and [1, 2] on the wire on the way to [1, 2, 3], each one clearing
+            # the jets before it. Repeats of the final state are the stream, and fine.
+            assert {tuple(channels(f)) for f in produced} == {(1, 2, 3)}
             await conn.close()
     asyncio.run(run())
 
@@ -189,7 +207,7 @@ def test_device_is_released_when_its_clip_ends():
             assert await engine.play()
             await asyncio.sleep(1.3)
 
-            fired = [channels(f) for f in outputs(gw) if channels(f)]
+            fired = [c for c in transitions(outputs(gw)) if c]
             assert fired == [[1], [2], [3]], f"jets did not fire one at a time: {fired}"
             assert channels(outputs(gw)[-1]) == [], "show did not end with everything off"
             await engine.stop()

@@ -278,6 +278,16 @@ export default function FountainControlPanel() {
           </span>
         )}
         {armed && <span style={{ color: C.danger, fontSize: 11, fontWeight: 700 }}>OUTPUT ARMED</span>}
+        {armed && (
+          // Visible proof the output stream is running. A count stuck at 0 while armed
+          // means the state is not being re-sent, and a controller with an output
+          // watchdog would drop its relays.
+          <span style={{ color: status?.streaming ? C.ok : C.danger, fontSize: 10 }}>
+            {status?.streaming
+              ? `streaming ${status.refresh_hz}Hz · ${status.frames_streamed} frames`
+              : "NOT STREAMING"}
+          </span>
+        )}
       </div>
       <div style={{ color: C.dim, fontSize: 10, marginBottom: 14, lineHeight: 1.5 }}>
         Each step unlocks the next. Connecting does not arm the output, and neither does
@@ -313,9 +323,12 @@ export default function FountainControlPanel() {
           marginBottom: 14, padding: "8px 10px", borderRadius: 4,
           background: `${C.danger}18`, border: `1px solid ${C.danger}66`, color: C.bright, fontSize: 11,
         }}>
-          Output is ARMED — commands below drive real relays. A lit button means the frame
-          was sent, not that the relay closed: the gateway does not acknowledge output.
-          Keep the water off until a single known channel has been confirmed at the cabinet.
+          Output is ARMED — commands below drive real relays. The current state is now
+          re-sent continuously, the way the original fountain software streams it, so a
+          controller with an output watchdog keeps holding its relays. A lit button means
+          the frame is being sent, not that the relay closed: the gateway does not
+          acknowledge output. Keep the water off until a single known channel has been
+          confirmed at the cabinet.
         </div>
       )}
 
