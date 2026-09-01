@@ -167,7 +167,11 @@ def test_reconnect_does_not_activate_outputs():
     assert after == before                                   # reconnect emitted no output
 
 
-def test_output_rate_limit_and_duplicate_suppression():
+def test_every_command_is_transmitted_none_are_suppressed():
+    """The reference client has no rate limit and no duplicate suppression: it transmits
+    every command immediately, and the vendor software does the same — the capture shows
+    the identical frame repeated back to back. A controller that drops "redundant" frames
+    is one that can silently skip the frame that mattered."""
     async def run():
         conn = ICANConnection(ICANConfig(gateway_ip="10.0.0.2", dry_run=True,
                                          output_min_interval=0.05))
@@ -177,12 +181,9 @@ def test_output_rate_limit_and_duplicate_suppression():
         b = await conn.send_output(1, [1], confirmed=True)    # identical, immediate
         return a, b, conn
     a, b, conn = asyncio.run(run())
-    # Both report success: the second call asked for a state the gateway already holds.
-    # Reporting False made the bus keep the group dirty and re-send the identical frame
-    # every flush, where this same rate window suppressed it again — a wedge loop.
     assert a is True and b is True
-    assert any("SUPPRESSED" in r["result"] for r in conn.audit_log)
-    assert sum(1 for r in conn.audit_log if r["result"] == "dry-run OK") == 1
+    assert not any("SUPPRESSED" in r["result"] for r in conn.audit_log)
+    assert sum(1 for r in conn.audit_log if r["result"] == "dry-run OK") == 2
 
 
 # ── integration against the real fake UDP gateway ────────────────────────────
@@ -234,20 +235,35 @@ def test_silent_gateway_connects_unverified_and_can_still_drive_output():
     assert received == [bytes.fromhex("08000000010011000000000000")]
 
 
-def test_unvalidated_reply_leaves_the_link_unverified():
-    """Junk on the port must never be *called* a validated gateway. That claim now lives
-    in `verified` rather than in connect(), so a wrong device is visible to the operator
+def test_malformed_reply_leaves_the_link_unverified():
+    """Junk must never be *called* a validated gateway. That claim now lives in
+    `verified` rather than in connect(), so a wrong device is visible to the operator
     instead of silently blocking a link that fire-and-forget control does not need."""
-    for fault in (FakeFaults(malformed=True), FakeFaults(wrong_source_port=True)):
-        async def run(f=fault):
-            with FakeICANGateway(faults=f) as gw:
-                conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1",
-                                                 gateway_port=gw.port, local_port=0,
-                                                 timeout=0.2, retries=1))
-                ok = await conn.connect()
-                return ok, conn.verified
-        ok, verified = asyncio.run(run())
-        assert ok is True and verified is False
+    async def run():
+        with FakeICANGateway(faults=FakeFaults(malformed=True)) as gw:
+            conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1",
+                                             gateway_port=gw.port, local_port=0,
+                                             timeout=0.2, retries=1))
+            ok = await conn.connect()
+            return ok, conn.verified
+    ok, verified = asyncio.run(run())
+    assert ok is True and verified is False
+
+
+def test_reply_from_another_source_port_is_accepted():
+    """A UDP device that answers from an ephemeral port rather than its command port is
+    ordinary. The old filter required source port == 200 and threw away every such reply,
+    reporting a perfectly reachable gateway as unverified. The reference client does not
+    filter by port at all; neither do we now."""
+    async def run():
+        with FakeICANGateway(faults=FakeFaults(wrong_source_port=True)) as gw:
+            conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1",
+                                             gateway_port=gw.port, local_port=0,
+                                             timeout=0.3, retries=1))
+            ok = await conn.connect()
+            return ok, conn.verified
+    ok, verified = asyncio.run(run())
+    assert ok is True and verified is True
 
 
 def test_integration_duplicate_reply_still_connects():
@@ -338,19 +354,15 @@ def test_blackout_turns_off_every_group_driven_not_just_group_zero():
 
 
 # ── differential test against the hardware-proven client ─────────────────────
-# aquaflow/tools/reference/ican_client.py is the script that actually drove the site
-# fountain. Rather than trusting that the constants were copied across correctly, import
-# it and compare frame for frame. If the two ever diverge, this fails.
+# engine/ican_reference_client.py is the script that actually drove the site fountain,
+# and it is now the LIVE TRANSPORT — ICANConnection instantiates its ICANClient and calls
+# set_channels()/all_off()/poll(). ican_protocol.py still has its own codec (used for
+# discovery, parsing and the audit trail), so these tests keep the two honest: if they
+# ever diverge, the bytes in the audit log would stop matching the bytes on the wire.
 
 def _reference_client():
-    import importlib.util
-    from pathlib import Path
-    ref = (Path(__file__).resolve().parents[2] / "tools" / "reference" / "ican_client.py")
-    assert ref.exists(), f"reference client missing at {ref}"
-    spec = importlib.util.spec_from_file_location("ican_client_reference", ref)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    from engine import ican_reference_client as ref
+    return ref
 
 
 def test_aquaflow_frames_are_identical_to_the_reference_client():
@@ -399,3 +411,47 @@ def test_reference_client_rejects_what_aquaflow_rejects():
             except ValueError:
                 continue
             raise AssertionError(f"channel {bad} accepted")
+
+
+def test_busy_local_port_fails_loudly_instead_of_pretending():
+    """The trap that cost a site visit.
+
+    AquaFlow set SO_REUSEADDR and, if port 2002 was busy, silently bound an ephemeral
+    port instead. On Windows SO_REUSEADDR let the bind SUCCEED while the vendor I-CAN
+    software still owned 2002 — so AquaFlow showed a healthy connection, logged every
+    frame as sent, and the fountain did not move, with no warning anywhere because from
+    AquaFlow's side nothing had failed.
+
+    The reference client refuses to start in that situation. So do we now.
+    """
+    import socket as _socket
+    squatter = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    squatter.bind(("", 0))
+    busy_port = squatter.getsockname()[1]
+    try:
+        async def run():
+            conn = ICANConnection(ICANConfig(gateway_ip="127.0.0.1", gateway_port=9,
+                                             local_port=busy_port, timeout=0.1))
+            ok = await conn.connect()
+            return ok, conn.last_error, conn.state
+        ok, err, state = asyncio.run(run())
+    finally:
+        squatter.close()
+    assert ok is False, "a busy local port must not report a successful connection"
+    assert state == ConnectionState.ERROR
+    assert str(busy_port) in err and "I-CAN app" in err, err
+
+
+def test_the_live_transport_is_the_reference_client():
+    """ICANConnection must not grow its own socket again. If someone replaces the
+    delegation with a hand-rolled sendto, this fails."""
+    import inspect
+    from engine import ican_connection as mod
+    from engine.ican_reference_client import ICANClient
+    assert mod.ICANClient is ICANClient
+    src = inspect.getsource(mod.ICANConnection)
+    assert "self._client.set_channels(" in src, "output must go through the client"
+    assert "self._client.all_off(" in src, "blackout must go through the client"
+    # Check the CALLS, not the prose — the docstrings explain why SO_REUSEADDR is gone.
+    assert "setsockopt(" not in src, "SO_REUSEADDR is what made a busy port look free"
+    assert "_sock.sendto(" not in src, "no hand-rolled sends alongside the client"

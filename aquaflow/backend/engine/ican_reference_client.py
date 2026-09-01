@@ -5,15 +5,23 @@ protocol, reverse-engineered from a live capture against a real NetCAN
 converter (gateway 192.168.5.2:200, PC-side host 192.168.5.200:2002).
 
 =============================================================================
-THIS FILE IS THE PROTOCOL AUTHORITY. DO NOT "IMPROVE" IT.
+THIS FILE IS THE LIVE TRANSPORT. DO NOT "IMPROVE" IT.
 =============================================================================
 On 31 Aug 2026 this script was run against the real site gateway and IT DROVE
-THE FOUNTAIN. It is kept here verbatim as the reference implementation, and
-tests/test_ican.py imports it to assert, frame by frame, that AquaFlow's own
-codec emits byte-for-byte identical output. If AquaFlow and this file ever
-disagree, AquaFlow is wrong.
+THE FOUNTAIN. AquaFlow does not reimplement it and does not wrap it in a
+cleverer socket layer -- ICANConnection instantiates the ICANClient below and
+calls set_channels()/all_off()/poll() on it. The bytes that reach the gateway
+come from this file, so "it works from the terminal but not from the app"
+cannot be a difference in the protocol code.
 
-It is NOT wired into the application and is never imported at runtime.
+Do not add SO_REUSEADDR here. Its absence is load-bearing: binding local port
+2002 must FAIL LOUDLY when the vendor I-CAN software already owns it, rather
+than appearing to succeed while the frames go nowhere.
+
+Everything above the transport -- the safety-kernel permit, the typed ARM
+confirmation, the channel map -- still applies. Those gates decide WHETHER a
+command is allowed. This file decides what the frame looks like and puts it on
+the wire, and it is the part that is proven.
 
 PROTOCOL (confirmed from capture.jsonl, 8085 frames):
     All frames are exactly 13 bytes over UDP.

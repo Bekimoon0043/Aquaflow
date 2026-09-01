@@ -31,6 +31,10 @@ from typing import Optional
 
 from engine import ican_protocol as proto
 from engine import ican_discovery as disco
+# The transport that is PROVEN to run the fountain. We call it; we do not
+# reimplement it. See engine/ican_reference_client.py.
+from engine.ican_reference_client import ICANClient
+from engine import ican_reference_client as refclient
 
 logger = logging.getLogger("ican.connection")
 audit = logging.getLogger("ican.audit")
@@ -105,6 +109,7 @@ class ICANConnection:
         # Every group we have transmitted to, so blackout can turn off all of them
         # rather than only group 0.
         self._groups_seen: set[int] = set()
+        self._client: Optional[ICANClient] = None
         self._sock: Optional[socket.socket] = None
         self._output_enabled = False           # must be turned on deliberately
         self._last_output: Optional[bytes] = None
@@ -128,34 +133,43 @@ class ICANConnection:
 
     # ── socket lifecycle ──────────────────────────────────────────────────────
     def _open_socket(self) -> bool:
+        """Open the proven client's socket. No SO_REUSEADDR, no silent fallback.
+
+        The previous version set SO_REUSEADDR and, if port 2002 was busy, quietly bound
+        an ephemeral port instead. Both were wrong on this hardware. SO_REUSEADDR let the
+        bind SUCCEED while the vendor I-CAN software still owned 2002, so AquaFlow
+        reported a healthy connection, reported every frame as sent, and the fountain did
+        not move — with no warning anywhere, because from AquaFlow's side nothing had
+        failed. The reference client refuses to start in that situation, which is the
+        behaviour we want: a loud, specific error naming the cause.
+        """
         if self.cfg.dry_run:
             return True
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                s.bind(("", self.cfg.local_port))
-            except OSError as e:
-                s.bind(("", 0))
-                logger.warning("local port %s busy (%s); bound ephemeral %s — the "
-                               "gateway expects 2002; if the vendor I-CAN software is "
-                               "running, close it", self.cfg.local_port, e.errno,
-                               s.getsockname()[1])
-                self.cfg.local_port = s.getsockname()[1]
-                self.local_port_fallback = True
-            s.settimeout(self.cfg.timeout)
-            self._sock = s
+            self._client = ICANClient(
+                gateway_ip=self.cfg.gateway_ip,
+                gateway_port=self.cfg.gateway_port,
+                local_port=self.cfg.local_port,
+                timeout=self.cfg.timeout,
+            )
+            self._sock = self._client.sock
+            bound = self._sock.getsockname()[1]
+            self.local_port_fallback = (bound != self.cfg.local_port)
+            self.cfg.local_port = bound
             return True
         except OSError as e:
-            self.last_error = f"socket open failed: {e}"
+            # ICANClient raises with the operator-facing explanation already attached.
+            self.last_error = str(e)
+            logger.error("icann %s", self.last_error)
             return False
 
     def _close_socket(self):
-        if self._sock:
+        if self._client is not None:
             try:
-                self._sock.close()
+                self._client.close()
             except OSError:
                 pass
+        self._client = None
         self._sock = None
 
     # ── discovery + connect ───────────────────────────────────────────────────
@@ -221,16 +235,23 @@ class ICANConnection:
 
         def _io():
             t0 = time.monotonic()
-            self._sock.sendto(frame, (self.cfg.gateway_ip, self.cfg.gateway_port))
+            self._client._send(frame)          # the proven client's socket
             deadline = t0 + self.cfg.timeout * max(1, self.cfg.retries)
             while time.monotonic() < deadline:
                 try:
                     data, addr = self._sock.recvfrom(1024)
                 except socket.timeout:
                     continue
-                # source validation: only accept from the gateway ip:port
-                if addr[0] != self.cfg.gateway_ip or addr[1] != self.cfg.gateway_port:
+                # Source validation on the ADDRESS only. The port filter used to require
+                # the reply to come from the gateway's command port (200); a UDP device
+                # that answers from an ephemeral port had every valid reply discarded and
+                # the link was reported "unverified" for no reason. The reference client
+                # does not filter at all — it reads whatever comes back.
+                if addr[0] != self.cfg.gateway_ip:
                     continue
+                if addr[1] != self.cfg.gateway_port:
+                    logger.info("icann reply from %s:%s (command port is %s) — accepted",
+                                addr[0], addr[1], self.cfg.gateway_port)
                 v = proto.validate_gateway_response(data)
                 if not v.valid:
                     continue
@@ -305,7 +326,14 @@ class ICANConnection:
         NOTE: 0x08 semantics are capture-derived, NOT proven on hardware. This path
         exists so control can be wired safely once validated on the real gateway; it is
         disabled by default and must never be reachable from arbitrary user input."""
-        frame = proto.encode_output(group, channels)
+        try:
+            # Encoded by the reference client itself, so the audit trail shows the exact
+            # bytes that go on the wire rather than a second implementation's opinion.
+            frame = refclient.encode_frame(refclient.CMD_OUTPUT, group,
+                                           refclient.channels_to_mask(channels))
+        except ValueError as e:
+            self._audit("send_output", b"", f"REFUSED: {e}", user)
+            return False
         if not self._output_enabled:
             self._audit("send_output", frame, "REFUSED: output not enabled", user)
             return False
@@ -315,17 +343,11 @@ class ICANConnection:
         if self.state != ConnectionState.CONNECTED:
             self._audit("send_output", frame, f"REFUSED: state {self.state.value}", user)
             return False
-        now = time.monotonic()
-        if frame == self._last_output and (now - self._last_output_ts) < self.cfg.output_min_interval:
-            # Suppressed, but REPORTED AS SUCCESS: the gateway already holds exactly
-            # this state, which is what the caller asked for. Reporting False made the
-            # bus keep the group dirty and re-send the identical frame on every flush,
-            # where this same rate window suppressed it again — a group that failed once
-            # could wedge in a retry loop its own rate limiter refused to let out of.
-            self._audit("send_output", frame, "SUPPRESSED: duplicate within rate window", user)
-            return True
-        if (now - self._last_output_ts) < self.cfg.output_min_interval:
-            await asyncio.sleep(self.cfg.output_min_interval - (now - self._last_output_ts))
+        # NO rate limiting and NO duplicate suppression. The reference client has
+        # neither: it transmits every command immediately, and the vendor software does
+        # the same — the capture shows the identical frame repeated back to back. A
+        # controller that drops "redundant" frames is a controller that can silently
+        # skip the one frame that mattered.
         self._groups_seen.add(int(group))
         if self.cfg.dry_run:
             self._last_output, self._last_output_ts = frame, time.monotonic()
@@ -333,7 +355,8 @@ class ICANConnection:
             return True
         try:
             async with ICANConnection._tx_lock():
-                self._sock.sendto(frame, (self.cfg.gateway_ip, self.cfg.gateway_port))
+                # The proven call. Not our own sendto.
+                self._client.set_channels(group, channels)
             self._last_output, self._last_output_ts = frame, time.monotonic()
             _netlog("tx", self.cfg, frame, message_type="output", result="sent")
             self._audit("send_output", frame, "sent", user)
@@ -357,11 +380,12 @@ class ICANConnection:
         groups = sorted(self._groups_seen | {0})
         all_ok = True
         for group in groups:
-            frame = proto.encode_all_off(group)
+            frame = refclient.encode_frame(refclient.CMD_OUTPUT, group,
+                                           bytes(refclient.MASK_BYTES))
             if not self.cfg.dry_run:
                 try:
                     async with ICANConnection._tx_lock():
-                        self._sock.sendto(frame, (self.cfg.gateway_ip, self.cfg.gateway_port))
+                        self._client.all_off(group)          # the proven call
                 except OSError as e:
                     self._audit("blackout", frame, f"error: {e}")
                     all_ok = False

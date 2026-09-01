@@ -1,10 +1,45 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-08-31, AF-ICAN-005):** backend pytest **581 passed, 21 skipped,
-> 0 failures, 0 errors (602 collected)** · frontend vitest **391 passed (29 files)** ·
-> `npm run build` green · desktop **1.1.2**. Single source of truth:
+> **AUTHORITATIVE (2026-09-01, AF-ICAN-006):** backend pytest **586 passed, 21 skipped,
+> 0 failures, 0 errors (607 collected)** · frontend vitest **391 passed (29 files)** ·
+> `npm run build` green · desktop **1.1.3**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-01 (AF-ICAN-006 — the proven client becomes the live transport)
+**Summary:** 1.1.2 went to the site. It connected to `192.168.5.2:200`, armed, and logged
+every frame as sent — and the fountain did not move. The screenshots showed `connected ·
+unverified · OUTPUT ARMED`, safety permit granted, and a clean activity log. Ruled out from
+the evidence: the `HARDWARE NOT COMMISSIONED — SIMULATED OUTPUT ONLY` banner is **not** in
+this path (`is_hardware_commissioned()` is consulted only by `show_engine.play()` and
+`bench_safety`, never by `_safety_gate` or the I-CAN branch), and the channel map resolved
+correctly (`ican-1-9` → group 1 / channel 9 → the right frame).
+
+**AquaFlow no longer reimplements the protocol.** `ican_client.py` — the script that ran the
+real fountain — is now `engine/ican_reference_client.py` and is the LIVE TRANSPORT.
+`ICANConnection` instantiates its `ICANClient` and calls `set_channels()` / `all_off()` /
+`poll()`. A test fails the build if a hand-rolled socket reappears beside it.
+
+**The likely root cause, found by diffing the two socket setups:** AquaFlow set
+`SO_REUSEADDR`; the client does not. On Windows that let AquaFlow **bind port 2002 while the
+vendor I-CAN software still owned it** — the bind succeeded, so the silent ephemeral-port
+fallback never fired and no warning was shown, yet the frames had no effect. The client
+refuses to start in that case. Now so does AquaFlow, with the port named in the error.
+
+Also: dropped rate-limiting and duplicate suppression (the reference has neither, and the
+vendor software repeats identical frames back to back); relaxed the reply filter to validate
+the source **address** only — requiring source port 200 discarded valid replies from a device
+answering on an ephemeral port and reported a reachable gateway as `unverified`; the panel now
+prints the exact frame hex per command and the actually-bound local port, so "what did you
+send" is readable at the cabinet without a packet capture.
+
+**Still open — the channel identity question.** `group 1 / channel 9` was an example from the
+test instructions, not a channel confirmed to be wired to equipment. The site's `changes.txt`
+holds the real ones; `/api/ican/map/import` already accepts decoded detections and should be
+wired to it. Backend **586 passed / 21 skipped / 0 failures (607)**; frontend **391 passed**;
+build green; packaged **1.1.3**. **Still not confirmed on hardware.**
+
+---
 
 **Date:** 2026-08-31 (AF-ICAN-005 — protocol parity with the hardware-proven client)
 **Summary:** The fountain ran from a 40-line standalone script (`ican_client.py`) against the

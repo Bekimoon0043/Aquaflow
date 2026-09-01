@@ -203,10 +203,14 @@ export default function FountainControlPanel() {
         return n;
       });
       const confirmed = live.has(id);
+      // Show the bytes. When a command does nothing at the cabinet, the first question
+      // is "what did you actually send", and the operator should be able to read the
+      // answer off this screen and compare it to ican_client.py.
+      const wire = r.frame_hex ? `  [${r.frame_hex}]` : "";
       if (on && !confirmed) {
-        say(`${dev.label || id} ON was NOT accepted — output refused it`, "warn");
+        say(`${dev.label || id} ON was NOT accepted — ${r.frame_result || "output refused it"}${wire}`, "warn");
       } else {
-        say(`${dev.label || id} → ${on ? "ON" : "OFF"}`, on ? "ok" : "info");
+        say(`${dev.label || id} → ${on ? "ON" : "OFF"}${wire}`, on ? "ok" : "info");
       }
       return confirmed === on;
     } catch (e) {
@@ -328,6 +332,12 @@ export default function FountainControlPanel() {
           <button style={btn(false, C.ok)} disabled={!!busy || connected} onClick={() => doConnect()}>Connect</button>
           {connected && <button style={btn(false, C.warn)} disabled={!!busy} onClick={doDisconnect}>Disconnect</button>}
         </div>
+        {connected && (
+          <div style={{ fontSize: 10, color: C.dim, marginBottom: 4 }}>
+            sending from local port <span style={{ color: C.bright }}>{status.local_port}</span>
+            {" → "}{status.gateway_ip}:{status.gateway_port}
+          </div>
+        )}
         {scanInfo && (
           <div style={{ fontSize: 10, marginTop: 4, marginBottom: 4,
                         color: scanInfo.found ? C.ok : C.warn }}>

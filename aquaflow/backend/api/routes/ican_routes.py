@@ -244,6 +244,11 @@ async def drive_channel(req: ChannelDrive):
     group = entry["group"]
     confirmed = sorted(protocol_bus._ican_confirmed.get(group, set()))
     desired = sorted(protocol_bus._ican_state.get(group, set()))
+    # The exact bytes the transport put on the wire, so an operator standing at the
+    # cabinet can compare them against ican_client.py without a packet capture. When a
+    # command does nothing, "which frame did you actually send" is the first question,
+    # and it should not require a developer to answer it.
+    last = (_manager().audit_log or [{}])[-1]
     return {
         "device_id": req.device_id,
         "requested": "on" if req.on else "off",
@@ -256,6 +261,9 @@ async def drive_channel(req: ChannelDrive):
         "live_channels": confirmed,
         "desired_channels": desired,
         "pending": group in protocol_bus._ican_dirty,
+        "frame_hex": last.get("frame_hex", ""),
+        "frame_result": last.get("result", ""),
+        "local_port": _manager().cfg.local_port,
     }
 
 
