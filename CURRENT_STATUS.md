@@ -1,10 +1,38 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-01, AF-ICAN-006):** backend pytest **586 passed, 21 skipped,
-> 0 failures, 0 errors (607 collected)** · frontend vitest **391 passed (29 files)** ·
-> `npm run build` green · desktop **1.1.3**. Single source of truth:
+> **AUTHORITATIVE (2026-09-01, AF-ICAN-007):** backend pytest **591 passed, 21 skipped,
+> 0 failures, 0 errors (612 collected)** · frontend vitest **391 passed (29 files)** ·
+> `npm run build` green · desktop **1.1.4**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-01 (AF-ICAN-007 — build the channel map from the original software's capture)
+**Summary:** Follow-on to AF-ICAN-006. The remaining unknown was never the protocol, it was
+channel identity: `group 1 / channel 9` came from the test instructions, not from anything
+confirmed to be wired to equipment, and a channel connected to nothing looks exactly like a
+broken control path — every step green, nothing moves. The capture of the ORIGINAL fountain
+software already answers it: every (group, channel) it drove is wired to something.
+
+New `engine/ican_capture_import.py` parses both artifacts from `tools/ican_capture.py` —
+`changes.txt` (using the SAME `LINE_RE` the reference client uses for `--replay`, so there is
+no second dialect to keep in sync) and `capture.jsonl` — into `[{group, channels}]`, taking the
+union per group and ignoring GW→PC replies. New `POST /api/ican/map/import-capture` accepts the
+raw text; the panel reads the file with `FileReader` and posts it, so it works the same in the
+packaged app as in a browser.
+
+**The bug that would have made the feature useless:** `import_detections()` created assignments
+with an empty label, and `to_device_registry()` skips unlabelled ones — so importing a capture
+produced a screen full of correct channel numbers that Attach silently ignored. Imported
+channels now carry a placeholder label (`G1 C9`), and out-of-range channels are dropped rather
+than mapped. `test_registry_bridge_only_labelled` asserted the old behaviour and was rewritten:
+identification is not what makes a channel safe — arming, the typed confirmation and a
+deliberate press of that channel's button are. The registry is what can be ADDRESSED, not what
+will fire; an explicitly cleared label is still excluded.
+
+Backend **591 passed / 21 skipped / 0 failures (612)**; frontend **391 passed**; build green;
+packaged **1.1.4**. **Still not confirmed on hardware.**
+
+---
 
 **Date:** 2026-09-01 (AF-ICAN-006 — the proven client becomes the live transport)
 **Summary:** 1.1.2 went to the site. It connected to `192.168.5.2:200`, armed, and logged

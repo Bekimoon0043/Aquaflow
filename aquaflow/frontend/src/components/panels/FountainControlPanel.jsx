@@ -163,6 +163,27 @@ export default function FountainControlPanel() {
     label: newCh.label, device_type: newCh.device_type,
   }), `mapped group ${newCh.group} channel ${newCh.channel} → ${newCh.label}`);
 
+  /**
+   * Build the whole map from a capture of the ORIGINAL fountain software. Every
+   * (group, channel) that capture drove is wired to something — which is the one thing
+   * typing a channel number by hand cannot tell you, and guessing it wrong looks
+   * identical to a broken control path: every step green, nothing moves.
+   */
+  const doImportCapture = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => say(`could not read ${file.name}`, "err");
+    reader.onload = () => run("import", async () => {
+      const r = await apiPost("/ican/map/import-capture", {
+        text: String(reader.result || ""), device_type: newCh.device_type,
+      });
+      say(`imported ${r.imported} channel(s) from ${file.name} — `
+          + `group(s) ${r.groups.join(", ")}, ${r.channels_seen} channel(s) seen`, "ok");
+      return r;
+    });
+    reader.readAsText(file);
+  };
+
   const doAttach = () => run("attach", async () => {
     const r = await apiPost("/ican/output/attach", {});
     setAttached(r);
@@ -380,6 +401,17 @@ export default function FountainControlPanel() {
             {["pump", "valve", "lighting", "fog", "flame"].map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <button style={btn(false)} disabled={!!busy} onClick={doAssign}>Add channel</button>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+          <label style={{ ...btn(false, C.ok), display: "inline-block" }}>
+            Import from capture…
+            <input type="file" accept=".txt,.jsonl,.json" style={{ display: "none" }}
+              disabled={!!busy}
+              onChange={e => { doImportCapture(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          <span style={{ color: C.dim, fontSize: 10 }}>
+            changes.txt or capture.jsonl — maps every channel the real show drove
+          </span>
         </div>
         {hasChannels ? (
           <div style={{ fontSize: 10, color: C.text }}>

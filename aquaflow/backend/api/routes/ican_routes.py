@@ -142,6 +142,11 @@ class ImportRequest(BaseModel):
     detections: list[dict]                  # [{"group": int, "channels": [int,...]}]
 
 
+class ImportCaptureRequest(BaseModel):
+    text: str                               # contents of changes.txt or capture.jsonl
+    device_type: Optional[str] = "unknown"  # applied to newly imported channels
+
+
 @router.get("/map")
 async def get_map():
     return _map().to_dict()
@@ -165,6 +170,41 @@ async def import_detections(req: ImportRequest):
     added = _map().import_detections(req.detections)
     _map().save()
     return {"added": added, "summary": _map().summary()}
+
+
+@router.post("/map/import-capture")
+async def import_capture(req: ImportCaptureRequest):
+    """Build the channel map from a capture of the ORIGINAL fountain software.
+
+    Every (group, channel) the real show drove is, by definition, wired to something.
+    That is the one question hand-typing a channel number cannot answer, and getting it
+    wrong looks exactly like a broken control path: every step green, nothing moves.
+    """
+    from engine.ican_capture_import import parse_capture
+
+    detections = parse_capture(req.text)
+    if not detections:
+        raise HTTPException(
+            400,
+            "no I-CAN frames found in that file — expected changes.txt or capture.jsonl "
+            "from the capture tool")
+
+    m = _map()
+    added = m.import_detections(detections)
+    if req.device_type and req.device_type != "unknown":
+        for det in detections:
+            for ch in det["channels"]:
+                try:
+                    m.assign(det["group"], ch, device_type=req.device_type)
+                except ValueError:
+                    pass
+    m.save()
+    return {
+        "imported": added,
+        "groups": [d["group"] for d in detections],
+        "channels_seen": sum(len(d["channels"]) for d in detections),
+        "devices": m.to_device_registry(),
+    }
 
 
 @router.get("/map/registry")

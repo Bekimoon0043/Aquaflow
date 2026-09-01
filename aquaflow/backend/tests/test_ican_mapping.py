@@ -45,14 +45,31 @@ def test_persistence_roundtrip(tmp_path):
     assert json.loads(p.read_text())["channels"][0]["label"] == "Center geyser"
 
 
-def test_registry_bridge_only_labelled(tmp_path):
+def test_registry_bridge_excludes_only_genuinely_unlabelled(tmp_path):
+    """An unlabelled assignment is still excluded — but an IMPORTED one is no longer
+    unlabelled.
+
+    This test used to assert that channels from a capture stayed out of the registry
+    until the operator renamed each one. The intent was "do not drive what you have not
+    identified", but the effect on site was that importing a capture produced a screen
+    full of correct channel numbers that Attach silently ignored. Identification is not
+    what makes a channel safe here: arming is, plus the typed confirmation and a
+    deliberate press of that one channel's button. The registry is the set of channels
+    that can be ADDRESSED, not the set that will fire.
+    """
     m = ChannelMap(tmp_path / "map.json")
     m.import_detections([{"group": 1, "channels": [9, 10]}])
     m.assign(1, 9, label="Lights", device_type="lighting")
     reg = m.to_device_registry()
-    assert len(reg) == 1                          # unlabelled channel excluded
-    assert reg[0]["protocol"] == "ican"
-    assert reg[0]["ican_group"] == 1 and reg[0]["ican_channel"] == 9
+    assert len(reg) == 2, "imported channels must be attachable"
+    lights = [d for d in reg if d["device_id"] == "ican-1-9"][0]
+    assert lights["protocol"] == "ican"
+    assert lights["ican_group"] == 1 and lights["ican_channel"] == 9
+    assert lights["label"] == "Lights"            # an explicit label always wins
+
+    # A channel with the label explicitly cleared is still excluded.
+    m.assign(1, 10, label="")
+    assert [d["device_id"] for d in m.to_device_registry()] == ["ican-1-9"]
 
 
 def test_lighting_only_excludes_hazardous(tmp_path):
@@ -63,3 +80,71 @@ def test_lighting_only_excludes_hazardous(tmp_path):
     safe = m.lighting_only_channels()
     assert [a.channel for a in safe] == [1]       # only the light
     assert "pump" in HAZARDOUS_TYPES and "flame" in HAZARDOUS_TYPES
+
+
+# ── building the map from a capture of the original software ─────────────────
+
+def test_capture_import_parses_changes_txt_and_jsonl_identically():
+    """changes.txt is parsed with the SAME regex the reference client uses for
+    --replay, so a file that replays correctly also imports correctly."""
+    from engine.ican_capture_import import parse_capture
+
+    changes = """OUTPUT CHANGES  (one line per actual change, per group)
+==============================================================================
+  time     group  channels now on
+------------------------------------------------------------------------------
+    8.26s      1  [9, 13]
+   17.45s      1  [9, 13, 17, 21]
+   18.90s      1  (all off)
+   19.10s      9  [10, 39]
+------------------------------------------------------------------------------
+3 change(s). Repeated identical frames are omitted.
+"""
+    jsonl = "\n".join([
+        '{"kind": "session", "tool": "ican_capture 1.0"}',
+        '{"kind": "frame", "dir": "PC->GW", "group": 1, "channels": [9, 13]}',
+        '{"kind": "frame", "dir": "PC->GW", "group": 1, "channels": [9, 13, 17, 21]}',
+        '{"kind": "frame", "dir": "PC->GW", "group": 1, "channels": []}',
+        '{"kind": "frame", "dir": "PC->GW", "group": 9, "channels": [10, 39]}',
+    ])
+    expected = [{"group": 1, "channels": [9, 13, 17, 21]},
+                {"group": 9, "channels": [10, 39]}]
+    assert parse_capture(changes) == expected
+    assert parse_capture(jsonl) == expected
+
+
+def test_capture_import_ignores_gateway_replies_and_junk():
+    from engine.ican_capture_import import parse_capture
+    # A GW->PC frame is not a command and its bytes are a different layout.
+    assert parse_capture('{"kind": "frame", "dir": "GW->PC", "group": 1, "channels": [4]}') == []
+    assert parse_capture("not a capture at all\nnor this line") == []
+    assert parse_capture("") == []
+
+
+def test_imported_channels_are_attachable(tmp_path):
+    """The bug this guards: import_detections used to leave the label blank, and
+    to_device_registry() skips unlabelled assignments — so the operator saw the right
+    numbers on screen and Attach did nothing with them."""
+    from engine.ican_mapping import ChannelMap
+    m = ChannelMap(path=tmp_path / "m.json")
+    added = m.import_detections([{"group": 1, "channels": [9, 13]}])
+    assert added == 2
+    reg = m.to_device_registry()
+    assert [d["device_id"] for d in reg] == ["ican-1-9", "ican-1-13"]
+    assert all(d["label"] for d in reg), "imported channels must carry a label"
+
+
+def test_capture_import_preserves_labels_you_already_set(tmp_path):
+    from engine.ican_mapping import ChannelMap
+    m = ChannelMap(path=tmp_path / "m.json")
+    m.assign(1, 9, label="North jet", device_type="pump")
+    m.import_detections([{"group": 1, "channels": [9, 13]}])
+    assert m.get(1, 9).label == "North jet"
+    assert m.get(1, 9).device_type == "pump"
+
+
+def test_capture_import_skips_unaddressable_channels(tmp_path):
+    from engine.ican_mapping import ChannelMap
+    m = ChannelMap(path=tmp_path / "m.json")
+    m.import_detections([{"group": 0, "channels": [1, 41, 999]}])
+    assert [(a.group, a.channel) for a in m.all()] == [(0, 1)]

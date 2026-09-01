@@ -86,17 +86,29 @@ class ChannelMap:
         self._items[key] = cur
         return cur
 
-    def import_detections(self, detections) -> int:
+    def import_detections(self, detections, label_fmt: str = "G{group} C{channel}") -> int:
         """Seed the map from a decoded capture. `detections` is an iterable of
         {"group": int, "channels": [int, ...]}. New channels are added as 'unknown'
-        and marked detected; existing labels are preserved. Returns count added."""
+        and marked detected; existing labels are preserved. Returns count added.
+
+        Imported channels get a PLACEHOLDER LABEL. This is not cosmetic:
+        to_device_registry() skips any assignment with an empty label, so an import
+        that left them blank produced a map the operator could see but could not
+        attach or drive — the numbers were right there on screen and the Attach button
+        did nothing with them. Pass label_fmt="" to keep the old blank behaviour.
+        """
         added = 0
         for det in detections or []:
             group = int(det.get("group", 0))
             for ch in det.get("channels", []):
-                key = f"{group}:{int(ch)}"
+                ch = int(ch)
+                if not 1 <= ch <= proto.MAX_CHANNEL:
+                    continue                       # not addressable; never map it
+                key = f"{group}:{ch}"
                 if key not in self._items:
-                    self._items[key] = ChannelAssignment(group, int(ch), detected=True)
+                    label = label_fmt.format(group=group, channel=ch) if label_fmt else ""
+                    self._items[key] = ChannelAssignment(group, ch, label=label,
+                                                         detected=True)
                     added += 1
                 else:
                     self._items[key].detected = True
