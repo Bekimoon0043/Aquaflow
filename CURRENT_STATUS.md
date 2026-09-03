@@ -1,10 +1,45 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-004):** backend pytest **647 passed, 21 skipped,
-> 0 failures, 0 errors (668 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-005):** backend pytest **658 passed, 21 skipped,
+> 0 failures, 0 errors (679 collected)** · frontend vitest **391 passed (29 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-005 — an S7 client that addresses what it names)
+**Summary:** The old raw S7comm path encoded the DB address as
+`(offset>>5, (offset&0x1f)<<3)` — S7 addresses in BITS (`byte_offset*8 + bit`), so
+the two encodings coincide ONLY at offset 0. Every read past `DB1.DBW0` silently
+returned the wrong location, and offset 0 is exactly what everyone smoke-tests
+with. The regression test reads DBW34, where the old math lands 18 bytes away.
+
+New `engine/s7_client.py`, built to the modbus_client standard: exact TPKT-framed
+reads, pdu_ref echo + header error-class + per-item return-code validation,
+`S7ItemError` (device up, item refused — connection STAYS up) vs `S7FrameError`
+(marks down), one request in flight, `ensure_connected()` backoff. Typed
+DBX/DBB/DBW/DBD reads AND writes incl. INT/DINT/REAL, and the
+`DB<n>.DB[XBWD]<offset>[.<bit>]` dialect used by field points — parser refuses
+malformed addresses instead of stripping digits and hoping. All proven against
+AF-IO-008's fake PLC, including the halted-CPU heartbeat via a FieldIOManager
+poll of an `s7:` source (now a real transport, not UNKNOWN).
+
+`SiemensS7Driver`: the raw fallback delegates to the client — and can finally
+WRITE without snap7 (the old raw path returned False for every write, so BOOL
+tags like `DB1.DBX2.0` were silently unwritable); the snap7 path's DBD read now
+returns a REAL as a float instead of its raw dword bit pattern. snap7 stays the
+preferred transport (optional in requirements, with the snap7.dll bundling note).
+
+Deliverable for the site: **`docs/S7_DB_CONTRACT.md`** — the non-optimized DB1
+layout (heartbeat counter word, E-stop/VFD/thermal bits, raw AI words, the
+AF-IO-009 command area), the three settings that break everything (non-optimized
+block, PUT/GET permit, counter-not-constant heartbeat), the 0-10 V vs 4-20 mA
+honesty note, matching field-point JSON, and the TIA commissioning checklist whose
+acceptance step is "pull a sensor plug → the permit drops".
+
+11 new tests. Backend **658 passed / 21 skipped / 0 failures (679)**; frontend
+untouched. Next: AF-IO-006 (honest PLC support matrix).
+
+---
 
 **Date:** 2026-09-03 (AF-IO-004 — the safety kernel gets eyes, and the bypass loses its cloak)
 **Summary:** The package the whole series exists for. Until today every safety input

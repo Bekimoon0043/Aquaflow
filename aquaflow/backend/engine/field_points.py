@@ -172,6 +172,12 @@ class FieldPoint:
                 state = not state
             return Reading(state, Quality.GOOD, ts, int(bool(raw)))
 
+        if self.raw_type == "real":
+            # S7 REAL arrives as an IEEE754 float from the driver (AF-IO-005) —
+            # no integer conversion, no signal-level diagnostics.
+            return Reading(float(raw) * self.scale + self.offset,
+                           Quality.GOOD, ts, None)
+
         raw_i = int(raw)
         if self.raw_type == "int16" and raw_i >= 0x8000:
             raw_i -= 0x10000          # registers arrive as uint16 off the wire

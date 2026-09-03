@@ -113,8 +113,7 @@ class SiemensS7Driver(PLCDriver):
     def __init__(self, config: PLCConnection):
         super().__init__(config)
         self._snap7 = None
-        self._reader = None
-        self._writer = None
+        self._raw_client = None      # AF-IO-005: engine/s7_client.S7Client fallback
         self._has_snap7 = self._check_snap7()
 
     def _check_snap7(self) -> bool:
@@ -148,46 +147,20 @@ class SiemensS7Driver(PLCDriver):
             return False
 
     async def _connect_raw(self) -> bool:
-        """Raw S7comm connection (COTP + S7 protocol)"""
-        try:
-            self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.config.ip, self.S7COMM_PORT),
-                timeout=3.0
-            )
-            # COTP connection request (CR TPDU)
-            cotp_cr = bytes([
-                0x03, 0x00, 0x00, 0x16,  # TPKT header
-                0x11, 0xe0, 0x00, 0x00,  # COTP CR
-                0x00, 0x01, 0x00, 0xc0,
-                0x01, 0x0a, 0xc1, 0x02,
-                0x01, 0x00, 0xc2, 0x02,
-                0x01, 0x02,
-            ])
-            self._writer.write(cotp_cr)
-            await self._writer.drain()
-            response = await asyncio.wait_for(self._reader.read(22), timeout=2.0)
-
-            if len(response) >= 4 and response[5] == 0xd0:  # CC TPDU
-                # S7 communication setup
-                s7_setup = bytes([
-                    0x03, 0x00, 0x00, 0x19,
-                    0x02, 0xf0, 0x80,
-                    0x32, 0x01, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x08,
-                    0x00, 0x00, 0xf0, 0x00,
-                    0x00, 0x01, 0x00, 0x01,
-                    0x00, 0xf0,
-                ])
-                self._writer.write(s7_setup)
-                await self._writer.drain()
-                await asyncio.wait_for(self._reader.read(27), timeout=2.0)
-                self._connected = True
-                logger.info(f"Siemens S7 connected (raw): {self.config.ip}")
-                return True
-        except Exception as e:
-            self.config.last_error = str(e)
-            logger.warning(f"S7 raw connect failed {self.config.ip}: {e}")
-        return False
+        """Raw S7comm connection — AF-IO-005: delegated to engine/s7_client.S7Client
+        (validated framing; the old inline handshake read fixed byte counts and
+        never checked what came back)."""
+        from engine.s7_client import S7Client
+        if self._raw_client is None:
+            self._raw_client = S7Client(self.config.ip, self.S7COMM_PORT,
+                                        self.config.rack, self.config.slot)
+        ok = await self._raw_client.connect()
+        self._connected = ok
+        if ok:
+            logger.info(f"Siemens S7 connected (raw): {self.config.ip}")
+        else:
+            self.config.last_error = self._raw_client.last_error
+        return ok
 
     async def read_tag(self, tag: PLCTag) -> Any:
         """Read a tag value from the PLC"""
@@ -220,6 +193,10 @@ class SiemensS7Driver(PLCDriver):
         elif "DBD" in area:
             offset = int(parts[1].replace("DBD", ""))
             data = await loop.run_in_executor(None, lambda: self._snap7.db_read(db_num, offset, 4))
+            # AF-IO-005 — a REAL tag must come back as a float, not its raw dword
+            # bit pattern (get_dword on a REAL produced meaningless huge ints).
+            if tag.tag_type == TagType.REAL:
+                return util.get_real(data, 0)
             return util.get_dword(data, 0)
         elif "DBX" in area:
             parts2 = parts[1].replace("DBX", "").split(".")
@@ -229,43 +206,18 @@ class SiemensS7Driver(PLCDriver):
         return None
 
     async def _read_raw_db(self, tag: PLCTag) -> Any:
-        """Read data block via raw S7comm"""
-        if not self._writer:
+        """Read a DB address via the validated raw client (AF-IO-005). The old
+        inline request encoded the address as (offset>>5, (offset&0x1f)<<3) —
+        correct ONLY at offset 0; S7 addresses in bits (offset*8)."""
+        if self._raw_client is None or not self._raw_client.is_connected:
             return None
         try:
-            parts = tag.address.upper().split(".")
-            db_num = int(parts[0].replace("DB", ""))
-            offset = int(''.join(filter(str.isdigit, parts[1])))
-
-            # S7 Read Var request
-            request = self._build_s7_read_request(db_num, offset, 2)
-            self._writer.write(request)
-            await self._writer.drain()
-            response = await asyncio.wait_for(self._reader.read(256), timeout=1.0)
-
-            if len(response) > 25 and response[21] == 0xff:
-                value = struct.unpack(">H", response[25:27])[0]
-                return value
+            raw_type = "real" if tag.tag_type == TagType.REAL else "uint16"
+            return await self._raw_client.read_address(tag.address.upper(), raw_type)
         except Exception as e:
-            logger.debug(f"Raw DB read error: {e}")
+            logger.debug(f"Raw DB read error {tag.address}: {e}")
+            self._connected = self._raw_client.is_connected
         return None
-
-    def _build_s7_read_request(self, db: int, offset: int, length: int) -> bytes:
-        """Build S7comm Read Var PDU"""
-        return bytes([
-            0x03, 0x00, 0x00, 0x1f,  # TPKT
-            0x02, 0xf0, 0x80,         # COTP
-            0x32, 0x01, 0x00, 0x00,  # S7 header
-            0x00, 0x00, 0x00, 0x0e,
-            0x00, 0x00, 0x04, 0x01,
-            0x12, 0x0a, 0x10,
-            0x02,                     # Transport size: BYTE
-            0x00, length & 0xff,
-            (db >> 8) & 0xff, db & 0xff,
-            0x84,                     # Area: DB
-            (offset >> 5) & 0xff, ((offset & 0x1f) << 3) & 0xff,
-            0x00,
-        ])
 
     async def write_tag(self, tag: PLCTag, value: Any) -> bool:
         if not self._connected:
@@ -281,8 +233,21 @@ class SiemensS7Driver(PLCDriver):
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, lambda: self._snap7.db_write(db_num, offset, data))
                 return True
+            # AF-IO-005 — the raw path can now WRITE too (DBX/DBB/DBW/DBD; the old
+            # code returned False without snap7, so BOOL tags like DB1.DBX2.0 were
+            # silently unwritable).
+            if self._raw_client is not None and self._raw_client.is_connected:
+                raw_type = "real" if tag.tag_type == TagType.REAL else "uint16"
+                if tag.tag_type == TagType.BOOL:
+                    return await self._raw_client.write_address(
+                        tag.address.upper(), bool(value), raw_type)
+                return await self._raw_client.write_address(
+                    tag.address.upper(),
+                    value if tag.tag_type == TagType.REAL else int(value), raw_type)
         except Exception as e:
             logger.debug(f"S7 write error: {e}")
+            if self._raw_client is not None:
+                self._connected = self._raw_client.is_connected
         return False
 
     async def disconnect(self):
@@ -290,9 +255,8 @@ class SiemensS7Driver(PLCDriver):
         if self._snap7:
             try: self._snap7.disconnect()
             except: pass
-        if self._writer:
-            try: self._writer.close()
-            except: pass
+        if self._raw_client is not None:
+            await self._raw_client.close()
 
     async def read_all_tags(self, tags: list[PLCTag]) -> dict:
         results = {}

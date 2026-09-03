@@ -14,10 +14,12 @@ answering demotes to STALE once its sample is older than 3× the scan period. No
 has to notice the failure for the quality to change — the passage of time does it.
 
 Source keys (FieldPoint.source) select the transport:
-  "modbus:HOST[:PORT[:UNIT]]" — engine/modbus_client.ModbusTCPClient (REAL now)
-  "s7:HOST[:RACK[:SLOT]]"     — arrives with AF-IO-005; until then its points read
-                                UNKNOWN (fail-closed: a transport we don't have yet
-                                is a reading we don't have)
+  "modbus:HOST[:PORT[:UNIT]]" — engine/modbus_client.ModbusTCPClient
+  "s7:HOST[:RACK[:SLOT]]"     — engine/s7_client.S7Client (AF-IO-005); addresses in
+                                the DB dialect: DB1.DBW4, DB1.DBX2.0 (see
+                                docs/S7_DB_CONTRACT.md for the published layout)
+  anything else               — UNKNOWN (fail-closed: a transport we don't have is
+                                a reading we don't have)
 
 Modbus dialect per point:
   AI  — 5/6-digit "3xxxx" addresses → FC04 input registers; everything else → FC03
@@ -121,21 +123,31 @@ class FieldIOManager:
             await self.start()
 
     # ── the poll loop ────────────────────────────────────────────────────────
-    def _modbus_client_for(self, source: str) -> Optional[ModbusTCPClient]:
-        parts = source.split(":")
-        if parts[0] != "modbus" or len(parts) < 2 or not parts[1]:
-            return None
+    def _client_for(self, source: str):
+        """Build (once) the transport client for a source key; None = no transport."""
         client = self._clients.get(source)
-        if client is None:
+        if client is not None:
+            return client
+        parts = source.split(":")
+        if parts[0] == "modbus" and len(parts) >= 2 and parts[1]:
             host = parts[1]
             port = int(parts[2]) if len(parts) > 2 else 502
             unit = int(parts[3]) if len(parts) > 3 else 1
             client = ModbusTCPClient(host, port, unit)
-            self._clients[source] = client
+        elif parts[0] == "s7" and len(parts) >= 2 and parts[1]:
+            from engine.s7_client import S7Client
+            host = parts[1]
+            # "s7:HOST[:RACK[:SLOT]]" — port stays 102; rack/slot are the knobs.
+            rack = int(parts[2]) if len(parts) > 2 else 0
+            slot = int(parts[3]) if len(parts) > 3 else 1
+            client = S7Client(host, 102, rack, slot)
+        else:
+            return None
+        self._clients[source] = client
         return client
 
     async def _poll_source(self, source: str, points: list[FieldPoint]):
-        client = self._modbus_client_for(source)
+        client = self._client_for(source)
         if client is None:
             # A transport we don't have (s7: until AF-IO-005, or a typo) is a reading
             # we don't have. UNKNOWN, permanently and visibly — never a crash, never
@@ -162,10 +174,14 @@ class FieldIOManager:
                 logger.error("field I/O poll error on %s: %s", source, e)
                 await asyncio.sleep(self.scan_rate_s)
 
-    async def _read_point(self, client: ModbusTCPClient, p: FieldPoint):
+    async def _read_point(self, client, p: FieldPoint):
+        from engine.s7_client import S7Client, S7ItemError, S7FrameError
         ts = time.time()
         try:
-            if p.kind == PointKind.DI:
+            if isinstance(client, S7Client):
+                # S7 dialect: the address itself says bit vs word (DBX vs DBW).
+                raw = await client.read_address(str(p.address).upper(), p.raw_type)
+            elif p.kind == PointKind.DI:
                 bits = await client.read_discrete_inputs(int(str(p.address).strip()), 1)
                 raw = 1 if bits[0] else 0
             else:
@@ -174,13 +190,13 @@ class FieldIOManager:
                     raw = (await client.read_input_registers(offset, 1))[0]
                 else:
                     raw = (await client.read_holding_registers(offset, 1))[0]
-        except ModbusException as e:
+        except (ModbusException, S7ItemError) as e:
             # The device is up and says this address is wrong — that is a
             # configuration problem, not a stale link: UNKNOWN (unreadable).
             logger.debug("field point %s unreadable: %s", p.id, e)
             self._readings[p.id] = Reading(None, Quality.UNKNOWN, ts, None)
             return
-        except (ModbusFrameError, ValueError) as e:
+        except (ModbusFrameError, S7FrameError, ValueError) as e:
             # Transport fault (link died mid-cycle) or malformed address. Leave the
             # last reading in place — aging demotes it to STALE; a never-read point
             # stays UNKNOWN via the snapshot default.

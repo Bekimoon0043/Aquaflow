@@ -37,10 +37,12 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       required heartbeat; GOOD DI bools drive the real interlocks (E-stop transition
       proven); SAFETY_BYPASS + field_io block in get_status; e2e device-death test;
       9 tests; suite 647/21/0 (668).
-- [ ] **AF-IO-005 — S7-1200 driver, correct**. Fix raw S7comm bit addressing
-      (offset*8, 3-byte BE); DBX/DBB/DBW/DBD read AND write; REAL/DINT; snap7
-      preferred + raw fallback; `docs/S7_DB_CONTRACT.md` (non-optimized DB1 layout,
-      heartbeat counter, PUT/GET checklist for the TIA electrician).
+- [x] **AF-IO-005 — S7-1200 driver, correct**. DONE 2026-09-03:
+      engine/s7_client.py (bit addressing offset*8, validated TPKT/pdu_ref/item
+      retcodes, item-vs-frame errors, backoff); DBX/DBB/DBW/DBD read AND write +
+      INT/DINT/REAL; SiemensS7Driver raw path delegates (and can finally WRITE
+      without snap7; snap7 DBD REAL fixed); FieldIOManager polls s7: sources;
+      docs/S7_DB_CONTRACT.md published; 11 tests; suite 658/21/0 (679).
 - [ ] **AF-IO-006 — honest PLC support matrix**. Four tiers mirrored into
       plc_engine/api; no silent Modbus substitution for unsupported types;
       /api/plc/types + PLCPanel reflect reality.
@@ -55,6 +57,9 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-005 · landed: engine/s7_client.py (correct bit addressing,
+  typed R/W, validated framing), plc_engine raw path delegates + writes,
+  FieldIOManager s7: dialect, docs/S7_DB_CONTRACT.md; 11 tests; backend 658/21/0.
 - 2026-09-03 · AF-IO-004 · landed: safety kernel ingests field I/O (required
   not-GOOD withdraws permit; DI bools drive interlocks; heartbeat-on-change is PLC
   liveness; SAFETY_BYPASS visible); 9 tests; backend 647/21/0.

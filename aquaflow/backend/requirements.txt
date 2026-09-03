@@ -6,6 +6,11 @@ python-multipart>=0.0.9
 # Protocol libraries
 # NOTE: pymodbus moved to the test-harness block (AF-IO-008) — runtime Modbus is the
 # in-house engine/modbus_client.py; nothing shipped imports pymodbus.
+# OPTIONAL (AF-IO-005): python-snap7 is the PREFERRED S7 transport when importable;
+# the raw fallback (engine/s7_client.py) needs nothing. Installing snap7 for a
+# packaged build also requires bundling snap7.dll into the PyInstaller spec — a
+# packaging task, not a pip one. Uncomment deliberately:
+# python-snap7>=1.3
 aiomqtt>=1.2.0
 # Core numeric layer
 numpy>=1.26.0
