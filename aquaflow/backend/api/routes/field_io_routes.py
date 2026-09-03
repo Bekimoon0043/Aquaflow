@@ -77,3 +77,37 @@ async def delete_field_point(point_id: str):
     mgr.store.save()
     await mgr.reload()
     return {"ok": True, "removed": point_id}
+
+
+# ── AF-IO-009 — the VFD write path ───────────────────────────────────────────────
+def _commander():
+    from app_state import vfd_commander
+    return vfd_commander
+
+
+class SpeedCommand(BaseModel):
+    fraction: float          # 0..1 of the speed point's raw span
+    user: str = "operator"
+
+
+@router.get("/vfd/status")
+async def vfd_status():
+    return _commander().status()
+
+
+@router.get("/vfd/audit")
+async def vfd_audit(limit: int = 50):
+    return {"audit": _commander().audit(limit)}
+
+
+@router.post("/vfd/speed")
+async def vfd_speed(body: SpeedCommand):
+    """Command the speed reference. Refusals (no permit, no pump_enable, no
+    config) come back as ok=False with the reason — visible, never a 500."""
+    return await _commander().set_speed(body.fraction, user=body.user)
+
+
+@router.post("/vfd/stop")
+async def vfd_stop(user: str = "operator"):
+    """Zero the reference and clear the enable bit. Never gated."""
+    return await _commander().stop(user=user)

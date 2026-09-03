@@ -1,10 +1,43 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-007):** backend pytest **666 passed, 21 skipped,
-> 0 failures, 0 errors (687 collected)** · frontend vitest **394 passed (30 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-009 — series complete):** backend pytest
+> **673 passed, 21 skipped, 0 failures, 0 errors (694 collected)** · frontend vitest
+> **394 passed (30 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-009 — the write path, and the one command that is never refused)
+**Summary:** The final AF-IO package. `engine/vfd_command.py` — `VFDCommander`, the
+one writer to the PLC command area (`DB1.DBW12` speed reference 0..27648 +
+`DB1.DBX14.0` enable, per the contract). The gate in one sentence: **a speed
+command needs the safety kernel's permit AND pump_enable at call time; a STOP
+needs nothing.** No kernel, no permit, half-declared config, kernel unreadable —
+`stop()` still zeroes the reference and clears the enable bit, because refusing to
+stop is exactly backwards. The lifespan also hooks the kernel's state changes:
+FAULT or EMERGENCY_STOP drives an automatic VFD stop. Command points are ordinary
+FieldPoints with reserved ids (`cmd_pump_speed`/`cmd_enable`, added to the DB
+contract), so one JSON file describes the whole rack, and both transports write
+correctly (S7 DB address / Modbus FC06+FC05 — pinned by test, including "a refused
+command leaves ZERO frames on the wire"). Every command and refusal is audited;
+`/api/field-io/vfd/{status,audit,speed,stop}` expose it. The 0-20 mA AO vs 0-10 V
+ZONCEN reference caveat stays flagged in the contract for the electrician.
+
+7 new tests. Backend **673 passed / 21 skipped / 0 failures (694)**; frontend
+**394 passed**.
+
+**AF-IO series complete — all nine packages (001-009) landed 2026-09-03.** AquaFlow
+now has a real input side for the purchased S7-1215C rack: a validated Modbus
+client, quality-tagged field points, a reader loop whose staleness needs no
+observer, a safety kernel that withdraws the permit when a required sensor goes
+blind, a corrected S7 driver with a published DB contract, an honest PLC matrix,
+live Field I/O telemetry, and a safety-gated VFD write path — all proven against
+the bench harness (fake S7 PLC + pymodbus cross-validation). **Not yet verified on
+the physical rack**: the decisive step is the commissioning checklist at the end of
+`docs/S7_DB_CONTRACT.md`, whose acceptance test is "pull a sensor plug → the
+permit drops".
+
+---
 
 **Date:** 2026-09-03 (AF-IO-007 — day one on site is always "is this number real")
 **Summary:** The input side becomes visible. A `field_io` websocket message rides

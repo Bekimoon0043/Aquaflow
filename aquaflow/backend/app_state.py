@@ -24,6 +24,11 @@ protocol_bus = ProtocolBus(primary=True)
 # lifespan). With an empty point inventory it starts no poll tasks, so a checkout
 # with no field_points.json behaves exactly as before.
 from engine.field_io import field_io_manager  # noqa: E402
+# AF-IO-009 — the ONE safety-gated writer to the PLC command area (VFD speed
+# reference). The lifespan attaches the live safety kernel; until then (and with
+# no cmd_* points declared) every speed command is refused.
+from engine.vfd_command import VFDCommander  # noqa: E402
+vfd_commander = VFDCommander(field_io_manager)
 
 # AF-HUB-006B — the ONE runtime output authority. Register the core output actors here
 # so every E-stop / blackout entry point halts the SAME complete set of subsystems.

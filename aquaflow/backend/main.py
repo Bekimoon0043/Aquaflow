@@ -204,6 +204,20 @@ async def lifespan(app: FastAPI):
     safety.attach_field_io(_field_io)
     safety.set_safety_bypass(SAFETY_BYPASS)
 
+    # AF-IO-009 — the VFD write path: gated by this kernel per command, and driven
+    # to a STOP (zero speed + enable cleared) whenever the kernel leaves the
+    # permitted states. stop() is deliberately ungated, so this always works.
+    from app_state import vfd_commander as _vfd
+    _vfd.set_safety_kernel(safety)
+    def _vfd_stop_on_safety(old, new):
+        try:
+            if str(new) in ("SafetyState.EMERGENCY_STOP", "SafetyState.FAULT",
+                            "EMERGENCY_STOP", "FAULT"):
+                asyncio.create_task(_vfd.stop(user="safety-kernel"))
+        except Exception:
+            pass
+    safety.on_state_change(_vfd_stop_on_safety)
+
     # AF-HUB-006B — register the live safety kernel + hardware output with the single
     # runtime authority so every E-stop path halts the complete set (idempotent).
     from engine.runtime_authority import runtime_authority

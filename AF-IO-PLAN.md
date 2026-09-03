@@ -56,14 +56,23 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       (quality badge, value+unit, raw, age, ●req marker, binds_to, source frames,
       heartbeat verdict); 2 backend + 3 frontend tests; backend 666/21/0 (687),
       vitest 394 (30 files).
-- [ ] **AF-IO-009 — VFD write-back (optional, last)**. Safety-gated command path to
-      the 1215C's 2 AO for the ZONCEN speed reference; 0-20 mA vs 0-10 V caveat in
-      the DB contract.
+- [x] **AF-IO-009 — VFD write-back**. DONE 2026-09-03: engine/vfd_command.py —
+      speed commands gated on permit + pump_enable AT CALL TIME; STOP (zero +
+      disable) never gated; kernel FAULT/ESTOP transition auto-stops the VFD; both
+      transports (DB1.DBW12 / Modbus register); /api/field-io/vfd routes; audited;
+      cmd points added to the DB contract; 7 tests; suite 673/21/0 (694).
+
+**ALL NINE PACKAGES COMPLETE — loop finished 2026-09-03.** Proven against the bench
+harness (fake S7 PLC + pymodbus cross-validation); hardware sign-off still requires
+the physical 1215C rack per docs/S7_DB_CONTRACT.md's commissioning checklist.
 
 ## Log
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-009 · landed: safety-gated VFD commander (ungated stop,
+  kernel auto-stop hook, both transports, audit + routes); 7 tests; backend
+  673/21/0. SERIES COMPLETE.
 - 2026-09-03 · AF-IO-007 · landed: field_io websocket + REST config routes with
   hot reload, per-source raw frame hex, PLCPanel Field I/O tab; backend 666/21/0,
   vitest 394.

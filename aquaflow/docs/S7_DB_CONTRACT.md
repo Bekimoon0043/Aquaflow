@@ -72,6 +72,18 @@ Spare space to `DBB63`; extend by appending, never by re-numbering.
 ]}
 ```
 
+For the AF-IO-009 write path, add the two **reserved-id** command points (the PLC's
+cyclic program copies CMD_PUMP_SPEED to the analog output and honours the enable
+bit; AquaFlow refuses speed commands without the safety permit + pump_enable, but a
+STOP — zero + disable — is never gated):
+
+```json
+  {"id": "cmd_pump_speed", "source": "s7:192.168.5.10", "address": "DB1.DBW12",
+   "kind": "AO", "raw_min": 0, "raw_max": 27648},
+  {"id": "cmd_enable",     "source": "s7:192.168.5.10", "address": "DB1.DBX14.0",
+   "kind": "DO", "raw_type": "bool"}
+```
+
 `required` starts **false** on everything except the heartbeat and E-stop monitor;
 flip it true per sensor as each is physically commissioned — that flip is the
 commissioning acceptance step (AF-IO-004 withdraws the master permit whenever a
