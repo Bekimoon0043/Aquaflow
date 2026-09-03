@@ -20,6 +20,10 @@ device_manager = DeviceManager()
 # AF-HUB-016 — the ONE runtime output bus (primary). A second primary is refused, and
 # get_protocol_bus() returns this instance rather than lazily creating another.
 protocol_bus = ProtocolBus(primary=True)
+# AF-IO-003 — the ONE input-side reader (module-level singleton, started in the
+# lifespan). With an empty point inventory it starts no poll tasks, so a checkout
+# with no field_points.json behaves exactly as before.
+from engine.field_io import field_io_manager  # noqa: E402
 
 # AF-HUB-006B — the ONE runtime output authority. Register the core output actors here
 # so every E-stop / blackout entry point halts the SAME complete set of subsystems.

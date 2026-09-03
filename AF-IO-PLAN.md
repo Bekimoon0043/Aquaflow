@@ -20,9 +20,11 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       FieldPoint + FieldPointStore (JSON, ChannelMap pattern); Reading carries
       quality; 4-20mA < 3.5 mA ⇒ FAULT value None; 0-10V no fake detection;
       binds_to/required validated at the form; 12 tests; suite 623/21/0 (644).
-- [ ] **AF-IO-003 — FieldIOManager** (`engine/field_io.py`). Poll loop, timestamps,
-      STALE past 3× scan period, in-memory input bus the safety kernel PULLS from
-      (never awaits network in its 50 Hz tick). Singleton in app_state.
+- [x] **AF-IO-003 — FieldIOManager** (`engine/field_io.py`). DONE 2026-09-03:
+      per-source poll tasks (FC02/03/04 by point kind + address dialect), STALE via
+      read-time aging, UNKNOWN for unavailable transports (s7: until 005),
+      heartbeat-judged-on-change, worst-of bound_snapshot for the kernel, singleton
+      in app_state + lifespan; 9 tests; suite 632/21/0 (653).
 - [ ] **AF-IO-008 — bench harness + tests** (before safety wiring). pymodbus as
       TEST-ONLY dep for a fake Modbus server; minimal fake S7 responder like
       fake_ican_gateway.py; injectable faults (exception reply, short frame, dropped
@@ -49,6 +51,9 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-003 · landed: engine/field_io.py (FieldIOManager reader loop,
+  sync pull accessors, heartbeat-on-change, app_state/lifespan wiring); 9 tests;
+  backend 632/21/0.
 - 2026-09-03 · AF-IO-002 · landed: engine/field_points.py (FieldPoint, Reading with
   GOOD/STALE/FAULT/UNKNOWN, FieldPointStore persistence); 12 tests; backend 623/21/0.
 - 2026-09-03 · AF-IO-001 · landed: engine/modbus_client.py (FC02/03/04/05/06, full

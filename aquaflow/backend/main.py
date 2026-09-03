@@ -173,6 +173,9 @@ async def lifespan(app: FastAPI):
 
     await hardware_output.start()
     await plc_manager.start()
+    # AF-IO-003 — the input-side reader loop. No-op with an empty point inventory.
+    from app_state import field_io_manager
+    await field_io_manager.start()
     await show_engine.start(device_manager, protocol_bus)
     await scheduler_engine.start()
 
@@ -244,6 +247,8 @@ async def lifespan(app: FastAPI):
     await hardware_output.stop()
     await protocol_bus.stop()
     await device_manager.stop()
+    from app_state import field_io_manager
+    await field_io_manager.stop()
 
 
 async def broadcast_playback_state(target: WebSocket | None = None):

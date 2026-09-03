@@ -1,10 +1,38 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-002):** backend pytest **623 passed, 21 skipped,
-> 0 failures, 0 errors (644 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-003):** backend pytest **632 passed, 21 skipped,
+> 0 failures, 0 errors (653 collected)** · frontend vitest **391 passed (29 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-003 — the reader loop, and staleness that needs no observer)
+**Summary:** `engine/field_io.py` — `FieldIOManager` owns one Modbus client per
+declared source, polls every AI/DI point at the scan rate (FC03 holding by default,
+FC04 for classic `3xxxx` addresses, FC02 for DIs), and keeps the latest
+quality-tagged `Reading` per point in plain memory. Consumers PULL: `snapshot()` /
+`bound_snapshot()` / `heartbeat_alive()` are sync, await-free dict work, so the
+safety kernel's 50 Hz tick (AF-IO-004) can never block on a network call.
+
+The design point: **staleness is applied at read time**, via `Reading.aged()` against
+3× the scan period. When a device dies, nothing has to notice — the passage of time
+demotes its readings to STALE on the next look. A source with no available transport
+(`s7:` until AF-IO-005, or a typo) reads UNKNOWN loudly rather than crashing or
+silently skipping; a device answering "illegal address" is config trouble → UNKNOWN;
+a transport drop leaves the last reading to age. `bound_snapshot()` reports the
+WORST reading per bound safety input — two sensors on one interlock, and the
+unhealthy one speaks for the pair. PLC liveness is judged on the heartbeat counter
+CHANGING, not on reads succeeding — a halted CPU serves static reads forever
+(`test_heartbeat_judged_on_change_not_on_read_success` pins exactly that).
+
+Wired as the module singleton `field_io_manager` (imported in `app_state`, started/
+stopped in the lifespan). With an empty inventory it starts zero poll tasks, so a
+checkout without `field_points.json` behaves exactly as before. 9 new tests
+(`tests/test_field_io.py`) reusing AF-IO-001's fault-injecting server. Backend
+**632 passed / 21 skipped / 0 failures (653)**; frontend untouched. Next: AF-IO-008
+(bench harness) before the safety wiring.
+
+---
 
 **Date:** 2026-09-03 (AF-IO-002 — a reading you don't have is not a permit)
 **Summary:** The input-side data model. `engine/field_points.py` declares the physical
