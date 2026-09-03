@@ -113,6 +113,9 @@ class S7Client:
         self._backoff = 1.0
         self._next_retry = 0.0
         self.last_error = ""
+        # AF-IO-007 — the last raw exchange, hex, for the operator UI.
+        self.last_tx_hex = ""
+        self.last_rx_hex = ""
 
     # ── connection lifecycle ─────────────────────────────────────────────────
     @property
@@ -214,6 +217,7 @@ class S7Client:
     async def _exchange_raw(self, frame: bytes) -> bytes:
         """Send one TPKT frame, return the complete TPKT reply (exact framed read)."""
         try:
+            self.last_tx_hex = frame.hex()
             self._writer.write(frame)
             await self._writer.drain()
             tpkt = await asyncio.wait_for(self._reader.readexactly(4),
@@ -225,6 +229,7 @@ class S7Client:
                 raise S7FrameError(f"implausible TPKT length {total}")
             rest = await asyncio.wait_for(self._reader.readexactly(total - 4),
                                           timeout=self.timeout)
+            self.last_rx_hex = (tpkt + rest).hex()
             return tpkt + rest
         except S7FrameError:
             raise

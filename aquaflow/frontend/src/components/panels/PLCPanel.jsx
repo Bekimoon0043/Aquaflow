@@ -26,7 +26,7 @@ export default function PLCPanel() {
       </div>
 
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--bg-surface)", flexShrink: 0 }}>
-        {[["connect","Connect"],["tags","Tag Browser"],["map","Tag Map"],["monitor","Monitor"]].map(([key, label]) => (
+        {[["connect","Connect"],["tags","Tag Browser"],["map","Tag Map"],["monitor","Monitor"],["fieldio","Field I/O"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{
             flex: 1, padding: "7px 0", background: "transparent", border: "none",
             borderBottom: tab === key ? "2px solid var(--accent)" : "2px solid transparent",
@@ -44,7 +44,111 @@ export default function PLCPanel() {
         {tab === "tags"    && <TagBrowserTab addServerLog={addServerLog} />}
         {tab === "map"     && <TagMapTab devices={devices} addServerLog={addServerLog} />}
         {tab === "monitor" && <MonitorTab />}
+        {tab === "fieldio" && <FieldIOTab />}
       </div>
+    </div>
+  );
+}
+
+// ── Field I/O tab (AF-IO-007) ─────────────────────────────────────────────────
+// Pure helpers exported for tests (the FixtureLibraryBrowser pattern).
+
+export function fieldIoQualityColor(quality) {
+  // GOOD is the only quality that may look calm. Everything else is a warning
+  // the operator must be unable to miss.
+  switch (quality) {
+    case "GOOD": return "var(--green)";
+    case "STALE": return "#f59e0b";
+    case "FAULT": return "var(--red)";
+    default: return "#8b5cf6";       // UNKNOWN — never read / no transport
+  }
+}
+
+export function formatFieldIoValue(point) {
+  if (point.value === null || point.value === undefined) return "—";
+  if (typeof point.value === "boolean") return point.value ? "ON" : "OFF";
+  const num = Number(point.value);
+  const text = Number.isInteger(num) ? String(num) : num.toFixed(2);
+  return point.unit ? `${text} ${point.unit}` : text;
+}
+
+export function formatFieldIoAge(ageS) {
+  if (ageS === null || ageS === undefined) return "never";
+  if (ageS < 1) return "<1s";
+  if (ageS < 60) return `${Math.round(ageS)}s`;
+  return `${Math.round(ageS / 60)}m`;
+}
+
+function FieldIOTab() {
+  const [data, setData] = useState({ points: [], sources: {}, heartbeat_alive: null });
+  const [error, setError] = useState("");
+  const timer = useRef(null);
+
+  const load = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/field-io/points`);
+      setData(await res.json());
+      setError("");
+    } catch {
+      setError("backend unreachable");
+    }
+  };
+
+  useEffect(() => {
+    load();
+    timer.current = setInterval(load, 2000);
+    return () => clearInterval(timer.current);
+  }, []);
+
+  const mono = { fontFamily: "var(--font-mono)" };
+
+  return (
+    <div style={{ padding: 10 }}>
+      <SectionLabel>Field points — live quality</SectionLabel>
+      {error && <div style={{ fontSize: 10, color: "var(--red)" }}>{error}</div>}
+      {data.points.length === 0 ? (
+        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
+          No field points declared — see docs/S7_DB_CONTRACT.md for the site config
+        </div>
+      ) : data.points.map(p => (
+        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 10 }}>
+          <div title={p.quality} style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: fieldIoQualityColor(p.quality) }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: "var(--text-primary)" }}>
+              {p.label}
+              {p.required && <span title="gates the safety permit" style={{ color: "var(--red)", marginLeft: 4 }}>●req</span>}
+              {p.binds_to && <span style={{ color: "var(--text-muted)", marginLeft: 6, ...mono }}>→{p.binds_to}</span>}
+            </div>
+            <div style={{ color: "var(--text-muted)", ...mono }}>{p.source} · {p.address}</div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ color: fieldIoQualityColor(p.quality), ...mono }}>{formatFieldIoValue(p)}</div>
+            <div style={{ color: "var(--text-muted)", ...mono }}>
+              {p.quality} · raw {p.raw ?? "—"} · {formatFieldIoAge(p.age_s)}
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <SectionLabel>Sources — last raw exchange</SectionLabel>
+      {Object.keys(data.sources || {}).length === 0 ? (
+        <div style={{ fontSize: 10, color: "var(--text-muted)" }}>no transports active</div>
+      ) : Object.entries(data.sources).map(([src, s]) => (
+        <div key={src} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 9, ...mono }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", marginTop: 2, background: s.connected ? "var(--green)" : "var(--red)" }} />
+            <span style={{ color: "var(--text-primary)", flex: 1 }}>{src}</span>
+            {s.last_error && <span style={{ color: "var(--red)" }}>{s.last_error}</span>}
+          </div>
+          <div style={{ color: "var(--text-muted)", wordBreak: "break-all" }}>TX {s.last_tx_hex || "—"}</div>
+          <div style={{ color: "var(--text-muted)", wordBreak: "break-all" }}>RX {s.last_rx_hex || "—"}</div>
+        </div>
+      ))}
+      {data.heartbeat_alive !== null && (
+        <div style={{ fontSize: 10, marginTop: 6, color: data.heartbeat_alive ? "var(--green)" : "var(--red)", ...mono }}>
+          PLC heartbeat: {data.heartbeat_alive ? "ALIVE (counter moving)" : "DEAD (counter frozen — halted CPU?)"}
+        </div>
+      )}
     </div>
   );
 }

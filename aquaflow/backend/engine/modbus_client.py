@@ -138,6 +138,11 @@ class ModbusTCPClient:
         self._backoff = 1.0
         self._next_retry = 0.0  # monotonic deadline before the next reconnect attempt
         self.last_error = ""
+        # AF-IO-007 — the last raw exchange, for the operator UI. The AF-ICAN-006
+        # lesson: "what did you send" must be readable at the cabinet without a
+        # packet capture.
+        self.last_tx_hex = ""
+        self.last_rx_hex = ""
 
     # ── connection lifecycle ─────────────────────────────────────────────────
     @property
@@ -213,6 +218,7 @@ class ModbusTCPClient:
             self._txid = (self._txid + 1) & 0xFFFF
             txid = self._txid
             mbap = struct.pack(">HHHB", txid, 0, len(pdu) + 1, self.unit_id)
+            self.last_tx_hex = (mbap + pdu).hex()
             try:
                 self._writer.write(mbap + pdu)
                 await self._writer.drain()
@@ -223,6 +229,7 @@ class ModbusTCPClient:
                     raise ModbusFrameError(f"implausible MBAP length {r_len}")
                 body = await asyncio.wait_for(
                     self._reader.readexactly(r_len - 1), timeout=self.timeout)
+                self.last_rx_hex = (header + body).hex()
             except ModbusFrameError as e:
                 self._mark_down(str(e))
                 raise

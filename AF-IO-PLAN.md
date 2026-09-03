@@ -49,9 +49,13 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       _create_driver refuses instead of substituting; add_plc refuses before
       storing; /api/plc/types offers only usable + carries the matrix; PLCPanel
       trimmed to match; 6 tests; backend 664/21/0 (685) + vitest 391.
-- [ ] **AF-IO-007 — telemetry + Field I/O panel**. `field_io` message on the 250 ms
-      websocket loop; Field I/O tab in PLCPanel (raw counts, scaled value, unit,
-      quality badge, age, last raw frame hex).
+- [x] **AF-IO-007 — telemetry + Field I/O panel**. DONE 2026-09-03: `field_io`
+      websocket message (2 s cadence, only when points exist); /api/field-io
+      status/points + upsert/delete with persist + hot reload; clients record
+      last raw TX/RX hex per source (AF-ICAN-006 idiom); PLCPanel Field I/O tab
+      (quality badge, value+unit, raw, age, ●req marker, binds_to, source frames,
+      heartbeat verdict); 2 backend + 3 frontend tests; backend 666/21/0 (687),
+      vitest 394 (30 files).
 - [ ] **AF-IO-009 — VFD write-back (optional, last)**. Safety-gated command path to
       the 1215C's 2 AO for the ZONCEN speed reference; 0-20 mA vs 0-10 V caveat in
       the DB contract.
@@ -60,6 +64,9 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-007 · landed: field_io websocket + REST config routes with
+  hot reload, per-source raw frame hex, PLCPanel Field I/O tab; backend 666/21/0,
+  vitest 394.
 - 2026-09-03 · AF-IO-006 · landed: honest PLC support matrix, refusal instead of
   silent Modbus substitution, /api/plc/types + PLCPanel truthful; 6 tests;
   backend 664/21/0, vitest 391.

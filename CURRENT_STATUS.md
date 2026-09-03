@@ -1,10 +1,37 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-006):** backend pytest **664 passed, 21 skipped,
-> 0 failures, 0 errors (685 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-007):** backend pytest **666 passed, 21 skipped,
+> 0 failures, 0 errors (687 collected)** · frontend vitest **394 passed (30 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-007 — day one on site is always "is this number real")
+**Summary:** The input side becomes visible. A `field_io` websocket message rides
+the existing telemetry loop's 2 s cadence (broadcast only when points are declared,
+so a stock install sends nothing new), carrying `points_payload()` — every declared
+point with `{value, quality, raw, age_s, required, binds_to}` — plus the manager
+status. New `/api/field-io` routes: `GET status`/`points` for the panel, `POST
+points` / `DELETE points/{id}` for the operator's inventory edits, persisting to
+`data/field_points.json` and hot-reloading the poll loop; malformed definitions are
+a 400 at the form.
+
+The AF-ICAN-006 lesson carried over: both clients (`modbus_client`, `s7_client`) now
+record the **last raw TX/RX frame as hex**, surfaced per source — "what did you
+send" stays readable at the cabinet without a packet capture. `PLCPanel` gains a
+**Field I/O** tab: per-point quality badge (only GOOD looks calm — STALE amber,
+FAULT red, UNKNOWN purple; pinned by test), scaled value + unit, raw counts, age,
+a `●req` marker on permit-gating points, the `binds_to` target, the per-source
+frame hex, and the heartbeat verdict spelled out ("counter frozen — halted CPU?").
+Null values render as "—", never as zero — the honesty rule reaches the pixels.
+
+2 backend tests (payload + frame hex against the scripted server; route
+upsert/reload/delete with a monkeypatched manager) and 3 frontend helper tests in
+the FixtureLibraryBrowser pattern. Backend **666 passed / 21 skipped / 0 failures
+(687)**; frontend **394 passed (30 files)**. Next: AF-IO-009 (VFD write-back), the
+final package.
+
+---
 
 **Date:** 2026-09-03 (AF-IO-006 — the PLC subsystem stops advertising what it doesn't have)
 **Summary:** AF-HUB-014 gave the protocol bus a four-tier honesty matrix; the PLC

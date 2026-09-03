@@ -271,7 +271,43 @@ class FieldIOManager:
             "by_quality": by_quality,
             "cycles": self._cycles,
             "heartbeat_alive": self.heartbeat_alive(),
+            # AF-IO-007 — per-source transport truth incl. the last raw exchange
+            # (the AF-ICAN-006 idiom: readable at the cabinet, no packet capture).
+            "sources_detail": {
+                source: {
+                    "connected": c.is_connected,
+                    "last_error": c.last_error,
+                    "last_tx_hex": getattr(c, "last_tx_hex", ""),
+                    "last_rx_hex": getattr(c, "last_rx_hex", ""),
+                }
+                for source, c in self._clients.items()
+            },
         }
+
+    def points_payload(self, now: Optional[float] = None) -> list[dict]:
+        """The Field I/O panel's table: every declared point with its live reading,
+        quality and age. Serialisable as-is for REST and the websocket."""
+        now = time.time() if now is None else now
+        out = []
+        for p in self.store.all():
+            r = self.get(p.id, now)
+            out.append({
+                "id": p.id,
+                "label": p.label or p.id,
+                "kind": p.kind.value,
+                "unit": p.unit,
+                "source": p.source,
+                "address": p.address,
+                "signal": p.signal,
+                "required": p.required,
+                "binds_to": p.binds_to,
+                "value": r.value,
+                "quality": r.quality.value,
+                "raw": r.raw,
+                "ts": r.ts,
+                "age_s": round(now - r.ts, 2) if r.ts else None,
+            })
+        return out
 
 
 # The ONE process-wide instance, wired in app_state next to protocol_bus.

@@ -347,6 +347,19 @@ async def telemetry_broadcast_loop():
                 except Exception:
                     pass
 
+                # AF-IO-007 — the input side, live: every declared field point with
+                # its quality-tagged reading, on the same 2 s cadence.
+                try:
+                    from app_state import field_io_manager as _fio
+                    if _fio.store.all():
+                        await ws_manager.broadcast({
+                            "type": "field_io",
+                            "status": _fio.get_status(),
+                            "points": _fio.points_payload(),
+                        })
+                except Exception:
+                    pass
+
                 # AF-HUB-007B — push the aggregated runtime-health verdict live so the
                 # operator UI sees degraded/critical subsystems without polling.
                 try:
@@ -388,6 +401,8 @@ app.include_router(ai_learning_router,      prefix="/api/ai",        tags=["AI-L
 app.include_router(protocols.router,        prefix="/api/protocols", tags=["Protocols"])
 app.include_router(audio.router,            prefix="/api/audio",     tags=["Audio"])
 app.include_router(plc.router,              prefix="/api/plc",       tags=["PLC"])
+from api.routes.field_io_routes import router as field_io_router  # AF-IO-007
+app.include_router(field_io_router,         prefix="/api/field-io",  tags=["FieldIO"])
 app.include_router(scheduler_routes.router, prefix="/api/scheduler", tags=["Scheduler"])
 app.include_router(runtime.router,          prefix="/api/runtime",   tags=["Runtime"])
 app.include_router(phase6_router,           prefix="/api",           tags=["Phase6"])
