@@ -1,10 +1,46 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-01, AF-ICAN-008):** backend pytest **593 passed, 21 skipped,
-> 0 failures, 0 errors (614 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-001):** backend pytest **611 passed, 21 skipped,
+> 0 failures, 0 errors (632 collected)** · frontend vitest **391 passed (29 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-001 — one Modbus TCP client that can actually read)
+**Summary:** Start of the AF-IO series (plan: `AF-IO-PLAN.md`, driven by the `/af-io`
+loop): give AquaFlow a real INPUT side for the purchased S7-1215C field-I/O rack. The
+platform's safety kernel models every sensor it needs — and nothing has ever written
+those inputs; they default to `True` and stay there. Before wiring anything to them,
+the transport had to stop lying.
+
+The codebase carried **two** hand-rolled Modbus implementations
+(`engine/protocol_bus.ModbusTCPDriver`, `plc/plc_engine.ModbusTCPPLCDriver`), both
+with the same read defect: `read(256)` and unpack at byte 9 with no check of
+transaction id, protocol id, declared length, function code or the exception bit — a
+short frame, an exception response or an out-of-order reply was parsed as register
+data. Also FC03/FC06 only (the ADAM/Moxa remote-I/O class needs FC02/FC04/FC05),
+and `_parse_modbus_address` turned a bare `"45"` into register **-39956** via
+`startswith("4")`.
+
+New `engine/modbus_client.py` is the ONE Modbus TCP client: FC02/03/04/05/06; exact
+framed reads (`readexactly` the MBAP header, then exactly the declared remainder);
+txid/protocol-id/unit-id/byte-count validation; exception replies decoded to named
+errors — and NOT treated as a dead link (the device answering "illegal address" is a
+healthy conversation); an `asyncio.Lock` so one request is in flight per connection;
+`ensure_connected()` reconnect with capped exponential backoff (the old drivers
+stayed down forever after one error); address parsing that raises on anything
+malformed so callers refuse instead of silently touching register 0. Both drivers now
+delegate with their public interfaces unchanged.
+
+18 new tests (`tests/test_modbus_client.py`) cover each validation path with a
+scripted fault-injecting server — exception reply, short frame, txid mismatch, bad
+protocol id, byte-count lie, silent timeout, mid-session death + recovery — plus the
+"45" regression and both drivers end-to-end. (One test initially deadlocked in
+teardown: Python 3.12+ `Server.wait_closed()` also waits for live handler tasks; the
+scripted server now tracks and drops connections.) Backend **611 passed / 21 skipped /
+0 failures (632)**; frontend untouched.
+
+---
 
 **Date:** 2026-09-01 (AF-ICAN-008 — stream the output state, the way the vendor software does)
 **Summary:** The 1.1.4 site screenshot closed out most of the remaining possibilities and

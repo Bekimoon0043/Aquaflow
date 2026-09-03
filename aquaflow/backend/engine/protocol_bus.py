@@ -168,34 +168,28 @@ class ArtNetDriver(ProtocolDriver):
 
 
 class ModbusTCPDriver(ProtocolDriver):
-    """Modbus TCP for pump VFDs and industrial hardware"""
+    """Modbus TCP for pump VFDs and industrial hardware.
+
+    AF-IO-001 — the hand-rolled socket code moved to engine/modbus_client.py (the ONE
+    validated Modbus client: exact framed reads, MBAP/txid/exception validation, one
+    request in flight, reconnect backoff). This class keeps its public interface and
+    fire-and-forget-style semantics (bool/None instead of raised errors) and delegates
+    the wire work.
+    """
     name = "modbus"
 
     def __init__(self, host: str, port: int = 502, unit_id: int = 1):
         self.host = host
         self.port = port
         self.unit_id = unit_id
-        self._reader: Optional[asyncio.StreamReader] = None
-        self._writer: Optional[asyncio.StreamWriter] = None
-        self._connected = False
-        self._transaction_id = 0
+        from engine.modbus_client import ModbusTCPClient
+        self._client = ModbusTCPClient(host, port, unit_id)
 
     async def connect(self) -> bool:
-        try:
-            self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.port), timeout=3.0
-            )
-            self._connected = True
-            logger.info(f"Modbus TCP connected → {self.host}:{self.port}")
-            return True
-        except Exception as e:
-            logger.warning(f"Modbus connect failed {self.host}:{self.port}: {e}")
-            return False
+        return await self._client.connect()
 
     async def disconnect(self):
-        if self._writer:
-            self._writer.close()
-        self._connected = False
+        await self._client.close()
 
     async def send(self, data: dict) -> bool:
         """Write holding registers"""
@@ -204,36 +198,21 @@ class ModbusTCPDriver(ProtocolDriver):
         return await self.write_register(register, value)
 
     async def write_register(self, register: int, value: int) -> bool:
-        if not self._connected:
+        # ensure_connected gives dropped VFD links a backoff-limited retry instead of
+        # requiring an operator reconnect (the old code stayed down forever).
+        if not await self._client.ensure_connected():
             return False
         try:
-            self._transaction_id = (self._transaction_id + 1) & 0xFFFF
-            # Modbus TCP Application Data Unit (MBAP header + PDU)
-            pdu = struct.pack(">BHH", 0x06, register, value)  # Write Single Register
-            mbap = struct.pack(">HHHB", self._transaction_id, 0, len(pdu) + 1, self.unit_id)
-            self._writer.write(mbap + pdu)
-            await self._writer.drain()
-            return True
+            return await self._client.write_register(register, value)
         except Exception as e:
             logger.debug(f"Modbus write error: {e}")
-            self._connected = False
             return False
 
     async def read_register(self, register: int, count: int = 1) -> Optional[list[int]]:
-        if not self._connected:
+        if not await self._client.ensure_connected():
             return None
         try:
-            self._transaction_id = (self._transaction_id + 1) & 0xFFFF
-            pdu = struct.pack(">BHH", 0x03, register, count)  # Read Holding Registers
-            mbap = struct.pack(">HHHB", self._transaction_id, 0, len(pdu) + 1, self.unit_id)
-            self._writer.write(mbap + pdu)
-            await self._writer.drain()
-            response = await asyncio.wait_for(self._reader.read(256), timeout=1.0)
-            # Parse response (skip MBAP header + function code + byte count)
-            if len(response) >= 9:
-                values = [struct.unpack(">H", response[9 + i*2:11 + i*2])[0] for i in range(count)]
-                return values
-            return None
+            return await self._client.read_holding_registers(register, count)
         except Exception as e:
             logger.debug(f"Modbus read error: {e}")
             return None
@@ -244,7 +223,7 @@ class ModbusTCPDriver(ProtocolDriver):
 
     @property
     def is_connected(self) -> bool:
-        return self._connected
+        return self._client.is_connected
 
 
 class MQTTDriver(ProtocolDriver):

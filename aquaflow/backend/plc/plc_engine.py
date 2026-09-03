@@ -304,34 +304,40 @@ class SiemensS7Driver(PLCDriver):
 
 
 class ModbusTCPPLCDriver(PLCDriver):
-    """Enhanced Modbus TCP driver with tag mapping"""
+    """Enhanced Modbus TCP driver with tag mapping.
+
+    AF-IO-001 — delegates the wire work to engine/modbus_client.ModbusTCPClient (the
+    ONE validated Modbus client). Address parsing is the shared parse_register_address:
+    a malformed address now raises there, so read_tag/write_tag refuse (None/False)
+    instead of silently touching register 0 as the old parser did.
+    """
 
     def __init__(self, config: PLCConnection):
         super().__init__(config)
-        self._reader = None
-        self._writer = None
-        self._transaction_id = 0
+        from engine.modbus_client import ModbusTCPClient
+        self._client = ModbusTCPClient(
+            config.ip, config.port or 502, config.unit_id or 1)
+
+    @property
+    def is_connected(self) -> bool:
+        return self._client.is_connected
 
     async def connect(self) -> bool:
-        try:
-            self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.config.ip, self.config.port or 502),
-                timeout=3.0
-            )
-            self._connected = True
-            logger.info(f"Modbus TCP connected: {self.config.ip}")
-            return True
-        except Exception as e:
-            self.config.last_error = str(e)
-            logger.warning(f"Modbus connect failed {self.config.ip}: {e}")
-            return False
+        ok = await self._client.connect()
+        self._connected = ok
+        if not ok:
+            self.config.last_error = self._client.last_error
+        return ok
 
     async def read_tag(self, tag: PLCTag) -> Any:
         """Read tag — address like '%MW100' or '40001' """
-        if not self._connected: return None
+        if not await self._client.ensure_connected():
+            self._connected = False
+            return None
+        self._connected = True
         try:
             register = self._parse_modbus_address(tag.address)
-            values = await self._read_registers(register, 1)
+            values = await self._client.read_holding_registers(register, 1)
             if values:
                 raw = values[0]
                 scaled = (raw * tag.scale_factor) + tag.offset
@@ -341,52 +347,28 @@ class ModbusTCPPLCDriver(PLCDriver):
         return None
 
     def _parse_modbus_address(self, address: str) -> int:
-        """Parse Modbus address formats: %MW100, 40001, HR100"""
-        addr = address.upper().strip()
-        if addr.startswith("%MW"):   return int(addr[3:])
-        if addr.startswith("HR"):    return int(addr[2:])
-        if addr.startswith("4"):     return int(addr) - 40001
-        try: return int(addr)
-        except: return 0
-
-    async def _read_registers(self, register: int, count: int) -> Optional[list]:
-        if not self._writer: return None
-        try:
-            self._transaction_id = (self._transaction_id + 1) & 0xFFFF
-            pdu  = struct.pack(">BHH", 0x03, register, count)
-            mbap = struct.pack(">HHHB", self._transaction_id, 0, len(pdu)+1, self.config.unit_id)
-            self._writer.write(mbap + pdu)
-            await self._writer.drain()
-            response = await asyncio.wait_for(self._reader.read(256), timeout=1.0)
-            if len(response) >= 9:
-                return [struct.unpack(">H", response[9+i*2:11+i*2])[0] for i in range(count)]
-        except Exception as e:
-            logger.debug(f"Modbus read error: {e}")
-            self._connected = False
-        return None
+        """Parse Modbus address formats: %MW100, 40001, HR100.
+        Raises ValueError on malformed addresses (fail-closed)."""
+        from engine.modbus_client import parse_register_address
+        return parse_register_address(address)
 
     async def write_tag(self, tag: PLCTag, value: Any) -> bool:
-        if not self._connected or not self._writer: return False
+        if not await self._client.ensure_connected():
+            self._connected = False
+            return False
+        self._connected = True
         try:
             register = self._parse_modbus_address(tag.address)
             scaled = int((float(value) - tag.offset) / max(tag.scale_factor, 0.001))
             scaled = max(0, min(65535, scaled))
-            self._transaction_id = (self._transaction_id + 1) & 0xFFFF
-            pdu  = struct.pack(">BHH", 0x06, register, scaled)
-            mbap = struct.pack(">HHHB", self._transaction_id, 0, len(pdu)+1, self.config.unit_id)
-            self._writer.write(mbap + pdu)
-            await self._writer.drain()
-            return True
+            return await self._client.write_register(register, scaled)
         except Exception as e:
             logger.debug(f"Modbus write error: {e}")
-            self._connected = False
             return False
 
     async def disconnect(self):
         self._connected = False
-        if self._writer:
-            try: self._writer.close()
-            except: pass
+        await self._client.close()
 
     async def read_all_tags(self, tags: list[PLCTag]) -> dict:
         results = {}
