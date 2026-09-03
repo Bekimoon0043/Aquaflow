@@ -198,6 +198,12 @@ async def lifespan(app: FastAPI):
     if hasattr(protocol_bus, "set_safety_kernel"):
         protocol_bus.set_safety_kernel(safety)
 
+    # AF-IO-004 — the input side: real sensor readings feed the interlocks, and the
+    # dev bypass can no longer be invisible (it is mirrored into the status payload).
+    from app_state import field_io_manager as _field_io
+    safety.attach_field_io(_field_io)
+    safety.set_safety_bypass(SAFETY_BYPASS)
+
     # AF-HUB-006B — register the live safety kernel + hardware output with the single
     # runtime authority so every E-stop path halts the complete set (idempotent).
     from engine.runtime_authority import runtime_authority

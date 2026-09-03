@@ -1,10 +1,43 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-008):** backend pytest **638 passed, 21 skipped,
-> 0 failures, 0 errors (659 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-004):** backend pytest **647 passed, 21 skipped,
+> 0 failures, 0 errors (668 collected)** · frontend vitest **391 passed (29 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-004 — the safety kernel gets eyes, and the bypass loses its cloak)
+**Summary:** The package the whole series exists for. Until today every safety input
+(`water_level_ok`, `pressure_ok`, `estop_chain_closed`, ...) defaulted `True` and
+nothing ever wrote them — the interlocks guarded a board nobody was reading.
+`_ingest_field_io()` now runs at the top of the kernel's 50 Hz tick, pulling from
+FieldIOManager's sync accessors (dict lookups — the tick still never awaits):
+
+- A **GOOD boolean reading drives the real interlock**: a bound E-stop DI reading
+  `False` takes the kernel through its genuine `EMERGENCY_STOP` transition (pinned
+  by test, not assumed).
+- A **REQUIRED point that is not GOOD** — UNKNOWN, STALE, FAULT, or a dead required
+  heartbeat — joins `blind_required`, raises the new `SENSOR_FAULT` (edge-detected,
+  once, not at 50 Hz), and **withdraws the master permit** in `_build_outputs()`.
+  Non-latched by design: the state machine is untouched and the permit returns BY
+  ITSELF the moment the sensor reads GOOD again. Non-required points never touch
+  the permit — they are listed `unmonitored` in the status so a green board can't
+  be mistaken for a guarded one.
+- **PLC liveness is the heartbeat counter CHANGING** (`heartbeat_alive()`), feeding
+  the previously-faked `update_plc_heartbeat()` path with something real.
+- `get_status()` now carries `safety_bypass` and a `field_io` block
+  (monitored / unmonitored / blind_required / heartbeat_alive) — the dev bypass can
+  no longer scrub faults invisibly.
+
+Migration stays per-point: nothing attached or nothing `required` is bit-identical
+to the old kernel (pinned by test). The end-to-end test runs the real FieldIOManager
+against the scripted Modbus server: rack live → permit holds; rack goes dark →
+nothing notices explicitly, aging demotes to STALE, next tick withdraws the permit —
+`blind_required: ["pressure(STALE)"]`. 9 new tests. Backend **647 passed / 21
+skipped / 0 failures (668)**; frontend untouched. Next: AF-IO-005 (the S7 driver,
+against AF-IO-008's fake PLC).
+
+---
 
 **Date:** 2026-09-03 (AF-IO-008 — a test double that is not ours, and a PLC that lies usefully)
 **Summary:** The bench harness, landed deliberately BEFORE the safety wiring so

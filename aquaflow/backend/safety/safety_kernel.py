@@ -46,6 +46,7 @@ class FaultCode(str, Enum):
     WATCHDOG_MISSED     = "WATCHDOG_MISSED"
     RUNTIME_FAULT       = "RUNTIME_FAULT"
     DEVICE_COMM_LOSS    = "DEVICE_COMM_LOSS"
+    SENSOR_FAULT        = "SENSOR_FAULT"    # AF-IO-004: a REQUIRED field sensor is not GOOD
     UNKNOWN             = "UNKNOWN"
 
 
@@ -117,6 +118,16 @@ class SafetyKernel:
         self._state_change_callbacks: List[Callable] = []
         self._fault_callbacks: List[Callable] = []
         self._tick_count = 0
+        # ── AF-IO-004: field-I/O binding ─────────────────────────────────────
+        # The FieldIOManager (engine/field_io.py) is attached by the lifespan; its
+        # accessors are sync dict work, so pulling from it inside the 50 Hz tick
+        # never blocks. Until attached (or with no required points), behaviour is
+        # bit-identical to the pre-AF-IO kernel.
+        self._field_io = None
+        self._blind_required: List[str] = []   # required points currently not GOOD
+        self._sensor_fault_active = False      # edge detection — no 50 Hz log spam
+        self._hb_fault_active = False
+        self._safety_bypass = False            # mirrored from main.SAFETY_BYPASS
         log.info("SafetyKernel initialised — state: BOOT")
 
     # ─── Public control API ───────────────────────────────────────────────────
@@ -245,10 +256,81 @@ class SafetyKernel:
 
     def _tick(self):
         self._tick_count += 1
+        self._ingest_field_io()
         self._check_watchdog()
         self._check_interlocks()
         self._evaluate_state()
         self._build_outputs()
+
+    # ─── AF-IO-004: field-I/O ingestion ──────────────────────────────────────
+    def attach_field_io(self, manager) -> None:
+        """Attach the FieldIOManager so real sensor readings feed the interlocks."""
+        self._field_io = manager
+        log.info("SafetyKernel: field I/O attached (%d bound point(s))",
+                 len(manager.store.bound_points()) if manager else 0)
+
+    def set_safety_bypass(self, active: bool) -> None:
+        """Mirror main's SAFETY_BYPASS so the status payload can never look clean
+        while the dev bypass is quietly scrubbing faults (AF-IO-004)."""
+        self._safety_bypass = bool(active)
+
+    def _ingest_field_io(self):
+        """Pull the latest quality-tagged readings into the safety inputs.
+
+        Fail-closed rules:
+          * a bound DI with a GOOD reading writes its boolean into the input field
+            (so a real E-stop contact drives the real interlock);
+          * a REQUIRED point whose reading is not GOOD (UNKNOWN/STALE/FAULT) joins
+            _blind_required — _build_outputs withdraws the master permit while that
+            list is non-empty. Non-required points never affect the permit; they
+            are surfaced as "unmonitored" in get_status() instead;
+          * PLC liveness comes from the heartbeat COUNTER advancing
+            (FieldIOManager.heartbeat_alive) — this replaces nothing less than the
+            old faked update_plc_heartbeat() path.
+        """
+        mgr = self._field_io
+        if mgr is None:
+            return
+        from engine.field_points import Quality
+
+        blind: List[str] = []
+        try:
+            hb_alive = mgr.heartbeat_alive()
+            for p in mgr.store.bound_points():
+                if p.binds_to == "heartbeat":
+                    # Judged on change, not on value: dead heartbeat on a REQUIRED
+                    # point blinds the permit like any other required sensor.
+                    if p.required and hb_alive is False:
+                        blind.append(f"{p.id}(HEARTBEAT_DEAD)")
+                    continue
+                r = mgr.get(p.id)
+                if r.quality == Quality.GOOD and isinstance(r.value, bool):
+                    setattr(self.inputs, p.binds_to, r.value)
+                if p.required and r.quality != Quality.GOOD:
+                    blind.append(f"{p.id}({r.quality.value})")
+        except Exception as e:  # pragma: no cover - defensive
+            # A broken manager is a blind input side: everything required is blind.
+            log.error("field I/O ingestion failed: %s", e)
+            blind = [f"{p.id}(INGEST_ERROR)"
+                     for p in getattr(mgr.store, "required_points", list)()] or ["field_io"]
+            hb_alive = None
+
+        self._blind_required = blind
+        if blind and not self._sensor_fault_active:
+            self._add_fault(FaultCode.SENSOR_FAULT,
+                            f"required sensor(s) not GOOD: {', '.join(blind)}")
+        self._sensor_fault_active = bool(blind)
+
+        if hb_alive is True:
+            self.update_plc_heartbeat()          # REAL liveness feeds the old path
+            self.inputs.plc_heartbeat_ok = True
+            self._hb_fault_active = False
+        elif hb_alive is False:
+            self.inputs.plc_heartbeat_ok = False
+            if not self._hb_fault_active:
+                self._add_fault(FaultCode.PLC_COMM_LOSS,
+                                "PLC heartbeat counter frozen (field I/O)")
+            self._hb_fault_active = True
 
     # ─── Interlock evaluation ─────────────────────────────────────────────────
     def _check_watchdog(self):
@@ -317,6 +399,13 @@ class SafetyKernel:
         # Master permit
         o.permit = s in (SafetyState.ARMED, SafetyState.LIVE, SafetyState.DRY_RUN)
 
+        # AF-IO-004 — a REQUIRED field sensor that is not GOOD withdraws the permit.
+        # This is the input-side fail-closed rule: an absent reading is not a permit.
+        # The state machine is untouched (the fault is non-latched), so the permit
+        # returns by itself the moment the sensor reads GOOD again.
+        if self._blind_required:
+            o.permit = False
+
         # Per-subsystem enables
         i = self.inputs
         o.pump_enable   = o.permit and i.water_level_ok and i.pressure_ok and i.vfd_ok
@@ -360,6 +449,28 @@ class SafetyKernel:
             try: cb(old, new_state)
             except: pass
 
+    def _field_io_status(self) -> dict:
+        mgr = self._field_io
+        if mgr is None:
+            return {"attached": False, "monitored": [], "unmonitored": [],
+                    "blind_required": [], "heartbeat_alive": None}
+        try:
+            bound = mgr.store.bound_points()
+            return {
+                "attached": True,
+                # monitored = the sensors the permit actually depends on
+                "monitored": [p.id for p in bound if p.required],
+                # unmonitored = wired and read, but NOT gating the permit — shown
+                # so nobody mistakes a green board for a guarded one
+                "unmonitored": [p.id for p in bound if not p.required],
+                "blind_required": list(self._blind_required),
+                "heartbeat_alive": mgr.heartbeat_alive(),
+            }
+        except Exception:  # pragma: no cover - defensive
+            return {"attached": True, "monitored": [], "unmonitored": [],
+                    "blind_required": list(self._blind_required),
+                    "heartbeat_alive": None}
+
     def get_status(self) -> dict:
         return {
             "state": self.state,
@@ -374,6 +485,10 @@ class SafetyKernel:
             "active_faults": self.outputs.active_faults,
             "fault_message": self.outputs.fault_message,
             "tick_count": self._tick_count,
+            # AF-IO-004 — the input side must be visible: whether the dev bypass is
+            # scrubbing faults, and which sensors the permit currently trusts/lacks.
+            "safety_bypass": self._safety_bypass,
+            "field_io": self._field_io_status(),
             "inputs": {
                 "water_level_ok":     self.inputs.water_level_ok,
                 "pressure_ok":        self.inputs.pressure_ok,

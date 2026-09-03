@@ -31,10 +31,12 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       engine/fake_s7_server.py speaks COTP/S7comm with correct bit addressing,
       halted-CPU frozen heartbeat, error/short/drop fault modes scoped to the data
       phase; 6 tests; suite 638/21/0 (659).
-- [ ] **AF-IO-004 — safety kernel wiring**. Tri-state inputs + per-input `required`
-      (default False = today's behaviour); SENSOR_FAULT code; required
-      UNKNOWN/STALE/FAULT withdraws permit; heartbeat liveness from FieldIOManager
-      counter; SAFETY_BYPASS visible in status payload.
+- [x] **AF-IO-004 — safety kernel wiring**. DONE 2026-09-03: _ingest_field_io in the
+      50 Hz tick (sync pulls only); SENSOR_FAULT (edge-logged, non-latched — permit
+      returns by itself on GOOD); required not-GOOD ⇒ permit withdrawn incl. dead
+      required heartbeat; GOOD DI bools drive the real interlocks (E-stop transition
+      proven); SAFETY_BYPASS + field_io block in get_status; e2e device-death test;
+      9 tests; suite 647/21/0 (668).
 - [ ] **AF-IO-005 — S7-1200 driver, correct**. Fix raw S7comm bit addressing
       (offset*8, 3-byte BE); DBX/DBB/DBW/DBD read AND write; REAL/DINT; snap7
       preferred + raw fallback; `docs/S7_DB_CONTRACT.md` (non-optimized DB1 layout,
@@ -53,6 +55,9 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-004 · landed: safety kernel ingests field I/O (required
+  not-GOOD withdraws permit; DI bools drive interlocks; heartbeat-on-change is PLC
+  liveness; SAFETY_BYPASS visible); 9 tests; backend 647/21/0.
 - 2026-09-03 · AF-IO-008 · landed: pymodbus cross-validation (caught the 3.13
   deprecated-context hr/ir swap), engine/fake_s7_server.py + reference request
   encoder for AF-IO-005; pymodbus moved to test-only requirements; backend 638/21/0.
