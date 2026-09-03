@@ -1,0 +1,50 @@
+FUNCTION "AquaFlow_Main" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+//
+// AquaFlow cyclic logic (AF-IO). Call this ONCE from OB1 (Main).
+//
+// Three jobs, nothing else:
+//   1. HEARTBEAT — increment every scan. AquaFlow judges PLC liveness on this
+//      value CHANGING; a constant proves nothing (a halted CPU serves static
+//      reads forever). Wrap is explicit so beginners see it.
+//   2. Copy physical inputs into the DB (AquaFlow only ever reads the DB).
+//   3. Honour the command area: the analog output follows CMD_PUMP_SPEED only
+//      while CMD_ENABLE is set, else it is forced to 0. AquaFlow's stop path
+//      clears both — but this ELSE branch means even a lone cleared enable
+//      bit zeroes the drive.
+//
+// I/O addresses below are the 1215C DEFAULTS (device view: DI %I0.x,
+// onboard AI %IW64/%IW66, onboard AO %QW64). If your hardware config shows
+// different addresses, change ONLY the %-addresses here — never the DB.
+//
+BEGIN
+    // ── 1. Heartbeat ─────────────────────────────────────────────────────
+    IF "AquaFlowIO".HEARTBEAT >= 65535 THEN
+        "AquaFlowIO".HEARTBEAT := 0;
+    ELSE
+        "AquaFlowIO".HEARTBEAT := "AquaFlowIO".HEARTBEAT + 1;
+    END_IF;
+
+    // ── 2. Inputs -> DB ──────────────────────────────────────────────────
+    // Digital (wire each contact so CLOSED = healthy = TRUE):
+    "AquaFlowIO".ESTOP_OK       := %I0.0;   // E-stop chain monitor contact
+    "AquaFlowIO".VFD_OK         := %I0.1;   // ZONCEN fault relay (closed = ok)
+    "AquaFlowIO".THERMAL_OK     := %I0.2;   // thermal contacts in series
+    "AquaFlowIO".LEVEL_FLOAT_OK := %I0.3;   // low-level float switch
+
+    // Analog raw counts (0..27648). Onboard AI are 0-10 V; move these to the
+    // SM 1231 channel addresses when that module is fitted (4-20 mA).
+    "AquaFlowIO".LEVEL_RAW    := %IW64;     // onboard AI ch0
+    "AquaFlowIO".PRESSURE_RAW := %IW66;     // onboard AI ch1
+    // FLOW_RAW / VFD_SPEED_FB stay 0 until more AI channels exist:
+    // "AquaFlowIO".FLOW_RAW     := %IW96;  // SM 1231 ch0 (example)
+    // "AquaFlowIO".VFD_SPEED_FB := %IW98;  // SM 1231 ch1 (example)
+
+    // ── 3. Command area -> outputs ───────────────────────────────────────
+    IF "AquaFlowIO".CMD_ENABLE THEN
+        %QW64 := "AquaFlowIO".CMD_PUMP_SPEED;   // onboard AO ch0 (0-20 mA!)
+    ELSE
+        %QW64 := 0;                             // disabled = zero reference
+    END_IF;
+END_FUNCTION

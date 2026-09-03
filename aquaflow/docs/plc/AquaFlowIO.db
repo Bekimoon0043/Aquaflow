@@ -1,0 +1,57 @@
+DATA_BLOCK "AquaFlowIO"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+//
+// AquaFlow <-> S7-1215C interface block (AF-IO-005/009).
+// MUST be non-optimized — the attribute above does that when the block is
+// generated from this source. Do not re-order or insert fields: AquaFlow
+// addresses these ABSOLUTE offsets (see docs/S7_DB_CONTRACT.md).
+//
+// Layout (non-optimized packing):
+//   DBW0    HEARTBEAT        incremented every scan by "AquaFlow_Main"
+//   DBX2.0  ESTOP_OK         1 = E-stop chain closed (MONITOR only)
+//   DBX2.1  VFD_OK           1 = VFD fault relay closed
+//   DBX2.2  THERMAL_OK       1 = thermal contacts closed
+//   DBX2.3  LEVEL_FLOAT_OK   1 = low-level float closed
+//   DBX2.4..2.7 spare bools
+//   DBB3    spare byte (alignment)
+//   DBW4    LEVEL_RAW        raw AI counts 0..27648
+//   DBW6    PRESSURE_RAW     raw AI counts 0..27648
+//   DBW8    FLOW_RAW         raw AI counts 0..27648
+//   DBW10   VFD_SPEED_FB     raw counts
+//   DBW12   CMD_PUMP_SPEED   AquaFlow -> PLC: AO reference 0..27648
+//   DBX14.0 CMD_ENABLE       AquaFlow -> PLC: output enable bit
+//   DBX14.1..14.7 spare command bits, DBB15 spare
+//   DBB16..DBB63 spare area — EXTEND BY APPENDING ONLY
+//
+   STRUCT
+      HEARTBEAT : UInt;             // DBW0
+      ESTOP_OK : Bool;              // DBX2.0
+      VFD_OK : Bool;                // DBX2.1
+      THERMAL_OK : Bool;            // DBX2.2
+      LEVEL_FLOAT_OK : Bool;        // DBX2.3
+      SPARE_2_4 : Bool;             // DBX2.4
+      SPARE_2_5 : Bool;             // DBX2.5
+      SPARE_2_6 : Bool;             // DBX2.6
+      SPARE_2_7 : Bool;             // DBX2.7
+      SPARE_B3 : Byte;              // DBB3
+      LEVEL_RAW : Int;              // DBW4
+      PRESSURE_RAW : Int;           // DBW6
+      FLOW_RAW : Int;               // DBW8
+      VFD_SPEED_FB : Int;           // DBW10
+      CMD_PUMP_SPEED : Int;         // DBW12
+      CMD_ENABLE : Bool;            // DBX14.0
+      SPARE_14_1 : Bool;            // DBX14.1
+      SPARE_14_2 : Bool;            // DBX14.2
+      SPARE_14_3 : Bool;            // DBX14.3
+      SPARE_14_4 : Bool;            // DBX14.4
+      SPARE_14_5 : Bool;            // DBX14.5
+      SPARE_14_6 : Bool;            // DBX14.6
+      SPARE_14_7 : Bool;            // DBX14.7
+      SPARE_B15 : Byte;             // DBB15
+      SPARE : Array[16..63] of Byte; // DBB16..DBB63
+   END_STRUCT;
+
+BEGIN
+
+END_DATA_BLOCK
