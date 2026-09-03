@@ -1,10 +1,36 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-001):** backend pytest **611 passed, 21 skipped,
-> 0 failures, 0 errors (632 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-002):** backend pytest **623 passed, 21 skipped,
+> 0 failures, 0 errors (644 collected)** · frontend vitest **391 passed (29 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-002 — a reading you don't have is not a permit)
+**Summary:** The input-side data model. `engine/field_points.py` declares the physical
+points on the field rack (`FieldPoint`: source driver, address, AI/DI/AO/DO, raw type,
+scaling, `required`, `binds_to` a named safety-kernel input) with a persisted JSON
+inventory (`FieldPointStore`, same load/save shape as the I-CAN channel map). Every
+observation is a `Reading {value, quality, ts, raw}` — the quality is part of the
+datum: **GOOD / STALE** (device stopped answering; last value kept but demoted) /
+**FAULT** / **UNKNOWN** (never read — and never a zero).
+
+The safety-relevant physics is in the model, not bolted on later: a 4-20 mA sample
+below **3.5 mA** is `FAULT` with `value None` — a cut wire reads ~0 mA while a genuine
+zero reads 4 mA, and reporting 0.0 would tell the safety kernel "tank empty" when the
+truth is "blind". A 0-10 V point performs NO such detection, because the physics
+doesn't provide one — 0 V is a legitimate zero; the model refuses to fake a diagnostic
+(this is exactly why the SM 1231 4-20 mA module is specified over the 1215C's two
+onboard 0-10 V inputs). Malformed definitions (unknown signal type, unknown
+`binds_to`, inverted span) are rejected at the form; a corrupt persisted entry is
+dropped LOUDLY on load without taking the inventory down. `required` defaults False —
+day-one behaviour is identical to today, and each sensor flips it on as it is
+physically commissioned (AF-IO-004 consumes it).
+
+12 new tests (`tests/test_field_points.py`). Backend **623 passed / 21 skipped /
+0 failures (644)**; frontend untouched. Next: AF-IO-003 (FieldIOManager poll loop).
+
+---
 
 **Date:** 2026-09-03 (AF-IO-001 — one Modbus TCP client that can actually read)
 **Summary:** Start of the AF-IO series (plan: `AF-IO-PLAN.md`, driven by the `/af-io`

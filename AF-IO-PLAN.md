@@ -16,10 +16,10 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       reconnect with backoff, fixed address parsing ("45" is never a negative
       register). `ModbusTCPDriver` + `ModbusTCPPLCDriver` delegate to it, public
       interfaces unchanged.
-- [ ] **AF-IO-002 — field point model** (`engine/field_points.py`). FieldPoint +
-      persisted config; every reading `{value, quality GOOD|STALE|FAULT|UNKNOWN, ts}`;
-      4-20mA under-range (< ~3.5 mA) ⇒ FAULT not zero; 0-10V honestly cannot detect
-      broken wire.
+- [x] **AF-IO-002 — field point model** (`engine/field_points.py`). DONE 2026-09-03:
+      FieldPoint + FieldPointStore (JSON, ChannelMap pattern); Reading carries
+      quality; 4-20mA < 3.5 mA ⇒ FAULT value None; 0-10V no fake detection;
+      binds_to/required validated at the form; 12 tests; suite 623/21/0 (644).
 - [ ] **AF-IO-003 — FieldIOManager** (`engine/field_io.py`). Poll loop, timestamps,
       STALE past 3× scan period, in-memory input bus the safety kernel PULLS from
       (never awaits network in its 50 Hz tick). Singleton in app_state.
@@ -49,6 +49,8 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-002 · landed: engine/field_points.py (FieldPoint, Reading with
+  GOOD/STALE/FAULT/UNKNOWN, FieldPointStore persistence); 12 tests; backend 623/21/0.
 - 2026-09-03 · AF-IO-001 · landed: engine/modbus_client.py (FC02/03/04/05/06, full
   MBAP validation, serialised transactions, backoff reconnect, honest address
   parsing); ModbusTCPDriver + ModbusTCPPLCDriver now delegate; 18 new tests;
