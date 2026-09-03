@@ -4,15 +4,12 @@ import { API_BASE_URL } from "../../config";
 
 const API = `${API_BASE_URL}/plc`;
 
+// AF-IO-006 — only genuinely usable (REAL) types are offered. The old list showed
+// Allen Bradley / OPC UA / Omron / Beckhoff, most of which the backend silently
+// routed to a Modbus driver; the backend now refuses them with a 400.
 const PLC_TYPES = [
   { id: "siemens_s7",    label: "Siemens S7",        port: 102,   color: "#00d4ff" },
-  { id: "allen_bradley", label: "Allen Bradley",      port: 44818, color: "#f59e0b" },
   { id: "modbus_tcp",    label: "Modbus TCP",         port: 502,   color: "#f97316" },
-  { id: "opc_ua",        label: "OPC UA",             port: 4840,  color: "#8b5cf6" },
-  { id: "mitsubishi",    label: "Mitsubishi",         port: 502,   color: "#10b981" },
-  { id: "delta",         label: "Delta",              port: 502,   color: "#06b6d4" },
-  { id: "omron",         label: "Omron",              port: 502,   color: "#f43f5e" },
-  { id: "beckhoff",      label: "Beckhoff TwinCAT",  port: 4840,  color: "#a78bfa" },
 ];
 
 export default function PLCPanel() {

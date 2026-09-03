@@ -43,9 +43,12 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       INT/DINT/REAL; SiemensS7Driver raw path delegates (and can finally WRITE
       without snap7; snap7 DBD REAL fixed); FieldIOManager polls s7: sources;
       docs/S7_DB_CONTRACT.md published; 11 tests; suite 658/21/0 (679).
-- [ ] **AF-IO-006 — honest PLC support matrix**. Four tiers mirrored into
-      plc_engine/api; no silent Modbus substitution for unsupported types;
-      /api/plc/types + PLCPanel reflect reality.
+- [x] **AF-IO-006 — honest PLC support matrix**. DONE 2026-09-03: PLC_SUPPORT
+      tiers (siemens_s7 + modbus_tcp REAL, opc_ua/delta/mitsubishi/omron GATED
+      with the explicit modbus_tcp hint, allen_bradley/beckhoff UNSUPPORTED);
+      _create_driver refuses instead of substituting; add_plc refuses before
+      storing; /api/plc/types offers only usable + carries the matrix; PLCPanel
+      trimmed to match; 6 tests; backend 664/21/0 (685) + vitest 391.
 - [ ] **AF-IO-007 — telemetry + Field I/O panel**. `field_io` message on the 250 ms
       websocket loop; Field I/O tab in PLCPanel (raw counts, scaled value, unit,
       quality badge, age, last raw frame hex).
@@ -57,6 +60,9 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-006 · landed: honest PLC support matrix, refusal instead of
+  silent Modbus substitution, /api/plc/types + PLCPanel truthful; 6 tests;
+  backend 664/21/0, vitest 391.
 - 2026-09-03 · AF-IO-005 · landed: engine/s7_client.py (correct bit addressing,
   typed R/W, validated framing), plc_engine raw path delegates + writes,
   FieldIOManager s7: dialect, docs/S7_DB_CONTRACT.md; 11 tests; backend 658/21/0.

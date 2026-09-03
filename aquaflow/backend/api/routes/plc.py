@@ -6,7 +6,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any
 from plc.plc_engine import (
-    plc_manager, PLCConnection, PLCType, PLCTag, TagType, DEFAULT_TAGS
+    plc_manager, PLCConnection, PLCType, PLCTag, TagType, DEFAULT_TAGS,
+    PLC_SUPPORT, PLC_TIER_MEANING, REAL_PLC_TYPES,
 )
 
 router = APIRouter()
@@ -64,6 +65,10 @@ async def connect_plc(req: PLCConnectRequest):
         unit_id=req.unit_id, tags=default_tags, scan_rate_ms=req.scan_rate_ms,
     )
     result = await plc_manager.add_plc(config)
+    # AF-IO-006 — a refused (non-REAL) type is a client error, loudly, not a stored
+    # PLC that quietly never works.
+    if result.get("refused"):
+        raise HTTPException(400, result.get("error", "PLC type not supported"))
     return {
         "plc_id": req.id,
         "name": req.name,
@@ -137,18 +142,21 @@ async def map_tag(plc_id: str, req: TagMapRequest):
 
 @router.get("/types")
 async def get_plc_types():
-    """List supported PLC types"""
+    """AF-IO-006 — list ONLY genuinely usable (REAL) PLC types, plus the honest
+    four-tier support matrix. The old list advertised Allen Bradley, OPC UA, Omron
+    and Beckhoff, three of which silently got a Modbus driver."""
     return {
         "types": [
-            {"id": "siemens_s7",    "label": "Siemens S7 (S7-300/400/1200/1500)", "library": "snap7",   "port": 102},
-            {"id": "allen_bradley", "label": "Allen Bradley (CompactLogix/MicroLogix)", "library": "pycomm3", "port": 44818},
-            {"id": "modbus_tcp",    "label": "Modbus TCP (Universal)",             "library": "built-in","port": 502},
-            {"id": "opc_ua",        "label": "OPC UA (Universal)",                 "library": "asyncua", "port": 4840},
-            {"id": "mitsubishi",    "label": "Mitsubishi MELSEC",                  "library": "modbus",  "port": 502},
-            {"id": "delta",         "label": "Delta DVP/AS Series",                "library": "modbus",  "port": 502},
-            {"id": "omron",         "label": "Omron CJ/CS/NX Series",              "library": "modbus",  "port": 502},
-            {"id": "beckhoff",      "label": "Beckhoff TwinCAT (OPC UA)",          "library": "asyncua", "port": 4840},
-        ]
+            {"id": "siemens_s7", "label": "Siemens S7 (S7-1200/1500, raw + snap7)",
+             "library": "built-in (snap7 optional)", "port": 102},
+            {"id": "modbus_tcp", "label": "Modbus TCP (Universal)",
+             "library": "built-in", "port": 502},
+        ],
+        "support": {
+            "tiers": dict(PLC_TIER_MEANING),
+            "plc_types": dict(PLC_SUPPORT),
+            "usable": list(REAL_PLC_TYPES),
+        },
     }
 
 

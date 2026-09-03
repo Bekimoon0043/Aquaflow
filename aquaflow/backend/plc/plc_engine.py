@@ -28,6 +28,31 @@ class PLCType(str, Enum):
     BECKHOFF     = "beckhoff"
 
 
+# ── AF-IO-006 — honest PLC support tiers (mirrors AF-HUB-014 / protocol_bus) ─────
+# The old _create_driver silently substituted a Modbus TCP driver for anything it
+# didn't recognise — so "Beckhoff TwinCAT" opened a Modbus connection to port 4840
+# and reported whatever that produced. Nothing may claim support it does not have.
+PLC_SUPPORT = {
+    "siemens_s7": "REAL",         # snap7 preferred + validated raw S7comm (AF-IO-005)
+    "modbus_tcp": "REAL",         # engine/modbus_client.py (AF-IO-001)
+    "opc_ua":     "GATED",        # OPCUADriver code exists, but asyncua is not a
+                                  # declared dependency and it has never been tested
+    "delta":      "GATED",        # many units speak Modbus TCP — connect those
+    "mitsubishi": "GATED",        #   EXPLICITLY as modbus_tcp; the family-specific
+    "omron":      "GATED",        #   protocols (MC, FINS) are not implemented
+    "allen_bradley": "UNSUPPORTED",  # no EtherNet/IP (pycomm3) code exists at all
+    "beckhoff":   "UNSUPPORTED",     # was the silent Modbus-on-port-4840 case
+}
+REAL_PLC_TYPES = [t for t, tier in PLC_SUPPORT.items() if tier == "REAL"]
+
+PLC_TIER_MEANING = {
+    "REAL": "implemented + tested driver (field verification gated by commissioning)",
+    "GATED": "code exists or a workaround exists, but it is explicitly disabled — "
+             "not selectable",
+    "UNSUPPORTED": "not implemented",
+}
+
+
 class TagType(str, Enum):
     BOOL   = "bool"
     INT    = "int"
@@ -442,19 +467,31 @@ class PLCManager:
             await driver.disconnect()
 
     def _create_driver(self, config: PLCConnection) -> PLCDriver:
+        """AF-IO-006 — only REAL types get a driver. No silent substitution: the old
+        fallback handed a Modbus driver to anything unknown, so 'Beckhoff TwinCAT'
+        quietly opened Modbus to port 4840."""
+        tier = PLC_SUPPORT.get(config.plc_type.value, "UNSUPPORTED")
+        if tier != "REAL":
+            hint = (" — if this unit speaks Modbus TCP, add it explicitly as "
+                    "modbus_tcp" if config.plc_type in (
+                        PLCType.DELTA, PLCType.MITSUBISHI, PLCType.OMRON) else "")
+            raise ValueError(
+                f"PLC type {config.plc_type.value!r} is {tier} "
+                f"({PLC_TIER_MEANING.get(tier, '')}){hint}. "
+                f"Usable types: {', '.join(REAL_PLC_TYPES)}")
         if config.plc_type == PLCType.SIEMENS_S7:
             return SiemensS7Driver(config)
-        elif config.plc_type in (PLCType.MODBUS_TCP, PLCType.DELTA, PLCType.MITSUBISHI):
-            return ModbusTCPPLCDriver(config)
-        elif config.plc_type == PLCType.OPC_UA:
-            return OPCUADriver(config)
-        else:
-            return ModbusTCPPLCDriver(config)  # Default fallback
+        return ModbusTCPPLCDriver(config)
 
     async def add_plc(self, config: PLCConnection) -> dict:
-        """Add and connect a PLC"""
+        """Add and connect a PLC. A non-REAL type is refused before anything is
+        stored — no connection entry, no driver, no socket opened."""
+        try:
+            driver = self._create_driver(config)
+        except ValueError as e:
+            logger.warning("add_plc refused: %s", e)
+            return {"connected": False, "error": str(e), "refused": True}
         self._connections[config.id] = config
-        driver = self._create_driver(config)
         self._drivers[config.id] = driver
 
         connected = await driver.connect()

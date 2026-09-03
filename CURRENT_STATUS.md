@@ -1,10 +1,34 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-005):** backend pytest **658 passed, 21 skipped,
-> 0 failures, 0 errors (679 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-006):** backend pytest **664 passed, 21 skipped,
+> 0 failures, 0 errors (685 collected)** · frontend vitest **391 passed (29 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-006 — the PLC subsystem stops advertising what it doesn't have)
+**Summary:** AF-HUB-014 gave the protocol bus a four-tier honesty matrix; the PLC
+subsystem never got the same treatment. `/api/plc/types` advertised Allen Bradley,
+OPC UA, Mitsubishi, Delta, Omron and Beckhoff — and `_create_driver`'s fallback
+handed a **Modbus TCP driver to anything it didn't recognise**, so "Beckhoff
+TwinCAT" quietly opened Modbus to port 4840 and reported whatever came back.
+
+Now `PLC_SUPPORT` classifies every `PLCType` member (nothing falls through to a
+default — pinned by test): `siemens_s7` and `modbus_tcp` **REAL** (AF-IO-005/001
+drivers), `opc_ua` **GATED** (driver code exists but asyncua is undeclared and it
+is untested), `delta`/`mitsubishi`/`omron` **GATED** with the refusal message
+pointing at the honest route — "if this unit speaks Modbus TCP, add it explicitly
+as modbus_tcp" — and `allen_bradley`/`beckhoff` **UNSUPPORTED**. `_create_driver`
+raises instead of substituting; `add_plc` refuses BEFORE storing anything (no
+connection entry, no driver, no socket) and the route turns that into a 400.
+`/api/plc/types` offers only the usable two and carries the full matrix;
+`PLCPanel`'s type picker is trimmed to match.
+
+6 new tests. Backend **664 passed / 21 skipped / 0 failures (685)**; frontend
+**391 passed** (PLCPanel touched, suite re-run). Next: AF-IO-007 (field-I/O
+telemetry + panel).
+
+---
 
 **Date:** 2026-09-03 (AF-IO-005 — an S7 client that addresses what it names)
 **Summary:** The old raw S7comm path encoded the DB address as
