@@ -1,10 +1,41 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-003):** backend pytest **632 passed, 21 skipped,
-> 0 failures, 0 errors (653 collected)** · frontend vitest **391 passed (29 files)** ·
+> **AUTHORITATIVE (2026-09-03, AF-IO-008):** backend pytest **638 passed, 21 skipped,
+> 0 failures, 0 errors (659 collected)** · frontend vitest **391 passed (29 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-03 (AF-IO-008 — a test double that is not ours, and a PLC that lies usefully)
+**Summary:** The bench harness, landed deliberately BEFORE the safety wiring so
+AF-IO-004 can be proven against faults instead of assumed. Two halves.
+
+**Cross-validation.** `tests/bench_harness.py` runs pymodbus's OWN TCP server (now an
+explicitly TEST-ONLY dependency — moved in requirements.txt; nothing shipped imports
+it) against `engine/modbus_client.py` on all five function codes. The point of a
+second implementation that shares no code with ours is that it cannot share our
+misreading of the spec — and it earned its keep immediately: **pymodbus 3.13's
+deprecated `ModbusDeviceContext` shim serves the `hr=` block for FC04 and `ir=` for
+FC03 — swapped.** Our client sends the spec-correct codes; the harness uses the new
+SimData/SimDevice API (block order co/di/hr/ir), which maps correctly. The comment in
+the harness warns the next person off "simplifying" back to the deprecated context.
+
+**The fake PLC.** `engine/fake_s7_server.py` (the fake_ican_gateway pattern) speaks
+enough S7comm for the real work: COTP + setup handshake, Read/Write Var against
+non-optimized DBs with **correct BIT addressing** (address = byte_offset*8 + bit — the
+encoding the current raw driver gets wrong at every offset except 0), WORD and BIT
+transports. Halted-CPU is modelled by NOT ticking the heartbeat counter — the server
+answers every read forever, because that is exactly what a halted CPU does, and the
+test pins that reads keep SUCCEEDING while the value freezes. Fault modes (error
+item / short frame / dropped connection) trigger only in the data phase; the
+handshake always succeeds, the way a PLC that fails mid-session behaves. The tests
+carry a byte-exact reference request encoder — AF-IO-005's fixed driver must produce
+identical frames.
+
+6 new tests. Backend **638 passed / 21 skipped / 0 failures (659)**; frontend
+untouched. Next: AF-IO-004 — wiring FieldIOManager into the safety kernel.
+
+---
 
 **Date:** 2026-09-03 (AF-IO-003 — the reader loop, and staleness that needs no observer)
 **Summary:** `engine/field_io.py` — `FieldIOManager` owns one Modbus client per

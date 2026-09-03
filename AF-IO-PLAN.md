@@ -25,10 +25,12 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
       read-time aging, UNKNOWN for unavailable transports (s7: until 005),
       heartbeat-judged-on-change, worst-of bound_snapshot for the kernel, singleton
       in app_state + lifespan; 9 tests; suite 632/21/0 (653).
-- [ ] **AF-IO-008 — bench harness + tests** (before safety wiring). pymodbus as
-      TEST-ONLY dep for a fake Modbus server; minimal fake S7 responder like
-      fake_ican_gateway.py; injectable faults (exception reply, short frame, dropped
-      socket, frozen values, halted-CPU static heartbeat).
+- [x] **AF-IO-008 — bench harness + tests**. DONE 2026-09-03: pymodbus (test-only,
+      SimData/SimDevice — the deprecated 3.13 context serves hr/ir SWAPPED and the
+      cross-validation caught it) validates modbus_client on all 5 FCs;
+      engine/fake_s7_server.py speaks COTP/S7comm with correct bit addressing,
+      halted-CPU frozen heartbeat, error/short/drop fault modes scoped to the data
+      phase; 6 tests; suite 638/21/0 (659).
 - [ ] **AF-IO-004 — safety kernel wiring**. Tri-state inputs + per-input `required`
       (default False = today's behaviour); SENSOR_FAULT code; required
       UNKNOWN/STALE/FAULT withdraws permit; heartbeat liveness from FieldIOManager
@@ -51,6 +53,9 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 
 (loop appends one line per iteration: date · package · result)
 
+- 2026-09-03 · AF-IO-008 · landed: pymodbus cross-validation (caught the 3.13
+  deprecated-context hr/ir swap), engine/fake_s7_server.py + reference request
+  encoder for AF-IO-005; pymodbus moved to test-only requirements; backend 638/21/0.
 - 2026-09-03 · AF-IO-003 · landed: engine/field_io.py (FieldIOManager reader loop,
   sync pull accessors, heartbeat-on-change, app_state/lifespan wiring); 9 tests;
   backend 632/21/0.
