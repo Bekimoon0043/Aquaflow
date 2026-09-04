@@ -302,6 +302,28 @@ class ModbusTCPClient:
         """FC04 — input registers (the Moxa ioLogik AI class)."""
         return await self._read_words(0x04, address, count)
 
+    async def read_device_identification(self) -> dict:
+        """FC43/14 (MEI) Read Device Identification, basic block — READ-ONLY.
+        Returns {"vendor": .., "product": .., "revision": ..} for devices that
+        implement it; raises ModbusException(ILLEGAL_FUNCTION) for those that
+        don't (which discovery treats as 'generic Modbus', not an error)."""
+        body = await self._transact(bytes([0x2B, 0x0E, 0x01, 0x00]))
+        if len(body) < 7 or body[1] != 0x0E:
+            raise ModbusFrameError("malformed FC43 reply")
+        names = {0: "vendor", 1: "product", 2: "revision"}
+        out: dict = {}
+        count = body[6]
+        pos = 7
+        for _ in range(count):
+            if pos + 2 > len(body):
+                break
+            obj_id, obj_len = body[pos], body[pos + 1]
+            value = body[pos + 2:pos + 2 + obj_len]
+            out[names.get(obj_id, f"object_{obj_id}")] = value.decode(
+                "ascii", errors="replace")
+            pos += 2 + obj_len
+        return out
+
     # ── writes ───────────────────────────────────────────────────────────────
     async def write_coil(self, address: int, value: bool) -> bool:
         """FC05 — write single coil (remote-I/O DO). Echo is validated."""

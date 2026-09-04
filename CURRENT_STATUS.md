@@ -1,11 +1,44 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-03, AF-IO-009 — series complete):** backend pytest
-> **673 passed, 21 skipped, 0 failures, 0 errors (694 collected)** · frontend vitest
-> **394 passed (30 files)** ·
+> **AUTHORITATIVE (2026-09-04, AF-CAT-001):** backend pytest
+> **685 passed, 21 skipped, 0 failures, 0 errors (706 collected)** · frontend vitest
+> **396 passed (31 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-04 (AF-CAT-001 — plug in the cable and AquaFlow tells you what's there)
+**Summary:** The controller catalog + auto-detection. `engine/controller_catalog.py`
+ships 18 entries covering the fountain-control ecosystem (researched 2026-09:
+Siemens/AB PLC plants, the OASE/Safe-Rain DMX show layer, the Chinese
+music-fountain controller class, ADAM/Moxa remote I/O, fountain VFDs) — each with
+vendor/model, category, detection method, config prefill, and an **honest
+drivability tier** that a test asserts equal to the runtime support matrices: the
+catalog can never advertise a driver the runtime lacks. Detectable ≠ drivable, and
+the UI shows the difference (DRIVABLE / GATED / IDENTIFY-ONLY badges).
+
+The reverse-engineered I-CAN site profile is now a first-class catalog entry, not
+commit-message folklore: gateway 192.168.5.2:200, mandatory local port 2002,
+group 0, channels 1-32, 10 Hz refresh — with the capture-derived protocol facts
+(fire-and-forget, BE-uint32 group, stream-don't-silence, the SO_REUSEADDR trap)
+preserved in its notes and pinned by test.
+
+`engine/controller_identify.py` does the auto-detection, **read-only by
+construction** (the AF-ICAN-005 lesson kept): subnet sweep of the catalog ports,
+then protocol-level identification — a full COTP+S7 handshake for Siemens; Modbus
+FC43/14 device identification (new, read-only, in modbus_client) with vendor-string
+mapping to specific entries, and a well-formed ILLEGAL_FUNCTION counting as
+confirmed *generic* Modbus; EtherNet/IP ListIdentity naming AB gear it cannot
+drive; the existing safe I-CAN probe folded in. Port-only matches report
+"port match only", never confirmation. New `/api/controllers/{catalog,discover}`
+routes and a Controllers tab in the Device Discovery panel (detect + browsable
+catalog with config templates).
+
+12 backend + 2 frontend tests. Backend **685 passed / 21 skipped / 0 failures
+(706)**; frontend **396 passed (31 files)**. Next up when authorised: AF-S7OUT
+(the S7 channel-mask output path to replace/parallel NETCAN).
+
+---
 
 **Date:** 2026-09-03 (AF-IO-009 — the write path, and the one command that is never refused)
 **Summary:** The final AF-IO package. `engine/vfd_command.py` — `VFDCommander`, the

@@ -66,6 +66,21 @@ recommended-to-add; design for it, degrade gracefully to the 2 onboard AI.
 harness (fake S7 PLC + pymodbus cross-validation); hardware sign-off still requires
 the physical 1215C rack per docs/S7_DB_CONTRACT.md's commissioning checklist.
 
+## Follow-on series
+
+- [x] **AF-CAT-001 — controller catalog + auto-detection** (2026-09-04). 18-entry
+      catalog of fountain controllers/PLCs (engine/controller_catalog.py) with
+      honest drivability tiers asserted against the runtime matrices; the
+      reverse-engineered I-CAN site profile preserved as a first-class entry;
+      read-only auto-detection (S7 handshake, Modbus FC43 ident, EtherNet/IP
+      ListIdentity, safe I-CAN probe) in engine/controller_identify.py;
+      /api/controllers routes; Controllers tab in Device Discovery; 12 backend +
+      2 frontend tests; backend 685/21/0 (706), vitest 396 (31 files).
+- [ ] **AF-S7OUT-001..005 — S7 channel-mask output path** (replace/parallel the
+      NETCAN route: DB contract v2 with CMD_CH_MASK + command watchdog, PLC
+      program v2, S7OutputDriver in the protocol bus, watchdog tests, cutover
+      checklist). Awaiting go + second SM 1222 on order.
+
 ## Log
 
 (loop appends one line per iteration: date · package · result)

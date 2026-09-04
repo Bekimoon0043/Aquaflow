@@ -34,7 +34,7 @@ export default function DeviceDiscoveryPanel() {
       </div>
 
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--bg-surface)", flexShrink: 0 }}>
-        {[["scan", "Network Scan"], ["dmx", "DMX Monitor"], ["test", "Hardware Test"], ["config", "Config"]].map(([key, label]) => (
+        {[["scan", "Network Scan"], ["controllers", "Controllers"], ["dmx", "DMX Monitor"], ["test", "Hardware Test"], ["config", "Config"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{
             flex: 1, padding: "7px 0", background: "transparent", border: "none",
             borderBottom: tab === key ? "2px solid var(--accent)" : "2px solid transparent",
@@ -48,11 +48,140 @@ export default function DeviceDiscoveryPanel() {
       </div>
 
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {tab === "scan"   && <ScanTab addServerLog={addServerLog} />}
-        {tab === "dmx"    && <DMXMonitorTab />}
-        {tab === "test"   && <HardwareTestTab devices={devices} addServerLog={addServerLog} />}
-        {tab === "config" && <ConfigTab devices={devices} />}
+        {tab === "scan"        && <ScanTab addServerLog={addServerLog} />}
+        {tab === "controllers" && <ControllersTab addServerLog={addServerLog} />}
+        {tab === "dmx"         && <DMXMonitorTab />}
+        {tab === "test"        && <HardwareTestTab devices={devices} addServerLog={addServerLog} />}
+        {tab === "config"      && <ConfigTab devices={devices} />}
       </div>
+    </div>
+  );
+}
+
+// ── Controllers tab (AF-CAT-001) ──────────────────────────────────────────────
+// Auto-detect what's on the wire; fall back to the pre-loaded catalog of known
+// fountain controllers/PLCs with honest drivability tiers and config prefills.
+// Pure helpers exported for tests.
+
+export function controllerTierBadge(tier) {
+  // Only REAL (drivable) earns green. GATED/UNSUPPORTED are identifiable at
+  // best — the UI must never blur "we can name it" into "we can run a show on it".
+  switch (tier) {
+    case "REAL": return { color: "var(--green)", label: "DRIVABLE" };
+    case "GATED": return { color: "#f59e0b", label: "GATED" };
+    default: return { color: "var(--red)", label: "IDENTIFY-ONLY" };
+  }
+}
+
+export function confidenceLabel(confidence) {
+  switch (confidence) {
+    case "confirmed": return "protocol confirmed";
+    case "probable": return "probable";
+    default: return "port match only";
+  }
+}
+
+function ControllersTab({ addServerLog }) {
+  const [catalog, setCatalog] = useState([]);
+  const [detected, setDetected] = useState(null);   // null = never scanned
+  const [scanning, setScanning] = useState(false);
+  const [subnet, setSubnet] = useState("");
+  const [open, setOpen] = useState(null);           // expanded catalog entry id
+  const mono = { fontFamily: "var(--font-mono)" };
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/controllers/catalog`)
+      .then(r => r.json()).then(d => setCatalog(d.entries || [])).catch(() => {});
+  }, []);
+
+  const runDiscover = async () => {
+    setScanning(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/controllers/discover`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subnet ? { subnet } : {}),
+      });
+      const data = await res.json();
+      setDetected(data);
+      addServerLog?.(`Controller scan: ${data.detected?.length ?? 0} found on ${data.subnets?.join(", ")} in ${data.duration_s}s`);
+    } catch {
+      addServerLog?.("Controller scan failed — backend unreachable");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const row = { padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 10 };
+
+  return (
+    <div style={{ padding: 10 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <input value={subnet} onChange={e => setSubnet(e.target.value)}
+          placeholder="subnet (blank = auto, e.g. 192.168.5.0/24)"
+          style={{ flex: 1, fontSize: 10, padding: "5px 8px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", ...mono }} />
+        <button onClick={runDiscover} disabled={scanning} style={{ fontSize: 10, padding: "5px 12px", background: scanning ? "var(--bg-surface)" : "var(--accent)", color: scanning ? "var(--text-muted)" : "#000", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>
+          {scanning ? "SCANNING…" : "DETECT"}
+        </button>
+      </div>
+
+      {detected && (
+        <>
+          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6, ...mono }}>
+            {detected.hosts_scanned} hosts · ports {detected.tcp_ports?.join("/")} · {detected.duration_s}s · read-only probes
+          </div>
+          {(detected.detected || []).length === 0 && (
+            <div style={{ ...row, color: "var(--text-muted)", textAlign: "center" }}>
+              Nothing identified — pick the controller from the catalog below and configure it manually
+            </div>
+          )}
+          {(detected.detected || []).map((d, i) => {
+            const badge = controllerTierBadge(d.tier);
+            return (
+              <div key={i} style={row}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
+                  <span style={{ color: "var(--text-primary)", flex: 1 }}>{d.label}</span>
+                  <span style={{ color: "var(--text-muted)", ...mono }}>{d.ip}:{d.port}</span>
+                </div>
+                <div style={{ color: "var(--text-muted)", ...mono, marginTop: 2 }}>
+                  {confidenceLabel(d.confidence)}
+                  {d.identity?.vendor && ` · ${d.identity.vendor} ${d.identity.product || ""}`}
+                  {d.configure_in && ` · configure in: ${d.configure_in}`}
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      <div style={{ fontSize: 9, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", margin: "12px 0 6px", borderBottom: "1px solid var(--border)", paddingBottom: 3, ...mono }}>
+        Controller catalog ({catalog.length})
+      </div>
+      {catalog.map(e => {
+        const badge = controllerTierBadge(e.tier);
+        const isOpen = open === e.id;
+        return (
+          <div key={e.id} style={{ ...row, cursor: "pointer" }} onClick={() => setOpen(isOpen ? null : e.id)}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
+              <span style={{ color: "var(--text-primary)", flex: 1 }}>{e.vendor} — {e.model}</span>
+              <span style={{ color: "var(--text-muted)", fontSize: 9, ...mono }}>{e.category}</span>
+            </div>
+            {isOpen && (
+              <div style={{ marginTop: 6, color: "var(--text-secondary)", fontSize: 9.5 }}>
+                {e.notes && <div style={{ marginBottom: 4 }}>{e.notes}</div>}
+                {Object.keys(e.default_config || {}).length > 0 && (
+                  <div style={{ ...mono, color: "var(--text-muted)", whiteSpace: "pre-wrap", background: "var(--bg-panel)", padding: 6, borderRadius: "var(--radius-sm)" }}>
+                    {Object.entries(e.default_config).map(([k, v]) => `${k}: ${v}`).join("\n")}
+                  </div>
+                )}
+                {e.configure_in && <div style={{ marginTop: 4, color: "var(--text-muted)" }}>Configure in: <b>{e.configure_in}</b></div>}
+                {e.source && <div style={{ marginTop: 2, color: "var(--text-muted)", fontStyle: "italic" }}>{e.source}</div>}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

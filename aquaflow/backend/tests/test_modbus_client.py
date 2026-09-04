@@ -42,6 +42,9 @@ class ScriptedModbusServer:
         self.holding = {0: 1234, 1: 42, 7: 65535}
         self.input_regs = {0: 555, 3: 777}
         self.discrete = {0: True, 2: True, 9: True}
+        # AF-CAT-001: optional FC43/14 device identification. None (default) =
+        # answer ILLEGAL_FUNCTION like a device without it — existing behaviour.
+        self.ident = None            # e.g. ("Advantech", "ADAM-6017", "1.0")
         self.writes = []          # (fc, address, value) records
         self._server = None
         self._conns = []          # live handler writers, so stop() can't deadlock
@@ -125,6 +128,13 @@ class ScriptedModbusServer:
             if fc == 0x06:
                 self.holding[addr] = value
             return pdu  # echo
+        if fc == 0x2B and self.ident is not None:
+            vendor, product, revision = self.ident
+            body = bytes([0x2B, 0x0E, 0x01, 0x01, 0x00, 0x00, 0x03])
+            for i, text in enumerate((vendor, product, revision)):
+                raw = text.encode("ascii")
+                body += bytes([i, len(raw)]) + raw
+            return body
         return bytes([fc | 0x80, 0x01])  # ILLEGAL_FUNCTION
 
 

@@ -417,6 +417,8 @@ app.include_router(audio.router,            prefix="/api/audio",     tags=["Audi
 app.include_router(plc.router,              prefix="/api/plc",       tags=["PLC"])
 from api.routes.field_io_routes import router as field_io_router  # AF-IO-007
 app.include_router(field_io_router,         prefix="/api/field-io",  tags=["FieldIO"])
+from api.routes.controllers import router as controllers_router  # AF-CAT-001
+app.include_router(controllers_router,      prefix="/api/controllers", tags=["Controllers"])
 app.include_router(scheduler_routes.router, prefix="/api/scheduler", tags=["Scheduler"])
 app.include_router(runtime.router,          prefix="/api/runtime",   tags=["Runtime"])
 app.include_router(phase6_router,           prefix="/api",           tags=["Phase6"])
