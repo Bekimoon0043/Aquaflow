@@ -1,103 +1,68 @@
-# AquaFlow Studio 1.1.5 — I-CAN fountain control
+# AquaFlow Studio 1.1.6 — Field I/O, the Siemens path, and the controller catalog
 
-Your 1.1.4 screenshot ruled out most of what was left, and pointed at one thing I had
-not done.
+The biggest build since fountain control began. 1.1.5 finished the OUTPUT side
+(streaming I-CAN). 1.1.6 gives AquaFlow an INPUT side and prepares the Siemens
+S7-1215C rack — plus auto-detection of whatever controller is on the wire.
 
-## What your screenshot proved
+## What's new
 
-- **`gateway replied`** in green — the gateway answers now. The link is genuinely
-  two-way. Network, socket and protocol are all confirmed working.
-- **`sending from local port 2002`** — port 2002 was never the problem.
-- **The import worked** — every channel your real show drove, all on group 0.
+**Field I/O (the S7-1215C / Modbus remote-I/O input side)**
+- New Modbus TCP client that validates every reply (the old one could read
+  garbage as data), plus FC02/FC04/FC05 for ADAM/Moxa-class remote I/O.
+- New S7 (Siemens) client with CORRECT DB addressing — the old raw driver read
+  the wrong location at every offset except 0.
+- Field points: every sensor reading carries a quality — GOOD / STALE / FAULT /
+  UNKNOWN. A 4-20 mA broken wire reads FAULT, never "tank empty".
+- The safety kernel now reads REAL sensors: a required sensor that is not GOOD
+  withdraws the master permit, and it comes back by itself when the sensor does.
+  PLC liveness = its heartbeat counter MOVING (a halted CPU still answers reads).
+- PLC panel → new **Field I/O** tab: live values, quality badges, age, raw frame
+  hex per source, heartbeat verdict.
+- Safety-gated VFD speed path (ZONCEN reference via the PLC's analog output).
+  STOP is never gated — no permit, broken kernel, it still stops.
 
-So the frames are correct, they leave the machine, and the gateway is alive and talking.
-One difference was left.
+**Controllers (Device Discovery → new "Controllers" tab)**
+- **DETECT** sweeps the network with read-only probes and names what it finds:
+  Siemens S7 (real handshake), Modbus devices (vendor identification), I-CAN
+  gateways (safe probe), Allen-Bradley (identified, honestly marked NOT drivable).
+- Below it: an 18-entry catalog of fountain controllers/PLCs with pre-filled
+  configs — including the reverse-engineered profile of YOUR site cabinet
+  (gateway 192.168.5.2:200, local port 2002, group 0, 10 Hz streaming).
 
-## What this build changes: AquaFlow now streams, like the original software does
+**For the Siemens rack (when it arrives)**
+- `docs/S7_DB_CONTRACT.md` — the exact PLC data-block layout + the three settings
+  that break everything (PUT/GET, non-optimized DB, heartbeat counter).
+- `docs/plc/` — the COMPLETE TIA program (import, don't write) + a click-by-click
+  walkthrough. Programming the PLC is an import-and-download job.
 
-Your capture contains **19,152 output frames**. The original software does not send a
-frame once and stop — it **streams the output state continuously**, several times a
-second, every frame carrying the full absolute channel state. The frames in your capture
-are about 250 ms apart.
-
-AquaFlow sent **one** frame per button press and then went silent.
-
-If the relay controller has an output watchdog — very common in fountain controllers —
-it drops its relays when that stream stops. That produces exactly what you saw: correct
-bytes, gateway alive, everything green, nothing moving.
-
-AquaFlow now re-sends the current state at **10 Hz** the whole time the output is armed.
-(Art-Net in AquaFlow already did this. I-CAN never did.)
-
-Blackout streams **off** rather than going quiet, for the same reason: if the controller
-latches its last state, silence would leave the relays closed.
-
-### How to see it
-
-When you arm the output the header now shows:
-
-```
-OUTPUT ARMED   streaming 10Hz · 1483 frames
-```
-
-If that counter is climbing, AquaFlow is streaming. If it says **NOT STREAMING**, tell me.
-
----
+Nothing in the I-CAN path changed — 1.1.5's streaming behaviour is untouched.
 
 ## Install
 
 1. Close AquaFlow Studio.
-2. Run `AquaFlowSetup-1.1.5.exe`. SmartScreen → More info → Run anyway.
-3. **Help → About must say 1.1.5.**
-4. Close the original I-CAN software.
+2. Run `AquaFlowSetup-1.1.6.exe`. SmartScreen → More info → Run anyway.
+3. **Help → About must say 1.1.6.**
 
-## Test
+## Test (5 minutes, no hardware needed)
 
-**Devices → Fountain Control (I-CAN)**
+1. **Devices → Device Discovery → Controllers tab** → press **DETECT**.
+   With the site network attached it should find the I-CAN gateway; on a bare
+   network it reports the scan honestly and shows the catalog below.
+2. Click the "I-CAN 32-ch Music Fountain" catalog entry — confirm it shows your
+   site profile (192.168.5.2:200, local port 2002, group 0, 10 Hz).
+3. **Devices → PLC panel** — the type list now offers only what genuinely works
+   (Siemens S7, Modbus TCP), and there is a new **Field I/O** tab.
+4. Fountain Control (I-CAN): connect / arm / streaming counter — exactly as in
+   1.1.5, unchanged.
 
-0. Arm the safety system → `permit GRANTED`
-1. Connect `192.168.5.2` / `200` / `2002` → check `gateway replied` and `local port 2002`
-2. **Import from capture…** → `changes.txt`
-3. Attach
-4. Arm the output (`ARM OUTPUT`) → confirm the **streaming** counter is climbing
-5. Press one channel button — leave it on for **10 seconds**, don't tap it
+## Test counts for this build
 
-Step 5 matters. If the old behaviour was a watchdog dropping the relay, a quick tap would
-have looked identical to nothing happening. Hold it on and watch the cabinet.
-
----
-
-## The one test that settles it, if it still does not move
-
-This distinguishes "AquaFlow is wrong" from "single frames don't work on this hardware".
-With AquaFlow **closed**:
-
-```
-# A. single shot — one frame, then silence (what AquaFlow used to do)
-python ican_client.py --gateway 192.168.5.2 --group 0 --on 9
-
-# B. the streaming replay — many frames (what you ran when it worked)
-python ican_client.py --gateway 192.168.5.2 --replay changes.txt
-```
-
-Use a channel that came from the import.
-
-- **B moves the fountain, A does not** → the controller needs the continuous stream.
-  That is exactly what 1.1.5 adds, and it should now work.
-- **A moves it too** → single frames are fine, my streaming theory is wrong, and the
-  problem is elsewhere. Tell me and I will keep looking.
-- **Neither moves** → that channel is not the one. Try another from the import, or a
-  whole group at once.
-
-**Please run A and B.** Whichever way it comes out, it tells me something I cannot
-determine from here, and it is the fastest way to the end of this.
+Backend 685 passed / 21 skipped / 0 failures (706) · Frontend 396 passed (31
+files). Field I/O + S7 proven against a bench-fake PLC and pymodbus
+cross-validation; physical-rack sign-off follows the S7_DB_CONTRACT checklist.
 
 ## Send back
 
 1. Version in Help → About
-2. Does the **streaming** counter climb while armed?
-3. What happened on a 10-second hold of one channel
-4. **Result of A vs B above** — the important one
-5. One hex line from the Activity log
-
-If it still does not run, send it exactly as it happened. That is information, not failure.
+2. What DETECT found on the site network (screenshot of the Controllers tab)
+3. Anything red in the Field I/O tab once the PLC is commissioned
