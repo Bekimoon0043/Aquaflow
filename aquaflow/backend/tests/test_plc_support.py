@@ -74,11 +74,27 @@ def test_gated_modbus_families_get_the_explicit_hint():
     assert "modbus_tcp" in result["error"]  # points at the honest route
 
 
-def test_types_route_offers_only_usable_and_carries_matrix():
+def test_types_route_lists_all_families_honestly():
+    """All 8 families are visible (operator request), but every entry carries the
+    truth: what it connects AS on the wire, and whether it is connectable at all.
+    Nothing connectable may resolve to a non-REAL wire protocol — the old silent
+    substitution can never come back through this surface."""
     from api.routes.plc import get_plc_types
     payload = asyncio.run(get_plc_types())
-    offered = {t["id"] for t in payload["types"]}
-    assert offered == {"siemens_s7", "modbus_tcp"}
+    by_id = {t["id"]: t for t in payload["types"]}
+    assert set(by_id) == set(PLC_SUPPORT)                 # every family, none invented
+    for t in payload["types"]:
+        assert t["tier"] == PLC_SUPPORT[t["id"]]          # tier is the runtime truth
+        if t["connectable"]:
+            assert t["connect_as"] in REAL_PLC_TYPES      # only real drivers on the wire
+        else:
+            assert t["connect_as"] is None
+    # The Modbus-speaking families route through modbus_tcp, said out loud.
+    for gated in ("delta", "mitsubishi", "omron"):
+        assert by_id[gated]["connect_as"] == "modbus_tcp"
+        assert "Modbus" in by_id[gated]["label"]
+    # Identify-only families are visible but not connectable.
+    assert by_id["allen_bradley"]["connectable"] is False
+    assert by_id["beckhoff"]["connectable"] is False
     assert payload["support"]["plc_types"] == PLC_SUPPORT
     assert payload["support"]["usable"] == REAL_PLC_TYPES
-    assert "REAL" in payload["support"]["tiers"]

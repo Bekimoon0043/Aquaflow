@@ -142,15 +142,29 @@ async def map_tag(plc_id: str, req: TagMapRequest):
 
 @router.get("/types")
 async def get_plc_types():
-    """AF-IO-006 — list ONLY genuinely usable (REAL) PLC types, plus the honest
-    four-tier support matrix. The old list advertised Allen Bradley, OPC UA, Omron
-    and Beckhoff, three of which silently got a Modbus driver."""
+    """AF-IO-006 + operator request: list ALL PLC families, each honestly tiered.
+    `connect_as` names the wire protocol actually used (Delta/Mitsubishi/Omron
+    connect through their Modbus TCP interface, said out loud); entries with
+    connectable=False have no driver at all — the UI disables Connect for them
+    instead of the old silent wrong-driver connection."""
     return {
         "types": [
             {"id": "siemens_s7", "label": "Siemens S7 (S7-1200/1500, raw + snap7)",
-             "library": "built-in (snap7 optional)", "port": 102},
+             "port": 102, "tier": "REAL", "connect_as": "siemens_s7", "connectable": True},
             {"id": "modbus_tcp", "label": "Modbus TCP (Universal)",
-             "library": "built-in", "port": 502},
+             "port": 502, "tier": "REAL", "connect_as": "modbus_tcp", "connectable": True},
+            {"id": "delta", "label": "Delta DVP/AS (via Modbus TCP)",
+             "port": 502, "tier": "GATED", "connect_as": "modbus_tcp", "connectable": True},
+            {"id": "mitsubishi", "label": "Mitsubishi MELSEC (via Modbus TCP)",
+             "port": 502, "tier": "GATED", "connect_as": "modbus_tcp", "connectable": True},
+            {"id": "omron", "label": "Omron CJ/CS/NX (via Modbus TCP)",
+             "port": 502, "tier": "GATED", "connect_as": "modbus_tcp", "connectable": True},
+            {"id": "opc_ua", "label": "OPC UA (driver gated — untested)",
+             "port": 4840, "tier": "GATED", "connect_as": None, "connectable": False},
+            {"id": "allen_bradley", "label": "Allen Bradley (identify-only)",
+             "port": 44818, "tier": "UNSUPPORTED", "connect_as": None, "connectable": False},
+            {"id": "beckhoff", "label": "Beckhoff TwinCAT (identify-only)",
+             "port": 4840, "tier": "UNSUPPORTED", "connect_as": None, "connectable": False},
         ],
         "support": {
             "tiers": dict(PLC_TIER_MEANING),

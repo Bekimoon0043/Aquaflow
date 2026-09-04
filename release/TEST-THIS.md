@@ -1,7 +1,7 @@
-# AquaFlow Studio 1.1.6 — Field I/O, the Siemens path, and the controller catalog
+# AquaFlow Studio 1.1.7 — Field I/O, the Siemens path, and the controller catalog
 
 The biggest build since fountain control began. 1.1.5 finished the OUTPUT side
-(streaming I-CAN). 1.1.6 gives AquaFlow an INPUT side and prepares the Siemens
+(streaming I-CAN). 1.1.7 gives AquaFlow an INPUT side and prepares the Siemens
 S7-1215C rack — plus auto-detection of whatever controller is on the wire.
 
 ## What's new
@@ -37,11 +37,18 @@ S7-1215C rack — plus auto-detection of whatever controller is on the wire.
 
 Nothing in the I-CAN path changed — 1.1.5's streaming behaviour is untouched.
 
+**1.1.7 over 1.1.6:** the PLC panel now lists ALL 8 PLC families again
+(operator request) — each honestly labeled: Siemens S7 + Modbus TCP have full
+drivers; Delta / Mitsubishi / Omron connect through their Modbus TCP interface
+(shown as "via Modbus TCP"); OPC UA / Allen Bradley / Beckhoff are visible but
+marked "no driver" with Connect disabled — never the old silent wrong-driver
+connection.
+
 ## Install
 
 1. Close AquaFlow Studio.
-2. Run `AquaFlowSetup-1.1.6.exe`. SmartScreen → More info → Run anyway.
-3. **Help → About must say 1.1.6.**
+2. Run `AquaFlowSetup-1.1.7.exe`. SmartScreen → More info → Run anyway.
+3. **Help → About must say 1.1.7.**
 
 ## Test (5 minutes, no hardware needed)
 

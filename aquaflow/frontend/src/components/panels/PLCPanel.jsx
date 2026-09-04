@@ -4,13 +4,33 @@ import { API_BASE_URL } from "../../config";
 
 const API = `${API_BASE_URL}/plc`;
 
-// AF-IO-006 — only genuinely usable (REAL) types are offered. The old list showed
-// Allen Bradley / OPC UA / Omron / Beckhoff, most of which the backend silently
-// routed to a Modbus driver; the backend now refuses them with a 400.
-const PLC_TYPES = [
-  { id: "siemens_s7",    label: "Siemens S7",        port: 102,   color: "#00d4ff" },
-  { id: "modbus_tcp",    label: "Modbus TCP",         port: 502,   color: "#f97316" },
+// AF-IO-006/AF-CAT — ALL families are listed (operator request), each honestly
+// labeled. REAL = full driver. connectAs = the unit's Modbus TCP interface is
+// used, said out loud (Delta/Mitsubishi/Omron units that speak Modbus). Entries
+// with `reason` have no driver: shown so the operator knows AquaFlow knows them,
+// but Connect is disabled — never the old silent wrong-driver connection.
+export const PLC_TYPES = [
+  { id: "siemens_s7",    label: "Siemens S7",         port: 102,   color: "#00d4ff", tier: "REAL" },
+  { id: "modbus_tcp",    label: "Modbus TCP",         port: 502,   color: "#f97316", tier: "REAL" },
+  { id: "delta",         label: "Delta DVP/AS",       port: 502,   color: "#06b6d4", tier: "GATED", connectAs: "modbus_tcp" },
+  { id: "mitsubishi",    label: "Mitsubishi MELSEC",  port: 502,   color: "#10b981", tier: "GATED", connectAs: "modbus_tcp" },
+  { id: "omron",         label: "Omron CJ/CS/NX",     port: 502,   color: "#f43f5e", tier: "GATED", connectAs: "modbus_tcp" },
+  { id: "opc_ua",        label: "OPC UA",             port: 4840,  color: "#8b5cf6", tier: "GATED",
+    reason: "OPC UA driver exists but is untested — not connectable yet" },
+  { id: "allen_bradley", label: "Allen Bradley",      port: 44818, color: "#f59e0b", tier: "UNSUPPORTED",
+    reason: "EtherNet/IP driver not implemented — identifiable in Discovery → Controllers, not drivable" },
+  { id: "beckhoff",      label: "Beckhoff TwinCAT",   port: 4840,  color: "#a78bfa", tier: "UNSUPPORTED",
+    reason: "ADS driver not implemented — identifiable in Discovery → Controllers, not drivable" },
 ];
+
+// Pure helpers (exported for tests).
+export function plcConnectAs(t) { return (t && (t.connectAs || t.id)) || ""; }
+export function plcConnectable(t) { return !!t && (t.tier === "REAL" || !!t.connectAs); }
+export function plcTypeSubLabel(t) {
+  if (!t || t.tier === "REAL") return "";
+  if (t.connectAs) return "via Modbus TCP";
+  return "no driver";
+}
 
 export default function PLCPanel() {
   const [tab, setTab] = useState("connect");
@@ -186,13 +206,18 @@ function ConnectTab({ addServerLog }) {
   };
 
   const connect = async () => {
+    if (!plcConnectable(selectedType)) {
+      addServerLog({ level: "warn", msg: `${selectedType?.label}: ${selectedType?.reason || "no driver"}` });
+      return;
+    }
     setConnecting(true);
-    addServerLog({ level: "info", msg: `Connecting to ${form.name} (${form.plc_type}) @ ${form.ip}...` });
+    const wireType = plcConnectAs(selectedType);   // Delta/Mitsubishi/Omron → their Modbus interface, honestly
+    addServerLog({ level: "info", msg: `Connecting to ${form.name} (${selectedType.label}${wireType !== form.plc_type ? " via Modbus TCP" : ""}) @ ${form.ip}...` });
     try {
       const res = await fetch(`${API}/connect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, id: `plc-${Date.now()}` }),
+        body: JSON.stringify({ ...form, plc_type: wireType, id: `plc-${Date.now()}` }),
       });
       const data = await res.json();
       if (data.connected) {
@@ -218,11 +243,27 @@ function ConnectTab({ addServerLog }) {
               border: `1px solid ${form.plc_type === t.id ? t.color : "var(--border)"}`,
               color: form.plc_type === t.id ? t.color : "var(--text-muted)",
               fontSize: 10, textAlign: "left", fontWeight: form.plc_type === t.id ? 600 : 400,
+              opacity: plcConnectable(t) ? 1 : 0.55,
             }}>
             {t.label}
+            {plcTypeSubLabel(t) && (
+              <span style={{ display: "block", fontSize: 8, fontFamily: "var(--font-mono)", color: plcConnectable(t) ? "var(--text-muted)" : "var(--red)" }}>
+                {plcTypeSubLabel(t)}
+              </span>
+            )}
           </button>
         ))}
       </div>
+      {selectedType && !plcConnectable(selectedType) && (
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: "1px solid var(--red)", color: "var(--red)" }}>
+          {selectedType.reason}
+        </div>
+      )}
+      {selectedType?.connectAs && (
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+          This family connects through its <b>Modbus TCP</b> interface (port 502) — make sure Modbus TCP is enabled on the unit.
+        </div>
+      )}
 
       <SectionLabel>Connection Settings</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
@@ -252,9 +293,9 @@ function ConnectTab({ addServerLog }) {
           style={{ flex: 1, justifyContent: "center", fontSize: 11 }}>
           {testing ? "Testing..." : "⟳ Test Connection"}
         </button>
-        <button className="btn primary" onClick={connect} disabled={connecting}
-          style={{ flex: 1, justifyContent: "center", fontSize: 11 }}>
-          {connecting ? "Connecting..." : "⚡ Connect"}
+        <button className="btn primary" onClick={connect} disabled={connecting || !plcConnectable(selectedType)}
+          style={{ flex: 1, justifyContent: "center", fontSize: 11, opacity: plcConnectable(selectedType) ? 1 : 0.5 }}>
+          {connecting ? "Connecting..." : plcConnectable(selectedType) ? "⚡ Connect" : "No driver"}
         </button>
       </div>
 
