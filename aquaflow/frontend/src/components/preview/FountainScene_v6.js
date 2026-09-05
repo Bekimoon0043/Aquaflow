@@ -70,6 +70,15 @@ import { launchSpeed as JP_launchSpeed, normalizePhysics as JP_normalizePhysics 
 import { WaterReflectionProbe } from "./waterReflection";
 import { SplashMap, insidePool as SM_insidePool, litresPerImpact as SM_litresPerImpact } from "./splashMap";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+// AF-3D Phase R1 (realism plan) — the night-look upgrades:
+//   billboard particles (velocity-stretched quads + soft depth fade), procedural
+//   sprite textures, an opaque-scene depth probe, a sky dome with starfield that
+//   doubles as the IBL source, and volumetric beam cones for the RGB fixtures.
+import { buildBillboardGeometry, buildBillboardMaterial } from "./particlesBillboard";
+import { makeDropletTexture, makeMistTexture, makeFoamTexture, makeFlameTexture } from "./particleTextures";
+import { SceneDepthProbe } from "./sceneDepth";
+import { createSkyDome, createSkyIBL } from "./skyDome";
+import { LightConeSet } from "./lightCones";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -93,16 +102,24 @@ const MAX_FIELD_LIGHTS = 16;
 // `reflect` is the planar-reflection target size in px, 0 = off. `reflectEvery` renders
 // it on every Nth frame: the mirror image is low-frequency and tolerates staleness far
 // better than the direct image, so medium buys the effect at half the cost.
+// AF-3D R1 additions per tier: `softDepth` renders the opaque-scene depth probe that
+// soft particles and light cones fade against (one cheap extra pass at `softScale` ×
+// canvas resolution); `cones` draws the volumetric fixture beams; `stars` puts the
+// starfield in the night sky dome. `low` keeps all three off — it exists for weak GPUs
+// and its frame budget is already spoken for.
 const QUALITY_CONFIG = {
   low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
             postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false,
-            reflect: 0,   reflectEvery: 1 },
+            reflect: 0,   reflectEvery: 1,
+            softDepth: false, softScale: 0.5, cones: false, stars: false },
   medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00,
             postfx: true,  bloom: 0.35, smaa: false, ibl: true,  ao: false,
-            reflect: 512, reflectEvery: 2 },
+            reflect: 512, reflectEvery: 2,
+            softDepth: true, softScale: 0.5, cones: true, stars: true },
   high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
             postfx: true,  bloom: 0.48, smaa: true,  ibl: true,  ao: true,
-            reflect: 1024, reflectEvery: 1 },
+            reflect: 1024, reflectEvery: 1,
+            softDepth: true, softScale: 0.5, cones: true, stars: true },
 };
 
 // ── Camera-response pass ────────────────────────────────────────────────────
@@ -171,113 +188,11 @@ function seededNoise(i, salt = 0) {
   return x - Math.floor(x);
 }
 
-// ─── SPRITE SHADER — anisotropic, velocity-aligned droplet w/ RGB light field ─
-const SPRITE_VERT = /* glsl */`
-attribute vec3  aOffset;
-attribute vec3  aVel;       // velocity for anisotropic stretch
-attribute float aScale;
-attribute vec4  aColor;
-attribute float aLife;
-attribute float aStretch;   // 0..1 how stretched
-uniform float uTime;
-uniform float uPixelRatio;
-varying vec4  vColor;
-varying float vLife;
-varying vec3  vWorldPos;
-varying float vStretch;
-
-void main(){
-  vColor    = aColor;
-  vLife     = aLife;
-  vStretch  = aStretch;
-  vec3 pos  = aOffset;
-  vec4 mvPos= modelViewMatrix * vec4(pos, 1.0);
-
-  // Anisotropic stretch: bigger point size if particle moves fast
-  float speed = length(aVel);
-  float stretchBoost = 1.0 + aStretch * min(speed * 0.08, 0.9);
-
-  vWorldPos    = pos;
-  gl_PointSize = aScale * uPixelRatio * (380.0 / -mvPos.z) * stretchBoost;
-  gl_Position  = projectionMatrix * mvPos;
-}`;
-
-const SPRITE_FRAG = /* glsl */`
-precision highp float;
-varying vec4  vColor;
-varying float vLife;
-varying vec3  vWorldPos;
-varying float vStretch;
-
-uniform vec3  uGlobalLight;      // RGB scalar from main fixture
-uniform float uGlobalLightI;
-uniform int   uFieldCount;
-uniform vec3  uFieldPos[${MAX_FIELD_LIGHTS}];
-uniform vec3  uFieldCol[${MAX_FIELD_LIGHTS}];
-uniform float uFieldInt[${MAX_FIELD_LIGHTS}];
-uniform float uFieldRad[${MAX_FIELD_LIGHTS}];
-
-void main(){
-  vec2  uv = gl_PointCoord - 0.5;
-  float d  = length(uv);
-  if(d > 0.5) discard;
-
-  // Droplet optical model
-  float edge    = smoothstep(0.5, 0.34, d);
-  float core    = smoothstep(0.22, 0.0, d);
-  float refractGlow = smoothstep(0.18, 0.0, abs(d - 0.12));
-  vec2  specUv  = uv - vec2(0.12, 0.14);
-  float spec    = smoothstep(0.12, 0.0, length(specUv)) * 0.9;
-
-  vec3 col = vColor.rgb;
-  col += core         * vec3(0.6, 0.8, 1.0);
-  col += refractGlow  * vec3(0.3, 0.5, 0.8);
-  col += spec         * vec3(1.0, 1.0, 1.0);
-
-      // ── RGB LIGHT FIELD INJECTION ──
-  // Realistic submersible light: avoid repainting the whole droplet as material.
-  // Keep a small global tint, then let fixture field do most of the visible work.
-    float runtimeTint = clamp(uGlobalLightI * 0.55, 0.0, 0.90);
-  float luminance = max(max(col.r, col.g), col.b);
-  vec3 tintedWater = uGlobalLight * max(luminance, 0.35);
-
-  col = mix(col, tintedWater + spec * vec3(1.0), runtimeTint);
-
-  // Extra glow contribution
-  col += uGlobalLight * uGlobalLightI * 0.35;
-
-  // Per-fixture spatial contribution
-  for (int i = 0; i < ${MAX_FIELD_LIGHTS}; i++) {
-    if (i >= uFieldCount) break;
-    // Horizontal-only distance — light shines UP through the full column
-    vec2  hd   = vWorldPos.xz - uFieldPos[i].xz;
-        float horizontalFall = 1.0 - clamp(length(hd) / uFieldRad[i], 0.0, 1.0);
-    horizontalFall = horizontalFall * horizontalFall;
-
-    // Submersible light is strongest near the base and fades with height.
-    float verticalFall = exp(-max(vWorldPos.y, 0.0) * 0.28);
-
-    // Small upward beam boost, but not a full colored pole.
-    float beam = smoothstep(0.0, 0.85, horizontalFall) * verticalFall;
-
-    col += uFieldCol[i] * uFieldInt[i] * beam * 0.95;
-  }
-
-  float alpha = edge * vColor.a * (0.30 + vLife * 0.70);
-
-  // PREMULTIPLIED output. The blend factors on the material then decide whether this
-  // droplet OCCLUDES what is behind it (water) or only adds to it (flame).
-  //
-  // Why this matters more than any other line in the renderer: water spray is a
-  // scattering medium, not a light source. Under straight additive blending a dense
-  // jet is the SUM of every droplet along the view ray, which is unbounded — six
-  // thousand droplets drove the column to pure white and erased its shape. A real
-  // jet saturates instead, exactly as a cloud does: past a certain optical depth you
-  // simply see the medium's own colour. Premultiplied source-over gives that
-  // convergence for free, while still letting a droplet carry colour above 1.0 so the
-  // bloom pass has genuine highlights to find.
-  gl_FragColor = vec4(col * alpha, alpha);
-}`;
+// ─── PARTICLE SPRITES ────────────────────────────────────────────────────────
+// The point-sprite shaders that lived here moved to particlesBillboard.js when the
+// particles became instanced, velocity-stretched quads (AF-3D-002). The droplet
+// optical model, light-field injection and premultiplied blending rationale are
+// preserved there verbatim — plus soft-depth fade and sprite textures.
 
 // ─── WATER CORE COLUMN SHADER — coherent pressurized body ───────────────────
 const CORE_VERT = /* glsl */`
@@ -628,7 +543,7 @@ class GPUParticleSystem {
    *   and saturates, which is how a cloud of droplets actually behaves.
    *   "emissive" — flame. Genuinely radiating, so it adds and does not occlude.
    */
-  constructor(T, maxCount, pixelRatio, blendMode = "scatter") {
+  constructor(T, maxCount, pixelRatio, blendMode = "scatter", map = null) {
     this.T = T;
     this.maxCount = maxCount;
     this.active   = 0;
@@ -643,49 +558,49 @@ class GPUParticleSystem {
     this.maxLives   = new Float32Array(maxCount);
     this.bounced    = new Uint8Array(maxCount);
     this.stretches  = new Float32Array(maxCount);
+    this.seeds      = new Float32Array(maxCount);
 
-    const geo = new T.BufferGeometry();
-    geo.setAttribute('aOffset',  new T.BufferAttribute(this.positions,  3));
-    geo.setAttribute('aVel',     new T.BufferAttribute(this.velocities, 3));
-    geo.setAttribute('aColor',   new T.BufferAttribute(this.colors,     4));
-    geo.setAttribute('aScale',   new T.BufferAttribute(this.scales,     1));
-    geo.setAttribute('aLife',    new T.BufferAttribute(this.lives,      1));
-    geo.setAttribute('aStretch', new T.BufferAttribute(this.stretches,  1));
-    geo.setDrawRange(0, 0);
-
-    // Light-field uniforms (shared with main scene by reference)
-    this.uniforms = {
-      uTime:         { value: 0 },
-      uPixelRatio:   { value: pixelRatio },
-      uGlobalLight:  { value: new T.Color(1,1,1) },
-      uGlobalLightI: { value: 0.0 },
-      uFieldCount:   { value: 0 },
-      uFieldPos:     { value: Array.from({length:MAX_FIELD_LIGHTS}, () => new T.Vector3()) },
-      uFieldCol:     { value: Array.from({length:MAX_FIELD_LIGHTS}, () => new T.Color(0,0,0)) },
-      uFieldInt:     { value: new Float32Array(MAX_FIELD_LIGHTS) },
-      uFieldRad:     { value: new Float32Array(MAX_FIELD_LIGHTS).fill(4.0) },
-    };
-
-    this.mat = new T.ShaderMaterial({
-      vertexShader: SPRITE_VERT,
-      fragmentShader: SPRITE_FRAG,
-      transparent: true, depthWrite: false,
-      // The shader emits premultiplied colour, so both modes share blendSrc = ONE and
-      // differ only in what they do to the destination.
-      blending: T.CustomBlending,
-      blendEquation: T.AddEquation,
-      blendSrc: T.OneFactor,
-      blendDst: blendMode === "emissive" ? T.OneFactor : T.OneMinusSrcAlphaFactor,
-      premultipliedAlpha: true,
-      uniforms: this.uniforms,
+    // AF-3D-002: instanced billboard quads instead of gl_Points — velocity-aligned
+    // stretch, no driver point-size clamp, sprite textures, soft-depth fade. The
+    // geometry wraps THIS class's arrays, so the simulation below is untouched.
+    const geo = buildBillboardGeometry(T, maxCount, this);
+    this.mat = buildBillboardMaterial(T, {
+      maxFieldLights: MAX_FIELD_LIGHTS,
+      blendMode,
+      map,
     });
-    this.mesh = new T.Points(geo, this.mat);
+    // Light-field entries are re-pointed at the scene's shared uniforms in init().
+    this.uniforms = this.mat.uniforms;
+    this.mesh = new T.Mesh(geo, this.mat);
     this.mesh.frustumCulled = false;
+  }
+
+  /** Bind (or with null, unbind) the scene-depth probe for soft particles. */
+  setSoftDepth(texture, invResX, invResY, near, far) {
+    const u = this.uniforms;
+    u.uSceneDepth.value = texture || null;
+    u.uUseDepth.value = texture ? 1.0 : 0.0;
+    u.uInvRes.value.set(invResX || 1, invResY || 1);
+    u.uNear.value = near ?? 0.1;
+    u.uFar.value = far ?? 500;
+  }
+
+  /** Temporarily toggle the soft-depth fade (off during the reflection pass, where
+   *  gl_FragCoord lives in the probe's target, not the screen). */
+  setSoftEnabled(on) {
+    const u = this.uniforms;
+    u.uUseDepth.value = (on && u.uSceneDepth.value) ? 1.0 : 0.0;
   }
 
   spawn(x,y,z, vx,vy,vz, r,g,b,a, life, scale, stretch=0.5) {
     if (this.active >= this.maxCount) return;
     const i = this.active++;
+    // Sub-frame spawn advance: all of a frame's particles used to be born at the
+    // nozzle mouth in the same instant, so a fast jet rendered as a chain of pearls
+    // one frame-step apart. Distributing each birth along its own first 1/60 s of
+    // flight fills the gaps and the stream reads as continuous.
+    const sub = Math.random() * 0.0167;
+    x += vx * sub; y += vy * sub; z += vz * sub;
     this.positions[i*3]=x; this.positions[i*3+1]=y; this.positions[i*3+2]=z;
     this.velocities[i*3]=vx; this.velocities[i*3+1]=vy; this.velocities[i*3+2]=vz;
     this.colors[i*4]=r; this.colors[i*4+1]=g; this.colors[i*4+2]=b; this.colors[i*4+3]=a;
@@ -693,10 +608,10 @@ class GPUParticleSystem {
     this.lives[i]=life; this.maxLives[i]=life;
     this.bounced[i]=0;
     this.stretches[i]=stretch;
+    this.seeds[i]=(i * 2654435761 % 1000) / 1000;
   }
 
   update(delta, gravity=-RE_GRAVITY, elapsed=0) {
-    this.uniforms.uTime.value = elapsed;
     let alive = 0;
     const drag = 0.018;
 
@@ -771,20 +686,22 @@ class GPUParticleSystem {
         this.scales[alive]    = this.scales[i];
         this.bounced[alive]   = this.bounced[i];
         this.stretches[alive] = this.stretches[i];
+        this.seeds[alive]     = this.seeds[i];
       }
       alive++;
     }
     this.active = alive;
-    this.mesh.geometry.setDrawRange(0, alive);
+    this.mesh.geometry.instanceCount = alive;
     this.mesh.geometry.attributes.aOffset.needsUpdate  = true;
     this.mesh.geometry.attributes.aVel.needsUpdate     = true;
     this.mesh.geometry.attributes.aColor.needsUpdate   = true;
     this.mesh.geometry.attributes.aLife.needsUpdate    = true;
     this.mesh.geometry.attributes.aScale.needsUpdate   = true;
     this.mesh.geometry.attributes.aStretch.needsUpdate = true;
+    this.mesh.geometry.attributes.aSeed.needsUpdate    = true;
   }
 
-  reset() { this.active = 0; this.mesh.geometry.setDrawRange(0,0); }
+  reset() { this.active = 0; this.mesh.geometry.instanceCount = 0; }
   dispose() { this.mesh.geometry.dispose(); this.mat.dispose(); }
 }
 
@@ -1623,11 +1540,20 @@ export class FountainScene {
       uFieldRad:     { value: new Float32Array(MAX_FIELD_LIGHTS).fill(4.0) },
     };
 
+    // AF-3D-003: procedural sprite textures. Null (no DOM / headless) simply means
+    // the shaders fall back to their analytic shapes.
+    this._particleTex = {
+      droplet: makeDropletTexture(T),
+      mist:    makeMistTexture(T),
+      foam:    makeFoamTexture(T),
+      flame:   makeFlameTexture(T),
+    };
+
     // GPU particle systems — share the light-field uniforms
-    this.waterSys = new GPUParticleSystem(T, MAX_WATER, PR, "scatter");
-    this.spraySys = new GPUParticleSystem(T, MAX_SPRAY, PR, "scatter");
-    this.foamSys  = new GPUParticleSystem(T, MAX_FOAM,  PR, "scatter");
-    this.flameSys = new GPUParticleSystem(T, MAX_FLAME, PR, "emissive");
+    this.waterSys = new GPUParticleSystem(T, MAX_WATER, PR, "scatter",  this._particleTex.droplet);
+    this.spraySys = new GPUParticleSystem(T, MAX_SPRAY, PR, "scatter",  this._particleTex.mist);
+    this.foamSys  = new GPUParticleSystem(T, MAX_FOAM,  PR, "scatter",  this._particleTex.foam);
+    this.flameSys = new GPUParticleSystem(T, MAX_FLAME, PR, "emissive", this._particleTex.flame);
     [this.waterSys, this.spraySys, this.foamSys].forEach(ps => {
       ps.uniforms.uGlobalLight  = this._lightField.uGlobalLight;
       ps.uniforms.uGlobalLightI = this._lightField.uGlobalLightI;
@@ -1640,6 +1566,28 @@ export class FountainScene {
 
     this._buildFogSystem();
     this.scene.add(this.waterSys.mesh, this.spraySys.mesh, this.foamSys.mesh, this.flameSys.mesh);
+
+    // AF-3D-001: opaque-scene depth probe for soft particles + beam cones. An
+    // enhancement, never a dependency — on failure the sprites keep hard edges.
+    this._depthProbe = null;
+    if (q.softDepth) {
+      try {
+        this._depthProbe = new SceneDepthProbe(T, this.renderer, {
+          width: W * PR, height: H * PR, scale: q.softScale,
+        });
+      } catch (err) {
+        console.warn("[FountainScene] depth probe unavailable:", err?.message || err);
+        this._depthProbe = null;
+      }
+    }
+
+    // AF-3D-005: volumetric beam cones for the RGB fixture lights.
+    this._cones = null;
+    if (q.cones) {
+      this._cones = new LightConeSet(T, MAX_FIELD_LIGHTS);
+      this.scene.add(this._cones.group);
+    }
+    this._bindSoftDepth();
 
     // AQ-S3-012 — the mirror image and the landing record. Both must exist before the
     // water surface is built, because its material binds their texture and matrix.
@@ -1861,6 +1809,9 @@ export class FountainScene {
   setQuadView(on) {
     this._quadView = !!on;
     if (this._quadView) this._buildQuadCameras();
+    // Quad panes render without the depth-probe refresh, so soft fades stand down
+    // with it and return when the single perspective view does.
+    this._setSoftDepthEnabled(!this._quadView);
     return this._quadView;
   }
 
@@ -1903,6 +1854,7 @@ export class FountainScene {
     return [
       this.waterSys?.mesh, this.spraySys?.mesh, this.foamSys?.mesh, this.flameSys?.mesh,
       this._fogMesh, this.waterSurface, this._wetOverlay,
+      this._cones?.group, this._sky?.group,
       ...(this.nozzles || []).map(n => n.glow),
     ].filter(Boolean);
   }
@@ -2040,28 +1992,33 @@ export class FountainScene {
 
   // ── Image-based lighting ────────────────────────────────────────────────────
   // The pool, deck and nozzle bodies are MeshStandardMaterial. Without an environment
-  // they can only respond to the punctual lights, which reads flat and plastic. A
-  // pre-filtered room probe gives their roughness something to reflect, so wet stone
-  // and metal look like wet stone and metal. Cheap: generated once, no runtime cost.
+  // they can only respond to the punctual lights, which reads flat and plastic.
+  //
+  // AF-3D-004: the probe is now generated FROM THE SKY DOME, so what the materials
+  // reflect agrees with the sky the viewer can actually see — a night scene gets a
+  // dark horizon-graded probe instead of a bright white studio. The RoomEnvironment
+  // studio probe survives only as the fallback when the sky probe cannot be built.
   _buildEnvironmentIBL() {
     const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
-    if (!q.ibl || this._envRT) return;
+    if (!q.ibl) return;
     const T = this.THREE;
     try {
-      const pmrem = new T.PMREMGenerator(this.renderer);
-      pmrem.compileEquirectangularShader?.();
-      const room = new RoomEnvironment();   // r165: takes an optional renderer, not THREE
-      this._envRT = pmrem.fromScene(room, 0.04);
+      this._envRT?.dispose?.();
+      this._envRT = createSkyIBL(T, this.renderer, this.environment);
+      this._iblKind = this._envRT ? "sky" : null;
+      if (!this._envRT) {
+        const pmrem = new T.PMREMGenerator(this.renderer);
+        const room = new RoomEnvironment();   // r165: takes an optional renderer, not THREE
+        this._envRT = pmrem.fromScene(room, 0.04);
+        this._iblKind = "room";
+        room.dispose?.();
+        pmrem.dispose();
+      }
       this.scene.environment = this._envRT.texture;
-      // Keep the authored sky/background — the probe is for material response only.
-      // Held deliberately low: a full-strength studio probe would flatten the night
-      // mood we want. This is enough for wet stone and metal to catch a highlight.
-      const nightish = this.environment === ENVIRONMENTS.NIGHT;
-      this.scene.environmentIntensity = nightish ? 0.16 : 0.42;
-      room.dispose?.();
-      pmrem.dispose();
+      this.scene.environmentIntensity = this._envIntensityFor(this.environment);
     } catch (e) {
       this._envRT = null;   // IBL is an enhancement: never fatal
+      this._iblKind = null;
     }
   }
 
@@ -2234,8 +2191,54 @@ export class FountainScene {
     };
   }
 
+  // ── Soft-depth plumbing (AF-3D-001) ─────────────────────────────────────────
+  /** Point every soft-depth consumer (particles, cones) at the probe's texture. */
+  _bindSoftDepth() {
+    const systems = [this.waterSys, this.spraySys, this.foamSys, this.flameSys].filter(Boolean);
+    if (!this._depthProbe) {
+      systems.forEach(ps => ps.setSoftDepth(null));
+      this._cones?.setDepth(null);
+      return;
+    }
+    // gl_FragCoord in the main pass lives in drawing-buffer pixels; the normalized
+    // lookup needs 1/that, regardless of the probe's own (half) resolution.
+    const size = this.renderer.getDrawingBufferSize(this._dbSize || (this._dbSize = new this.THREE.Vector2()));
+    const ix = 1 / Math.max(1, size.x), iy = 1 / Math.max(1, size.y);
+    const near = this.camera.near, far = this.camera.far;
+    systems.forEach(ps => ps.setSoftDepth(this._depthProbe.texture, ix, iy, near, far));
+    this._cones?.setDepth(this._depthProbe.texture, ix, iy, near, far);
+  }
+
+  /** Toggle the fade without unbinding — used around the reflection pass, whose
+   *  framebuffer does not match the probe's screen-space lookup. */
+  _setSoftDepthEnabled(on) {
+    [this.waterSys, this.spraySys, this.foamSys, this.flameSys].forEach(ps => ps?.setSoftEnabled(on));
+    this._cones?.cones.forEach(c => {
+      c.material.uniforms.uUseDepth.value = (on && c.material.uniforms.uSceneDepth.value) ? 1.0 : 0.0;
+    });
+  }
+
+  /** Everything that must NOT write into the opaque depth probe: transparent media,
+   *  overlays, and the sky (whose dome would otherwise stamp depth at 300 m). */
+  _depthHiddenObjects() {
+    return [
+      this.waterSys?.mesh, this.spraySys?.mesh, this.foamSys?.mesh, this.flameSys?.mesh,
+      this._fogMesh, this.waterSurface, this._wetOverlay, this._reviewGroup,
+      this._laserGroup, this._cones?.group, this._sky?.group, this._editor?.root,
+      ...(this.nozzles || []).map(n => n.glow),
+      ...(this.nozzles || []).map(n => n.core),
+      ...(this._engLightMeshes || []),
+    ].filter(Boolean);
+  }
+
   /** Render through the composer when available, else straight to the canvas. */
   _renderFrame() {
+    // AF-3D-001: refresh the opaque-scene depth first — the camera is already placed
+    // for this frame, and both the particles and the beam cones sample the result.
+    if (this._depthProbe && !this._quadView) {
+      this.camera.updateMatrixWorld();
+      this._depthProbe.update(this.scene, this.camera, this._depthHiddenObjects());
+    }
     // The mirror image is rendered first, from a camera reflected through the
     // waterline. It must run after the camera has been placed for this frame and
     // before the main pass, which samples its result. Skipped in quad view: that layout
@@ -2243,6 +2246,9 @@ export class FountainScene {
     if (this._reflection && this.waterSurface && !this._quadView) {
       this.camera.updateMatrixWorld();
       const waterY = this.waterSurface.position.y;
+      // The mirror pass renders into its own target, where gl_FragCoord no longer
+      // corresponds to the screen-space depth probe — soft fades must sit out.
+      this._setSoftDepthEnabled(false);
       const rendered = this._reflection.update(
         this.scene, this.camera, waterY,
         // The water cannot reflect itself; the analysis overlays and the editor's
@@ -2250,6 +2256,7 @@ export class FountainScene {
         // mirror image — a reflected gizmo would be both wrong and distracting.
         [this.waterSurface, this._wetOverlay, this._reviewGroup, this._editor?.root]
       );
+      this._setSoftDepthEnabled(!this._quadView);
       const u = this.waterMat?.uniforms;
       if (u) {
         if (rendered && u.uReflectStrength.value === 0) {
@@ -2530,14 +2537,42 @@ export class FountainScene {
     }
     this.scene.add(this._venueGroup);
   }
+  /** Environment-map strength. The sky-dome IBL is dim and truthful, so it can run
+   *  near full strength; the RoomEnvironment fallback is a bright studio probe that
+   *  must be held far lower or it flattens the night mood. */
+  _envIntensityFor(env) {
+    const nightish = env === ENVIRONMENTS.NIGHT || env === ENVIRONMENTS.ARENA;
+    if (this._iblKind === "sky") return nightish ? 1.5 : 1.0;
+    return nightish ? 0.16 : 0.42;
+  }
+
+  /** AF-3D-004: the sky dome (and starfield at night) replacing the flat backdrop. */
+  _buildSky() {
+    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
+    this._sky?.dispose?.();
+    this._sky = null;
+    try {
+      this._sky = createSkyDome(this.THREE, this.environment, {
+        stars: q.stars ? null : false,   // null = per-preset default
+        pixelRatio: this._pr || 1,
+      });
+      this.scene.add(this._sky.group);
+    } catch (err) {
+      // The scene.background colour below remains the fallback backdrop.
+      console.warn("[FountainScene] sky dome unavailable:", err?.message || err);
+      this._sky = null;
+    }
+  }
+
   _applyEnvironment() {
     const T=this.THREE; const env=this.environment;
     if (this._envGroup) this.scene.remove(this._envGroup);
     this._envGroup = new T.Group();
-    // Keep the IBL probe in step with the preset: a night scene wants only a hint of
-    // reflection, a daylit one can take much more before it looks artificial.
+    this._buildSky();
+    // Keep the IBL probe in step with the preset — and, since the probe IS the sky
+    // now, rebuild it whenever the environment changes after init.
     if (this._envRT && this.scene) {
-      this.scene.environmentIntensity = (env === ENVIRONMENTS.NIGHT) ? 0.16 : 0.42;
+      this._buildEnvironmentIBL();
     }
 
     if (env===ENVIRONMENTS.NIGHT){
@@ -2950,6 +2985,26 @@ export class FountainScene {
     this._emitGroundFog(delta, I.fog || 0);
     this._updateSplashMap(delta);
 
+    // ─── Sky + volumetric beam cones (AF-3D R1) ────────────────────────
+    this._sky?.update(elapsed);
+    if (this._cones) {
+      // A beam is only visible where there is spray to scatter it.
+      const activity = Math.max(I.pump || 0, I.valve || 0, (I.fog || 0) * 0.6);
+      let coneLights = this._engLights;
+      if (!coneLights?.length && lightI > 0.02 && this.uwLights?.length) {
+        // No engineering fixtures placed: synthesize beams at the default
+        // underwater ring so the stock preview still gets the signature look.
+        if (!this._defaultConeLights || this._defaultConeLights.length !== this.uwLights.length) {
+          this._defaultConeLights = this.uwLights.map(l => ({
+            x: l.position.x, z: l.position.z, color: l.color, intensity: 0, radius: 5,
+          }));
+        }
+        for (const c of this._defaultConeLights) c.intensity = lightI * 4.0;
+        coneLights = this._defaultConeLights;
+      }
+      this._cones.update(coneLights, elapsed, activity, this.camera);
+    }
+
     // ─── Lasers ────────────────────────────────────────────────────────
     const laserI = I.laser || 0;
     this._laserBeams.forEach((beam,i) => {
@@ -3320,6 +3375,9 @@ export class FountainScene {
       try{ this.renderer.xr.setReferenceSpaceType(WT_vrReferenceSpaceType()); }catch(e){}
       await this.renderer.xr.setSession(session);
       this._xrSession=session;
+      // The XR loop renders directly (no depth-probe refresh), so a soft-particle
+      // fade would sample a stale frame. Hard edges are the honest fallback in VR.
+      this._setSoftDepthEnabled(false);
       // WebXR drives its own frame loop; the headset controls the camera pose.
       this.renderer.setAnimationLoop(()=>{
         try{
@@ -3331,7 +3389,7 @@ export class FountainScene {
           this.renderer.render(this.scene, this.camera);
         }catch(e){}
       });
-      session.addEventListener("end", ()=>{ this._xrSession=null; this.renderer.setAnimationLoop(null); });
+      session.addEventListener("end", ()=>{ this._xrSession=null; this.renderer.setAnimationLoop(null); this._setSoftDepthEnabled(true); });
       return true;
     }catch(e){ return false; }
   }
@@ -3417,6 +3475,13 @@ export class FountainScene {
       const pr = this._pr || 1;
       this._gradePass?.uniforms?.uResolution?.value?.set(w * pr, h * pr);
     }
+    // The depth probe tracks the drawing buffer; a resize rebuilds its depth texture,
+    // so every consumer must be re-pointed at the fresh one.
+    if (this._depthProbe) {
+      const pr = this._pr || 1;
+      this._depthProbe.setSize(w * pr, h * pr);
+      this._bindSoftDepth();
+    }
   }
 
   dispose() {
@@ -3439,6 +3504,16 @@ export class FountainScene {
     this._disposePostFX();
     this._reflection?.dispose?.();
     this._reflection = null;
+    this._depthProbe?.dispose?.();
+    this._depthProbe = null;
+    this._cones?.dispose?.();
+    this._cones = null;
+    this._sky?.dispose?.();
+    this._sky = null;
+    if (this._particleTex) {
+      Object.values(this._particleTex).forEach(t => t?.dispose?.());
+      this._particleTex = null;
+    }
     this._wetTex?.dispose?.();
     this._heatTex?.dispose?.();
     this._wetMat?.dispose?.();

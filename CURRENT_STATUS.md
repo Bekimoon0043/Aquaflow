@@ -1,11 +1,47 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-04, AF-CAT-001):** backend pytest
+> **AUTHORITATIVE (2026-09-05, AF-3D R1):** backend pytest
 > **685 passed, 21 skipped, 0 failures, 0 errors (706 collected)** · frontend vitest
-> **396 passed (31 files)** ·
+> **400 passed (32 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-05 (AF-3D R1 — the Depence night look: soft particles, billboard droplets, sky, beam cones)
+**Summary:** First phase of the 3D-preview realism programme (`AF-3D-REALISM-PLAN.md`,
+new at repo root — the full Depence-benchmarked 5-phase plan). Phase R1 lands the
+five "night look" upgrades in four new modules plus integration, keeping
+`FountainScene_v6.js` as orchestrator:
+
+- **AF-3D-001 soft particles** — `sceneDepth.js` renders an opaque-scene depth
+  probe (half-res, override material, shadow-frozen — WaterReflectionProbe
+  pattern); particle and cone fragments fade as they approach scene depth, killing
+  the hard sprite cuts at the pool rim. Disabled during reflection/quad/VR passes
+  where gl_FragCoord no longer maps to the probe.
+- **AF-3D-002 billboard droplets** — `particlesBillboard.js` replaces gl_Points
+  with instanced camera-facing quads, velocity-aligned and speed-stretched (width
+  narrows to conserve volume); no driver point-size clamp. Simulation untouched.
+  Plus a sub-frame spawn advance in `GPUParticleSystem.spawn` — a fast jet no
+  longer renders as a chain of pearls one frame-step apart.
+- **AF-3D-003 sprite textures** — `particleTextures.js` draws droplet/mist/foam/
+  flame sprites into canvases at startup (deterministic, no assets to ship);
+  headless/jsdom gets the analytic fallback automatically.
+- **AF-3D-004 sky dome + starfield + matched IBL** — `skyDome.js`: per-environment
+  gradient dome (night/dusk/day/arena) with a twinkling 1100-star field at night
+  (`sceneModes.js`'s `starfield: true` finally consumed), and the *same dome*
+  PMREM-filtered as the environment map, replacing the bright RoomEnvironment
+  studio probe that fought the night mood (kept only as fallback).
+- **AF-3D-005 volumetric beam cones** — `lightCones.js`: analytic light shafts for
+  up to 16 RGB fixtures (optical-depth shading, axial falloff, scrolling haze,
+  soft-depth fade), intensity scaled by live spray activity so light and water
+  cues visibly interact; synthesized at the default underwater ring when no
+  engineering lights are placed.
+
+Quality gating: new `softDepth/softScale/cones/stars` flags in `QUALITY_CONFIG`;
+`low` unchanged by design. Verified end-to-end in the running app (vite dev +
+backend on :8010, headless Chrome via playwright-core): night/dusk screenshots,
+zero shader/GL console errors. Frontend **400 passed (32 files)**, build green.
+Next: AF-3D-006/007 (GPU particle sim, 500k particles) per the plan.
 
 **Date:** 2026-09-04 (AF-CAT-001 — plug in the cable and AquaFlow tells you what's there)
 **Summary:** The controller catalog + auto-detection. `engine/controller_catalog.py`
