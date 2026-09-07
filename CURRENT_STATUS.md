@@ -1,11 +1,51 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-07, AF-3D-012):** backend pytest
+> **AUTHORITATIVE (2026-09-07, AF-3D R2):** backend pytest
 > **685 passed, 21 skipped, 0 failures, 0 errors (706 collected)** · frontend vitest
-> **400 passed (32 files)** ·
+> **418 passed (33 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-07 (AF-3D R2 — GPU particle simulation, ~200k droplets)
+**Summary:** Phase R2 of the realism plan. Particle state moved into floating-point
+textures and is advanced by shaders, lifting the count from the CPU field's ~82k
+ceiling to **131k water + 66k spray on `medium`** and 262k + 131k on `high`.
+
+- `particlesGPU.js` (AF-3D-007) — ping-ponged RGBA32F state (posLife / velLife),
+  a static per-particle meta texture (emitter index + seed), and a 6-row emitter
+  parameter texture re-uploaded each frame (~5 KB). Two passes advance it, one
+  writing velocity and one position; both recompute the FULL step from the same
+  previous state through a shared `simulate()`, so they cannot disagree about a
+  death, respawn or bounce. MRT would save the duplicated arithmetic but costs a
+  GLSL3 path — a second fullscreen pass over a 363-square texture is far cheaper.
+  No append: the pool is fixed, each particle belongs permanently to one emitter,
+  and dead particles respawn gated by that emitter's `density`, so live density
+  tracks show intensity while the allocation stays stable.
+- `nozzleEmitters.js` (AF-3D-006) — the insight that made this tractable: the
+  seventeen tuned nozzle behaviours are only FIVE emission primitives (CONE, RING,
+  FAN, CASCADE, MIST) with different parameters. Per-type knowledge stays in plain,
+  unit-tested JavaScript instead of being re-encoded — and almost certainly
+  regressed — in GLSL. Solved hydraulic launch speed, wind and animated aiming all
+  stay on the CPU. 18 new tests; one caught a real bug pre-merge (`fan_jet` passed
+  `dy: 0`, and the shader reads `dir.y` as fan compression — the sweep would have
+  collapsed to a vertical line).
+- Droplet opacity and size dropped hard (alpha 0.9 -> 0.17, size 0.55 -> 0.30):
+  optical depth is count x alpha x area, and at the old values an order of
+  magnitude more droplets integrated to solid white and lost the jet's shape.
+- **The splash/containment analysis is preserved.** It converts impacts into
+  calibrated litres/minute of spill — commissioning output, not decoration. Rather
+  than drop it, the CPU field keeps running as an INVISIBLE statistical sample at
+  1/16 (`CPU_SAMPLE_FRACTION`), sampled inside `spawn()` so it stays unbiased across
+  nozzles. Calibration divides solved flow by the spawn rate it actually measures,
+  so thinning the sample changes the per-impact volume and leaves reported litres
+  unchanged. Verified live: 39% outside, wetness field active.
+- `low` tier is untouched and keeps the CPU path; the GPU path also self-disables
+  without WebGL2 + `EXT_color_buffer_float`.
+
+Verified in the running app: backend reports WebGL2 + float RTs, 131406/65536
+particles live, 19 water + 23 spray emitters, zero GL errors. Frontend **418 passed
+(33 files)**, build green. Remaining from R2: AF-3D-008 (half-res particle pass).
 
 **Date:** 2026-09-07 (AF-3D-012 — stone/tile PBR surfaces, and the vertical pool rim)
 **Summary:** Pulled `AF-3D-012` forward from Phase R4 after on-hardware review: with

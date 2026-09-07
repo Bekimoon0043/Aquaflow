@@ -100,7 +100,13 @@ void main(){
   gl_Position = projectionMatrix * mv;
 }`;
 
-function billboardFrag(maxFieldLights) {
+/**
+ * The droplet fragment stage. Exported so the GPU-simulated field (particlesGPU.js)
+ * renders with the SAME optical model, light-field injection and soft-depth fade —
+ * the two backends must be visually indistinguishable, so this shading exists once.
+ * Its contract is the varying set: vColor, vLife, vWorldPos, vUv, vViewZ, vSeed.
+ */
+export function billboardFrag(maxFieldLights) {
   return /* glsl */ `
 precision highp float;
 varying vec4  vColor;

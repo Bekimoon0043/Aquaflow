@@ -82,6 +82,12 @@ import { LightConeSet } from "./lightCones";
 // AF-3D-012 (pulled forward from Phase R4) — procedural stone/tile PBR maps for the
 // hard surfaces; the flat single-colour deck was the loudest remaining CGI cue.
 import { createStoneMaps, cloneStoneMaps, applyStoneMaps, disposeStoneMaps } from "./groundTextures";
+// AF-3D-006/007 (Phase R2) — GPU particle simulation. State lives in float textures
+// and is advanced by shaders, lifting the count an order of magnitude above what the
+// CPU field can carry. The CPU field stays as the low-tier fallback AND as the
+// invisible statistical sample that keeps the splash/containment analysis honest.
+import { GPUParticleField, gpuParticlesSupported } from "./particlesGPU";
+import { describeNozzleEmitters, allocatePool, EMIT_CLASS } from "./nozzleEmitters";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -100,6 +106,9 @@ export const RENDER_QUALITY = { LOW:"low", MEDIUM:"medium", HIGH:"high" };
 
 // Max RGB fixture lights uploaded to the spatial light field shader
 const MAX_FIELD_LIGHTS = 16;
+// Emitter slots in the GPU field's parameter texture. A nozzle contributes one or
+// two (a jet plus its atomised shell), so this carries a large design comfortably.
+const MAX_GPU_EMITTERS = 96;
 // postFX per tier: `low` stays on the direct render path (no composer) so weak GPUs keep
 // their frame rate; `medium` gets bloom + grade; `high` adds SMAA and a wider bloom.
 // `reflect` is the planar-reflection target size in px, 0 = off. `reflectEvery` renders
@@ -114,16 +123,30 @@ const QUALITY_CONFIG = {
   low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
             postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false,
             reflect: 0,   reflectEvery: 1,
-            softDepth: false, softScale: 0.5, cones: false, stars: false },
+            softDepth: false, softScale: 0.5, cones: false, stars: false,
+            gpuParticles: false, gpuWater: 0, gpuSpray: 0 },
   medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00,
             postfx: true,  bloom: 0.35, smaa: false, ibl: true,  ao: false,
             reflect: 512, reflectEvery: 2,
-            softDepth: true, softScale: 0.5, cones: true, stars: true },
+            softDepth: true, softScale: 0.5, cones: true, stars: true,
+            gpuParticles: true, gpuWater: 131072, gpuSpray: 65536 },
   high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
             postfx: true,  bloom: 0.48, smaa: true,  ibl: true,  ao: true,
             reflect: 1024, reflectEvery: 1,
-            softDepth: true, softScale: 0.5, cones: true, stars: true },
+            softDepth: true, softScale: 0.5, cones: true, stars: true,
+            gpuParticles: true, gpuWater: 262144, gpuSpray: 131072 },
 };
+
+/**
+ * When the GPU field is drawing the water, the CPU field keeps running at this
+ * fraction purely as a PHYSICS SAMPLE: invisible, but still reporting impacts to the
+ * splash map. That map converts impacts into calibrated litres/minute of spill — an
+ * engineering figure, not decoration — and its calibration divides solved flow by the
+ * spawn rate it actually measures, so sampling one droplet in sixteen changes the
+ * per-impact volume and leaves the reported litres unchanged. Dropping the CPU field
+ * entirely would have silently zeroed a commissioning number.
+ */
+const CPU_SAMPLE_FRACTION = 1 / 16;
 
 // ── Camera-response pass ────────────────────────────────────────────────────
 // Applied after bloom, before OutputPass (which owns tone mapping + colour space).
@@ -555,6 +578,7 @@ class GPUParticleSystem {
     this.active   = 0;
     this.px = pixelRatio;
     this.blendMode = blendMode;
+    this.sampleFraction = 1;
 
     this.positions  = new Float32Array(maxCount * 3);
     this.velocities = new Float32Array(maxCount * 3);
@@ -600,6 +624,10 @@ class GPUParticleSystem {
 
   spawn(x,y,z, vx,vy,vz, r,g,b,a, life, scale, stretch=0.5) {
     if (this.active >= this.maxCount) return;
+    // Statistical sampling (see CPU_SAMPLE_FRACTION). Applied here rather than at the
+    // call sites so the sample is unbiased across nozzles — thinning inside each
+    // emitter's loop would have favoured whichever nozzle is iterated first.
+    if (this.sampleFraction < 1 && Math.random() >= this.sampleFraction) return;
     const i = this.active++;
     // Sub-frame spawn advance: all of a frame's particles used to be born at the
     // nozzle mouth in the same instant, so a fast jet rendered as a chain of pearls
@@ -1587,6 +1615,46 @@ export class FountainScene {
       }
     }
 
+    // AF-3D-007: GPU particle fields. When they are carrying the water, the CPU
+    // fields keep simulating as an invisible physics sample (see CPU_SAMPLE_FRACTION)
+    // so the splash map and its calibrated containment figures stay intact.
+    this._gpuWater = null;
+    this._gpuSpray = null;
+    if (q.gpuParticles && gpuParticlesSupported(T, this.renderer)) {
+      try {
+        const shared = { maxFieldLights: MAX_FIELD_LIGHTS, maxEmitters: MAX_GPU_EMITTERS };
+        this._gpuWater = new GPUParticleField(T, this.renderer, {
+          ...shared, count: q.gpuWater, map: this._particleTex.droplet,
+          gravity: -9.5, drag: 0.018, turbulence: 0.35,
+          sizeScale: 0.30, alpha: 0.17,
+        });
+        this._gpuSpray = new GPUParticleField(T, this.renderer, {
+          ...shared, count: q.gpuSpray, map: this._particleTex.mist,
+          gravity: -7.0, drag: 0.024, turbulence: 0.55,
+          sizeScale: 0.42, alpha: 0.10,
+        });
+        this.scene.add(this._gpuWater.mesh, this._gpuSpray.mesh);
+        // The CPU water/spray fields become invisible samplers.
+        this.waterSys.mesh.visible = false;
+        this.spraySys.mesh.visible = false;
+        this.waterSys.sampleFraction = CPU_SAMPLE_FRACTION;
+        this.spraySys.sampleFraction = CPU_SAMPLE_FRACTION;
+        // Share the light field so GPU droplets are lit identically to CPU ones.
+        [this._gpuWater, this._gpuSpray].forEach(f => {
+          f.uniforms.uGlobalLight  = this._lightField.uGlobalLight;
+          f.uniforms.uGlobalLightI = this._lightField.uGlobalLightI;
+          f.uniforms.uFieldCount   = this._lightField.uFieldCount;
+          f.uniforms.uFieldPos     = this._lightField.uFieldPos;
+          f.uniforms.uFieldCol     = this._lightField.uFieldCol;
+          f.uniforms.uFieldInt     = this._lightField.uFieldInt;
+          f.uniforms.uFieldRad     = this._lightField.uFieldRad;
+        });
+      } catch (err) {
+        console.warn("[FountainScene] GPU particles unavailable:", err?.message || err);
+        this._disposeGPUFields();
+      }
+    }
+
     // AF-3D-005: volumetric beam cones for the RGB fixture lights.
     this._cones = null;
     if (q.cones) {
@@ -1864,6 +1932,7 @@ export class FountainScene {
   _cadHiddenObjects() {
     return [
       this.waterSys?.mesh, this.spraySys?.mesh, this.foamSys?.mesh, this.flameSys?.mesh,
+      this._gpuWater?.mesh, this._gpuSpray?.mesh,
       this._fogMesh, this.waterSurface, this._wetOverlay,
       this._cones?.group, this._sky?.group,
       ...(this.nozzles || []).map(n => n.glow),
@@ -2205,7 +2274,8 @@ export class FountainScene {
   // ── Soft-depth plumbing (AF-3D-001) ─────────────────────────────────────────
   /** Point every soft-depth consumer (particles, cones) at the probe's texture. */
   _bindSoftDepth() {
-    const systems = [this.waterSys, this.spraySys, this.foamSys, this.flameSys].filter(Boolean);
+    const systems = [this.waterSys, this.spraySys, this.foamSys, this.flameSys,
+                     this._gpuWater, this._gpuSpray].filter(Boolean);
     if (!this._depthProbe) {
       systems.forEach(ps => ps.setSoftDepth(null));
       this._cones?.setDepth(null);
@@ -2220,10 +2290,22 @@ export class FountainScene {
     this._cones?.setDepth(this._depthProbe.texture, ix, iy, near, far);
   }
 
+  /** Release the GPU particle fields and hand the water back to the CPU path. */
+  _disposeGPUFields() {
+    this._gpuWater?.dispose?.();
+    this._gpuSpray?.dispose?.();
+    this._gpuWater = null;
+    this._gpuSpray = null;
+    this._gpuLayoutKey = null;
+    if (this.waterSys) { this.waterSys.mesh.visible = true; this.waterSys.sampleFraction = 1; }
+    if (this.spraySys) { this.spraySys.mesh.visible = true; this.spraySys.sampleFraction = 1; }
+  }
+
   /** Toggle the fade without unbinding — used around the reflection pass, whose
    *  framebuffer does not match the probe's screen-space lookup. */
   _setSoftDepthEnabled(on) {
-    [this.waterSys, this.spraySys, this.foamSys, this.flameSys].forEach(ps => ps?.setSoftEnabled(on));
+    [this.waterSys, this.spraySys, this.foamSys, this.flameSys,
+     this._gpuWater, this._gpuSpray].forEach(ps => ps?.setSoftEnabled(on));
     this._cones?.cones.forEach(c => {
       c.material.uniforms.uUseDepth.value = (on && c.material.uniforms.uSceneDepth.value) ? 1.0 : 0.0;
     });
@@ -2234,6 +2316,7 @@ export class FountainScene {
   _depthHiddenObjects() {
     return [
       this.waterSys?.mesh, this.spraySys?.mesh, this.foamSys?.mesh, this.flameSys?.mesh,
+      this._gpuWater?.mesh, this._gpuSpray?.mesh,
       this._fogMesh, this.waterSurface, this._wetOverlay, this._reviewGroup,
       this._laserGroup, this._cones?.group, this._sky?.group, this._editor?.root,
       ...(this.nozzles || []).map(n => n.glow),
@@ -2967,6 +3050,13 @@ export class FountainScene {
       }
     }
 
+    // GPU emitter descriptors are rebuilt each frame from the same intensities that
+    // drive the CPU path, so the two backends stay in step.
+    const gpuOn = !!(this._gpuWater && this._gpuSpray);
+    const emitWater = gpuOn ? (this._emitWaterBuf || (this._emitWaterBuf = [])) : null;
+    const emitSpray = gpuOn ? (this._emitSprayBuf || (this._emitSprayBuf = [])) : null;
+    if (gpuOn) { emitWater.length = 0; emitSpray.length = 0; }
+
        // ─── Drive nozzles ──────────────────────────────────────────────────
     this.nozzles.forEach((nz, idx) => {
       const t = nz.config.type;
@@ -3022,7 +3112,39 @@ export class FountainScene {
       const finalI = live > 0.015 ? live : floor;
       nz.setIntensity(finalI);
       nz.update(delta, elapsed, this.wind, this._lightField.uGlobalLight.value);
+
+      if (gpuOn) {
+        const descs = describeNozzleEmitters(
+          nz.config, finalI, elapsed, this.wind,
+          this._lightField.uGlobalLight.value,
+          (demand, fallback) => nz._launchSpeed(demand, fallback),
+        );
+        for (const d of descs) {
+          const bucket = d.cls === EMIT_CLASS.SPRAY ? emitSpray : emitWater;
+          // The parameter texture is MAX_GPU_EMITTERS wide; a particle assigned past
+          // its edge would sample garbage, so a very large design simply drops its
+          // tail rather than corrupting the field.
+          if (bucket.length < MAX_GPU_EMITTERS) bucket.push(d);
+        }
+      }
     });
+
+    // ─── GPU particle simulation ───────────────────────────────────────
+    if (gpuOn) {
+      const pool = this._poolBoundsForSplash();
+      // The allocation only has to be recomputed when the DESIGN changes; keying on
+      // the emitter signature keeps a fading nozzle from reshuffling the whole field.
+      const key = `${this.nozzles.map(n => `${n.config.id}:${n.config.type}`).join("|")}#${emitWater.length}/${emitSpray.length}`;
+      if (key !== this._gpuLayoutKey) {
+        this._gpuLayoutKey = key;
+        this._gpuWater.setLayout(allocatePool(emitWater, this._gpuWater.count), key);
+        this._gpuSpray.setLayout(allocatePool(emitSpray, this._gpuSpray.count), key);
+      }
+      this._gpuWater.setEmitters(emitWater);
+      this._gpuSpray.setEmitters(emitSpray);
+      this._gpuWater.step(delta, elapsed, { wind: this.wind, pool });
+      this._gpuSpray.step(delta, elapsed, { wind: this.wind, pool });
+    }
       
     // ─── Particle systems ──────────────────────────────────────────────
     this.waterSys.update(delta, -9.5, elapsed);
@@ -3555,6 +3677,7 @@ export class FountainScene {
     this._reflection = null;
     this._depthProbe?.dispose?.();
     this._depthProbe = null;
+    this._disposeGPUFields();
     this._cones?.dispose?.();
     this._cones = null;
     this._sky?.dispose?.();
