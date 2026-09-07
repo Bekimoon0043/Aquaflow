@@ -1,11 +1,36 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-05, AF-3D R1):** backend pytest
+> **AUTHORITATIVE (2026-09-07, AF-3D-012):** backend pytest
 > **685 passed, 21 skipped, 0 failures, 0 errors (706 collected)** · frontend vitest
 > **400 passed (32 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-07 (AF-3D-012 — stone/tile PBR surfaces, and the vertical pool rim)
+**Summary:** Pulled `AF-3D-012` forward from Phase R4 after on-hardware review: with
+R1's lighting in place the untextured ground was the loudest remaining CGI cue.
+New `groundTextures.js` generates complete PBR sets (albedo + normal + roughness,
+all derived from one seeded height field so they agree by construction) into
+canvases at startup — no binary assets, deterministic, analytic fallback when
+headless. Applied to deck and pool wall (dark granite pavers), coping (polished
+stone — its 0.7 metalness had to drop to 0.22 or a real albedo read as smoked
+mirror), basin floor (mosaic tiles, coarsened to 12/edge at repeat 2 because a
+fine mosaic seen through the animated surface is sub-pixel and moirés), and the
+venue stage. Clones share canvases, so the wall reuses the deck stone at wall
+scale for three texture objects rather than a regeneration.
+
+Also fixed a **pre-existing bug** the user's circular-pool screenshot exposed:
+`_buildPool` built the circular coping as a `TorusGeometry` without rotating it.
+Three.js generates a torus standing in the XY plane, so the pool rim was installed
+VERTICALLY — a large translucent archway hooping over the water, its lower half
+buried under the deck. Only circular pools build a torus coping (rectangular ones
+use box copings), which is why it had never surfaced. Diagnosed by bisection with
+a new dev-only `window.__aquaflowScene` handle: with particles, glows, cones and
+core columns all hidden the arch survived, proving solid geometry.
+
+Frontend **400 passed (32 files)**, build green. Verified on the user's GPU at
+60 fps. Next: AF-3D-006/007 (GPU particle sim, 500k particles) per the plan.
 
 **Date:** 2026-09-05 (AF-3D R1 — the Depence night look: soft particles, billboard droplets, sky, beam cones)
 **Summary:** First phase of the 3D-preview realism programme (`AF-3D-REALISM-PLAN.md`,

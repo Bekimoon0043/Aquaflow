@@ -79,6 +79,9 @@ import { makeDropletTexture, makeMistTexture, makeFoamTexture, makeFlameTexture 
 import { SceneDepthProbe } from "./sceneDepth";
 import { createSkyDome, createSkyIBL } from "./skyDome";
 import { LightConeSet } from "./lightCones";
+// AF-3D-012 (pulled forward from Phase R4) — procedural stone/tile PBR maps for the
+// hard surfaces; the flat single-colour deck was the loudest remaining CGI cue.
+import { createStoneMaps, cloneStoneMaps, applyStoneMaps, disposeStoneMaps } from "./groundTextures";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -356,7 +359,10 @@ void main(){
   float dx = (w1.y + w2.y + w3.y) * 2.0;
   float dz = (w1.y + w2.y + w4.y) * 2.0;
   vNormal = normalize(normalMatrix * normalize(vec3(-dx*1.8, 1.0, -dz*1.8)));
-  vFoam   = smoothstep(0.02, 0.06, disp.y) * I;
+  // Foam only where wave trains actually superpose near their combined maximum.
+  // The old 0.02 threshold sat below every single crest, so daylight painted the
+  // whole surface in ordered white rows — wave-pattern stripes, not foam.
+  vFoam   = smoothstep(0.058, 0.105, disp.y) * I;
   vDepth  = 1.0 - length(uv - 0.5) * 2.2;
   vec4 wp = modelMatrix * vec4(pos, 1.0);
   vWorldPos = wp.xyz;
@@ -1607,6 +1613,11 @@ export class FountainScene {
     this._buildPostFX();
 
     this._initialized = true;
+    // Dev-only debug handle: lets a console (or a headless test driver) reach the
+    // live scene to toggle materials and passes. Stripped from production builds.
+    try {
+      if (import.meta.env?.DEV && typeof window !== "undefined") window.__aquaflowScene = this;
+    } catch (e) { /* non-vite consumers */ }
     this._animate();
   }
 
@@ -2339,6 +2350,28 @@ export class FountainScene {
     this._fogMesh.geometry.attributes.aLife.needsUpdate=true;
   }
 
+  // ── Ground texture cache (AF-3D-012) ────────────────────────────────────
+  // Generated once per scene, reused across pool rebuilds. Null in headless
+  // contexts — every material then keeps its flat colour, the pre-texture look.
+  _ensureGroundTextures() {
+    if (this._groundTex !== undefined) return this._groundTex;
+    const T = this.THREE;
+    try {
+      const deck = createStoneMaps(T, { kind: "deck", repeat: 20 });
+      this._groundTex = deck ? {
+        deck,
+        // Same stone at wall/stage scale — clones share the canvases.
+        wall:   cloneStoneMaps(deck, 16, 0.4),
+        stage:  cloneStoneMaps(deck, 6, 6),
+        coping: createStoneMaps(T, { kind: "coping", repeat: 10 }),
+        basin:  createStoneMaps(T, { kind: "basin", repeat: 2 }),
+      } : null;
+    } catch (e) {
+      this._groundTex = null;   // textures are an enhancement, never fatal
+    }
+    return this._groundTex;
+  }
+
   // ── Pool / surface / lasers / venue ─────────────────────────────────────
   _buildPool() {
     const T=this.THREE;
@@ -2357,7 +2390,10 @@ export class FountainScene {
     }
     this._poolRadius=poolRadius; this._poolW=poolW; this._poolL=poolL; this._poolType=poolType;
 
+    const gt = this._ensureGroundTextures();
+
     const deckMat = new T.MeshStandardMaterial({ color:0x10151b, roughness:0.78, metalness:0.12 });
+    if (gt) { applyStoneMaps(deckMat, gt.deck); deckMat.metalness = 0.05; }
     const deck = new T.Mesh(new T.PlaneGeometry(80,80), deckMat);
     deck.rotation.x=-Math.PI/2; deck.position.y=-0.02; deck.receiveShadow=true;
     this.scene.add(deck); this._poolObjects.push(deck);
@@ -2366,12 +2402,21 @@ export class FountainScene {
       ? new T.CylinderGeometry(poolRadius+0.18, poolRadius+0.18, 0.45, 64, 1, true)
       : new T.BoxGeometry(poolW+0.35, 0.45, poolL+0.35);
     const wallMat = new T.MeshStandardMaterial({ color:0x252535, roughness:0.65, metalness:0.25 });
+    if (gt) { applyStoneMaps(wallMat, gt.wall, { normalScale: 0.6 }); wallMat.metalness = 0.08; }
     const wall = new T.Mesh(wallGeo, wallMat); wall.position.y=0.22; wall.castShadow=true;
     this.scene.add(wall); this._poolObjects.push(wall);
 
     const copingMat = new T.MeshStandardMaterial({color:0x999aaa,roughness:0.2,metalness:0.7});
+    // Polished stone, not chrome: with a real albedo the high metalness read as
+    // smoked mirror and swallowed the texture.
+    if (gt) { applyStoneMaps(copingMat, gt.coping, { normalScale: 0.4 }); copingMat.metalness = 0.22; }
     if (poolType==='circular') {
       const coping = new T.Mesh(new T.TorusGeometry(poolRadius+0.18,0.09,8,64), copingMat);
+      // A torus is generated standing in the XY plane. Without this rotation the pool
+      // rim was installed VERTICALLY — a giant archway hooping over the water, its
+      // lower half buried under the deck. Only circular pools build a torus coping,
+      // which is why rectangular layouts (box copings) never showed it.
+      coping.rotation.x = -Math.PI/2;
       coping.position.y=0.46; this.scene.add(coping); this._poolObjects.push(coping);
     } else {
       const s1 = poolW + 0.35;
@@ -2388,6 +2433,8 @@ export class FountainScene {
 
     const floorGeo = poolType==='circular' ? new T.CircleGeometry(poolRadius,64) : new T.PlaneGeometry(poolW,poolL);
     const floorMat = new T.MeshStandardMaterial({color:0x08101e,roughness:0.95});
+    // Mosaic basin lining — visible through the water and under the caustics.
+    if (gt) applyStoneMaps(floorMat, gt.basin, { normalScale: 0.45 });
     const floor = new T.Mesh(floorGeo,floorMat);
     floor.rotation.x=-Math.PI/2; floor.position.y=-0.45;
     this.scene.add(floor); this._poolObjects.push(floor);
@@ -2499,6 +2546,8 @@ export class FountainScene {
       roughness: 0.72,
       metalness: 0.18,
     });
+    const gtStage = this._ensureGroundTextures();
+    if (gtStage) { applyStoneMaps(stageMat, gtStage.stage); stageMat.metalness = 0.05; }
     const stage = new T.Mesh(new T.CylinderGeometry(11.5, 12.2, 0.22, 96), stageMat);
     stage.position.y = -0.12;
     stage.receiveShadow = true;
@@ -3513,6 +3562,10 @@ export class FountainScene {
     if (this._particleTex) {
       Object.values(this._particleTex).forEach(t => t?.dispose?.());
       this._particleTex = null;
+    }
+    if (this._groundTex) {
+      Object.values(this._groundTex).forEach(maps => disposeStoneMaps(maps));
+      this._groundTex = undefined;
     }
     this._wetTex?.dispose?.();
     this._heatTex?.dispose?.();
