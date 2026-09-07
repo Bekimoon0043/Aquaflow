@@ -109,6 +109,9 @@ const MAX_FIELD_LIGHTS = 16;
 // Emitter slots in the GPU field's parameter texture. A nozzle contributes one or
 // two (a jet plus its atomised shell), so this carries a large design comfortably.
 const MAX_GPU_EMITTERS = 96;
+// Concurrent impact ripples on the pool surface. A ring buffer: the newest impact
+// replaces the oldest, so a busy show keeps its most recent disturbances.
+const MAX_RIPPLES = 8;
 // postFX per tier: `low` stays on the direct render path (no composer) so weak GPUs keep
 // their frame rate; `medium` gets bloom + grade; `high` adds SMAA and a wider bloom.
 // `reflect` is the planar-reflection target size in px, 0 = off. `reflectEvery` renders
@@ -356,12 +359,15 @@ uniform float uTime;
 uniform float uIntensity;
 uniform float uWind;
 uniform mat4  uReflectMatrix;
+uniform vec4  uRipples[${MAX_RIPPLES}];   // xy = centre, z = age (s), w = strength
+uniform int   uRippleCount;
 varying vec2  vUv;
 varying vec3  vWorldPos;
 varying vec3  vNormal;
 varying float vDepth;
 varying float vFoam;
 varying vec4  vReflectCoord;
+varying vec2  vLocalXZ;
 
 vec3 gerstner(vec2 p, vec2 dir, float amp, float freq, float speed, float steep, float t){
   float phase = dot(dir, p) * freq + t * speed;
@@ -371,23 +377,62 @@ vec3 gerstner(vec2 p, vec2 dir, float amp, float freq, float speed, float steep,
 
 void main(){
   vUv = uv;
-  vec3 pos = position;
+  // Wave input must be the WORLD ground plane. A PlaneGeometry's local position lies
+  // in XY with z identically zero, so the old position.xz fed every Gerstner term
+  // (x, 0): each wave reduced to dir.x * x, varying along X and constant along Z.
+  // The result was a set of parallel bands rather than a wave field — the surface
+  // could never look like water no matter how the amplitudes were tuned.
+  vec3 wp0 = (modelMatrix * vec4(position, 1.0)).xyz;
+  vec2 P   = wp0.xz;
   float I  = max(uIntensity, 0.2);
-  vec3 w1 = gerstner(pos.xz, normalize(vec2( 1.0, 0.6)), 0.035*I, 2.1, 1.20, 0.8, uTime);
-  vec3 w2 = gerstner(pos.xz, normalize(vec2(-0.7, 1.0)), 0.028*I, 1.8, 0.90, 0.6, uTime*0.85);
-  vec3 w3 = gerstner(pos.xz, normalize(vec2( 0.3,-1.0)), 0.018*I, 3.5, 1.80, 0.4, uTime*1.15);
-  vec3 w4 = gerstner(pos.xz, normalize(vec2(-1.0, 0.4)), 0.012*I, 4.8, 2.40, 0.3, uTime*0.70);
+  vec3 w1 = gerstner(P, normalize(vec2( 1.0, 0.6)), 0.035*I, 2.1, 1.20, 0.8, uTime);
+  vec3 w2 = gerstner(P, normalize(vec2(-0.7, 1.0)), 0.028*I, 1.8, 0.90, 0.6, uTime*0.85);
+  vec3 w3 = gerstner(P, normalize(vec2( 0.3,-1.0)), 0.018*I, 3.5, 1.80, 0.4, uTime*1.15);
+  vec3 w4 = gerstner(P, normalize(vec2(-1.0, 0.4)), 0.012*I, 4.8, 2.40, 0.3, uTime*0.70);
   vec3 disp = w1 + w2 + w3 + w4;
-  pos += disp;
   float dx = (w1.y + w2.y + w3.y) * 2.0;
   float dz = (w1.y + w2.y + w4.y) * 2.0;
-  vNormal = normalize(normalMatrix * normalize(vec3(-dx*1.8, 1.0, -dz*1.8)));
+
+  // ── Impact ripples (AF-3D-010) ──
+  // Expanding rings where the jets ACTUALLY land, sourced from the same impact
+  // events the splash map records. Ambient wave trains make a pool look animated
+  // but inert; rings appearing under a running jet are what tie the surface to the
+  // show. The slope is differentiated analytically rather than sampled, so the
+  // normal stays exact — a ripple visible in the reflection but not in the shading
+  // reads as a decal painted on glass.
+  float ripple = 0.0;
+  for (int i = 0; i < ${MAX_RIPPLES}; i++) {
+    if (i >= uRippleCount) break;
+    vec2  d     = P - uRipples[i].xy;
+    float r     = length(d) + 1e-4;
+    float age   = uRipples[i].z;
+    float front = age * 1.7;                    // ring travel, metres/second
+    float env   = exp(-abs(r - front) * 3.2)    // energy stays at the wavefront
+                * exp(-age * 1.15)              // and decays with age
+                * uRipples[i].w;
+    float k     = 9.0;
+    float phase = (r - front) * k;
+    ripple += sin(phase) * env * 0.05;
+    float dhdr = cos(phase) * k * env * 0.05;
+    dx += dhdr * (d.x / r) * 2.0;
+    dz += dhdr * (d.y / r) * 2.0;
+  }
+  disp.y += ripple;
+
+  vLocalXZ = P;
+  // World-space normal. The slope above is already expressed in world XZ, and the
+  // fragment stage dots this against world-space view and light vectors — routing it
+  // through normalMatrix (which maps object space to VIEW space) mixed two frames of
+  // reference and quietly corrupted every fresnel, specular and refraction term.
+  vNormal = normalize(vec3(-dx*1.8, 1.0, -dz*1.8));
   // Foam only where wave trains actually superpose near their combined maximum.
   // The old 0.02 threshold sat below every single crest, so daylight painted the
   // whole surface in ordered white rows — wave-pattern stripes, not foam.
   vFoam   = smoothstep(0.058, 0.105, disp.y) * I;
   vDepth  = 1.0 - length(uv - 0.5) * 2.2;
-  vec4 wp = modelMatrix * vec4(pos, 1.0);
+  // Displacement is authored in world axes, so it is applied to the world position
+  // directly rather than being pushed back through the model matrix.
+  vec4 wp = vec4(wp0 + disp, 1.0);
   vWorldPos = wp.xyz;
   // Project against the FLAT plane, not the wave-displaced point: the mirror lives at
   // the mean waterline, and projecting the displaced position would double-count the
@@ -410,6 +455,12 @@ uniform vec3  uCameraPos;
 uniform sampler2D uReflectTex;
 uniform float uReflectStrength;   // 0 disables the sample and falls back to flat sky
 uniform float uIntensity;         // surface agitation — drives reflection break-up
+uniform sampler2D uFloorTex;      // basin lining, sampled through the refracted ray
+uniform float uHasFloorTex;
+uniform float uFloorY;            // basin floor height, world metres
+uniform float uFloorScale;        // world metres per texture tile
+uniform vec3  uAbsorb;            // Beer-Lambert extinction per metre, per channel
+uniform vec4  uPoolShape;         // x: 1 = circular, y: radius, z: width, w: length
 uniform int   uFieldCount;
 uniform vec3  uFieldPos[${MAX_FIELD_LIGHTS}];
 uniform vec3  uFieldCol[${MAX_FIELD_LIGHTS}];
@@ -421,17 +472,56 @@ varying vec3  vNormal;
 varying float vDepth;
 varying float vFoam;
 varying vec4  vReflectCoord;
+varying vec2  vLocalXZ;
 
 void main(){
+  // A circular basin is drawn as a tessellated plane and cut to shape here. A fan
+  // (CircleGeometry) has vertices only on its rim, so wave displacement and ripples
+  // had nothing to move — the round pools were flat by construction.
+  if (uPoolShape.x > 0.5 && length(vLocalXZ) > uPoolShape.y) discard;
+
   float depth = clamp(vDepth, 0.0, 1.0);
   float absorption = exp(-depth * 2.5);
   vec3  base = mix(uDeepColor, uShallowColor, pow(1.0 - absorption, 0.7));
 
-  // Procedural caustics
-  float c1 = sin(vUv.x * 18.0 + uTime * 1.1) * cos(vUv.y * 14.0 + uTime * 0.85);
-  float c2 = sin(vUv.x * 11.0 - uTime * 1.3) * cos(vUv.y * 12.0 + uTime * 0.65);
+  vec3 viewIn = normalize(vWorldPos - uCameraPos);
+
+  // ── Refraction through the surface onto the basin floor (AF-3D-009) ──
+  // Reflection alone cannot make a basin read as water: looking down, fresnel says
+  // you see THROUGH it, and what you see is the lining, displaced by the waves. The
+  // basin is a known flat plane, so the refracted ray can be intersected with it
+  // analytically — no second scene pass, and the wobble is physically the right
+  // shape rather than a scrolling normal-map trick.
+  float causticsFloor = 0.0;
+  if (uHasFloorTex > 0.5) {
+    vec3 rdir = refract(viewIn, normalize(vNormal), 1.0 / 1.333);
+    if (rdir.y < -1e-3) {
+      float t   = (uFloorY - vWorldPos.y) / rdir.y;
+      vec3  hit = vWorldPos + rdir * t;
+      // World-space tiling: the lining is seamless, so this avoids having to match
+      // the floor mesh's own UV layout for two different pool shapes.
+      vec3 floorCol = texture2D(uFloorTex, hit.xz / uFloorScale).rgb;
+
+      // Caustics belong HERE — focused light on the floor — not painted on the
+      // surface as they were before. Animated in world space so they stay put as
+      // the camera orbits.
+      float k1 = sin(hit.x * 3.1 + uTime * 1.1) * cos(hit.z * 2.6 + uTime * 0.85);
+      float k2 = sin(hit.x * 2.0 - uTime * 1.3) * cos(hit.z * 2.2 + uTime * 0.65);
+      causticsFloor = pow(max(k1 * k2, 0.0), 2.0) * 0.9;
+      floorCol *= 1.0 + causticsFloor * 2.2;
+      floorCol += causticsFloor * uLightColor * uLightIntensity * 0.5;
+
+      // Beer-Lambert along the real path length: red is stripped first, which is
+      // why deep water goes blue-green rather than merely darker.
+      float pathLen = length(hit - vWorldPos);
+      vec3  trans   = exp(-uAbsorb * pathLen);
+      base = floorCol * trans + uDeepColor * (1.0 - trans) * 0.85;
+    }
+  }
+
+  // Surface-level shimmer, kept subtle now that the real caustics live on the floor.
   float c3 = sin((vUv.x + vUv.y) * 9.0 + uTime * 0.9) * 0.5;
-  float caustics = pow(max(c1*c2, 0.0), 2.2) * 0.35 + pow(max(c3, 0.0), 3.0) * 0.2;
+  float caustics = pow(max(c3, 0.0), 3.0) * 0.2 + causticsFloor * 0.25;
 
     // Main light caustic tint
   base += caustics * uLightColor * uLightIntensity * 0.7;
@@ -1805,8 +1895,24 @@ export class FountainScene {
     this._wetOverlay.renderOrder = 2;
     this.scene.add(this._wetOverlay);
 
+    // Impact ripples: the ring buffer of recent in-basin landings (AF-3D-010).
+    this._ripples = Array.from({ length: MAX_RIPPLES }, () => ({ x: 0, z: 0, age: 1e3, str: 0 }));
+    this._rippleNext = 0;
+    this._rippleCooldown = 0;
+
     // Give the particle systems somewhere to report their impacts.
-    const sink = (x, z, amount, inside) => this._splash?.deposit(x, z, amount, inside);
+    const sink = (x, z, amount, inside) => {
+      this._splash?.deposit(x, z, amount, inside);
+      // Seed a ripple from a real landing. Rate-limited: thousands of droplets land
+      // each second and spawning a ring per droplet would leave the surface a
+      // featureless boil rather than the readable rings a viewer expects.
+      if (inside && this._rippleCooldown <= 0) {
+        this._rippleCooldown = 0.11;
+        const r = this._ripples[this._rippleNext];
+        this._rippleNext = (this._rippleNext + 1) % MAX_RIPPLES;
+        r.x = x; r.z = z; r.age = 0; r.str = 1;
+      }
+    };
     const bounds = () => this._poolBoundsForSplash();
     [this.waterSys, this.spraySys].forEach(ps => { ps.impactSink = sink; ps.poolBounds = bounds; });
   }
@@ -1828,6 +1934,24 @@ export class FountainScene {
       b.length = this._poolL || 8;
     }
     return b;
+  }
+
+  /** Age the impact ripples and push them to the water shader. */
+  _updateRipples(delta) {
+    if (!this._ripples || !this.waterMat?.uniforms?.uRipples) return;
+    this._rippleCooldown -= delta;
+    const u = this.waterMat.uniforms;
+    let n = 0;
+    for (let i = 0; i < MAX_RIPPLES; i++) {
+      const r = this._ripples[i];
+      r.age += delta;
+      // Past ~3.5 s the exp(-age) envelope has taken the ring below visibility;
+      // dropping it there keeps the shader's loop short.
+      if (r.str <= 0 || r.age > 3.5) continue;
+      u.uRipples.value[n].set(r.x, r.z, r.age, r.str);
+      n++;
+    }
+    u.uRippleCount.value = n;
   }
 
   _updateSplashMap(delta) {
@@ -2444,7 +2568,17 @@ export class FountainScene {
       this._groundTex = deck ? {
         deck,
         // Same stone at wall/stage scale — clones share the canvases.
-        wall:   cloneStoneMaps(deck, 16, 0.4),
+        //
+        // Wall tiling is per SHAPE and deliberately near-isotropic. The circular wall
+        // is an open cylinder: many repeats around its circumference, one up its
+        // 0.45 m band. The rectangular wall is a solid Box whose top face is a large
+        // quad — and a box face's UVs are 0..1 regardless of its size, so a strongly
+        // anisotropic repeat there smears the stone into parallel bands across the
+        // whole pool interior. That is exactly what an earlier 16 x 0.4 did: it read
+        // as striping on the water and survived every attempt to blame the water,
+        // the basin floor, shadows or post-processing, because it was none of them.
+        wallCyl: cloneStoneMaps(deck, 18, 1),
+        wallBox: cloneStoneMaps(deck, 5, 5),
         stage:  cloneStoneMaps(deck, 6, 6),
         coping: createStoneMaps(T, { kind: "coping", repeat: 10 }),
         basin:  createStoneMaps(T, { kind: "basin", repeat: 2 }),
@@ -2485,7 +2619,10 @@ export class FountainScene {
       ? new T.CylinderGeometry(poolRadius+0.18, poolRadius+0.18, 0.45, 64, 1, true)
       : new T.BoxGeometry(poolW+0.35, 0.45, poolL+0.35);
     const wallMat = new T.MeshStandardMaterial({ color:0x252535, roughness:0.65, metalness:0.25 });
-    if (gt) { applyStoneMaps(wallMat, gt.wall, { normalScale: 0.6 }); wallMat.metalness = 0.08; }
+    if (gt) {
+      applyStoneMaps(wallMat, poolType === 'circular' ? gt.wallCyl : gt.wallBox, { normalScale: 0.6 });
+      wallMat.metalness = 0.08;
+    }
     const wall = new T.Mesh(wallGeo, wallMat); wall.position.y=0.22; wall.castShadow=true;
     this.scene.add(wall); this._poolObjects.push(wall);
 
@@ -2532,8 +2669,12 @@ export class FountainScene {
     const T=this.THREE;
     if (this.waterSurface?.parent) this.waterSurface.parent.remove(this.waterSurface);
     const segs=48;
+    // Both shapes use a tessellated PLANE; a circular basin is cut to shape in the
+    // fragment stage. CircleGeometry is a fan with vertices only on its rim, so it
+    // had no interior to displace — round pools were flat no matter how the waves
+    // were tuned, and ripples would have been invisible on them entirely.
     const geo = this._poolType==='circular'
-      ? new T.CircleGeometry(this._poolRadius, 64)
+      ? new T.PlaneGeometry(this._poolRadius*2, this._poolRadius*2, 96, 96)
       : new T.PlaneGeometry(this._poolW, this._poolL, segs, segs);
 
     this.waterMat = new T.ShaderMaterial({
@@ -2556,6 +2697,19 @@ export class FountainScene {
         uReflectTex:      {value: this._reflection ? this._reflection.texture : null},
         uReflectMatrix:   {value: this._reflection ? this._reflection.textureMatrix : new T.Matrix4()},
         uReflectStrength: {value: 0.0},
+        // Refraction onto the basin floor + the impact-ripple ring buffer (R3).
+        uFloorTex:    {value: this._groundTex?.basin?.map || null},
+        uHasFloorTex: {value: this._groundTex?.basin?.map ? 1.0 : 0.0},
+        uFloorY:      {value: -0.45},
+        uFloorScale:  {value: 2.0},
+        // Water's extinction coefficients: red is absorbed roughly an order of
+        // magnitude faster than blue, which is why depth reads blue-green.
+        uAbsorb:      {value: new T.Vector3(0.46, 0.09, 0.06)},
+        uPoolShape:   {value: new T.Vector4(
+          this._poolType === 'circular' ? 1 : 0,
+          this._poolRadius || 6, this._poolW || 12, this._poolL || 8)},
+        uRipples:     {value: Array.from({length: MAX_RIPPLES}, () => new T.Vector4())},
+        uRippleCount: {value: 0},
         uFieldCount:     this._lightField.uFieldCount,
         uFieldPos:       this._lightField.uFieldPos,
         uFieldCol:       this._lightField.uFieldCol,
@@ -3155,6 +3309,7 @@ export class FountainScene {
     this._emitFlame(delta, I.flame || 0);
     this._emitGroundFog(delta, I.fog || 0);
     this._updateSplashMap(delta);
+    this._updateRipples(delta);
 
     // ─── Sky + volumetric beam cones (AF-3D R1) ────────────────────────
     this._sky?.update(elapsed);

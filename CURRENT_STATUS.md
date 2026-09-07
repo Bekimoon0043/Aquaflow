@@ -7,6 +7,53 @@
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
 
+**Date:** 2026-09-07 (AF-3D R3 + HUD — refraction, ripples, and the striped water solved)
+**Summary:** Phase R3 of the realism plan, plus the performance HUD, plus three real
+bugs found along the way.
+
+- **AF-3D-013 performance HUD.** The tiers are a frame-budget trade and the budget
+  was invisible — including to the user I had asked for a frame rate. `getPerfStats()`
+  reports FPS (averaged over a second), worst frame, particles by backend, draw calls,
+  triangles and which features the tier enabled; a toggleable HUD sits top-right of
+  the preview. Fixed the counter too: three.js clears `renderer.info` on every
+  `render()` and a frame runs several passes, so it first reported only the last pass
+  (one draw). `autoReset` off with one reset per frame gives honest totals
+  (medium 343 draws / 814k tris, high 528, low 199).
+- **AF-3D-009 refraction.** The basin is a known flat plane, so the refracted view ray
+  is intersected with it analytically and the lining sampled directly — no second
+  scene pass, and the wobble is the physically right shape rather than a scrolling
+  normal-map trick. Beer-Lambert extinction along the true path length (red stripped
+  ~8x faster than blue) is why depth now reads blue-green instead of merely darker.
+- **AF-3D-010 caustics + impact ripples.** Caustics moved to where they physically
+  belong — focused on the floor, sampled through the refracted ray — instead of being
+  painted on the surface. Ripple rings are seeded from the SAME impact events the
+  splash map records, rate-limited to ~9/s (a ring per droplet would boil the surface
+  rather than read as rings) into an 8-slot buffer, with the slope differentiated
+  analytically so the normal stays exact.
+
+**Three bugs fixed, all pre-existing:**
+1. **The striped water — root cause found.** Wall maps were cloned at repeat
+   `16 x 0.4`. A rectangular pool's "wall" is a solid Box whose top face sits at
+   y=0.445, ABOVE the water at y=0.02, and box-face UVs are 0..1 regardless of size —
+   so that anisotropic tiling smeared into parallel bands across the pool interior.
+   It survived every earlier attempt to blame the water, the basin floor, shadows or
+   post-processing because it was none of them. Wall tiling is now per shape and
+   near-isotropic (cylinder 18x1, box 5x5).
+2. **Gerstner waves were one-dimensional.** A PlaneGeometry's local position lies in
+   XY with z identically zero, so `position.xz` fed every wave `(x, 0)` and each
+   reduced to `dir.x * x` — varying along X, constant along Z. Now driven by world XZ.
+3. **The water normal was in the wrong space.** It was pushed through `normalMatrix`
+   (object -> VIEW space) then dotted against world-space view and light vectors,
+   quietly corrupting every fresnel, specular and refraction term. Now world-space.
+
+Circular pools also gain a real water surface: they were drawn with `CircleGeometry`,
+a fan with vertices only on its rim and no interior to displace, so waves and ripples
+were invisible on them by construction. Both shapes now use a tessellated plane, cut
+to a circle in the fragment stage.
+
+Frontend **418 passed (33 files)**, build green, verified live on both pool shapes
+with zero GL errors.
+
 **Date:** 2026-09-07 (AF-3D R2 — GPU particle simulation, ~200k droplets)
 **Summary:** Phase R2 of the realism plan. Particle state moved into floating-point
 textures and is advanced by shaders, lifting the count from the CPU field's ~82k
