@@ -3261,11 +3261,79 @@ export class FountainScene {
     }
   }
 
+  // ── Performance counters (AF-3D-013) ────────────────────────────────────────
+  /**
+   * Rolling frame statistics. A preview whose realism is tuned against frame budget
+   * needs the budget to be VISIBLE — otherwise every judgement about whether a tier
+   * is affordable is guesswork. Measured over a one-second window rather than from
+   * the instantaneous delta, which is far too noisy to read.
+   */
+  _tickPerf(delta) {
+    const p = this._perf || (this._perf = {
+      fps: 0, ms: 0, frames: 0, accum: 0, worstMs: 0, _worst: 0,
+    });
+    p.frames++;
+    p.accum += delta;
+    const ms = delta * 1000;
+    if (ms > p._worst) p._worst = ms;
+    if (p.accum >= 1.0) {
+      p.fps = p.frames / p.accum;
+      p.ms = (p.accum / p.frames) * 1000;
+      p.worstMs = p._worst;
+      p.frames = 0; p.accum = 0; p._worst = 0;
+    }
+  }
+
+  /**
+   * What the renderer is actually doing this frame — frame rate, the work behind it,
+   * and which realism features the active tier switched on.
+   */
+  getPerfStats() {
+    const p = this._perf || { fps: 0, ms: 0, worstMs: 0 };
+    const info = this.renderer?.info;
+    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
+    const gpuCount = (this._gpuWater?.count || 0) + (this._gpuSpray?.count || 0);
+    const cpuCount = (this.waterSys?.active || 0) + (this.spraySys?.active || 0)
+                   + (this.foamSys?.active || 0) + (this.flameSys?.active || 0);
+    return {
+      fps: Math.round(p.fps),
+      ms: Number(p.ms.toFixed(2)),
+      worstMs: Number(p.worstMs.toFixed(2)),
+      quality: this.quality,
+      backend: gpuCount ? "GPU" : "CPU",
+      particles: gpuCount || cpuCount,
+      gpuParticles: gpuCount,
+      // The CPU field is an invisible physics sample once the GPU has the water.
+      cpuParticles: cpuCount,
+      drawCalls: info?.render?.calls ?? 0,
+      triangles: info?.render?.triangles ?? 0,
+      programs: info?.programs?.length ?? 0,
+      features: {
+        softParticles: !!this._depthProbe,
+        lightCones: !!this._cones,
+        reflection: !!this._reflection,
+        postfx: !!this._postEnabled,
+        shadows: !!this.renderer?.shadowMap?.enabled,
+        ao: !!this._aoPass,
+        ibl: this._iblKind || null,
+        pixelRatio: this._pr || 1,
+        reflectRes: q.reflect || 0,
+      },
+    };
+  }
+
   _animate() {
     if (!this._initialized) return;
     this._rafId = requestAnimationFrame(() => this._animate());
     const delta = Math.min(this.clock.getDelta(), 0.05);
     const elapsed = this.clock.elapsedTime || 0;
+    this._tickPerf(delta);
+    // A frame is many passes — depth probe, reflection, then the composer chain — and
+    // three.js clears its counters on every render() call. Left on auto, the HUD would
+    // only ever report the final pass (one draw), which is worse than no number at all.
+    // Reset once per frame instead, so the counters accumulate the whole frame's work.
+    if (this.renderer.info.autoReset) this.renderer.info.autoReset = false;
+    this.renderer.info.reset();
     this._update(delta, elapsed);
 
     const cam = this.camera;

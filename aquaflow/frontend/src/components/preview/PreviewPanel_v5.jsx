@@ -74,6 +74,8 @@ export default function PreviewPanel() {
   const [windZ,    setWindZ]    = useState(0);
   const [reviewMode, setReviewMode] = useState(true);
   const [reviewOverlays, setReviewOverlays] = useState(true);
+  const [showPerf, setShowPerf] = useState(true);
+  const [perfStats, setPerfStats] = useState(null);
 
   // Panel visibility
   const [tab, setTab] = useState("render"); // render | design | signals | info
@@ -334,6 +336,17 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
   useEffect(() => { sceneRef.current?.setLightColor(lightCol); }, [lightCol]);
   useEffect(() => { sceneRef.current?.setWind(windX, windZ); }, [windX, windZ]);
   useEffect(() => { sceneRef.current?.setReviewOverlays?.(reviewOverlays); }, [reviewOverlays]);
+
+  // Poll the renderer's own counters while the HUD is up. 4 Hz: the scene already
+  // averages FPS over a second, so sampling faster would only add React renders.
+  useEffect(() => {
+    if (!showPerf) { setPerfStats(null); return; }
+    const id = setInterval(() => {
+      const s = sceneRef.current?.getPerfStats?.();
+      if (s) setPerfStats(s);
+    }, 250);
+    return () => clearInterval(id);
+  }, [showPerf]);
   useEffect(() => {
   if (!sceneRef.current) return;
 
@@ -417,6 +430,63 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
             <div style={{ color:"#8ea4b8" }}>Pool <span style={{ color:"#58c7ff" }}>{poolDesc}</span></div>
             <div style={{ color:"#8ea4b8" }}>Signal <span style={{ color:"#58c7ff" }}>{engineSignals?.source || "manual"}</span></div>
             <div style={{ color:"#8ea4b8" }}>Flow <span style={{ color:"#58c7ff" }}>{(hydraulics?.totalFlowM3Hr||0).toFixed(1)} m3/h</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Performance HUD (AF-3D-013) ──
+          The realism tiers are a frame-budget trade, so the budget has to be visible:
+          without it, "is High affordable on this machine?" is guesswork. Polled at
+          4 Hz — the scene already averages over a one-second window, and re-rendering
+          this overlay every frame would itself cost frames. */}
+      {showPerf && perfStats && (
+        <div style={{
+          position:"absolute", top:12, right:12, zIndex:15, pointerEvents:"none",
+          minWidth:168, padding:"8px 10px", borderRadius:6, fontFamily:"monospace",
+          background:"rgba(4,10,16,0.82)", border:"1px solid rgba(88,199,255,0.28)",
+          backdropFilter:"blur(6px)",
+        }}>
+          <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:6 }}>
+            <span style={{
+              fontSize:22, fontWeight:700, lineHeight:1,
+              // Green at 55+, amber through 30, red below: the thresholds a designer
+              // actually cares about — smooth, usable, and struggling.
+              color: perfStats.fps >= 55 ? "#3ddc84" : perfStats.fps >= 30 ? "#ffcc00" : "#ff5544",
+            }}>{perfStats.fps}</span>
+            <span style={{ fontSize:9, color:"#8ea4b8" }}>FPS</span>
+            <span style={{ fontSize:9, color:"#556677", marginLeft:"auto" }}>
+              {perfStats.ms}ms · peak {perfStats.worstMs}
+            </span>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:"2px 8px", fontSize:9 }}>
+            <span style={{ color:"#556677" }}>Tier</span>
+            <span style={{ color:"#58c7ff", textTransform:"capitalize" }}>
+              {perfStats.quality} · {perfStats.backend}
+            </span>
+            <span style={{ color:"#556677" }}>Particles</span>
+            <span style={{ color:"#58c7ff" }}>{perfStats.particles.toLocaleString()}</span>
+            <span style={{ color:"#556677" }}>Draws</span>
+            <span style={{ color:"#8ea4b8" }}>
+              {perfStats.drawCalls} · {Math.round(perfStats.triangles / 1000)}k tris
+            </span>
+            <span style={{ color:"#556677" }}>Res</span>
+            <span style={{ color:"#8ea4b8" }}>{perfStats.features.pixelRatio.toFixed(1)}x</span>
+          </div>
+          <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:3 }}>
+            {[
+              ["soft", perfStats.features.softParticles],
+              ["beams", perfStats.features.lightCones],
+              ["reflect", perfStats.features.reflection],
+              ["post", perfStats.features.postfx],
+              ["shadow", perfStats.features.shadows],
+              ["AO", perfStats.features.ao],
+            ].map(([label, on]) => (
+              <span key={label} style={{
+                fontSize:8, padding:"1px 4px", borderRadius:2,
+                background: on ? "rgba(61,220,132,0.14)" : "rgba(80,90,100,0.12)",
+                color: on ? "#3ddc84" : "#445566",
+              }}>{label}</span>
+            ))}
           </div>
         </div>
       )}
@@ -521,6 +591,10 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
               <button onClick={() => setReviewOverlays(v => !v)} style={{
                 ...btnSm(reviewOverlays,"#58c7ff"), textAlign:"left", padding:"4px 6px",
               }}>{reviewOverlays ? "Scale overlays on" : "Scale overlays off"}</button>
+            <button onClick={() => setShowPerf(v => !v)} style={{
+                ...btnSm(showPerf,"#3ddc84"), textAlign:"left", padding:"4px 6px",
+                width:"100%", marginTop:4,
+              }}>{showPerf ? "Performance HUD on" : "Performance HUD off"}</button>
             </div>
 
             <div style={sectionLabel}>Walkthrough</div>
