@@ -2,7 +2,7 @@
 
 > **AUTHORITATIVE (2026-09-07, AF-DISC Windows DCP):** backend pytest
 > **805 passed, 21 skipped** · frontend vitest **440 passed (34 files)** ·
-> `npm run build` green · desktop **1.1.5**. Single source of truth:
+> `npm run build` green · desktop **1.1.8**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
 

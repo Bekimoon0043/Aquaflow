@@ -114,7 +114,7 @@ def test_malformed_and_unrelated_frames_are_rejected_not_crashing():
     kinds = " | ".join(r for _, r in res.rejected)
     assert "not PROFINET" in kinds and "too short" in kinds and "overruns" in kinds
     # our own request echoed back is silently ignored, not reported as a device
-    assert not any("plc" in m for m, _ in res.rejected if m == "04:7c:16:aa:bb:cc")
+    assert not any(m == "04:7c:16:aa:bb:cc" for m, _ in res.rejected)
 
 
 def test_duplicate_replies_are_deduplicated():

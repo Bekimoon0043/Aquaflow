@@ -672,6 +672,10 @@ def dcp_identify_all(adapter, *, provider: Optional[EthernetProvider] = None,
             frame = link.recv(min(0.2, max(0.01, deadline - time.monotonic())))
             if frame is None:
                 continue
+            # Npcap/AF_PACKET can deliver our transmitted frame back through the
+            # capture path. It is expected local traffic, not a malformed reply.
+            if frame == request:
+                continue
             try:
                 dev = parse_identify_response(frame, expected_xid=xid, expected_dst=link.src_mac)
             except DcpParseError as e:
