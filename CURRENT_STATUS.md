@@ -1,10 +1,7 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-07, AF-DISC):** backend pytest
-> **784 passed, 21 skipped, 1 pre-existing environmental failure**
-> (`test_hardware_output.py::test_loopback_output_timing_within_spec`, a wall-clock
-> Art-Net loopback timing test that fails identically on a clean HEAD worktree of this
-> machine) · frontend vitest **440 passed (34 files)** ·
+> **AUTHORITATIVE (2026-09-07, AF-DISC Windows DCP):** backend pytest
+> **805 passed, 21 skipped** · frontend vitest **440 passed (34 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
@@ -35,9 +32,13 @@ claims more than the evidence supports. The Fountain Control I-CAN implementatio
   `/api/controllers/discover/start|jobs/{id}|cancel`.
 - **Siemens**: `engine/s7_identify.py` strict COTP/S7 setup validation (every field), SZL
   0x0011/0x001C identity (order number, module, firmware) — a bare handshake never claims
-  a CPU model; rack/slot profiles 0/1 then 0/2. `engine/profinet_dcp.py` DCP Identify
-  codec (read-only; sender needs raw Ethernet — unavailable on Windows, reported
-  honestly). Stages: tcp_open → cotp_connected → s7_confirmed → identity_confirmed.
+  a CPU model; rack/slot profiles 0/1 then 0/2. `engine/profinet_dcp.py` sends one
+  read-only DCP Identify-All on Windows through an operator-installed Npcap runtime,
+  bound to the selected adapter. It finds devices with no IP or a foreign IP; without
+  Npcap it fails closed with an installation hint. A Siemens DCP identity alone stays
+  identify-only because it may be remote I/O; only a validated S7comm handshake promotes
+  it to a configurable S7 PLC. Stages: tcp_open → cotp_connected → s7_confirmed →
+  identity_confirmed.
 - **Modbus**: FC43/14 fully validated (MEI echo, conformity, more-follows +
   continuation, object lengths, trailing bytes) via
   `ModbusTCPClient.read_device_identification_full`; configurable unit-id list (default 1);

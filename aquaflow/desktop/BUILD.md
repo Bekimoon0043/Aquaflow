@@ -19,6 +19,7 @@ Wine + a Windows Python, and are not meant to be.
 | npm | 9+ | dependency install |
 | Python (build) | **3.10 – 3.12** | PyInstaller does not support 3.14. Point `AQUAFLOW_BUILD_PYTHON` at this interpreter. The dev backend still *runs* on 3.14 — this is only for freezing the bundle. |
 | Git | any | source |
+| Npcap (runtime, **end-user machine**) | 1.7+ | Optional: needed only for PROFINET DCP discovery of PLCs with unknown/foreign IPs. **Not bundled** (redistribution needs an Npcap OEM licence) — the operator installs it from https://npcap.com under Npcap's applicable licence; the free/demo edition currently has a five-system limit. AquaFlow loads `wpcap.dll` via ctypes at runtime and fails closed with an install hint when absent. See `../docs/PROFINET_DCP_WINDOWS.md`. |
 
 > **Why two Pythons?** Development uses `aquaflow/backend/.venv` (Python 3.14). PyInstaller
 > can't freeze 3.14 yet, so the *packaged* engine is built with a separate 3.10–3.12

@@ -9,9 +9,10 @@ as a PLC, and a real S7 says so by completing a real, fully validated handshake.
 Every probe is READ-ONLY by construction:
   s7_handshake       — strict COTP CR/CC + S7 setup, then SZL identity (what any
                        HMI does on connect), then close   → engine/s7_identify
-  profinet_dcp       — one DCP Identify-All multicast on the local segment
-                       (raw Ethernet; unavailable on Windows without npcap, and
-                       reported as such)                    → engine/profinet_dcp
+  profinet_dcp       — one DCP Identify-All multicast on the SELECTED adapter
+                       (Linux AF_PACKET / Windows Npcap runtime via ctypes; fails
+                       closed with an install hint when absent — never a
+                       fallback sweep of other subnets)     → engine/profinet_dcp
   modbus_ident       — FC43/14 Read Device Identification, fully parsed; devices
                        without it are still valid 'generic Modbus' (the refusal
                        is itself proof a Modbus stack answered with a well-formed
@@ -426,7 +427,13 @@ def _dedupe(detected: list[DetectedController]) -> list[DetectedController]:
     out: list[DetectedController] = []
     seen: set[tuple] = set()
     for d in detected:
-        key = (d.ip, d.port, d.catalog_id)
+        # DCP works below IP and can expose the duplicate-address fault we most
+        # need commissioning to see. Preserve two PROFINET devices with the same
+        # IP when their source MACs differ; normal TCP findings still dedupe by
+        # endpoint + catalog identity.
+        key = ((d.protocol, d.mac.lower())
+               if d.protocol == "profinet_dcp" and d.mac
+               else (d.ip, d.port, d.catalog_id))
         if key in seen:
             continue
         seen.add(key)
@@ -501,29 +508,47 @@ async def discover_controllers(
             "warnings": ["no eligible network adapter — select an adapter or type a subnet"],
         }
 
-    # ── PROFINET DCP (layer-2, per adapter) — before the TCP sweep ───────────
-    dcp_by_ip: dict[str, dict] = {}
+    # ── PROFINET DCP (layer-2, per SELECTED adapter) — before the TCP sweep ──
+    # Finds PLCs with no IP or a foreign IP. Bound to the adapter object (name,
+    # IP, MAC) so the provider can never pick "the first NIC"; cancellable.
+    dcp_devices: list[dict] = []
+    dcp_seen: set[tuple] = set()
     if dcp_scanner is not False:
         from engine.profinet_dcp import dcp_identify_all
         scanner = dcp_scanner or dcp_identify_all
+        adapter_objs = {a.name: a for a in adapters}
         dcp_diag = []
         for t in targets:
-            if not t.adapter:
+            if not t.adapter or t.adapter not in adapter_objs:
                 continue
+            adapter_obj = adapter_objs[t.adapter]
             try:
                 loop = asyncio.get_running_loop()
-                res = await loop.run_in_executor(None, lambda n=t.adapter: scanner(n))
+                res = await loop.run_in_executor(
+                    None, lambda a=adapter_obj: scanner(a, should_stop=stopped))
+            except TypeError:
+                loop = asyncio.get_running_loop()
+                res = await loop.run_in_executor(None, lambda a=adapter_obj: scanner(a))
             except Exception as e:                       # pragma: no cover - defensive
                 dcp_diag.append({"interface": t.adapter, "available": False, "reason": str(e)})
                 continue
-            dcp_diag.append(res.to_dict() if hasattr(res, "to_dict") else dict(res))
+            d_res = res.to_dict() if hasattr(res, "to_dict") else dict(res)
+            dcp_diag.append(d_res)
             for dev in getattr(res, "devices", []) or []:
                 d = dev.to_dict() if hasattr(dev, "to_dict") else dict(dev)
-                if d.get("ip"):
-                    dcp_by_ip[d["ip"]] = {**d, "_adapter": t.adapter, "_subnet": t.subnet}
+                d.update({"_adapter": t.adapter, "_subnet": t.subnet})
+                # A duplicate IP is valuable evidence of a configuration conflict;
+                # never collapse two physical devices merely because their address
+                # is the same. DCP identity is the source MAC on one adapter.
+                key = (t.adapter, (d.get("mac") or "").lower())
+                if key[1] and key not in dcp_seen:
+                    dcp_seen.add(key)
+                    dcp_devices.append(d)
         diagnostics["dcp"] = dcp_diag
-        if not any(x.get("available") for x in dcp_diag) and dcp_diag:
-            warnings.append(f"PROFINET DCP: {dcp_diag[0].get('reason', 'unavailable')}")
+        if dcp_diag and not any(x.get("available") for x in dcp_diag):
+            warnings.append(f"PROFINET DCP unavailable: {dcp_diag[0].get('reason', 'unavailable')}")
+        elif any(x.get("cancelled") for x in dcp_diag):
+            warnings.append("PROFINET DCP listen was cancelled — layer-2 results are partial")
 
     # ── TCP sweep + identification ───────────────────────────────────────────
     hosts: list[tuple[str, ScanTarget]] = []
@@ -575,29 +600,81 @@ async def discover_controllers(
 
     # ── merge DCP-discovered devices ─────────────────────────────────────────
     by_ip = {d.ip: d for d in detected}
-    for ip, d in dcp_by_ip.items():
-        evidence = [f"PROFINET DCP Identify: station '{d.get('station_name')}', vendor {d.get('vendor')}, "
-                    f"device id 0x{(d.get('device_id') or 0):04X}, role {d.get('role') or '?'}"]
-        existing = by_ip.get(ip)
+    for d in dcp_devices:
+        ip = d.get("ip") or ""
+        evidence = [f"PROFINET DCP Identify on {d.get('_adapter')}: station '{d.get('station_name')}', "
+                    f"vendor {d.get('vendor')}, device id 0x{(d.get('device_id') or 0):04X}, "
+                    f"role {d.get('role') or '?'}, MAC {d.get('mac')}"
+                    + (f", IP {ip}/{d.get('netmask')} gw {d.get('gateway')}" if ip else ", no IP configured")]
+        existing = by_ip.get(ip) if ip else None
         if existing is not None and existing.protocol == "siemens_s7":
             existing.mac = existing.mac or d.get("mac", "")
             existing.identity.update({"station_name": d.get("station_name"), "dcp_vendor": d.get("vendor_name")})
             existing.evidence.extend(evidence)
             continue
-        entry = get_entry("siemens-s7-1200") if d.get("vendor_id") == 0x002A else None
-        if entry is None:
-            det = DetectedController(
-                ip=ip, port=0, catalog_id="profinet-device", label=f"PROFINET device '{d.get('station_name')}' ({d.get('vendor')})",
-                tier="UNSUPPORTED", drivable=False, confidence="probable", identity=d,
-                protocol="profinet_dcp", vendor=d.get("vendor", ""), stage="protocol_confirmed",
-                evidence=evidence, adapter=d.get("_adapter", ""), subnet=d.get("_subnet", ""),
-                mac=d.get("mac", ""), warnings=["PROFINET device discovered — no AquaFlow driver for this family"])
+        in_subnet = False
+        if ip:
+            try:
+                addr = ipaddress.IPv4Address(ip)
+                in_subnet = any(addr in t.network for t in targets)
+            except ValueError:
+                in_subnet = False
+        is_siemens = d.get("vendor_id") == 0x002A
+        if is_siemens and ip and not in_subnet:
+            # One direct S7comm attempt at the DCP-reported address (a single host,
+            # never a sweep of that foreign subnet). Only this validated handshake
+            # may promote a Siemens PROFINET device to a drivable S7 PLC.
+            if not stopped():
+                try:
+                    found = await identifier(ip, 102, 102, unit_ids=unit_ids)
+                except TypeError:
+                    found = await identifier(ip, 102, 102)
+                except Exception:
+                    found = []
+                for f in found:
+                    f.mac = f.mac or d.get("mac", "")
+                    f.adapter, f.subnet = d.get("_adapter", ""), d.get("_subnet", "")
+                    f.identity.update({"station_name": d.get("station_name"),
+                                       "dcp_vendor": d.get("vendor_name")})
+                    f.evidence.extend(evidence)
+                    f.evidence.append("S7comm confirmed at the DCP-reported address (direct, routed)")
+                    detected.append(f)
+                if found:
+                    continue
+
+        # DCP proves that a PROFINET device exists and identifies its vendor. It
+        # does not prove that a Siemens device is an S7 PLC: an ET 200 remote-I/O
+        # station carries the same Siemens vendor id. Keep DCP-only results
+        # identify-only until TCP/102 completes the strict S7comm handshake.
+        station = d.get("station_name") or "unnamed"
+        vendor = d.get("vendor") or "unknown vendor"
+        warnings_for_device = [
+            "PROFINET identity confirmed; no controller driver selected from DCP evidence alone"
+        ]
+        if is_siemens:
+            warnings_for_device.append(
+                "Siemens device detected, but S7comm on TCP 102 is not confirmed; "
+                "it may be a PLC, remote I/O, or another PROFINET device")
         else:
-            det = _from_entry(entry, ip, 102, "probable", d, stage="protocol_confirmed", evidence=evidence)
-            det.label = f"Siemens PROFINET device '{d.get('station_name')}' ({d.get('vendor_name') or 'S7'})"
-            det.mac = d.get("mac", "")
-            det.adapter, det.subnet = d.get("_adapter", ""), d.get("_subnet", "")
-            det.warnings.append("PROFINET device discovered; S7comm on TCP 102 not confirmed")
+            warnings_for_device.append(
+                "PROFINET device discovered — no AquaFlow driver for this family")
+        if not ip:
+            warnings_for_device.append(
+                "device has no IP address — assign one in TIA Portal before AquaFlow can connect")
+        elif not in_subnet:
+            warnings_for_device.append(
+                f"IP {ip} is outside the selected subnet — no foreign subnet was scanned")
+        det = DetectedController(
+            ip=ip, port=0,
+            catalog_id="siemens-profinet-device" if is_siemens else "profinet-device",
+            label=f"{vendor} PROFINET device '{station}'",
+            tier="UNSUPPORTED", drivable=False, confidence="confirmed", identity=d,
+            protocol="profinet_dcp", vendor=vendor,
+            product=d.get("vendor_name", ""), model=d.get("device_family", ""),
+            stage="identity_confirmed", evidence=evidence,
+            adapter=d.get("_adapter", ""), subnet=d.get("_subnet", ""),
+            mac=d.get("mac", ""), warnings=warnings_for_device,
+            configurable=False, plc_prefill={})
         detected.append(det)
 
     # ── I-CAN safe probe, limited to the selected adapter/subnet ─────────────

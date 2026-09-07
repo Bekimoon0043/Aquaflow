@@ -240,7 +240,9 @@ function ControllersTab({ addServerLog }) {
                 <div style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : d.discovery_id)}>
                   <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
                   <span style={{ color: "var(--text-primary)", flex: 1 }}>{d.label}</span>
-                  <span style={{ color: "var(--text-muted)", ...mono }}>{d.ip}{d.port ? `:${d.port}` : ""}</span>
+                  <span style={{ color: "var(--text-muted)", ...mono }}>
+                    {d.ip ? `${d.ip}${d.port ? `:${d.port}` : ""}` : "no IP configured"}
+                  </span>
                 </div>
                 <div style={{ color: "var(--text-muted)", ...mono, marginTop: 2 }}>
                   {confidenceLabel(d.confidence, d.stage)} · stage: {stageLabel(d.stage)}
