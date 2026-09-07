@@ -1,4 +1,4 @@
-import { useState, useRef, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { Component } from "react";
 import { WebSocketProvider } from "./hooks/WebSocketContext";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -68,6 +68,13 @@ function StudioApp() {
   const workspacePx = () => workspaceRef.current?.clientWidth || 0;
   const centerHeightPx = () => centerRef.current?.clientHeight || 0;
   const [activePanel, setActivePanel] = useState("nodes");
+  // AF-DISC — Device Discovery can hand the operator to the PLC panel (with a
+  // prefill) or to Fountain Control. Navigation only: nothing connects or arms.
+  useEffect(() => {
+    const onOpen = (e) => { if (e?.detail?.panel) setActivePanel(e.detail.panel); };
+    window.addEventListener("aquaflow:open-panel", onOpen);
+    return () => window.removeEventListener("aquaflow:open-panel", onOpen);
+  }, []);
   const [showLogs, setShowLogs] = useState(false);
   const [showBrowser, setShowBrowser] = useState(null);
   const { isDirty } = useShowStore();

@@ -9,6 +9,7 @@ from plc.plc_engine import (
     plc_manager, PLCConnection, PLCType, PLCTag, TagType, DEFAULT_TAGS,
     PLC_SUPPORT, PLC_TIER_MEANING, REAL_PLC_TYPES,
 )
+from plc.s7_profiles import get_profile, list_profiles, profile_tags, profile_summary
 
 router = APIRouter()
 
@@ -24,6 +25,34 @@ class PLCConnectRequest(BaseModel):
     unit_id: int = 1
     scan_rate_ms: int = 100
     tags: list = []
+    # AF-DISC — a versioned tag profile (plc/s7_profiles.py). Never applied
+    # implicitly: the operator selects it AND confirms it.
+    profile_id: Optional[str] = None
+    confirm_profile: bool = False
+
+
+class S7VerifyRequest(BaseModel):
+    ip: str
+    port: int = 102
+    rack: int = 0
+    slot: int = 1
+    profile_id: str = "aquaflow-s7-1215c-v1"
+    samples: int = 4
+    interval_s: float = 0.3
+
+
+class ModbusPoint(BaseModel):
+    id: Optional[str] = None
+    address: Any                       # "30001", "%MW10", 4, ...
+    kind: str = "input_register"       # input_register | holding_register | discrete_input
+    count: int = 1
+
+
+class ModbusVerifyRequest(BaseModel):
+    ip: str
+    port: int = 502
+    unit_id: int = 1
+    points: list[ModbusPoint] = []
 
 
 class TagWriteRequest(BaseModel):
@@ -50,8 +79,21 @@ async def connect_plc(req: PLCConnectRequest):
     except ValueError:
         raise HTTPException(400, f"Unknown PLC type: {req.plc_type}")
 
-    # Apply default tags if none provided
-    if not req.tags and plc_type in DEFAULT_TAGS:
+    profile = None
+    if req.profile_id:
+        profile = get_profile(req.profile_id)
+        if profile is None:
+            raise HTTPException(400, f"Unknown tag profile: {req.profile_id}")
+        if plc_type != PLCType.SIEMENS_S7:
+            raise HTTPException(400, f"profile {req.profile_id} is a Siemens S7 profile")
+        if profile.get("requires_confirmation", True) and not req.confirm_profile:
+            raise HTTPException(
+                400, f"profile {req.profile_id} must be explicitly confirmed "
+                     f"(confirm_profile=true) — it is never assigned silently")
+        default_tags = profile_tags(profile)
+    elif not req.tags and plc_type in DEFAULT_TAGS:
+        # Apply default tags if none provided (Siemens defaults are EMPTY on purpose:
+        # its tags come only from a confirmed profile — see plc_engine.DEFAULT_TAGS).
         default_tags = [dict(t, id=t["id"], description=t.get("description",""),
                             unit=t.get("unit",""), offset=0.0, mapped_device="",
                             current_value=None, last_updated=0.0)
@@ -75,6 +117,12 @@ async def connect_plc(req: PLCConnectRequest):
         "connected": result["connected"],
         "error": result.get("error", ""),
         "tag_count": len(default_tags),
+        "profile_id": profile["id"] if profile else None,
+        # Connecting proves a socket, not a program. Verification is a separate,
+        # explicit, read-only step (POST /api/plc/verify).
+        "verified": False,
+        "note": ("no tags loaded — select and confirm a Siemens tag profile"
+                 if plc_type == PLCType.SIEMENS_S7 and not default_tags else ""),
     }
 
 
@@ -176,14 +224,60 @@ async def get_plc_types():
 
 @router.get("/default-tags/{plc_type}")
 async def get_default_tags(plc_type: str):
-    """Get default tag templates for a PLC type"""
+    """Get default tag templates for a PLC type. Siemens has none by design —
+    the response points at the versioned profiles instead."""
     try:
         ptype = PLCType(plc_type)
     except ValueError:
         raise HTTPException(400, f"Unknown PLC type: {plc_type}")
 
     tags = DEFAULT_TAGS.get(ptype, [])
-    return {"plc_type": plc_type, "tags": tags}
+    out = {"plc_type": plc_type, "tags": tags}
+    if ptype == PLCType.SIEMENS_S7:
+        out["profiles"] = list_profiles()
+        out["note"] = ("Siemens tags come from a versioned profile you select and confirm "
+                       "(docs/S7_DB_CONTRACT.md) — nothing is assumed about DB1")
+    return out
+
+
+# ── AF-DISC: versioned S7 tag profiles + explicit read-only verification ──────
+@router.get("/profiles")
+async def plc_profiles():
+    return {"profiles": list_profiles()}
+
+
+@router.get("/profiles/{profile_id}")
+async def plc_profile(profile_id: str):
+    profile = get_profile(profile_id)
+    if profile is None:
+        raise HTTPException(404, f"unknown tag profile {profile_id!r}")
+    return {**profile_summary(profile), "fields": profile["fields"],
+            "tags": profile_tags(profile)}
+
+
+@router.post("/verify")
+async def verify_s7(req: S7VerifyRequest):
+    """READ-ONLY verification of a Siemens PLC against a tag profile: strict
+    handshake, every read-direction field, and the heartbeat sampled until it
+    is seen to CHANGE. Writes nothing — command fields are never touched."""
+    from engine.plc_verify import verify_s7_profile
+    profile = get_profile(req.profile_id)
+    if profile is None:
+        raise HTTPException(404, f"unknown tag profile {req.profile_id!r}")
+    result = await verify_s7_profile(req.ip, req.port, req.rack, req.slot, profile,
+                                     samples=max(2, min(20, req.samples)),
+                                     interval_s=max(0.05, min(2.0, req.interval_s)))
+    return result.to_dict()
+
+
+@router.post("/verify-modbus")
+async def verify_modbus(req: ModbusVerifyRequest):
+    """READ-ONLY verification of operator-selected Modbus input points (FC02/03/04).
+    Nothing is guessed: an empty point list reads nothing."""
+    from engine.plc_verify import verify_modbus_points
+    result = await verify_modbus_points(req.ip, req.port, req.unit_id,
+                                        [p.model_dump() for p in req.points])
+    return result.to_dict()
 
 
 @router.post("/test-connection")

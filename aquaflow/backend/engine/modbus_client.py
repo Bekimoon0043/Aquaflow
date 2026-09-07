@@ -52,6 +52,14 @@ EXCEPTION_NAMES = {
 }
 
 
+# FC43/14 conformity levels (Modbus Application Protocol v1.1b3 §6.21).
+CONFORMITY_NAMES = {
+    0x01: "basic (stream)", 0x02: "regular (stream)", 0x03: "extended (stream)",
+    0x81: "basic (stream + individual)", 0x82: "regular (stream + individual)",
+    0x83: "extended (stream + individual)",
+}
+
+
 class ModbusError(Exception):
     """Base class for everything this client raises."""
 
@@ -307,22 +315,81 @@ class ModbusTCPClient:
         Returns {"vendor": .., "product": .., "revision": ..} for devices that
         implement it; raises ModbusException(ILLEGAL_FUNCTION) for those that
         don't (which discovery treats as 'generic Modbus', not an error)."""
-        body = await self._transact(bytes([0x2B, 0x0E, 0x01, 0x00]))
-        if len(body) < 7 or body[1] != 0x0E:
-            raise ModbusFrameError("malformed FC43 reply")
+        full = await self.read_device_identification_full()
         names = {0: "vendor", 1: "product", 2: "revision"}
-        out: dict = {}
-        count = body[6]
-        pos = 7
-        for _ in range(count):
-            if pos + 2 > len(body):
-                break
-            obj_id, obj_len = body[pos], body[pos + 1]
-            value = body[pos + 2:pos + 2 + obj_len]
-            out[names.get(obj_id, f"object_{obj_id}")] = value.decode(
-                "ascii", errors="replace")
-            pos += 2 + obj_len
-        return out
+        return {names.get(oid, f"object_{oid}"): text for oid, text in full["objects"].items()}
+
+    async def read_device_identification_full(self, read_code: int = 0x01,
+                                              max_frames: int = 8) -> dict:
+        """FC43/14 Read Device Identification with the WHOLE response validated
+        and continuation ('more follows') honoured — READ-ONLY.
+
+        Every field of the MEI response is checked, not just the first byte:
+          * MEI type echoed (0x0E), read-device-id code echoed
+          * conformity level in the defined set (0x01..0x03, 0x81..0x83)
+          * more-follows is 0x00 or 0xFF; when 0xFF the next object id is used to
+            issue the follow-up request (bounded by `max_frames`)
+          * declared object count matches the objects present, and every object's
+            declared length fits inside the frame — a short object is a framing
+            fault, not a shorter string
+        Returns {"objects": {id: text}, "vendor", "product", "revision", "conformity",
+                 "conformity_name", "more_follows", "next_object_id", "frames",
+                 "object_lengths": {id: len}}.
+        """
+        objects: dict[int, str] = {}
+        lengths: dict[int, int] = {}
+        conformity = None
+        next_obj = 0x00
+        frames = 0
+        more = True
+        while more and frames < max_frames:
+            body = await self._transact(bytes([0x2B, 0x0E, read_code & 0xFF, next_obj & 0xFF]))
+            frames += 1
+            if len(body) < 7:
+                raise ModbusFrameError(f"FC43 reply too short ({len(body)} bytes)")
+            if body[1] != 0x0E:
+                raise ModbusFrameError(f"FC43 MEI type 0x{body[1]:02X} (expected 0x0E)")
+            if body[2] != (read_code & 0xFF):
+                raise ModbusFrameError(f"FC43 read-device-id code 0x{body[2]:02X} not echoed")
+            conformity = body[3]
+            if conformity not in (0x01, 0x02, 0x03, 0x81, 0x82, 0x83):
+                raise ModbusFrameError(f"FC43 conformity level 0x{conformity:02X} undefined")
+            more_follows, next_obj, count = body[4], body[5], body[6]
+            if more_follows not in (0x00, 0xFF):
+                raise ModbusFrameError(f"FC43 'more follows' 0x{more_follows:02X} undefined")
+            pos = 7
+            for _ in range(count):
+                if pos + 2 > len(body):
+                    raise ModbusFrameError("FC43 object header overruns the frame")
+                obj_id, obj_len = body[pos], body[pos + 1]
+                if pos + 2 + obj_len > len(body):
+                    raise ModbusFrameError(
+                        f"FC43 object {obj_id} declares {obj_len} bytes, frame has "
+                        f"{len(body) - pos - 2}")
+                objects[obj_id] = body[pos + 2:pos + 2 + obj_len].decode("ascii", errors="replace")
+                lengths[obj_id] = obj_len
+                pos += 2 + obj_len
+            if pos != len(body):
+                raise ModbusFrameError(f"FC43 frame has {len(body) - pos} trailing byte(s)")
+            more = more_follows == 0xFF
+            if more and next_obj in objects:
+                raise ModbusFrameError(f"FC43 continuation loops back to object {next_obj}")
+        return {
+            "objects": objects,
+            "vendor": objects.get(0, ""),
+            "product": objects.get(1, ""),
+            "revision": objects.get(2, ""),
+            "vendor_url": objects.get(3, ""),
+            "product_name": objects.get(4, ""),
+            "model_name": objects.get(5, ""),
+            "user_app_name": objects.get(6, ""),
+            "conformity": conformity,
+            "conformity_name": CONFORMITY_NAMES.get(conformity, f"0x{conformity:02X}"),
+            "more_follows": more,
+            "next_object_id": next_obj,
+            "frames": frames,
+            "object_lengths": lengths,
+        }
 
     # ── writes ───────────────────────────────────────────────────────────────
     async def write_coil(self, address: int, value: bool) -> bool:

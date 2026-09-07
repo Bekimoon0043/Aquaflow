@@ -1,7 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useShowStore } from "../../store/showStore";
 import { useWS } from "../../hooks/WebSocketContext";
 import { API_BASE_URL } from "../../config";
+import { apiGet, apiPost } from "../../utils/apiClient";
+import {
+  controllerTierBadge, confidenceLabel, stageLabel, discoveredDeviceProjection,
+  plcPrefillFromDetection, isIcanGateway, buildDiscoverBody, adapterOptionLabel,
+  discoveryStatusLine, describeHttpError,
+} from "../../utils/controllerDiscovery";
+import { PREFILL_KEY, PREFILL_EVENT } from "../../utils/plcConfig";
+
+// Pure helpers re-exported for the existing tests.
+export {
+  controllerTierBadge, confidenceLabel, stageLabel, discoveredDeviceProjection,
+  plcPrefillFromDetection, isIcanGateway, buildDiscoverBody, adapterOptionLabel,
+  discoveryStatusLine, describeHttpError,
+};
 
 const API = `${API_BASE_URL}/devices`;
 
@@ -58,95 +72,216 @@ export default function DeviceDiscoveryPanel() {
   );
 }
 
-// ── Controllers tab (AF-CAT-001) ──────────────────────────────────────────────
-// Auto-detect what's on the wire; fall back to the pre-loaded catalog of known
-// fountain controllers/PLCs with honest drivability tiers and config prefills.
-// Pure helpers exported for tests.
+// ── Controllers tab (AF-CAT-001 / AF-DISC) ───────────────────────────────────
+// Protocol-specific, READ-ONLY identification on a SELECTED adapter/subnet, run
+// as a cancellable background job with real progress. Every row shows the
+// evidence behind its claim; nothing here connects, saves, arms or commissions.
 
-export function controllerTierBadge(tier) {
-  // Only REAL (drivable) earns green. GATED/UNSUPPORTED are identifiable at
-  // best — the UI must never blur "we can name it" into "we can run a show on it".
-  switch (tier) {
-    case "REAL": return { color: "var(--green)", label: "DRIVABLE" };
-    case "GATED": return { color: "#f59e0b", label: "GATED" };
-    default: return { color: "var(--red)", label: "IDENTIFY-ONLY" };
-  }
-}
-
-export function confidenceLabel(confidence) {
-  switch (confidence) {
-    case "confirmed": return "protocol confirmed";
-    case "probable": return "probable";
-    default: return "port match only";
-  }
-}
+const POLL_MS = 700;
 
 function ControllersTab({ addServerLog }) {
   const [catalog, setCatalog] = useState([]);
-  const [detected, setDetected] = useState(null);   // null = never scanned
-  const [scanning, setScanning] = useState(false);
-  const [subnet, setSubnet] = useState("");
-  const [open, setOpen] = useState(null);           // expanded catalog entry id
+  const [adapters, setAdapters] = useState([]);
+  const [defaultTargets, setDefaultTargets] = useState([]);
+  const [adapter, setAdapter] = useState("");
+  const [cidr, setCidr] = useState("");
+  const [unitIds, setUnitIds] = useState("1");
+  const [includeIcan, setIncludeIcan] = useState(true);
+  const [job, setJob] = useState(null);           // {job_id, status, progress, message}
+  const [result, setResult] = useState(null);     // finished discovery result
+  const [error, setError] = useState("");
+  const [open, setOpen] = useState(null);         // expanded catalog entry id
+  const [expanded, setExpanded] = useState(null); // expanded detection discovery_id
+  const timer = useRef(null);
   const mono = { fontFamily: "var(--font-mono)" };
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/controllers/catalog`)
-      .then(r => r.json()).then(d => setCatalog(d.entries || [])).catch(() => {});
+    apiGet("/controllers/catalog").then(d => setCatalog(d.entries || [])).catch(() => {});
+    apiGet("/controllers/adapters").then(d => {
+      setAdapters(d.adapters || []);
+      setDefaultTargets(d.default_targets || []);
+    }).catch(e => setError(describeHttpError(e, "adapters unavailable — backend unreachable")));
+    return () => clearInterval(timer.current);
   }, []);
 
-  const runDiscover = async () => {
-    setScanning(true);
+  const scanning = job && job.status === "running";
+
+  const stopPolling = () => { clearInterval(timer.current); timer.current = null; };
+
+  const poll = async (jobId) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/controllers/discover`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subnet ? { subnet } : {}),
-      });
-      const data = await res.json();
-      setDetected(data);
-      addServerLog?.(`Controller scan: ${data.detected?.length ?? 0} found on ${data.subnets?.join(", ")} in ${data.duration_s}s`);
-    } catch {
-      addServerLog?.("Controller scan failed — backend unreachable");
-    } finally {
-      setScanning(false);
+      const j = await apiGet(`/controllers/discover/jobs/${jobId}`);
+      setJob(j);
+      if (j.status !== "running") {
+        stopPolling();
+        if (j.result) {
+          setResult(j.result);
+          const n = j.result.detected?.length ?? 0;
+          addServerLog?.(`Controller scan ${j.status}: ${n} found on ${(j.result.subnets || []).join(", ")} in ${j.result.duration_s}s`);
+        }
+        if (j.status === "failed") setError(j.error || "discovery failed");
+      }
+    } catch (e) {
+      stopPolling();
+      setError(describeHttpError(e));
     }
   };
 
+  const runDiscover = async () => {
+    setError("");
+    setResult(null);
+    const body = buildDiscoverBody({ adapter, cidr, unitIds, includeIcan });
+    try {
+      const started = await apiPost("/controllers/discover/start", body);
+      setJob(started);
+      addServerLog?.(`Controller discovery started (${body.subnet || body.adapter || "auto"}) — read-only probes`);
+      stopPolling();
+      timer.current = setInterval(() => poll(started.job_id), POLL_MS);
+    } catch (e) {
+      setError(describeHttpError(e));
+      addServerLog?.(`Controller scan refused: ${describeHttpError(e)}`);
+    }
+  };
+
+  const cancel = async () => {
+    if (!job) return;
+    try { await apiPost(`/controllers/discover/jobs/${job.job_id}/cancel`, {}); }
+    catch (e) { setError(describeHttpError(e)); }
+  };
+
+  const configurePlc = (d) => {
+    const prefill = plcPrefillFromDetection(d);
+    if (!prefill) return;
+    try { window.localStorage.setItem(PREFILL_KEY, JSON.stringify(prefill)); } catch {}
+    window.dispatchEvent(new CustomEvent(PREFILL_EVENT, { detail: prefill }));
+    window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "plc" } }));
+    addServerLog?.(`PLC panel pre-filled from discovery: ${prefill.plc_type} @ ${prefill.ip} — not connected, not saved`);
+  };
+
+  const openFountainControl = () => {
+    window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "fountain" } }));
+  };
+
+  const selectedTarget = cidr.trim()
+    ? { subnet: cidr.trim(), adapter: "(manual CIDR)" }
+    : adapter
+      ? (() => { const a = adapters.find(x => x.name === adapter); return a ? { subnet: a.subnet, adapter: a.name } : null; })()
+      : (defaultTargets[0] ? { subnet: defaultTargets.map(t => t.subnet).join(", "), adapter: defaultTargets.map(t => t.adapter).join(", ") } : null);
+
   const row = { padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 10 };
+  const input = { fontSize: 10, padding: "5px 8px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", ...mono };
 
   return (
     <div style={{ padding: 10 }}>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-        <input value={subnet} onChange={e => setSubnet(e.target.value)}
-          placeholder="subnet (blank = auto, e.g. 192.168.5.0/24)"
-          style={{ flex: 1, fontSize: 10, padding: "5px 8px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", ...mono }} />
-        <button onClick={runDiscover} disabled={scanning} style={{ fontSize: 10, padding: "5px 12px", background: scanning ? "var(--bg-surface)" : "var(--accent)", color: scanning ? "var(--text-muted)" : "#000", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>
-          {scanning ? "SCANNING…" : "DETECT"}
-        </button>
+      <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6 }}>
+        Protocol-level, read-only identification. Network Scan shows hosts; this tab proves protocols. Nothing here connects, arms or writes.
       </div>
 
-      {detected && (
-        <>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6, ...mono }}>
-            {detected.hosts_scanned} hosts · ports {detected.tcp_ports?.join("/")} · {detected.duration_s}s · read-only probes
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <select value={adapter} onChange={e => setAdapter(e.target.value)} disabled={scanning || !!cidr.trim()} style={{ ...input, flex: 1 }}>
+          <option value="">auto — every physical adapter</option>
+          {adapters.map(a => (
+            <option key={a.name} value={a.name} disabled={!a.eligible && a.kind !== "unknown"}>
+              {adapterOptionLabel(a)}{!a.eligible ? " (excluded by default)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <input value={cidr} onChange={e => setCidr(e.target.value)} disabled={scanning}
+          placeholder="or an explicit CIDR, e.g. 192.168.5.0/24 (scans ONLY that range)" style={{ ...input, flex: 2 }} />
+        <input value={unitIds} onChange={e => setUnitIds(e.target.value)} disabled={scanning} title="Modbus unit ids to try (max 8)"
+          placeholder="unit ids" style={{ ...input, width: 70 }} />
+        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--text-muted)" }}>
+          <input type="checkbox" checked={includeIcan} onChange={e => setIncludeIcan(e.target.checked)} disabled={scanning} /> I-CAN probe
+        </label>
+        {scanning ? (
+          <button onClick={cancel} style={{ fontSize: 10, padding: "5px 12px", background: "var(--red)", color: "#fff", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>CANCEL</button>
+        ) : (
+          <button onClick={runDiscover} style={{ fontSize: 10, padding: "5px 12px", background: "var(--accent)", color: "#000", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>DETECT</button>
+        )}
+      </div>
+
+      <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6, ...mono }}>
+        target: {selectedTarget ? `${selectedTarget.subnet} via ${selectedTarget.adapter}` : "no eligible adapter — pick one or type a CIDR"}
+      </div>
+
+      {scanning && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden", marginBottom: 3 }}>
+            <div style={{ width: `${(job.progress || 0) * 100}%`, height: "100%", background: "var(--accent)", transition: "width 0.3s" }} />
           </div>
-          {(detected.detected || []).length === 0 && (
+          <div style={{ fontSize: 9, color: "var(--text-muted)", ...mono }}>{Math.round((job.progress || 0) * 100)}% · {job.message}</div>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ ...row, color: "var(--red)", borderColor: "var(--red)" }}>{error}</div>
+      )}
+
+      {result && (
+        <>
+          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6, ...mono }}>{discoveryStatusLine(result)}</div>
+          {(result.warnings || []).map((w, i) => (
+            <div key={i} style={{ ...row, color: "#f59e0b", borderColor: "#f59e0b55" }}>⚠ {w}</div>
+          ))}
+          {(result.detected || []).length === 0 && (
             <div style={{ ...row, color: "var(--text-muted)", textAlign: "center" }}>
               Nothing identified — pick the controller from the catalog below and configure it manually
             </div>
           )}
-          {(detected.detected || []).map((d, i) => {
+          {(result.detected || []).map((d) => {
             const badge = controllerTierBadge(d.tier);
+            const ican = isIcanGateway(d);
+            const isOpen = expanded === d.discovery_id;
+            const prefill = plcPrefillFromDetection(d);
             return (
-              <div key={i} style={row}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div key={d.discovery_id} style={row}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : d.discovery_id)}>
                   <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
                   <span style={{ color: "var(--text-primary)", flex: 1 }}>{d.label}</span>
-                  <span style={{ color: "var(--text-muted)", ...mono }}>{d.ip}:{d.port}</span>
+                  <span style={{ color: "var(--text-muted)", ...mono }}>{d.ip}{d.port ? `:${d.port}` : ""}</span>
                 </div>
                 <div style={{ color: "var(--text-muted)", ...mono, marginTop: 2 }}>
-                  {confidenceLabel(d.confidence)}
-                  {d.identity?.vendor && ` · ${d.identity.vendor} ${d.identity.product || ""}`}
-                  {d.configure_in && ` · configure in: ${d.configure_in}`}
+                  {confidenceLabel(d.confidence, d.stage)} · stage: {stageLabel(d.stage)}
+                  {d.vendor && d.vendor !== "(any)" && ` · ${d.vendor}${d.model ? " " + d.model : ""}`}
+                  {d.revision && ` · rev ${d.revision}`}
+                  {d.mac && ` · ${d.mac}`}
+                  {d.adapter && ` · via ${d.adapter}`}
+                </div>
+                {ican && (
+                  <div style={{ marginTop: 3, color: "var(--green)", fontSize: 9.5 }}>
+                    ✓ Validated I-CAN gateway reply on {d.ip} (interface {d.identity?.interface || d.adapter || "?"}) — configure and operate it in Fountain Control; nothing was armed or connected here.
+                  </div>
+                )}
+                {(d.warnings || []).map((w, i) => (
+                  <div key={i} style={{ color: "#f59e0b", fontSize: 9, marginTop: 2 }}>⚠ {w}</div>
+                ))}
+                {isOpen && (
+                  <div style={{ marginTop: 4, color: "var(--text-secondary)", fontSize: 9.5, ...mono, background: "var(--bg-panel)", padding: 6, borderRadius: "var(--radius-sm)" }}>
+                    <div style={{ color: "var(--text-muted)", marginBottom: 2 }}>evidence:</div>
+                    {(d.evidence || []).map((e, i) => <div key={i}>• {e}</div>)}
+                    <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
+                      status: {d.status} · health: {d.health === null || d.health === undefined ? "not measured" : d.health} · discovery {d.discovery_id}
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
+                  {prefill && (
+                    <button className="btn primary" style={{ fontSize: 9, padding: "2px 8px" }} onClick={() => configurePlc(d)}>
+                      Configure PLC →
+                    </button>
+                  )}
+                  {ican && (
+                    <button className="btn" style={{ fontSize: 9, padding: "2px 8px" }} onClick={openFountainControl}>
+                      Open Fountain Control →
+                    </button>
+                  )}
+                  {!prefill && !ican && (
+                    <span style={{ fontSize: 9, color: "var(--text-muted)" }}>
+                      {d.tier === "REAL" ? `configure in: ${d.configure_in}` : "identify-only — no AquaFlow driver"}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -213,16 +348,13 @@ function ScanTab({ addServerLog }) {
       setStatusMsg(`Found ${data.found} devices`);
       addServerLog({ level: "info", msg: `Scan complete: ${data.found} devices found` });
 
+      // Network visibility only: a host answering a port is "seen", not online,
+      // healthy or identified. Protocol identification lives in the Controllers tab.
       if (data.devices?.length) {
         updateDevicesFromServer(data.devices.map((d) => ({
+          ...discoveredDeviceProjection(d),
           id: d.id || `discovered-${d.ip}-${d.port}`,
-          label: d.label,
-          type: d.device_type || d.type,
-          protocol: d.protocol,
-          ip: d.ip,
-          port: d.port,
-          status: d.status || "online",
-          health: d.health ?? 85,
+          type: d.device_type || d.type || "unknown",
         })));
       }
     } catch (e) {
@@ -286,6 +418,9 @@ function ScanTab({ addServerLog }) {
       {discovered.length > 0 && (
         <div>
           <SectionLabel>Discovered ({discovered.length})</SectionLabel>
+          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6 }}>
+            Network visibility only — an open port does not prove a PLC or fountain controller. Use the Controllers tab for protocol-level identification.
+          </div>
           {discovered.map((d, i) => (
             <div key={i} style={{
               padding: "8px 10px", marginBottom: 6,
@@ -293,7 +428,7 @@ function ScanTab({ addServerLog }) {
               borderRadius: "var(--radius-md)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 4px var(--green)" }} />
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--text-muted)" }} title="seen on the network — unverified" />
                 <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)", flex: 1 }}>{d.label}</span>
                 <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "var(--font-mono)", background: `${PROTOCOL_COLORS[d.protocol] || "#888"}22`, color: PROTOCOL_COLORS[d.protocol] || "#888", border: `1px solid ${PROTOCOL_COLORS[d.protocol] || "#888"}44` }}>
                   {d.protocol?.toUpperCase()}
@@ -309,17 +444,8 @@ function ScanTab({ addServerLog }) {
               </div>
               <button className="btn" style={{ marginTop: 6, fontSize: 10, padding: "2px 8px" }}
                 onClick={() => {
-                  updateDevicesFromServer([{
-                    id: `discovered-${d.ip}-${d.port}`,
-                    label: d.label,
-                    type: d.device_type || "unknown",
-                    protocol: d.protocol,
-                    ip: d.ip,
-                    port: d.port,
-                    status: "online",
-                    health: 85,
-                  }]);
-                  addServerLog({ level: "info", msg: `Added ${d.label} to project` });
+                  updateDevicesFromServer([{ ...discoveredDeviceProjection(d), type: d.device_type || "unknown" }]);
+                  addServerLog({ level: "info", msg: `Added ${d.label} to project (unverified — identify it in Controllers)` });
                 }}>
                 + Add to Project
               </button>

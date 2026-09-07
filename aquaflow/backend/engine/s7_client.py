@@ -291,10 +291,15 @@ class S7Client:
         param = bytes([0x04, 0x01]) + self._item(db, offset, 1, bit=bit,
                                                  transport=0x01)
         _, data = await self._transact(param)
-        if len(data) < 5:
+        # An item REFUSAL is exactly 4 bytes (retcode, transport 0, length 0) — check
+        # the return code before demanding a payload, or a real ACCESS_DENIED on a
+        # BOOL reads as a framing fault and marks the connection down.
+        if len(data) < 4:
             raise S7FrameError("bit read reply too short")
         if data[0] != RET_OK:
             raise S7ItemError(data[0])
+        if len(data) < 5:
+            raise S7FrameError("bit read reply carries no payload")
         return bool(data[4] & 1)
 
     async def read_word(self, db: int, offset: int) -> int:

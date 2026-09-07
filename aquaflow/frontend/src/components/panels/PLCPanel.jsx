@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useShowStore } from "../../store/showStore";
 import { API_BASE_URL } from "../../config";
+import { apiGet, apiPost } from "../../utils/apiClient";
+import {
+  PREFILL_KEY, PREFILL_EVENT, applyPlcPrefill, buildConnectBody, profileGateSatisfied,
+  parseModbusPoints, verifyOutcomeStyle, verifySummary,
+} from "../../utils/plcConfig";
+
+export { applyPlcPrefill, buildConnectBody, profileGateSatisfied, parseModbusPoints, verifyOutcomeStyle, verifySummary };
 
 const API = `${API_BASE_URL}/plc`;
 
@@ -174,14 +181,41 @@ function FieldIOTab() {
 }
 
 // ── Connect Tab ────────────────────────────────────────────────────────────────
+// AF-DISC: accepts a prefill from Device Discovery (form only — never auto-connects),
+// requires an EXPLICIT tag-profile selection + confirmation for Siemens (no silent
+// DB1 assumptions), and offers a separate READ-ONLY verification step.
 function ConnectTab({ addServerLog }) {
   const [plcs, setPlcs] = useState([]);
-  const [form, setForm] = useState({ name: "My PLC", plc_type: "siemens_s7", ip: "192.168.1.100", port: 102, rack: 0, slot: 1 });
+  const [form, setForm] = useState({ name: "My PLC", plc_type: "siemens_s7", ip: "192.168.1.100", port: 102, rack: 0, slot: 1, unit_id: 1 });
+  const [profiles, setProfiles] = useState([]);
+  const [profileId, setProfileId] = useState("");
+  const [profileConfirmed, setProfileConfirmed] = useState(false);
+  const [modbusPoints, setModbusPoints] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [verifyResult, setVerifyResult] = useState(null);
+  const [verifyError, setVerifyError] = useState("");
 
-  useEffect(() => { loadPLCs(); }, []);
+  useEffect(() => {
+    loadPLCs();
+    apiGet("/plc/profiles").then(d => setProfiles(d.profiles || [])).catch(() => {});
+    // Prefill handed over by Device Discovery → Controllers → "Configure PLC".
+    const applyDetail = (detail) => {
+      if (!detail) return;
+      setForm(f => applyPlcPrefill(f, detail));
+      setVerifyResult(null);
+      addServerLog?.({ level: "info", msg: `PLC form pre-filled from discovery (${detail.plc_type} @ ${detail.ip}) — review, then Connect` });
+    };
+    try {
+      const raw = window.localStorage.getItem(PREFILL_KEY);
+      if (raw) { applyDetail(JSON.parse(raw)); window.localStorage.removeItem(PREFILL_KEY); }
+    } catch {}
+    const onPrefill = (e) => applyDetail(e.detail);
+    window.addEventListener(PREFILL_EVENT, onPrefill);
+    return () => window.removeEventListener(PREFILL_EVENT, onPrefill);
+  }, []);
 
   const loadPLCs = async () => {
     try {
@@ -192,6 +226,10 @@ function ConnectTab({ addServerLog }) {
   };
 
   const selectedType = PLC_TYPES.find(t => t.id === form.plc_type);
+  const wireType = plcConnectAs(selectedType);
+  const isSiemens = wireType === "siemens_s7";
+  const profile = profiles.find(p => p.id === profileId);
+  const gateOk = profileGateSatisfied(wireType, profileId, profileConfirmed);
 
   const testConnection = async () => {
     setTesting(true);
@@ -199,9 +237,10 @@ function ConnectTab({ addServerLog }) {
     try {
       const res = await fetch(`${API}/test-connection?ip=${form.ip}&plc_type=${form.plc_type}&port=${form.port}`, { method: "POST" });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setTestResult(data);
-    } catch {
-      setTestResult({ reachable: false, error: "Backend offline" });
+    } catch (e) {
+      setTestResult({ reachable: false, error: e.message || "Backend offline" });
     } finally { setTesting(false); }
   };
 
@@ -210,33 +249,55 @@ function ConnectTab({ addServerLog }) {
       addServerLog({ level: "warn", msg: `${selectedType?.label}: ${selectedType?.reason || "no driver"}` });
       return;
     }
+    if (!gateOk) {
+      addServerLog({ level: "warn", msg: "Confirm the selected Siemens tag profile before connecting" });
+      return;
+    }
     setConnecting(true);
-    const wireType = plcConnectAs(selectedType);   // Delta/Mitsubishi/Omron → their Modbus interface, honestly
     addServerLog({ level: "info", msg: `Connecting to ${form.name} (${selectedType.label}${wireType !== form.plc_type ? " via Modbus TCP" : ""}) @ ${form.ip}...` });
     try {
-      const res = await fetch(`${API}/connect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, plc_type: wireType, id: `plc-${Date.now()}` }),
-      });
-      const data = await res.json();
+      const data = await apiPost("/plc/connect", buildConnectBody(form, wireType, { profileId, profileConfirmed }));
       if (data.connected) {
-        addServerLog({ level: "info", msg: `✓ ${form.name} connected — ${data.tag_count} tags loaded` });
+        addServerLog({ level: "info", msg: `✓ ${form.name} connected — ${data.tag_count} tags loaded${data.profile_id ? ` (profile ${data.profile_id})` : ""}. Not yet verified — run Verify (read-only).` });
       } else {
         addServerLog({ level: "warn", msg: `${form.name} connection failed: ${data.error || "Unknown error"}` });
       }
+      if (data.note) addServerLog({ level: "info", msg: data.note });
       loadPLCs();
-    } catch {
-      addServerLog({ level: "warn", msg: `Connect failed — backend offline` });
+    } catch (e) {
+      addServerLog({ level: "warn", msg: `Connect refused — ${e.message || "backend offline"}` });
     } finally { setConnecting(false); }
   };
+
+  const verify = async () => {
+    setVerifying(true);
+    setVerifyResult(null);
+    setVerifyError("");
+    try {
+      let data;
+      if (isSiemens) {
+        if (!profileId) throw new Error("select a tag profile — verification reads only its declared input fields");
+        data = await apiPost("/plc/verify", { ip: form.ip, port: Number(form.port), rack: Number(form.rack), slot: Number(form.slot), profile_id: profileId, samples: 4, interval_s: 0.3 });
+      } else {
+        const points = parseModbusPoints(modbusPoints);
+        if (!points.length) throw new Error("list the known-safe input points to read — addresses are never guessed");
+        data = await apiPost("/plc/verify-modbus", { ip: form.ip, port: Number(form.port), unit_id: Number(form.unit_id), points });
+      }
+      setVerifyResult(data);
+      addServerLog({ level: data.ok ? "info" : "warn", msg: `PLC verify (read-only): ${verifySummary(data)}` });
+    } catch (e) {
+      setVerifyError(e.message || "verification failed");
+    } finally { setVerifying(false); }
+  };
+
+  const inputStyle = { fontSize: 11, fontFamily: "var(--font-mono)" };
 
   return (
     <div style={{ padding: 12 }}>
       <SectionLabel>PLC Type</SectionLabel>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 12 }}>
         {PLC_TYPES.map((t) => (
-          <button key={t.id} onClick={() => setForm(f => ({ ...f, plc_type: t.id, port: t.port }))}
+          <button key={t.id} onClick={() => { setForm(f => ({ ...f, plc_type: t.id, port: t.port })); setVerifyResult(null); }}
             style={{
               padding: "6px 8px", borderRadius: "var(--radius-sm)", cursor: "pointer",
               background: form.plc_type === t.id ? `${t.color}15` : "var(--bg-surface)",
@@ -264,6 +325,11 @@ function ConnectTab({ addServerLog }) {
           This family connects through its <b>Modbus TCP</b> interface (port 502) — make sure Modbus TCP is enabled on the unit.
         </div>
       )}
+      {form.prefilled_from && (
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "rgba(0,212,255,0.05)", border: "1px solid var(--border-accent)", color: "var(--text-secondary)" }}>
+          Pre-filled from discovery {form.prefill_vendor && <b>{form.prefill_vendor} {form.prefill_model}</b>} — not connected, not saved. Review the settings, then Connect.
+        </div>
+      )}
 
       <SectionLabel>Connection Settings</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
@@ -271,18 +337,50 @@ function ConnectTab({ addServerLog }) {
           <input className="input" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 11 }} />
         </FieldRow>
         <FieldRow label="IP Address">
-          <input className="input" value={form.ip} onChange={e => setForm(f => ({...f, ip: e.target.value}))} style={{ fontSize: 11, fontFamily: "var(--font-mono)" }} />
+          <input className="input" value={form.ip} onChange={e => setForm(f => ({...f, ip: e.target.value}))} style={inputStyle} />
         </FieldRow>
         <FieldRow label="Port">
-          <input className="input" type="number" value={form.port} onChange={e => setForm(f => ({...f, port: parseInt(e.target.value)}))} style={{ fontSize: 11, fontFamily: "var(--font-mono)" }} />
+          <input className="input" type="number" value={form.port} onChange={e => setForm(f => ({...f, port: parseInt(e.target.value)}))} style={inputStyle} />
         </FieldRow>
-        {form.plc_type === "siemens_s7" && (
+        {isSiemens && (
           <>
             <FieldRow label="Rack">
-              <input className="input" type="number" value={form.rack} onChange={e => setForm(f => ({...f, rack: parseInt(e.target.value)}))} style={{ fontSize: 11, fontFamily: "var(--font-mono)" }} />
+              <input className="input" type="number" value={form.rack} onChange={e => setForm(f => ({...f, rack: parseInt(e.target.value)}))} style={inputStyle} />
             </FieldRow>
             <FieldRow label="Slot">
-              <input className="input" type="number" value={form.slot} onChange={e => setForm(f => ({...f, slot: parseInt(e.target.value)}))} style={{ fontSize: 11, fontFamily: "var(--font-mono)" }} />
+              <input className="input" type="number" value={form.slot} onChange={e => setForm(f => ({...f, slot: parseInt(e.target.value)}))} style={inputStyle} />
+            </FieldRow>
+            <FieldRow label="Tag profile">
+              <select className="select" value={profileId} onChange={e => { setProfileId(e.target.value); setProfileConfirmed(false); setVerifyResult(null); }} style={{ fontSize: 11, width: "100%" }}>
+                <option value="">none — connect without tags (nothing read)</option>
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.label} · v{p.version}</option>)}
+              </select>
+            </FieldRow>
+            {profile && (
+              <div style={{ marginLeft: 78, padding: "6px 10px", borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: `1px solid ${profileConfirmed ? "var(--green)" : "#f59e0b"}` }}>
+                <div style={{ color: "var(--text-secondary)", marginBottom: 4 }}>
+                  {profile.cpu} · rack {profile.rack} slot {profile.slot} · {profile.field_count} fields · contract {profile.contract}
+                </div>
+                <ul style={{ margin: "0 0 4px 14px", padding: 0, color: "var(--text-muted)", fontSize: 9 }}>
+                  {(profile.requirements || []).map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, color: profileConfirmed ? "var(--green)" : "#f59e0b", cursor: "pointer" }}>
+                  <input type="checkbox" checked={profileConfirmed} onChange={e => setProfileConfirmed(e.target.checked)} />
+                  I confirm this PLC runs the {profile.label.split(" — ")[0]} program (DB1 as in {profile.contract})
+                </label>
+              </div>
+            )}
+          </>
+        )}
+        {!isSiemens && (
+          <>
+            <FieldRow label="Unit ID">
+              <input className="input" type="number" min={0} max={247} value={form.unit_id} onChange={e => setForm(f => ({...f, unit_id: parseInt(e.target.value)}))} style={inputStyle} />
+            </FieldRow>
+            <FieldRow label="Verify points">
+              <textarea className="input" rows={3} value={modbusPoints} onChange={e => setModbusPoints(e.target.value)}
+                placeholder={"known-safe INPUT points to read, one per line:\n30001 input_register\n%MW10 holding_register\n3 discrete_input"}
+                style={{ ...inputStyle, width: "100%", resize: "vertical" }} />
             </FieldRow>
           </>
         )}
@@ -291,11 +389,16 @@ function ConnectTab({ addServerLog }) {
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
         <button className="btn" onClick={testConnection} disabled={testing}
           style={{ flex: 1, justifyContent: "center", fontSize: 11 }}>
-          {testing ? "Testing..." : "⟳ Test Connection"}
+          {testing ? "Testing..." : "⟳ Test TCP"}
         </button>
-        <button className="btn primary" onClick={connect} disabled={connecting || !plcConnectable(selectedType)}
-          style={{ flex: 1, justifyContent: "center", fontSize: 11, opacity: plcConnectable(selectedType) ? 1 : 0.5 }}>
-          {connecting ? "Connecting..." : plcConnectable(selectedType) ? "⚡ Connect" : "No driver"}
+        <button className="btn" onClick={verify} disabled={verifying || !plcConnectable(selectedType)}
+          title="Read-only: reads declared inputs and watches the heartbeat change. Writes nothing."
+          style={{ flex: 1, justifyContent: "center", fontSize: 11 }}>
+          {verifying ? "Verifying..." : "🔍 Verify (read-only)"}
+        </button>
+        <button className="btn primary" onClick={connect} disabled={connecting || !plcConnectable(selectedType) || !gateOk}
+          style={{ flex: 1, justifyContent: "center", fontSize: 11, opacity: plcConnectable(selectedType) && gateOk ? 1 : 0.5 }}>
+          {connecting ? "Connecting..." : !plcConnectable(selectedType) ? "No driver" : !gateOk ? "Confirm profile" : "⚡ Connect"}
         </button>
       </div>
 
@@ -304,9 +407,34 @@ function ConnectTab({ addServerLog }) {
           background: testResult.reachable ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
           border: `1px solid ${testResult.reachable ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
           color: testResult.reachable ? "var(--green)" : "var(--red)" }}>
-          {testResult.reachable ? `✓ ${form.ip}:${form.port} is reachable` : `✕ ${testResult.error || "Not reachable"}`}
+          {testResult.reachable ? `✓ ${form.ip}:${form.port} accepts TCP (proves reachability only — not a PLC, not a program)` : `✕ ${testResult.error || "Not reachable"}`}
         </div>
       )}
+
+      {verifyError && (
+        <div style={{ padding: "7px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11, border: "1px solid rgba(239,68,68,0.3)", color: "var(--red)" }}>
+          ✕ {verifyError}
+        </div>
+      )}
+      {verifyResult && (() => {
+        const st = verifyOutcomeStyle(verifyResult.outcome);
+        return (
+          <div style={{ padding: "8px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: `1px solid ${st.color}` }}>
+            <div style={{ color: st.color, fontWeight: 600, marginBottom: 3 }}>{st.label}</div>
+            <div style={{ color: "var(--text-secondary)", marginBottom: 4 }}>{verifyResult.message}</div>
+            <div style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 9 }}>{verifySummary(verifyResult)}</div>
+            {(verifyResult.fields || []).length > 0 && (
+              <div style={{ marginTop: 5, display: "grid", gridTemplateColumns: "1fr auto auto", gap: "2px 10px", fontFamily: "var(--font-mono)", fontSize: 9 }}>
+                {verifyResult.fields.map((f) => (
+                  <FieldStatusRow key={f.id} f={f} />
+                ))}
+              </div>
+            )}
+            {(verifyResult.warnings || []).map((w, i) => <div key={i} style={{ color: "#f59e0b", fontSize: 9, marginTop: 3 }}>⚠ {w}</div>)}
+            <div style={{ color: "var(--text-muted)", fontSize: 9, marginTop: 4 }}>writes performed: {verifyResult.writes_performed ?? 0} · read-only verification</div>
+          </div>
+        );
+      })()}
 
       <SectionLabel>Connected PLCs ({plcs.length})</SectionLabel>
       {plcs.length === 0 ? (
@@ -336,9 +464,9 @@ function ConnectTab({ addServerLog }) {
       {/* Library requirements */}
       <SectionLabel>Required Libraries</SectionLabel>
       {[
-        { label: "Siemens S7", cmd: "pip install python-snap7", note: "Also install snap7 C library" },
+        { label: "Siemens S7", cmd: "pip install python-snap7", note: "Optional — the validated raw S7comm client needs nothing" },
         { label: "OPC UA",     cmd: "pip install asyncua" },
-        { label: "Allen Bradley", cmd: "pip install pycomm3" },
+        { label: "Allen Bradley", cmd: "pip install pycomm3", note: "Identify-only today: no EtherNet/IP control driver" },
       ].map((lib) => (
         <div key={lib.label} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
           <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 2 }}>{lib.label}</div>
@@ -347,6 +475,18 @@ function ConnectTab({ addServerLog }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function FieldStatusRow({ f }) {
+  const ok = f.status === "ok";
+  const value = f.value === null || f.value === undefined ? "—" : typeof f.value === "boolean" ? (f.value ? "1" : "0") : Array.isArray(f.value) ? f.value.join(",") : String(f.value);
+  return (
+    <>
+      <span style={{ color: "var(--text-secondary)" }}>{f.name || f.id} <span style={{ color: "var(--text-muted)" }}>{f.address}</span></span>
+      <span style={{ color: ok ? "var(--text-accent)" : "var(--text-muted)" }}>{value}</span>
+      <span style={{ color: ok ? "var(--green)" : "var(--red)" }}>{ok ? "ok" : `${f.status}${f.error ? ` (${f.error})` : ""}`}</span>
+    </>
   );
 }
 

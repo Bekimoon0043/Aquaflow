@@ -577,15 +577,16 @@ class PLCManager:
         ]
 
 
-# Default tag templates per PLC type
+# Default tag templates per PLC type.
+#
+# SIEMENS: deliberately EMPTY. The old default table put "pump speed" at DB1.DBW0
+# and "pump run" at DB1.DBX2.0 — the very addresses docs/S7_DB_CONTRACT.md defines
+# as HEARTBEAT and ESTOP_OK. A default that writes a speed into the heartbeat word
+# is worse than no default. Siemens tags now come from an explicitly selected,
+# versioned profile (plc/s7_profiles.py, e.g. "aquaflow-s7-1215c-v1"), confirmed by
+# the operator — never assigned silently to every S7 that answers.
 DEFAULT_TAGS = {
-    PLCType.SIEMENS_S7: [
-        {"id": "pump_speed",  "name": "Pump Speed",      "address": "DB1.DBW0",  "tag_type": "int",  "min_value": 0, "max_value": 1000, "scale_factor": 0.1,  "unit": "%",  "mapped_param": "speed"},
-        {"id": "pump_run",    "name": "Pump Run",         "address": "DB1.DBX2.0","tag_type": "bool", "min_value": 0, "max_value": 1,    "scale_factor": 1.0,  "unit": "",   "mapped_param": "run"},
-        {"id": "valve_1",     "name": "Solenoid Valve 1", "address": "DB2.DBX0.0","tag_type": "bool", "min_value": 0, "max_value": 1,    "scale_factor": 1.0,  "unit": "",   "mapped_param": "open"},
-        {"id": "pressure",    "name": "Water Pressure",   "address": "DB3.DBW0",  "tag_type": "int",  "min_value": 0, "max_value": 100,  "scale_factor": 0.01, "unit": "bar","mapped_param": "pressure"},
-        {"id": "flow_rate",   "name": "Flow Rate",        "address": "DB3.DBW2",  "tag_type": "int",  "min_value": 0, "max_value": 1000, "scale_factor": 0.1,  "unit": "L/m","mapped_param": "flow"},
-    ],
+    PLCType.SIEMENS_S7: [],
     PLCType.MODBUS_TCP: [
         {"id": "pump_speed",  "name": "Pump Speed",      "address": "%MW0",   "tag_type": "int",  "min_value": 0, "max_value": 1000, "scale_factor": 0.1,  "unit": "%",  "mapped_param": "speed"},
         {"id": "pump_run",    "name": "Pump Run/Stop",   "address": "%MW1",   "tag_type": "int",  "min_value": 0, "max_value": 1,    "scale_factor": 1.0,  "unit": "",   "mapped_param": "run"},

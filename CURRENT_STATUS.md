@@ -1,11 +1,73 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-07, AF-3D R2):** backend pytest
-> **685 passed, 21 skipped, 0 failures, 0 errors (706 collected)** · frontend vitest
-> **418 passed (33 files)** ·
+> **AUTHORITATIVE (2026-09-07, AF-DISC):** backend pytest
+> **784 passed, 21 skipped, 1 pre-existing environmental failure**
+> (`test_hardware_output.py::test_loopback_output_timing_within_spec`, a wall-clock
+> Art-Net loopback timing test that fails identically on a clean HEAD worktree of this
+> machine) · frontend vitest **440 passed (34 files)** ·
 > `npm run build` green · desktop **1.1.5**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-07 (AF-DISC — evidence-based PLC/controller discovery, read-only)
+**Summary:** Device Discovery → Controllers now identifies real hardware by protocol
+exchange, on a selected adapter/subnet, as a cancellable job with progress — and never
+claims more than the evidence supports. The Fountain Control I-CAN implementation
+(`ican_reference_client.py`, `ican_connection.py`, `ican_routes.py`,
+`FountainControlPanel.jsx`, the `ican-music-fountain` catalog profile) is **unchanged**.
+
+- **I-CAN aggregation bug fixed.** `controller_identify.py` listed every probe candidate
+  (it checked a `protocol_valid` field that never existed) — 253 timeouts became 253
+  "probable" DRIVABLE gateways. Now only `accepted == true` candidates are controllers;
+  timeouts/junk stay in diagnostics; duplicates collapse. Regression tests:
+  253 timeouts + 1 valid reply → exactly one; all timeouts → zero.
+- **I-CAN discovery socket coordination** (`engine/ican_discovery.py`, discovery-only):
+  ONE shared UDP socket per run instead of 16 SO_REUSEADDR sockets on 2002 (which could
+  steal the control client's datagrams); a busy 2002 is reported, never squatted; an
+  active Fountain Control connection is detected via its read-only status and the scan
+  does not bind or send at all. Probe bytes (`03 00 00 00 01 …`) and the 0x07 validation
+  rule are untouched; opcode 0x08 is not referenced by any discovery module (tokenised
+  source check in `test_ican_discovery_readonly.py`).
+- **Adapters + subnet selection** (`engine/net_adapters.py`): real IPv4 adapters with
+  real masks (ipconfig / ip / ifconfig parsing, no psutil), kind classification
+  (physical/virtual/vpn/loopback/link-local), explicit adapter or CIDR (scans ONLY that
+  range), ranges > /22 refused, bounded concurrency + time budget, cancel + progress via
+  `/api/controllers/discover/start|jobs/{id}|cancel`.
+- **Siemens**: `engine/s7_identify.py` strict COTP/S7 setup validation (every field), SZL
+  0x0011/0x001C identity (order number, module, firmware) — a bare handshake never claims
+  a CPU model; rack/slot profiles 0/1 then 0/2. `engine/profinet_dcp.py` DCP Identify
+  codec (read-only; sender needs raw Ethernet — unavailable on Windows, reported
+  honestly). Stages: tcp_open → cotp_connected → s7_confirmed → identity_confirmed.
+- **Modbus**: FC43/14 fully validated (MEI echo, conformity, more-follows +
+  continuation, object lengths, trailing bytes) via
+  `ModbusTCPClient.read_device_identification_full`; configurable unit-id list (default 1);
+  a well-formed exception = generic Modbus, vendor NOT identified.
+- **EtherNet/IP**: `engine/enip_identify.py` strict ListIdentity (encap status, lengths,
+  item count/type/bounds, name bounds); Allen-Bradley remains identify-only; an open 44818
+  with junk behind it is not a PLC.
+- **S7 profile conflict fixed**: versioned `plc/s7_profiles.py` `aquaflow-s7-1215c-v1`
+  matching `docs/S7_DB_CONTRACT.md` (asserted by test against the doc table); the old
+  Siemens default tags (pump speed at DB1.DBW0 = HEARTBEAT) are gone; a profile must be
+  selected AND confirmed (`profile_id` + `confirm_profile`) — never assigned silently.
+- **Read-only verification** (`engine/plc_verify.py`, `POST /api/plc/verify`,
+  `/verify-modbus`): reads only declared input fields, classifies unreachable /
+  wrong rack-slot / not-S7 / access denied / missing DB / optimized-or-short DB /
+  timeout / malformed separately, and calls the PLC verified ONLY when HEARTBEAT changes
+  across samples. Modbus reads only operator-listed points. Zero writes (asserted).
+- **UI**: Controllers tab shows adapter/subnet, progress + cancel, evidence, stage,
+  confidence, warnings; "Configure PLC →" pre-fills the PLC panel (IP/port/rack/slot/
+  unit id/vendor/model) without connecting; I-CAN rows show the validated reply and link
+  to Fountain Control (navigation only). Network Scan adds hosts as **unverified** with
+  no health value. Non-2xx responses surface as text.
+- Also fixed in passing: `S7Client.read_bit` checked reply length before the return code,
+  so a real ACCESS_DENIED on a BOOL read as a frame error and marked the link down.
+
+**Physical commissioning still required:** DCP on the plant Ethernet, S7 SZL on the real
+1215C, the I-CAN gateway on 192.168.5.2 and Modbus units have only been exercised
+against the fake servers (`fake_s7_server.py`, `ScriptedModbusServer`,
+`FakeICANGateway`, constructed ENIP/DCP frames).
+
+---
 
 **Date:** 2026-09-07 (AF-3D R3 + HUD — refraction, ripples, and the striped water solved)
 **Summary:** Phase R3 of the realism plan, plus the performance HUD, plus three real

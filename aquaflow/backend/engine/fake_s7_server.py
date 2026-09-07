@@ -23,6 +23,18 @@ Fault modes:
   "drop"    — close the connection on the first Read/Write Var after setup
 (Faults apply to the DATA phase only — the COTP/S7 handshake always succeeds, the
 way a real PLC that later fails mid-session behaves.)
+
+Discovery additions (read-only identification, engine/s7_identify.py):
+  expected_slot   — when set, a COTP CR whose remote TSAP names another slot is
+                    refused (connection dropped, or a COTP DR with
+                    handshake_mode="refuse_dr"), the way a real rack answers a
+                    wrong rack/slot
+  handshake_mode  — "cc_short" (truncated CC), "setup_bad_ref", "setup_truncated",
+                    "setup_error", "setup_wrong_rosctr", "setup_bad_proto",
+                    "setup_zero_pdu": malformed handshake replies discovery must refuse
+  identity        — SZL 0x0011/0x001C content (order number, module name, ...);
+                    szl_supported=False answers the userdata request with an error,
+                    like a CPU that does not expose the list
 """
 from __future__ import annotations
 
@@ -41,8 +53,19 @@ RET_ADDR_OUT_OF_RANGE = 0x05
 class FakeS7Server:
     """A scriptable S7comm responder bound to 127.0.0.1:<ephemeral>."""
 
-    def __init__(self, mode: Optional[str] = None):
+    def __init__(self, mode: Optional[str] = None, *, expected_slot: Optional[int] = None,
+                 handshake_mode: Optional[str] = None, identity: Optional[dict] = None,
+                 szl_supported: bool = True):
         self.mode = mode
+        self.expected_slot = expected_slot
+        self.handshake_mode = handshake_mode
+        self.identity = identity or {
+            "order_number": "6ES7 215-1AG40-0XB0", "module_name": "CPU 1215C DC/DC/DC",
+            "plc_name": "AquaFlowPLC", "serial_number": "S C-FAKE00001",
+            "hardware_version": (1, 0), "firmware_version": (4, 5, 2),
+        }
+        self.szl_supported = szl_supported
+        self.szl_reads = 0
         self.dbs: dict[int, bytearray] = {1: bytearray(64)}
         self.reads = 0
         self.writes = 0
@@ -116,7 +139,20 @@ class FakeS7Server:
 
         # COTP connection request → connection confirm.
         if len(cotp) >= 2 and cotp[1] == 0xE0:
-            cc = bytes([0x11, 0xD0]) + cotp[2:6] + bytes([0x00]) + cotp[7:]
+            if self.expected_slot is not None:
+                # remote TSAP = C2 02 01 <rack*0x20+slot>; find it in the CR params
+                idx = cotp.find(b"\xc2\x02")
+                slot = (cotp[idx + 3] & 0x1F) if idx >= 0 and idx + 3 < len(cotp) else None
+                if slot != self.expected_slot:
+                    if self.handshake_mode == "refuse_dr":
+                        # COTP Disconnect Request: LI 6, 0x80, dst-ref, src-ref, reason
+                        return self._tpkt(bytes([0x06, 0x80]) + cotp[4:6] + cotp[2:4] + bytes([0x00]))
+                    return None                            # a real rack just drops it
+            if self.handshake_mode == "cc_short":
+                self._close_after_reply = True
+                return b"\x03\x00\x00\x06\x02\xd0"     # TPKT says 6, CC cut off
+            # dst-ref = the caller's src-ref (swap the two 16-bit refs), class 0
+            cc = bytes([0x11, 0xD0]) + cotp[4:6] + bytes([0x00, 0x01, 0x00]) + cotp[7:]
             return self._tpkt(cc)
 
         if len(s7) < 10 or s7[0] != 0x32:
@@ -125,10 +161,33 @@ class FakeS7Server:
         rosctr = s7[1]
         pdu_ref = s7[4:6]
 
+        if rosctr == 0x07:                                     # USERDATA (SZL read)
+            return self._userdata(pdu_ref, s7)
+
         if rosctr == 0x01:                                     # JOB
             function = s7[10]
             if function == 0xF0:                               # setup communication
                 param = s7[10:18]                              # echo negotiated params
+                hm = self.handshake_mode
+                if hm == "setup_bad_ref":
+                    bad = struct.pack(">H", (struct.unpack(">H", pdu_ref)[0] + 1) & 0xFFFF)
+                    return self._s7_ack(bad, param, b"")
+                if hm == "setup_truncated":
+                    full = self._s7_ack(pdu_ref, param, b"")
+                    self._close_after_reply = True
+                    return full[:-4]                           # TPKT length lies by 4
+                if hm == "setup_error":
+                    return self._s7_ack(pdu_ref, param, b"", error=(0x85, 0x00))
+                if hm == "setup_wrong_rosctr":
+                    ack = bytearray(self._s7_ack(pdu_ref, param, b""))
+                    ack[8] = 0x01                              # ROSCTR job instead of ack-data
+                    return bytes(ack)
+                if hm == "setup_bad_proto":
+                    ack = bytearray(self._s7_ack(pdu_ref, param, b""))
+                    ack[7] = 0x33
+                    return bytes(ack)
+                if hm == "setup_zero_pdu":
+                    param = param[:6] + b"\x00\x00"
                 return self._s7_ack(pdu_ref, param, b"")
             if function in (0x04, 0x05):
                 # Data-phase fault injection lives HERE so the handshake stays clean.
@@ -198,14 +257,56 @@ class FakeS7Server:
             buf[offset:offset + count] = payload[:count]
         return self._s7_ack(pdu_ref, bytes([0x05, 0x01]), bytes([RET_OK]))
 
+    # ── SZL (system status list) — read-only identity ───────────────────────
+    def _userdata(self, pdu_ref: bytes, s7: bytes) -> bytes:
+        """Answer a read-SZL userdata request (0x0011 module id, 0x001C component
+        id). Anything else, or szl_supported=False, gets a userdata error reply."""
+        self.szl_reads += 1
+        plen, dlen = struct.unpack(">HH", s7[6:10])
+        param = s7[10:10 + plen]
+        data = s7[10 + plen:10 + plen + dlen]
+        seq = param[7] if len(param) >= 8 else 0
+        szl_id = struct.unpack(">H", data[4:6])[0] if len(data) >= 8 else 0
+        records: list[bytes] = []
+        rec_len = 0
+        if self.szl_supported and szl_id == 0x0011:
+            rec_len = 28
+            idn = self.identity
+            hw = idn.get("hardware_version", (1, 0))
+            fw = idn.get("firmware_version", (4, 5, 2))
+            mlfb = idn.get("order_number", "").encode("ascii").ljust(20, b"\x00")[:20]
+            records.append(struct.pack(">H", 1) + mlfb + struct.pack(">HHH", 0, (hw[0] << 8) | hw[1], 0))
+            records.append(struct.pack(">H", 7) + mlfb + struct.pack(">HHH", 0, (fw[0] << 8) | fw[1], fw[2]))
+        elif self.szl_supported and szl_id == 0x001C:
+            rec_len = 34
+            idn = self.identity
+            for idx, key in ((1, "plc_name"), (2, "module_name"), (5, "serial_number")):
+                text = idn.get(key, "").encode("ascii").ljust(32, b"\x00")[:32]
+                records.append(struct.pack(">H", idx) + text)
+        if not records:
+            rparam = (bytes([0x00, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, seq, 0x00, 0x00]) +
+                      struct.pack(">H", 0x8104))               # "function not supported"
+            rdata = bytes([0x0A, 0x00, 0x00, 0x00])
+            return self._s7_userdata(pdu_ref, rparam, rdata)
+        body = struct.pack(">HHHH", szl_id, 0, rec_len, len(records)) + b"".join(records)
+        rparam = bytes([0x00, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, seq, 0x00, 0x00, 0x00, 0x00])
+        rdata = bytes([0xFF, 0x09]) + struct.pack(">H", len(body)) + body
+        return self._s7_userdata(pdu_ref, rparam, rdata)
+
+    def _s7_userdata(self, pdu_ref: bytes, param: bytes, data: bytes) -> bytes:
+        header = (bytes([0x32, 0x07, 0x00, 0x00]) + pdu_ref +
+                  struct.pack(">HH", len(param), len(data)))
+        return self._tpkt(bytes([0x02, 0xF0, 0x80]) + header + param + data)
+
     # ── framing ──────────────────────────────────────────────────────────────
     @staticmethod
     def _tpkt(payload: bytes) -> bytes:
         return struct.pack(">BBH", 0x03, 0x00, len(payload) + 4) + payload
 
-    def _s7_ack(self, pdu_ref: bytes, param: bytes, data: bytes) -> bytes:
+    def _s7_ack(self, pdu_ref: bytes, param: bytes, data: bytes,
+                error: tuple = (0x00, 0x00)) -> bytes:
         header = (bytes([0x32, 0x03, 0x00, 0x00]) + pdu_ref +
                   struct.pack(">HH", len(param), len(data)) +
-                  bytes([0x00, 0x00]))                         # error class/code = ok
+                  bytes(error))                                # error class/code
         cotp = bytes([0x02, 0xF0, 0x80])
         return self._tpkt(cotp + header + param + data)
