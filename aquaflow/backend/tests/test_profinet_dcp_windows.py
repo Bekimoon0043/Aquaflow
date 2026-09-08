@@ -351,6 +351,52 @@ def test_controllers_discovery_uses_the_selected_adapter_and_cancels_dcp():
     assert res["hosts_scanned"] <= 1022 and res["subnets"] == ["192.168.4.0/22"]
 
 
+def test_link_local_usb_adapter_runs_dcp_without_any_ip_sweep():
+    import asyncio
+    from engine.controller_identify import discover_controllers
+
+    usb = Adapter(name="Ethernet", ip="169.254.201.86", prefix=16,
+                  kind="link_local", description="USB2.0 Ethernet Adapter",
+                  mac="04:7c:16:aa:bb:cc")
+    calls = {"dcp": 0, "port": 0, "identify": 0, "ican": 0}
+
+    def scanner(adapter, should_stop=None):
+        calls["dcp"] += 1
+        assert adapter is usb
+        prov = dcp.FakeEthernetProvider(replies=[lambda req: _reply_for(
+            req, station_name="unconfigured-cpu", ip="0.0.0.0",
+            mask="0.0.0.0", gw="0.0.0.0")], src_mac=PC_MAC)
+        return dcp.dcp_identify_all(
+            adapter, provider=prov, listen_s=0.05, should_stop=should_stop)
+
+    async def no_port_probe(ip, port):
+        calls["port"] += 1
+        return False
+
+    async def no_identify(ip, port, wk, unit_ids=(1,)):
+        calls["identify"] += 1
+        return []
+
+    async def no_ican(**kwargs):
+        calls["ican"] += 1
+        raise AssertionError("I-CAN must not run without a configured IPv4 subnet")
+
+    res = asyncio.run(discover_controllers(
+        adapter="Ethernet", adapters_provider=lambda: [usb],
+        dcp_scanner=scanner, port_checker=no_port_probe, identifier=no_identify,
+        ican_discover=no_ican, include_ican=True, arp_provider=lambda n: {}))
+
+    assert calls == {"dcp": 1, "port": 0, "identify": 0, "ican": 0}
+    assert res["hosts_scanned"] == 0
+    assert res["targets"][0]["source"] == "adapter_layer2"
+    assert res["subnets"] == ["169.254.201.86/32"]
+    assert any("only a link-local address" in warning for warning in res["warnings"])
+    assert len(res["detected"]) == 1
+    found = res["detected"][0]
+    assert found["protocol"] == "profinet_dcp" and found["ip"] == ""
+    assert found["drivable"] is False and found["configurable"] is False
+
+
 def test_dcp_only_siemens_remote_io_is_not_claimed_as_a_drivable_s7_plc():
     """A Siemens vendor id is shared by CPUs and PROFINET remote I/O. Without a
     strict S7comm handshake, DCP evidence must stay identify-only."""

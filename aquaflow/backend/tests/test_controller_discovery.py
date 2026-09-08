@@ -102,6 +102,21 @@ def test_ipconfig_parsing_reads_real_masks_and_kinds():
     assert d["netmask"] == "255.255.252.0" and d["host_count"] == 1022
 
 
+def test_ipconfig_keeps_usb_adapter_with_autoconfiguration_ipv4_for_dcp():
+    text = """Ethernet adapter Ethernet:
+
+   Description . . . . . . . . . . . : USB2.0 Ethernet Adapter
+   Physical Address. . . . . . . . . : C8-17-F5-DD-4E-52
+   Autoconfiguration IPv4 Address. . : 169.254.201.86(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.0.0
+"""
+    ads = parse_ipconfig(text)
+    assert len(ads) == 1
+    assert ads[0].name == "Ethernet" and ads[0].ip == "169.254.201.86"
+    assert ads[0].prefix == 16 and ads[0].kind == "link_local"
+    assert ads[0].mac == "c8:17:f5:dd:4e:52"
+
+
 def test_linux_and_bsd_parsers():
     lin = {a.name: a for a in parse_ip_addr(IP_ADDR)}
     assert lin["lo"].kind == "loopback"
@@ -167,6 +182,17 @@ def test_explicit_adapter_uses_its_real_subnet_only():
         resolve_scan_targets(_adapters(), adapter_name="Ethernet 2")   # /16 refused
     with pytest.raises(ScanRangeError):
         resolve_scan_targets(_adapters(), adapter_name="nope")
+
+
+def test_explicit_link_local_adapter_becomes_layer2_only_target():
+    apipa = Adapter(name="USB Ethernet", ip="169.254.201.86", prefix=16,
+                    kind="link_local", description="USB2.0 Ethernet Adapter",
+                    mac="c8:17:f5:dd:4e:52")
+    targets = resolve_scan_targets([apipa], adapter_name="USB Ethernet")
+    assert len(targets) == 1
+    assert targets[0].subnet == "169.254.201.86/32"
+    assert targets[0].adapter == "USB Ethernet"
+    assert targets[0].source == "adapter_layer2"
 
 
 def test_unreasonable_ranges_are_refused_not_clamped():

@@ -181,8 +181,8 @@ function ControllersTab({ addServerLog }) {
         <select value={adapter} onChange={e => setAdapter(e.target.value)} disabled={scanning || !!cidr.trim()} style={{ ...input, flex: 1 }}>
           <option value="">auto — every physical adapter</option>
           {adapters.map(a => (
-            <option key={a.name} value={a.name} disabled={!a.eligible && a.kind !== "unknown"}>
-              {adapterOptionLabel(a)}{!a.eligible ? " (excluded by default)" : ""}
+            <option key={a.name} value={a.name} disabled={!a.eligible && !["unknown", "link_local"].includes(a.kind)}>
+              {adapterOptionLabel(a)}{a.kind === "link_local" ? " (DCP only until static IP)" : !a.eligible ? " (excluded by default)" : ""}
             </option>
           ))}
         </select>

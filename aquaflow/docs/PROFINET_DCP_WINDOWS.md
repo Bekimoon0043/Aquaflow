@@ -45,6 +45,15 @@ Wireshark GUI, nothing to `pip install`.
 
 TIA Portal or PRONETA are **not** required and are not used.
 
+### Direct cable with no DHCP (169.254.x.x)
+
+Windows gives a directly connected USB Ethernet adapter an automatic `169.254.x.x/16`
+address when no DHCP server is present. AquaFlow keeps that adapter selectable and runs
+DCP on it, but deliberately does not sweep the 65,534-address link-local range. The scan
+is marked DCP-only until the PC has a static address on the controller subnet. This is
+enough to identify an unconfigured PROFINET device by MAC and station name; S7comm,
+Modbus TCP and I-CAN need a correctly configured IPv4 subnet before they can be tested.
+
 ## PLC with a foreign IP
 
 When DCP reports a PLC whose IP is outside the selected subnet, the Controllers

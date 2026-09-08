@@ -482,6 +482,13 @@ async def discover_controllers(
     host_sem = asyncio.Semaphore(MAX_PARALLEL_HOSTS)
     conn_sem = asyncio.Semaphore(MAX_PARALLEL_CONNECTS)
 
+    layer2_only_targets = [t for t in targets if t.source == "adapter_layer2"]
+    for t in layer2_only_targets:
+        warnings.append(
+            f"{t.adapter} has only a link-local address ({t.adapter_ip}); PROFINET DCP "
+            "will run on that adapter, but IP-based discovery is skipped until the PC "
+            "has a static address on the controller subnet")
+
     def report(frac: float, msg: str):
         if progress:
             try:
@@ -536,7 +543,8 @@ async def discover_controllers(
             dcp_diag.append(d_res)
             for dev in getattr(res, "devices", []) or []:
                 d = dev.to_dict() if hasattr(dev, "to_dict") else dict(dev)
-                d.update({"_adapter": t.adapter, "_subnet": t.subnet})
+                d.update({"_adapter": t.adapter, "_subnet": t.subnet,
+                          "_layer2_only": t.source == "adapter_layer2"})
                 # A duplicate IP is valuable evidence of a configuration conflict;
                 # never collapse two physical devices merely because their address
                 # is the same. DCP identity is the source MAC on one adapter.
@@ -553,6 +561,8 @@ async def discover_controllers(
     # ── TCP sweep + identification ───────────────────────────────────────────
     hosts: list[tuple[str, ScanTarget]] = []
     for t in targets:
+        if t.source == "adapter_layer2":
+            continue
         for h in t.network.hosts():
             ip = str(h)
             if ip == t.adapter_ip:
@@ -620,7 +630,7 @@ async def discover_controllers(
             except ValueError:
                 in_subnet = False
         is_siemens = d.get("vendor_id") == 0x002A
-        if is_siemens and ip and not in_subnet:
+        if is_siemens and ip and not in_subnet and not d.get("_layer2_only"):
             # One direct S7comm attempt at the DCP-reported address (a single host,
             # never a sweep of that foreign subnet). Only this validated handshake
             # may promote a Siemens PROFINET device to a drivable S7 PLC.
@@ -661,6 +671,10 @@ async def discover_controllers(
         if not ip:
             warnings_for_device.append(
                 "device has no IP address — assign one in TIA Portal before AquaFlow can connect")
+        elif d.get("_layer2_only"):
+            warnings_for_device.append(
+                "the selected PC adapter has only a link-local address — configure a static "
+                "address on the device subnet before S7comm validation")
         elif not in_subnet:
             warnings_for_device.append(
                 f"IP {ip} is outside the selected subnet — no foreign subnet was scanned")
@@ -684,7 +698,9 @@ async def discover_controllers(
             from engine import ican_discovery as disco
             run_disco = ican_discover or disco.discover
             status_provider = control_status_provider or _default_control_status
-            ican_targets = targets
+            # I-CAN uses IPv4/UDP. A link-local-only adapter remains useful for
+            # DCP, but there is no bounded or correctly routed IP subnet to probe.
+            ican_targets = [t for t in targets if t.source != "adapter_layer2"]
             all_ican: list[DetectedController] = []
             ican_diag: list[dict] = []
             for t in ican_targets:
@@ -724,6 +740,8 @@ async def discover_controllers(
         from engine.ican_discovery import arp_neighbours
         arp = arp_provider or arp_neighbours
         for t in targets:
+            if t.source == "adapter_layer2":
+                continue
             table = arp(t.network)
             for d in detected:
                 if not d.mac and d.ip in table:

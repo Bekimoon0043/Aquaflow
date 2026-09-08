@@ -163,7 +163,10 @@ def parse_ipconfig(text: str) -> list[Adapter]:
         if m:
             current["mac"] = m.group(1).strip().lower().replace("-", ":")
             continue
-        m = re.match(r"^IPv4 Address[ .]*: (\d+\.\d+\.\d+\.\d+)", stripped)
+        # A directly connected NIC with no DHCP server is shown by Windows as
+        # "Autoconfiguration IPv4 Address". It is still a usable layer-2
+        # interface and must remain visible for PROFINET DCP discovery.
+        m = re.match(r"^(?:Autoconfiguration )?IPv4 Address[ .]*: (\d+\.\d+\.\d+\.\d+)", stripped)
         if m and not current.get("ip"):
             current["ip"] = m.group(1)
             continue
@@ -263,7 +266,7 @@ class ScanTarget:
     subnet: str                 # CIDR actually swept
     adapter: Optional[str]      # adapter name the subnet belongs to (None for manual)
     adapter_ip: Optional[str]
-    source: str                 # "adapter" | "manual_cidr" | "auto"
+    source: str                 # "adapter" | "adapter_layer2" | "manual_cidr" | "auto"
     kind: str = "unknown"
 
     @property
@@ -318,6 +321,13 @@ def resolve_scan_targets(adapters: list[Adapter], *, adapter_name: Optional[str]
         a = next((x for x in adapters if x.name == adapter_name), None)
         if a is None:
             raise ScanRangeError(f"no adapter named {adapter_name!r}")
+        if a.kind == "link_local":
+            # APIPA is a /16, far too large for an IP sweep, but the physical
+            # NIC is exactly what DCP needs. Represent it as a no-host /32
+            # target so controller discovery can run layer 2 on the selected
+            # adapter without probing 65,534 link-local addresses.
+            return [ScanTarget(subnet=f"{a.ip}/32", adapter=a.name, adapter_ip=a.ip,
+                               source="adapter_layer2", kind=a.kind)]
         validate_cidr(a.subnet)
         return [ScanTarget(subnet=a.subnet, adapter=a.name, adapter_ip=a.ip,
                            source="adapter", kind=a.kind)]
