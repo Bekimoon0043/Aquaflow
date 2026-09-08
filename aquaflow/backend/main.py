@@ -260,6 +260,11 @@ async def lifespan(app: FastAPI):
 
     print("LuxuryCon Fountain Studio shutting down...")
     telem_task.cancel()
+    # A captured I-CAN demo runs in a backend task and may outlive the visible panel.
+    # Stop it while the event loop and connection are still healthy, send all-off to
+    # every driven group, then release the exclusive local UDP port.
+    from api.routes.ican_routes import shutdown_ican
+    await shutdown_ican()
     await safety.stop()
     await transport.stop_loop()
     await show_engine.stop()

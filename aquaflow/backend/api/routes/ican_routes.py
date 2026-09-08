@@ -3,8 +3,8 @@ API Routes - I-CAN fountain gateway discovery & connection.
 
 Backs the operator connection panel. Discovery and status are READ-ONLY. The output
 endpoint is deliberately gated (requires an armed connection + explicit confirmation)
-and is NOT reachable with arbitrary user-supplied frames. Semantics of output frames
-are capture-derived and unproven on hardware, so output stays disabled by default.
+and is NOT reachable with arbitrary user-supplied frames. The captured output sequence
+has driven the real site fountain, but output stays disabled by default.
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -13,6 +13,7 @@ from typing import Optional
 from engine import ican_discovery as disco
 from engine.ican_connection import ICANConnection, ICANConfig
 from engine.ican_mapping import ChannelMap
+from engine.ican_site_demo import ICANSiteDemo, SiteDemoStartError
 
 router = APIRouter()
 
@@ -29,6 +30,7 @@ def _map() -> ChannelMap:
 # One process-wide manager for the connection panel. dry_run defaults False; the
 # manager only ever transmits the SAFE probe until output is explicitly enabled.
 _conn: Optional[ICANConnection] = None
+_site_demo: Optional[ICANSiteDemo] = None
 
 
 def _manager() -> ICANConnection:
@@ -36,6 +38,13 @@ def _manager() -> ICANConnection:
     if _conn is None:
         _conn = ICANConnection(ICANConfig())
     return _conn
+
+
+def _demo() -> ICANSiteDemo:
+    global _site_demo
+    if _site_demo is None:
+        _site_demo = ICANSiteDemo()
+    return _site_demo
 
 
 class DiscoverRequest(BaseModel):
@@ -75,6 +84,7 @@ async def status():
 @router.post("/connect")
 async def connect(req: ManualConnect):
     """Manual override: connect to an explicit gateway IP/port (read-only verify)."""
+    await _demo().stop("reconnected")
     m = _manager()
     m.cfg.gateway_ip = req.gateway_ip
     m.cfg.gateway_port = req.gateway_port
@@ -92,6 +102,7 @@ async def connect(req: ManualConnect):
 @router.post("/auto-connect")
 async def auto_connect(req: DiscoverRequest):
     """Discover then connect in one call. Emits no output."""
+    await _demo().stop("reconnected")
     m = _manager()
     m.cfg.gateway_port = req.gateway_port
     m.cfg.local_port = req.local_port
@@ -112,8 +123,11 @@ async def probe():
 
 @router.post("/disconnect")
 async def disconnect():
-    await _manager().close()
-    return _manager().status()
+    m = _manager()
+    await _demo().stop("disconnected")
+    await m.blackout()
+    await m.close()
+    return m.status()
 
 
 @router.post("/auto-reconnect")
@@ -126,6 +140,37 @@ async def auto_reconnect(req: ReconnectToggle):
 async def audit():
     """The output-command audit trail, for support/diagnostics export."""
     return {"entries": _manager().audit_log}
+
+
+# ── Hardware-proven one-minute site choreography ─────────────────────────────
+@router.get("/demo/status")
+async def site_demo_status():
+    return _demo().status()
+
+
+@router.post("/demo/start")
+async def start_site_demo():
+    """Start the one-minute choreography captured from the original site software."""
+    try:
+        return await _demo().start(_manager())
+    except SiteDemoStartError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/demo/stop")
+async def stop_site_demo():
+    """Stop the captured choreography immediately and hold every driven group off."""
+    state = await _demo().stop("stopped")
+    await _manager().blackout()
+    return state
+
+
+async def shutdown_ican():
+    """Application shutdown hook: stop the site demo, blackout, then release UDP 2002."""
+    await _demo().stop("shutdown")
+    if _conn is not None:
+        await _conn.blackout()
+        await _conn.close()
 
 
 # ── channel mapping (pure data; the method to label each channel) ────────────
@@ -311,7 +356,9 @@ async def drive_channel(req: ChannelDrive):
 async def stop_output():
     """Blackout every attached channel. Never gated — stopping is always allowed."""
     from app_state import protocol_bus
+    await _demo().stop("stopped")
     await protocol_bus.blackout()
+    await _manager().blackout()
     return {"stopped": True}
 
 
@@ -321,8 +368,8 @@ async def arm_output(req: ArmRequest):
     Arm or disarm the physical output path.
 
     Arming requires an explicit confirmation phrase because this is the step that
-    lets software close real relays. The 0x08 output semantics are capture-derived
-    and unproven on hardware, so this must never be reachable by accident.
+    lets software close real relays. The 0x08 output path is proven on this fountain,
+    but it must never be reachable by accident.
     Disarming is always allowed and needs no confirmation — stopping is never gated.
     """
     m = _manager()
@@ -331,6 +378,8 @@ async def arm_output(req: ArmRequest):
             status_code=400,
             detail='arming requires confirm="ARM OUTPUT"',
         )
+    if not req.enabled:
+        await _demo().stop("disarmed")
     m.enable_output(bool(req.enabled))
     if not req.enabled:
         # Disarming should also drop anything currently energised, not merely stop

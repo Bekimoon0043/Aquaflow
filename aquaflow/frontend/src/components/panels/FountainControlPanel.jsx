@@ -8,8 +8,8 @@
  *
  * The panel deliberately mirrors the backend's gating rather than hiding it. Connecting
  * does not attach; attaching does not arm; arming needs a typed confirmation. Each step
- * unlocks only the next one, because the frame semantics are capture-derived and a wrong
- * channel could actuate real equipment.
+ * unlocks only the next one. The captured sequence has driven the real site fountain,
+ * and a wrong manual channel can still actuate real equipment.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, apiPost } from "../../utils/apiClient";
@@ -68,6 +68,7 @@ export default function FountainControlPanel() {
   const [confirmText, setConfirmText] = useState("");
   const [liveChannels, setLiveChannels] = useState(new Set());
   const [seqRunning, setSeqRunning] = useState(false);
+  const [siteDemo, setSiteDemo] = useState(null);
 
   const [manualIp, setManualIp] = useState("192.168.5.2");
   const [gwPort, setGwPort] = useState(200);
@@ -82,14 +83,16 @@ export default function FountainControlPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, m, k] = await Promise.all([
+      const [s, m, k, d] = await Promise.all([
         apiGet("/ican/status"),
         apiGet("/ican/map/registry").catch(() => ({ devices: [] })),
         apiGet("/safety/status").catch(() => null),
+        apiGet("/ican/demo/status").catch(() => null),
       ]);
       setStatus(s);
       setChannels(m.devices || []);
       setSafety(k);
+      setSiteDemo(d);
     } catch (e) {
       setStatus(null);
       say(`status unavailable — ${e.message}`, "err");
@@ -100,9 +103,9 @@ export default function FountainControlPanel() {
   // Poll while connected so a dropped gateway is visible rather than assumed.
   useEffect(() => {
     if (!status?.state || status.state === "idle") return;
-    const t = setInterval(refresh, 4000);
+    const t = setInterval(refresh, siteDemo?.running ? 1000 : 4000);
     return () => clearInterval(t);
-  }, [status?.state, refresh]);
+  }, [status?.state, siteDemo?.running, refresh]);
 
   const run = useCallback(async (name, fn, okMsg) => {
     setBusy(name);
@@ -248,6 +251,21 @@ export default function FountainControlPanel() {
     return r;
   }, "STOP — all channels off");
 
+  const startSiteDemo = () => run("site demo", async () => {
+    abortSeq.current = true;
+    setSeqRunning(false);
+    const r = await apiPost("/ican/demo/start", {});
+    setSiteDemo(r);
+    return r;
+  }, "one-minute captured fountain demo started");
+
+  const stopSiteDemo = () => run("stop demo", async () => {
+    const r = await apiPost("/ican/demo/stop", {});
+    setSiteDemo(r);
+    setLiveChannels(new Set());
+    return r;
+  }, "captured fountain demo stopped — all groups off");
+
   /** The simplest deterministic proof: each mapped channel on, then off, in order. */
   const runSequence = async () => {
     abortSeq.current = false;
@@ -266,6 +284,9 @@ export default function FountainControlPanel() {
   };
 
   const stateColor = connected ? C.ok : (status?.state === "error" ? C.danger : C.dim);
+  const demoRemaining = Math.max(0, Math.ceil(siteDemo?.remaining_s ?? 60));
+  const demoProgress = Math.max(0, Math.min(100,
+    ((siteDemo?.elapsed_s || 0) / Math.max(1, siteDemo?.duration_s || 60)) * 100));
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: C.panel, padding: 14, fontFamily: MONO }}>
@@ -453,11 +474,11 @@ export default function FountainControlPanel() {
             <input style={{ ...input, width: 150 }} placeholder='type: ARM OUTPUT'
               value={confirmText} onChange={e => setConfirmText(e.target.value)} />
             <button style={btn(false, C.danger)}
-              disabled={!!busy || !attached || confirmText !== "ARM OUTPUT"} onClick={doArm}>
+              disabled={!!busy || !connected || !permit || confirmText !== "ARM OUTPUT"} onClick={doArm}>
               Arm output
             </button>
             <span style={{ color: C.dim, fontSize: 10 }}>
-              {!attached ? "attach first" : "water off · one channel · watch the cabinet"}
+              {!connected ? "connect first" : !permit ? "arm safety first" : "required for manual controls and the site demo"}
             </span>
           </div>
         ) : (
@@ -465,7 +486,41 @@ export default function FountainControlPanel() {
         )}
       </Step>
 
-      <Step n={5} title="Test" done={false}>
+      <Step n={5} title="Run the proven one-minute fountain demo" done={siteDemo?.outcome === "completed"}>
+        <div style={{ fontSize: 10, color: C.text, lineHeight: 1.5, marginBottom: 8 }}>
+          Replays 2,503 captured state changes across groups 1, 2, 9, 17 and 25.
+          It stops automatically at 1:00 and sends all groups off. The red button stops
+          it immediately.
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <button style={btn(!!siteDemo?.running, C.ok)}
+            disabled={!!busy || !!siteDemo?.running || !connected || !armed || !permit}
+            onClick={startSiteDemo}>
+            {siteDemo?.running ? `Running 0:${String(demoRemaining).padStart(2, "0")}` : "START 1-MINUTE DEMO"}
+          </button>
+          <button style={btn(false, C.danger)} disabled={!!busy || !siteDemo?.running}
+            onClick={stopSiteDemo}>
+            STOP DEMO
+          </button>
+          <span style={{ color: siteDemo?.running ? C.ok : C.dim, fontSize: 10 }}>
+            {siteDemo?.running
+              ? `${siteDemo.frames_sent || 0}/${siteDemo.total_events || 2503} captured changes sent`
+              : siteDemo?.outcome && siteDemo.outcome !== "idle"
+                ? `last result: ${siteDemo.outcome}${siteDemo.error ? ` — ${siteDemo.error}` : ""}`
+                : "ready"}
+          </span>
+        </div>
+        <div style={{ height: 4, background: C.line, borderRadius: 2, marginTop: 8, overflow: "hidden" }}>
+          <div style={{ width: `${demoProgress}%`, height: "100%", background: siteDemo?.running ? C.ok : C.accent }} />
+        </div>
+        {(!connected || !armed || !permit) && (
+          <div style={{ color: C.warn, fontSize: 10, marginTop: 6 }}>
+            {!connected ? "Connect to 192.168.5.2 first." : !permit ? "Arm the safety system first." : "Type ARM OUTPUT and arm the output first."}
+          </div>
+        )}
+      </Step>
+
+      <Step n={6} title="Manual channel test" done={false}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
           <button style={btn(seqRunning, C.ok)} disabled={!armed || !permit || !!busy || seqRunning || !hasChannels}
             onClick={runSequence}>

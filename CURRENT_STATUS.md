@@ -1,10 +1,29 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-07, AF-DISC Windows DCP):** backend pytest
-> **808 passed, 21 skipped** · frontend vitest **440 passed (34 files)** ·
-> `npm run build` green · desktop **1.1.8**. Single source of truth:
+> **AUTHORITATIVE (2026-09-08, I-CAN site demo):** backend pytest
+> **816 passed, 21 skipped** · frontend vitest **440 passed (34 files)** ·
+> `npm run build` green · desktop **1.1.9**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
 > point-in-time snapshots — the line above is current.
+
+**Date:** 2026-09-08 (I-CAN hardware-proven one-minute site demo)
+**Summary:** Fountain Control can now start and stop a server-side one-minute replay of
+the real fountain choreography. The embedded 2,503-event segment is byte-derived from
+the site `changes.txt` capture and spans groups 1, 2, 9, 17 and 25. Its source and event
+hashes are asserted by test.
+
+- **Operator controls:** `START 1-MINUTE DEMO`, live countdown/progress and `STOP DEMO`
+  are in Fountain Control. The demo needs a connected gateway, safety permit and the
+  existing typed `ARM OUTPUT` gate; channel mapping/attachment is not required.
+- **Backend authority:** playback timing stays in the backend if the panel is closed.
+  Start/status/stop APIs expose progress, outcome, frames sent and the last event.
+- **Stop contract:** normal completion, manual stop, safety-permit loss, disarm,
+  disconnect, application shutdown and playback errors all issue per-group all-off.
+- **Hardware evidence:** the source capture was shortened and replayed from this PC on
+  2026-09-08; the physical fountain ran correctly. The one-minute embedded segment
+  begins at capture time 17.45 s and contains the same proven choreography. Packaged
+  AquaFlow 1.1.9 then completed all 2,503 events through the verified site gateway and
+  the manual Stop path interrupted a second run after five seconds before blackout.
 
 **Date:** 2026-09-07 (AF-DISC — evidence-based PLC/controller discovery, read-only)
 **Summary:** Device Discovery → Controllers now identifies real hardware by protocol

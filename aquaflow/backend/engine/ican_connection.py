@@ -338,9 +338,9 @@ class ICANConnection:
         passes confirmed=True (the operator-confirmation flow). Rate-limited and
         duplicate-suppressed. Every attempt is audited.
 
-        NOTE: 0x08 semantics are capture-derived, NOT proven on hardware. This path
-        exists so control can be wired safely once validated on the real gateway; it is
-        disabled by default and must never be reachable from arbitrary user input."""
+        NOTE: 0x08 semantics are capture-derived and proven on the site fountain. The
+        path remains disabled by default and must never be reachable from arbitrary
+        user input."""
         try:
             # Encoded by the reference client itself, so the audit trail shows the exact
             # bytes that go on the wire rather than a second implementation's opinion.
@@ -494,9 +494,8 @@ class ICANConnection:
 # ── ProtocolBus adapter (NOT auto-registered on the primary bus) ─────────────
 class ICANDriver:
     """Adapts ICANConnection to the ProtocolDriver interface so the gateway can join
-    the protocol bus once validated. Intentionally NOT added by app_state today — the
-    output semantics are unproven, so wiring it into the runtime bus is a deliberate,
-    reviewed step, not a default."""
+    the protocol bus once validated. Intentionally NOT added by app_state today: wiring
+    a real fountain into the runtime bus remains a deliberate operator step."""
     name = "ican"
 
     def __init__(self, connection: ICANConnection):
