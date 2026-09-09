@@ -17,6 +17,7 @@ from typing import Callable
 
 MANUAL_RUN_CONFIRMATION = "RUN MANUAL PATTERN"
 SITE_PATTERN_GROUPS = (1, 2, 9, 17, 25)
+COMMISSIONING_LOCKED_GROUPS = (2, 25)
 CAPTURED_GROUP17_SUPPORT = (9, 25, 29, 31, 32, 33, 37)
 MIN_STEP_MS = 100
 MAX_STEP_MS = 60_000
@@ -29,6 +30,7 @@ SITE_FOUNTAIN_LAYOUT = {
     "id": "curved-six-pump-fountain-v1",
     "name": "Curved site fountain",
     "mapping_status": "provisional",
+    "design_status": "legacy-evidence-safe",
     "physical_summary": {
         "front_outputs": 9,
         "front_pumps": 1,
@@ -53,6 +55,16 @@ SITE_FOUNTAIN_LAYOUT = {
         "The cabinet labels do not expose the I-CAN group/channel translation clearly enough to assign addresses.",
         "Unknown power or pump circuits must not be rapidly pulsed during commissioning.",
     ],
+    "legacy_evidence": {
+        "controller": "I-CAN NETCAN at 192.168.5.2:200 (local UDP 2002)",
+        "valve_outputs": 76,
+        "designable_valve_outputs": 64,
+        "pump_commands": 4,
+        "physical_motors": 6,
+        "frequency_channels": 16,
+        "note": "The first 64 legacy valve positions map to the two captured 32-output banks. "
+                "The remaining valves, frequency outputs, pumps and fire circuit require commissioning.",
+    },
     "presets": [
         {"id": "proven-opening", "label": "Proven opening state", "section": "captured",
          "confidence": "hardware-proven",
@@ -82,12 +94,11 @@ SITE_FOUNTAIN_LAYOUT = {
              {"group": 1, "channels": list(range(9, 41))},
              {"group": 9, "channels": list(range(9, 41))},
         ]},
-        {"id": "front-candidates", "label": "Front candidates 1-8", "section": "front-9",
-         "confidence": "provisional",
-         "addresses": [{"group": 2, "channels": list(range(1, 9))}]},
-        {"id": "rear-candidates", "label": "Rear high candidates", "section": "rear-high",
-         "confidence": "provisional",
-         "addresses": [{"group": 25, "channels": [33, 34]}]},
+    ],
+    "protected_groups": [
+        {"group": 2, "reason": "Legacy database identifies a separate frequency controller; locked until commissioned."},
+        {"group": 17, "reason": "May contain pump/support outputs; only the exact hardware-proven support state is allowed."},
+        {"group": 25, "reason": "Legacy database identifies rear/fire outputs in this range; locked until commissioned."},
     ],
     "unresolved": [
         "The ninth front output address is unknown.",
@@ -157,6 +168,10 @@ def normalize_pattern(raw: dict, *, assign_id: bool = False) -> dict:
             if any(channel < 1 or channel > 40 for channel in channels):
                 raise ManualPatternError(
                     f"step {index} group {group} channels must be in 1..40")
+            if group in COMMISSIONING_LOCKED_GROUPS and channels:
+                raise ManualPatternError(
+                    f"step {index} group {group} is commissioning-locked because it may "
+                    "control frequency, pump, or fire equipment")
             if group == 17 and channels not in ([], list(CAPTURED_GROUP17_SUPPORT)):
                 raise ManualPatternError(
                     f"step {index} group 17 is locked to all-off or the captured support "
@@ -171,7 +186,7 @@ def normalize_pattern(raw: dict, *, assign_id: bool = False) -> dict:
     pattern_id = str(raw.get("id", "")).strip()
     if assign_id and not pattern_id:
         pattern_id = uuid.uuid4().hex[:12]
-    return {
+    canonical = {
         "id": pattern_id,
         "name": name,
         "description": str(raw.get("description", "")).strip()[:500],
@@ -181,6 +196,11 @@ def normalize_pattern(raw: dict, *, assign_id: bool = False) -> dict:
         "created_at": float(raw.get("created_at") or now),
         "updated_at": now,
     }
+    for key in ("provenance", "music", "safety"):
+        value = raw.get(key)
+        if isinstance(value, dict):
+            canonical[key] = value
+    return canonical
 
 
 class ManualPatternStore:

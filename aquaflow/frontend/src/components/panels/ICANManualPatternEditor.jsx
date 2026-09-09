@@ -1,5 +1,5 @@
 /** Operator-authored, server-timed patterns for the real I-CAN fountain. */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost, apiUrl } from "../../utils/apiClient";
 
 const GROUPS = [1, 2, 9, 17, 25];
@@ -59,6 +59,7 @@ function stepFromAddresses(addresses, durationMs) {
 
 export default function ICANManualPatternEditor({
   connected, armed, permit, siteDemoRunning, channelTestRunning, status, setStatus, say, refresh,
+  incomingPattern, reloadKey, audioFile, onPatternChange,
 }) {
   const [layout, setLayout] = useState(null);
   const [saved, setSaved] = useState([]);
@@ -68,6 +69,9 @@ export default function ICANManualPatternEditor({
   const [repeat, setRepeat] = useState(1);
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState("");
+  const audioRef = useRef(null);
+  const audioUrlRef = useRef("");
+  const wasRunningRef = useRef(false);
 
   const loadSaved = async () => {
     const result = await apiGet("/ican/manual-patterns");
@@ -79,12 +83,41 @@ export default function ICANManualPatternEditor({
     loadSaved().catch(() => setSaved([]));
   }, []);
 
+  useEffect(() => {
+    if (!incomingPattern) return;
+    setDraft(hydratePattern(incomingPattern));
+    setActiveStep(0);
+  }, [incomingPattern]);
+
+  useEffect(() => { loadSaved().catch(() => setSaved([])); }, [reloadKey]);
+
+  useEffect(() => {
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = audioFile ? URL.createObjectURL(audioFile) : "";
+    audioRef.current = audioUrlRef.current ? new Audio(audioUrlRef.current) : null;
+    return () => {
+      audioRef.current?.pause();
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = "";
+    };
+  }, [audioFile]);
+
+  useEffect(() => {
+    if (wasRunningRef.current && !status?.running && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    wasRunningRef.current = !!status?.running;
+  }, [status?.running]);
+
+  useEffect(() => { onPatternChange?.(draft); }, [draft, onPatternChange]);
+
   const totalMs = useMemo(
     () => draft.steps.reduce((sum, step) => sum + Number(step.duration_ms || 0), 0) * repeat,
     [draft.steps, repeat]);
   const step = draft.steps[Math.min(activeStep, draft.steps.length - 1)] || emptyStep();
   const activeChannels = new Set(step.groups?.[String(activeGroup)] || []);
-  const group17Locked = activeGroup === 17;
+  const groupLocked = activeGroup === 17 || activeGroup === 2 || activeGroup === 25;
 
   const updateStep = (index, updater) => {
     setDraft(current => ({
@@ -200,6 +233,10 @@ export default function ICANManualPatternEditor({
       });
       setStatus?.(result);
       say?.(`manual pattern started: ${draft.name}`, "ok");
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(error => say?.(`music playback blocked — ${error.message}`, "warn"));
+      }
       await refresh?.();
     } catch (error) {
       say?.(`manual pattern start failed — ${error.message}`, "err");
@@ -210,6 +247,7 @@ export default function ICANManualPatternEditor({
     setBusy("stop");
     try {
       const result = await apiPost("/ican/manual-pattern/stop", {});
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
       setStatus?.(result);
       say?.("manual pattern stopped — all driven groups off", "warn");
       await refresh?.();
@@ -321,16 +359,18 @@ export default function ICANManualPatternEditor({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(30px,1fr))", gap: 3, marginBottom: 5 }}>
         {Array.from({ length: 40 }, (_, index) => index + 1).map(channel => (
           <button key={channel} style={{ ...button(activeChannels.has(channel), C.ok), padding: "5px 2px" }}
-            disabled={group17Locked} onClick={() => toggleChannel(channel)}>{channel}</button>
+            disabled={groupLocked} onClick={() => toggleChannel(channel)}>{channel}</button>
         ))}
       </div>
       <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
-        <button style={button(false)} disabled={group17Locked} onClick={setAllGroup}>Select group 1-40</button>
+        <button style={button(false)} disabled={groupLocked} onClick={setAllGroup}>Select group 1-40</button>
         <button style={button(false)} onClick={clearGroup}>Clear group {activeGroup}</button>
       </div>
-      {group17Locked && (
+      {groupLocked && (
         <div style={{ color: C.warn, fontSize: 9, marginTop: -6, marginBottom: 10 }}>
-          Group 17 individual selection is locked. Use "Captured G17 support" above or leave it off.
+          {activeGroup === 17
+            ? "Group 17 is locked to the exact Captured G17 support state or off."
+            : `Group ${activeGroup} may control frequency, pump, or fire equipment and is locked until commissioned.`}
         </div>
       )}
 
@@ -340,6 +380,7 @@ export default function ICANManualPatternEditor({
           <input type="number" min="1" max="20" style={{ ...input, width: 48 }} value={repeat}
             onChange={event => setRepeat(Math.max(1, Math.min(20, Number(event.target.value) || 1)))} />
           <span style={{ fontSize: 9, color: C.dim }}>total {(totalMs / 1000).toFixed(1)}s</span>
+          {audioFile && <span style={{ fontSize: 9, color: C.ok }} title={audioFile.name}>music: {audioFile.name}</span>}
           <input style={{ ...input, width: 175 }} placeholder={`type: ${CONFIRM}`}
             value={confirmText} onChange={event => setConfirmText(event.target.value)} />
           <button style={button(!!status?.running, C.ok)} disabled={!canRun} onClick={runPattern}>

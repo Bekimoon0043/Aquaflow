@@ -6,7 +6,7 @@ endpoint is deliberately gated (requires an armed connection + explicit confirma
 and is NOT reachable with arbitrary user-supplied frames. The captured output sequence
 has driven the real site fountain, but output stays disabled by default.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from typing import Optional
 
@@ -21,6 +21,8 @@ from engine.ican_manual_patterns import (
 )
 from engine.ican_mapping import ChannelMap
 from engine.ican_site_demo import ICANSiteDemo, SiteDemoStartError
+from engine.ican_site_choreography import STYLES, generate_site_pattern
+from engine.ican_legacy_importer import LegacyImportError, import_legacy_programs
 
 router = APIRouter()
 
@@ -209,12 +211,33 @@ class ManualPatternSaveRequest(BaseModel):
     layout_id: str = "curved-six-pump-fountain-v1"
     steps: list[dict]
     created_at: float = 0.0
+    provenance: Optional[dict] = None
+    music: Optional[dict] = None
+    safety: Optional[dict] = None
 
 
 class ManualPatternRunRequest(BaseModel):
     pattern: dict
     repeat: int = 1
     confirm: str = ""
+
+
+class SiteGenerateRequest(BaseModel):
+    prompt: str = "Create a flowing wave"
+    duration_s: float = 60.0
+    bpm: float = 120.0
+    style: Optional[str] = None
+    include_proven_support: bool = True
+    save: bool = False
+
+
+class SiteAudioGenerateRequest(BaseModel):
+    job_id: str
+    prompt: str = "Create a fountain dance that follows this music"
+    style: Optional[str] = None
+    bpm_override: Optional[float] = None
+    include_proven_support: bool = True
+    save: bool = False
 
 
 @router.get("/site-layout")
@@ -268,6 +291,89 @@ async def stop_manual_pattern():
     state = await _manual_runner().stop("stopped")
     await _manager().blackout()
     return state
+
+
+def _maybe_save_generated(pattern: dict, save: bool) -> dict:
+    return _manual_store().save(pattern) if save else pattern
+
+
+@router.get("/choreography/capabilities")
+async def choreography_capabilities():
+    return {
+        "styles": list(STYLES),
+        "designable_outputs": "legacy valve positions 1-64",
+        "protected": {
+            "groups": [2, 25],
+            "group_17": "all-off or exact hardware-proven support state",
+            "legacy": "pumps, frequency, lights, fire and valve outputs 65-76 omitted",
+        },
+        "legacy_program_count": 6,
+    }
+
+
+@router.post("/choreography/generate")
+async def generate_choreography(req: SiteGenerateRequest):
+    try:
+        pattern = generate_site_pattern(
+            prompt=req.prompt, duration_s=req.duration_s, bpm=req.bpm,
+            style=req.style, include_proven_support=req.include_proven_support)
+        return {"pattern": _maybe_save_generated(pattern, req.save)}
+    except (ManualPatternError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/choreography/from-audio")
+async def generate_choreography_from_audio(req: SiteAudioGenerateRequest):
+    from api.routes import audio as audio_routes
+    job = audio_routes._jobs.get(req.job_id)
+    if not job or job.get("status") != "complete" or not job.get("result"):
+        raise HTTPException(status_code=400, detail="audio analysis is not complete")
+    try:
+        analysis = dict(job["result"])
+        if req.bpm_override:
+            analysis["bpm"] = req.bpm_override
+            analysis["analysis_method"] = (
+                f"{analysis.get('analysis_method', 'audio')} + operator BPM override")
+        pattern = generate_site_pattern(
+            prompt=req.prompt, style=req.style, analysis=analysis,
+            include_proven_support=req.include_proven_support)
+        return {"pattern": _maybe_save_generated(pattern, req.save), "analysis": job["result"]}
+    except (ManualPatternError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _save_imported(result: dict) -> dict:
+    saved = [_manual_store().save(pattern) for pattern in result["patterns"]]
+    return {**result, "patterns": saved, "saved": len(saved)}
+
+
+@router.post("/legacy/import")
+async def import_legacy_archive(file: UploadFile = File(...), include_proven_support: bool = True):
+    """Convert an exported 4KILO analysis ZIP without launching the legacy program."""
+    try:
+        return _save_imported(import_legacy_programs(
+            await file.read(), include_proven_support=include_proven_support))
+    except LegacyImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/legacy/import-bundled")
+async def import_bundled_legacy_programs(include_proven_support: bool = True):
+    """Install the six recovered site programs shipped as inert CSV evidence."""
+    import io
+    import zipfile
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[2] / "data" / "legacy_4kilo"
+    buffer = io.BytesIO()
+    try:
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name in ("schemes.csv", "scheme_audio_sections.csv", "scheme_events.csv", "music_manifest.csv"):
+                archive.writestr(name, (source / name).read_bytes())
+        return _save_imported(import_legacy_programs(
+            buffer.getvalue(), include_proven_support=include_proven_support))
+    except (OSError, LegacyImportError) as exc:
+        raise HTTPException(status_code=500, detail=f"bundled legacy evidence unavailable: {exc}") from exc
 
 
 # ── channel mapping (pure data; the method to label each channel) ────────────

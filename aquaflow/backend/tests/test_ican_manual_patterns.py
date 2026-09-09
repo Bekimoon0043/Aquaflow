@@ -89,6 +89,8 @@ def test_pattern_normalization_makes_sorted_absolute_states_and_duration():
     (pattern(step(100, **{"1": [41]})), "1..40"),
     (pattern(step(100, **{"3": [1]})), "captured site groups"),
     (pattern(step(100, **{"17": [9]})), "group 17 is locked"),
+    (pattern(step(100, **{"2": [1]})), "commissioning-locked"),
+    (pattern(step(100, **{"25": [33]})), "commissioning-locked"),
 ])
 def test_pattern_validation_rejects_unsafe_or_ambiguous_input(bad, message):
     with pytest.raises(ManualPatternError, match=message):
@@ -186,7 +188,7 @@ def test_manual_pattern_routes_require_separate_phrase_and_control_runner(monkey
         monkeypatch.setattr(ican_routes, "_manual_pattern_store", store)
 
         save_req = ican_routes.ManualPatternSaveRequest(
-            name="Front Test", steps=[step(1000, **{"2": [1]})])
+            name="Valve Test", steps=[step(1000, **{"1": [9]})])
         saved = await ican_routes.save_manual_pattern(save_req)
         assert (await ican_routes.list_manual_patterns())["patterns"][0]["id"] == saved["id"]
 

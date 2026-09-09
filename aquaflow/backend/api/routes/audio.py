@@ -18,6 +18,7 @@ import time
 import math
 import hashlib
 import asyncio
+import wave
 from pathlib import Path
 from typing import Optional
 
@@ -51,6 +52,78 @@ def _save_jobs():
 _load_jobs()
 
 
+class _PCMAnalysisComplete(Exception):
+    """Private control-flow marker used to skip the optional librosa path."""
+
+
+def _analyze_pcm_wav(file_path: Path):
+    """Analyze an entire PCM WAV with only stdlib + numpy (both ship in desktop)."""
+    import numpy as np
+    from services.beat_detection import detect_beats
+
+    with wave.open(str(file_path), "rb") as source:
+        channels = source.getnchannels()
+        sample_width = source.getsampwidth()
+        source_rate = source.getframerate()
+        frame_count = source.getnframes()
+        if channels < 1 or sample_width not in (1, 2, 3, 4) or source_rate < 1000:
+            raise ValueError("unsupported PCM WAV layout")
+        raw = source.readframes(frame_count)
+    if sample_width == 2:
+        values = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
+    elif sample_width == 1:
+        values = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+    elif sample_width == 4:
+        values = np.frombuffer(raw, dtype="<i4").astype(np.float32) / 2147483648.0
+    else:
+        packed = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+        ints = packed[:, 0] | (packed[:, 1] << 8) | (packed[:, 2] << 16)
+        ints = np.where(ints & 0x800000, ints - 0x1000000, ints)
+        values = ints.astype(np.float32) / 8388608.0
+    if channels > 1:
+        usable = values.size - values.size % channels
+        values = values[:usable].reshape(-1, channels).mean(axis=1)
+    duration = frame_count / float(source_rate)
+    stride = max(1, source_rate // 11025)
+    samples = values[::stride]
+    analysis_rate = source_rate // stride
+    detected = detect_beats(samples, analysis_rate, hop=256)
+    bpm = float(detected.get("bpm") or 120.0)
+    beat_times = detected.get("beat_times") or []
+    if len(beat_times) < 4:
+        beat_times = list(np.arange(0.0, duration, 60.0 / bpm))
+
+    chunks = np.array_split(samples, 200)
+    rms = [float(np.sqrt(np.mean(chunk * chunk))) if chunk.size else 0.0 for chunk in chunks]
+    peak = max(rms) or 1.0
+    energy_profile = [round(value / peak, 4) for value in rms]
+    kernel_n = max(3, int(analysis_rate / 180))
+    kernel = np.ones(kernel_n, dtype=np.float32) / kernel_n
+    bass_signal = np.convolve(samples, kernel, mode="same")
+    bass_chunks = np.array_split(bass_signal, 200)
+    bass = [float(np.sqrt(np.mean(chunk * chunk))) if chunk.size else 0.0 for chunk in bass_chunks]
+    bass_peak = max(bass) or 1.0
+    bass_profile = [round(value / bass_peak, 4) for value in bass]
+
+    section_count = min(8, max(4, int(duration / 35)))
+    labels = ["intro", "verse", "chorus", "verse", "chorus", "bridge", "chorus", "outro"]
+    sections = []
+    for index in range(section_count):
+        start = index * duration / section_count
+        end = (index + 1) * duration / section_count
+        lo = int(index * len(energy_profile) / section_count)
+        hi = max(lo + 1, int((index + 1) * len(energy_profile) / section_count))
+        sections.append({"start": round(start, 3), "end": round(end, 3),
+                         "label": labels[index % len(labels)],
+                         "energy": round(float(np.mean(energy_profile[lo:hi])), 3)})
+    beats = [{"time": round(float(value), 4),
+              "type": "downbeat" if index % 4 == 0 else "beat", "strength": 1.0}
+             for index, value in enumerate(beat_times) if value <= duration]
+    return (duration, bpm, "Unknown", _estimate_mood(bpm, 0.0, float(np.mean(rms))),
+            energy_profile, bass_profile, beats, sections,
+            0.9 if detected.get("bpm") else 0.35)
+
+
 # ── Analysis engine ───────────────────────────────────────────────────────────
 def _analyze_audio(job_id: str, file_path: Path):
     """
@@ -67,10 +140,17 @@ def _analyze_audio(job_id: str, file_path: Path):
         _save_jobs()
 
         file_size = file_path.stat().st_size
-        filename   = file_path.name
+        filename   = job.get("filename") or file_path.name
 
-        # Try real analysis with librosa
+        analysis_method = "metadata-estimate"
+        # WAV analysis uses the complete track and is available in the packaged app.
+        # Other codecs continue to use the optional librosa stack.
         try:
+            if file_path.suffix.lower() == ".wav":
+                (duration, bpm, key, mood, energy_profile, bass_profile, beats,
+                 sections, bpm_confidence) = _analyze_pcm_wav(file_path)
+                analysis_method = "pcm-wav"
+                raise _PCMAnalysisComplete
             import librosa
             import numpy as np
 
@@ -145,11 +225,15 @@ def _analyze_audio(job_id: str, file_path: Path):
 
             mood = _estimate_mood(bpm, float(np.mean(spectral_centroids)), float(np.mean(rms)))
             bpm_confidence = 0.92
+            analysis_method = "librosa"
 
+        except _PCMAnalysisComplete:
+            pass
         except Exception:
             # Fallback: deterministic estimation from file properties
             duration, bpm, key, mood, energy_profile, bass_profile, beats, sections, bpm_confidence = \
                 _estimate_from_metadata(file_path, file_size)
+            analysis_method = "metadata-estimate"
 
         # Build waveform (128 points for timeline display)
         waveform = _build_waveform(energy_profile)
@@ -168,6 +252,7 @@ def _analyze_audio(job_id: str, file_path: Path):
             "energy_profile": energy_profile,
             "bass_profile":   bass_profile,
             "waveform":       waveform,
+            "analysis_method": analysis_method,
         }
 
         _jobs[job_id].update({

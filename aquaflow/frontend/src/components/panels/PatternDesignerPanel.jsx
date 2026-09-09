@@ -15,6 +15,7 @@ import { API_BASE_URL } from "../../config";
 import NozzleMap from "./NozzleMap";
 import { DEFAULT_DEVICE_GROUPS } from "../../utils/deviceGroupSelector";
 import { resolveFixtureGroup, fixturePlanCoords } from "../../hooks/fixtureTypeMap";
+import ICANSiteDesignStudio from "./ICANSiteDesignStudio";
 
 const API        = `${API_BASE_URL}/devices`;
 const PATTERN_API = API_BASE_URL; // base for /api/patterns, /api/dmx-map, etc.
@@ -40,7 +41,7 @@ const DEVICE_COLORS = {
 
 const UNIVERSE_COLORS = ["#1a6fbd","#2e7d32","#8a4700","#6a1b9a","#ad1457"];
 
-const TABS = ["Pattern","Nozzle Map","DMX Patch","Recording"];
+const TABS = ["Pattern","Nozzle Map","DMX Patch","Recording","Site I-CAN"];
 
 // ─── Professional runtime group mapping ──────────────────────────────────────
 
@@ -928,6 +929,8 @@ export default function PatternDesignerPanel() {
           </div>
         </div>
       )}
+
+      {activeTab === 4 && <ICANSiteDesignStudio />}
 
     </div>
   );
