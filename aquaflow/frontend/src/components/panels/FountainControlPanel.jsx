@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, apiPost } from "../../utils/apiClient";
+import ICANManualPatternEditor from "./ICANManualPatternEditor";
 
 const MONO = "monospace";
 const C = {
@@ -69,6 +70,7 @@ export default function FountainControlPanel() {
   const [liveChannels, setLiveChannels] = useState(new Set());
   const [seqRunning, setSeqRunning] = useState(false);
   const [siteDemo, setSiteDemo] = useState(null);
+  const [manualPattern, setManualPattern] = useState(null);
 
   const [manualIp, setManualIp] = useState("192.168.5.2");
   const [gwPort, setGwPort] = useState(200);
@@ -83,16 +85,18 @@ export default function FountainControlPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, m, k, d] = await Promise.all([
+      const [s, m, k, d, p] = await Promise.all([
         apiGet("/ican/status"),
         apiGet("/ican/map/registry").catch(() => ({ devices: [] })),
         apiGet("/safety/status").catch(() => null),
         apiGet("/ican/demo/status").catch(() => null),
+        apiGet("/ican/manual-pattern/status").catch(() => null),
       ]);
       setStatus(s);
       setChannels(m.devices || []);
       setSafety(k);
       setSiteDemo(d);
+      setManualPattern(p);
     } catch (e) {
       setStatus(null);
       say(`status unavailable — ${e.message}`, "err");
@@ -103,9 +107,9 @@ export default function FountainControlPanel() {
   // Poll while connected so a dropped gateway is visible rather than assumed.
   useEffect(() => {
     if (!status?.state || status.state === "idle") return;
-    const t = setInterval(refresh, siteDemo?.running ? 1000 : 4000);
+    const t = setInterval(refresh, siteDemo?.running || manualPattern?.running ? 1000 : 4000);
     return () => clearInterval(t);
-  }, [status?.state, siteDemo?.running, refresh]);
+  }, [status?.state, siteDemo?.running, manualPattern?.running, refresh]);
 
   const run = useCallback(async (name, fn, okMsg) => {
     setBusy(name);
@@ -494,7 +498,7 @@ export default function FountainControlPanel() {
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <button style={btn(!!siteDemo?.running, C.ok)}
-            disabled={!!busy || !!siteDemo?.running || !connected || !armed || !permit}
+            disabled={!!busy || seqRunning || !!siteDemo?.running || !!manualPattern?.running || !connected || !armed || !permit}
             onClick={startSiteDemo}>
             {siteDemo?.running ? `Running 0:${String(demoRemaining).padStart(2, "0")}` : "START 1-MINUTE DEMO"}
           </button>
@@ -520,9 +524,23 @@ export default function FountainControlPanel() {
         )}
       </Step>
 
-      <Step n={6} title="Manual channel test" done={false}>
+      <Step n={6} title="Build and run manual site patterns" done={manualPattern?.outcome === "completed"}>
+        <ICANManualPatternEditor
+          connected={connected}
+          armed={armed}
+          permit={permit}
+          siteDemoRunning={!!siteDemo?.running}
+          channelTestRunning={seqRunning}
+          status={manualPattern}
+          setStatus={setManualPattern}
+          say={say}
+          refresh={refresh}
+        />
+      </Step>
+
+      <Step n={7} title="Manual channel test" done={false}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-          <button style={btn(seqRunning, C.ok)} disabled={!armed || !permit || !!busy || seqRunning || !hasChannels}
+          <button style={btn(seqRunning, C.ok)} disabled={!armed || !permit || !!busy || seqRunning || !!siteDemo?.running || !!manualPattern?.running || !hasChannels}
             onClick={runSequence}>
             {seqRunning ? "Running…" : "Run test sequence"}
           </button>
@@ -533,7 +551,7 @@ export default function FountainControlPanel() {
             const on = liveChannels.has(d.device_id);
             return (
               <button key={d.device_id} style={btn(on, on ? C.ok : C.accent, !armed)}
-                disabled={!armed || !permit || !!busy}
+                disabled={!armed || !permit || !!busy || !!siteDemo?.running || !!manualPattern?.running}
                 onClick={() => setChannel(d, !on)}>
                 {d.label || d.device_id} {on ? "ON" : "OFF"}
               </button>

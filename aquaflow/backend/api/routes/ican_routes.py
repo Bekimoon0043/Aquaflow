@@ -12,6 +12,13 @@ from typing import Optional
 
 from engine import ican_discovery as disco
 from engine.ican_connection import ICANConnection, ICANConfig
+from engine.ican_manual_patterns import (
+    ICANManualPatternRunner,
+    MANUAL_RUN_CONFIRMATION,
+    ManualPatternError,
+    ManualPatternStore,
+    SITE_FOUNTAIN_LAYOUT,
+)
 from engine.ican_mapping import ChannelMap
 from engine.ican_site_demo import ICANSiteDemo, SiteDemoStartError
 
@@ -31,6 +38,8 @@ def _map() -> ChannelMap:
 # manager only ever transmits the SAFE probe until output is explicitly enabled.
 _conn: Optional[ICANConnection] = None
 _site_demo: Optional[ICANSiteDemo] = None
+_manual_pattern_runner: Optional[ICANManualPatternRunner] = None
+_manual_pattern_store: Optional[ManualPatternStore] = None
 
 
 def _manager() -> ICANConnection:
@@ -45,6 +54,20 @@ def _demo() -> ICANSiteDemo:
     if _site_demo is None:
         _site_demo = ICANSiteDemo()
     return _site_demo
+
+
+def _manual_runner() -> ICANManualPatternRunner:
+    global _manual_pattern_runner
+    if _manual_pattern_runner is None:
+        _manual_pattern_runner = ICANManualPatternRunner()
+    return _manual_pattern_runner
+
+
+def _manual_store() -> ManualPatternStore:
+    global _manual_pattern_store
+    if _manual_pattern_store is None:
+        _manual_pattern_store = ManualPatternStore()
+    return _manual_pattern_store
 
 
 class DiscoverRequest(BaseModel):
@@ -85,6 +108,7 @@ async def status():
 async def connect(req: ManualConnect):
     """Manual override: connect to an explicit gateway IP/port (read-only verify)."""
     await _demo().stop("reconnected")
+    await _manual_runner().stop("reconnected")
     m = _manager()
     m.cfg.gateway_ip = req.gateway_ip
     m.cfg.gateway_port = req.gateway_port
@@ -103,6 +127,7 @@ async def connect(req: ManualConnect):
 async def auto_connect(req: DiscoverRequest):
     """Discover then connect in one call. Emits no output."""
     await _demo().stop("reconnected")
+    await _manual_runner().stop("reconnected")
     m = _manager()
     m.cfg.gateway_port = req.gateway_port
     m.cfg.local_port = req.local_port
@@ -125,6 +150,7 @@ async def probe():
 async def disconnect():
     m = _manager()
     await _demo().stop("disconnected")
+    await _manual_runner().stop("disconnected")
     await m.blackout()
     await m.close()
     return m.status()
@@ -152,6 +178,7 @@ async def site_demo_status():
 async def start_site_demo():
     """Start the one-minute choreography captured from the original site software."""
     try:
+        await _manual_runner().stop("replaced")
         return await _demo().start(_manager())
     except SiteDemoStartError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -168,9 +195,79 @@ async def stop_site_demo():
 async def shutdown_ican():
     """Application shutdown hook: stop the site demo, blackout, then release UDP 2002."""
     await _demo().stop("shutdown")
+    await _manual_runner().stop("shutdown")
     if _conn is not None:
         await _conn.blackout()
         await _conn.close()
+
+
+# ── Operator-authored site patterns ──────────────────────────────────────────
+class ManualPatternSaveRequest(BaseModel):
+    id: str = ""
+    name: str
+    description: str = ""
+    layout_id: str = "curved-six-pump-fountain-v1"
+    steps: list[dict]
+    created_at: float = 0.0
+
+
+class ManualPatternRunRequest(BaseModel):
+    pattern: dict
+    repeat: int = 1
+    confirm: str = ""
+
+
+@router.get("/site-layout")
+async def get_site_layout():
+    """Physical layout plus capture-derived, explicitly provisional address presets."""
+    return SITE_FOUNTAIN_LAYOUT
+
+
+@router.get("/manual-patterns")
+async def list_manual_patterns():
+    return {"patterns": _manual_store().list()}
+
+
+@router.post("/manual-patterns")
+async def save_manual_pattern(req: ManualPatternSaveRequest):
+    try:
+        payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        return _manual_store().save(payload)
+    except ManualPatternError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/manual-patterns/{pattern_id}")
+async def delete_manual_pattern(pattern_id: str):
+    if not _manual_store().delete(pattern_id):
+        raise HTTPException(status_code=404, detail="manual pattern was not found")
+    return {"deleted": pattern_id}
+
+
+@router.get("/manual-pattern/status")
+async def manual_pattern_status():
+    return _manual_runner().status()
+
+
+@router.post("/manual-pattern/run")
+async def run_manual_pattern(req: ManualPatternRunRequest):
+    if req.confirm != MANUAL_RUN_CONFIRMATION:
+        raise HTTPException(
+            status_code=400,
+            detail=f'manual hardware playback requires confirm="{MANUAL_RUN_CONFIRMATION}"',
+        )
+    await _demo().stop("replaced")
+    try:
+        return await _manual_runner().start(_manager(), req.pattern, req.repeat)
+    except ManualPatternError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/manual-pattern/stop")
+async def stop_manual_pattern():
+    state = await _manual_runner().stop("stopped")
+    await _manager().blackout()
+    return state
 
 
 # ── channel mapping (pure data; the method to label each channel) ────────────
@@ -316,6 +413,16 @@ async def drive_channel(req: ChannelDrive):
     """
     from app_state import protocol_bus
 
+    if _site_demo is not None and _site_demo.running:
+        raise HTTPException(
+            status_code=409,
+            detail="stop the one-minute site demo before driving individual channels",
+        )
+    if _manual_pattern_runner is not None and _manual_pattern_runner.running:
+        raise HTTPException(
+            status_code=409,
+            detail="stop the manual pattern before driving individual channels",
+        )
     if req.device_id not in getattr(protocol_bus, "_ican_devices", {}):
         raise HTTPException(status_code=404,
                             detail=f"{req.device_id} is not an attached I-CAN channel")
@@ -357,6 +464,7 @@ async def stop_output():
     """Blackout every attached channel. Never gated — stopping is always allowed."""
     from app_state import protocol_bus
     await _demo().stop("stopped")
+    await _manual_runner().stop("stopped")
     await protocol_bus.blackout()
     await _manager().blackout()
     return {"stopped": True}
@@ -380,6 +488,7 @@ async def arm_output(req: ArmRequest):
         )
     if not req.enabled:
         await _demo().stop("disarmed")
+        await _manual_runner().stop("disarmed")
     m.enable_output(bool(req.enabled))
     if not req.enabled:
         # Disarming should also drop anything currently energised, not merely stop

@@ -1,10 +1,41 @@
 # AquaFlow Studio — Current Status
 
-> **AUTHORITATIVE (2026-09-08, I-CAN site demo):** backend pytest
-> **816 passed, 21 skipped** · frontend vitest **440 passed (34 files)** ·
-> `npm run build` green · desktop **1.1.9**. Single source of truth:
+> **AUTHORITATIVE (2026-09-08, manual I-CAN patterns):** backend pytest
+> **831 passed, 21 skipped**; frontend vitest **440 passed (34 files)**;
+> `npm run build` green; desktop **1.2.1**. Single source of truth:
 > `AQUAFLOW_STATUS_CANONICAL.md`. Test/task numbers in the dated entries below are
-> point-in-time snapshots — the line above is current.
+> point-in-time snapshots; the line above is current.
+
+**Date:** 2026-09-08 (operator-authored manual patterns for the site fountain)
+**Summary:** Fountain Control now includes a persistent, server-timed manual pattern
+editor for the proven I-CAN output path. It records the photographed physical layout as
+9 front outputs on one pump, two rear high sides on one pump, and 64 middle nozzles on
+four pumps. Patterns can be built, saved, repeated, started, monitored and stopped.
+
+- **Pattern controls:** an operator can create absolute-state steps, set each duration,
+  select any channel 1-40 in captured groups 1, 2, 9, 17 and 25, copy/off/remove steps,
+  repeat a pattern and save it as this site's hardware-profile pattern data.
+- **Photo/capture presets:** the exact opening state from the hardware-proven capture is
+  marked proven. Groups 1 and 9 each expose 32 channels and are offered as four
+  provisional 16-nozzle middle banks. Group 2 channels 1-8 are provisional front
+  candidates; group 25 channels 33-34 are provisional rear-high candidates.
+- **Cabinet evidence:** the blue I-CAN NETCAN converter feeds the black Music Fountain
+  Control System, which drives rows of JGX4080 solid-state relays and separate CHINT
+  multi-pole power circuits. The labels still do not reveal the I-CAN address translation.
+- **Unknown wiring stays explicit:** the ninth front address, all six pump addresses,
+  pump start/stop order and group 17 functions remain unassigned. The editor labels all
+  inferred physical presets provisional; photographs cannot reveal electrical addresses.
+  Until commissioning, group 17 is restricted to all-off or its exact captured support
+  state so it cannot be arbitrarily rapid-pulsed as a possible pump/contactor circuit.
+- **Output safeguards:** every step is normalized to a complete state for all five site
+  groups. Playback clears all five before step 1 and blackouts on completion, Stop,
+  safety loss, disarm, disconnect, shutdown or error. Individual channel controls are
+  rejected while automated playback runs. Hardware Run requires connection, safety
+  permit, output arm and the separate phrase `RUN MANUAL PATTERN`.
+- **Commissioning boundary:** no inferred manual pattern was actuated during development.
+  The proven one-minute demo remains available. Physical one-channel-at-a-time
+  commissioning is still required before treating the front/rear/middle presets as the
+  final hardware map or adding pump sequencing.
 
 **Date:** 2026-09-08 (I-CAN hardware-proven one-minute site demo)
 **Summary:** Fountain Control can now start and stop a server-side one-minute replay of

@@ -1,13 +1,23 @@
 # AquaFlow Studio — Canonical Status (single source of truth)
 
-**Date:** 2026-07-06
-**Status:** **Tier A Hardening — software stabilization in progress, hardware commissioning pending.**
+**Date:** 2026-09-08
+**Status:** **Tier A hardening; site I-CAN output verified, broader hardware commissioning pending.**
 **Primary readiness number:** **Tier A readiness ≈ 55%** · **Overall technical maturity 7.7 / 10.**
 
 > This document **supersedes** the three earlier, mutually-contradictory audits
 > (see §4). It is the status the AI Command Hub and the CEO dashboard read from.
 > The platform is **NOT "operational"** — it is in a stabilization/hardening pass
 > whose only remaining Tier A gate after software work is real-hardware commissioning.
+
+
+**Current site hardware evidence:** the reverse-engineered I-CAN output path was run
+from this PC against gateway `192.168.5.2`; the fountain responded correctly to the
+shortened capture, and AquaFlow 1.1.9 completed the embedded one-minute, 2,503-event
+demo plus its manual Stop/blackout path. AquaFlow 1.2.1 adds operator-authored manual
+patterns. The photographed 9-front / 2-rear-high / 64-middle physical layout is
+recorded, while nozzle, pump and group-17 electrical addresses remain provisional
+until one-channel-at-a-time site commissioning. PLC, Modbus and other site protocols
+retain their separate commissioning requirements.
 
 ---
 
@@ -46,10 +56,10 @@ The old 65-task AquaFlow roadmap is **superseded** by this sequence (v3 + supple
 Stage-7 corrective tasks from the independent ChatGPT review). Tasks 000–010, 013–018 are
 software (Claude Code); 009 is an independent review; 011–012 are on-site hardware.
 
-**Authoritative test evidence (single source):** backend pytest **532 passed, 21 skipped,
-0 errors**; frontend vitest **231 passed (20 files)**; frontend `npm run build` green;
-backend line coverage **59%** (`pytest --cov`). The 21 skips are the fix-strategy contract
-tests, which require a transient `EVALUATION_REPORT.md` absent on a clean checkout.
+**Authoritative test evidence (single source):** backend pytest **830 passed, 21 skipped,
+0 errors**; frontend vitest **440 passed (34 files)**; frontend `npm run build` green.
+The 21 skips are the fix-strategy contract tests, which require a transient
+`EVALUATION_REPORT.md` absent on a clean checkout.
 
 | ID | Title | Pri | Stage | Type | Status |
 | --- | --- | --- | --- | --- | --- |
