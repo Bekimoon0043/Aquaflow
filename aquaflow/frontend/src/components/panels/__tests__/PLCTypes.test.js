@@ -27,7 +27,7 @@ describe("full PLC type list, honestly labeled", () => {
   });
 
   it("driverless families are visible but never connectable", () => {
-    for (const id of ["allen_bradley", "beckhoff", "opc_ua"]) {
+    for (const id of ["beckhoff"]) {
       const t = PLC_TYPES.find(x => x.id === id);
       expect(plcConnectable(t)).toBe(false);
       expect(plcTypeSubLabel(t)).toBe("no driver");
@@ -35,8 +35,13 @@ describe("full PLC type list, honestly labeled", () => {
     }
   });
 
+  it("bundled-library families (1.2.5) carry an address-format hint", () => {
+    expect(PLC_TYPES.find(x => x.id === "opc_ua").hint).toMatch(/NodeId/);
+    expect(PLC_TYPES.find(x => x.id === "allen_bradley").hint).toMatch(/tag name/);
+  });
+
   it("REAL families connect as themselves with no sub-label", () => {
-    for (const id of ["siemens_s7", "modbus_tcp"]) {
+    for (const id of ["siemens_s7", "modbus_tcp", "opc_ua", "allen_bradley"]) {
       const t = PLC_TYPES.find(x => x.id === id);
       expect(plcConnectable(t)).toBe(true);
       expect(plcConnectAs(t)).toBe(id);

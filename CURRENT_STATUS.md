@@ -1,5 +1,37 @@
 # AquaFlow Studio — Current Status
 
+**2026-09-24 (later): PLC integration libraries bundled — snap7, asyncua, pycomm3 (1.2.5)**
+
+- The PLC panel's "Required Libraries" block used to tell the operator to
+  `pip install python-snap7 / asyncua / pycomm3`. All three now ship inside the
+  PyInstaller engine (`requirements.txt`, `aquaflow-engine.spec` hidden imports +
+  asyncua's address-space pickle). python-snap7 3.x is pure Python — no snap7.dll.
+- `plc/plc_engine.py`:
+  - **Siemens** `SiemensS7Driver`: snap7 is the preferred transport again and now
+    honours `config.port` (NetToPLCsim), reads `DBB`, and writes by tag type/area
+    (REAL→`set_real`, DWORD, BOOL as read-modify-write of the byte). Fixed a
+    pre-existing bug where every snap7 bit read (`DB1.DBX8.3`) raised IndexError.
+  - **OPC UA** `OPCUADriver` → **REAL**: typed reads (bool stays bool, numerics
+    scaled), writes typed from the node's own DataType (Boolean/IntN/Float/Double/
+    String) instead of always Double; the IP field may hold a full `opc.tcp://…/path`.
+  - **Allen-Bradley** `AllenBradleyDriver` → **REAL** (new): pycomm3 LogixDriver,
+    address = Logix tag name, path `ip[:port][/slot]`, one tag per request behind a
+    lock in the executor, controller tag list when served else the operator's
+    declared type injected as pycomm3's definition (BOOL/INT/DINT/REAL).
+  - `PLC_SUPPORT`: opc_ua and allen_bradley REAL; `_create_driver` routes them.
+- Discovery: an identified Logix (ListIdentity) is now configurable ("Configure PLC →",
+  prefill allen_bradley/44818/slot 0); catalog entries gained default_config/configure_in.
+  `/api/plc/types`, the frontend type list and the bundled-libraries block updated.
+- Evidence (honest): snap7 path vs `FakeS7Server` (INT/REAL/BOOL round trip); OPC UA vs
+  an in-process asyncua Server (Double/Boolean/Int32/Float typed writes); Allen-Bradley
+  vs the **cpppo** Logix simulator (connect, identity, typed reads) — the simulator
+  rejects pycomm3's connected Write Tag, so **AB writes are unit-tested with a stub only**.
+  No physical Logix, OPC UA server or S7-1200 has been driven. `docs/PLC_LIBRARIES.md`.
+- Validation: frontend **532 passed (43 files)**; backend **905 passed, 50 skipped, 0 failed**; web build
+  green (zero circular chunks); engine rebuilt (py -3.12) with the three libraries;
+  installer **AquaFlowSetup-1.2.5.exe**; release folder
+  `release/AquaFlow-1.2.5-PLC-Libraries/`. Installed on this PC via silent NSIS upgrade: version 1.2.5.0, engine boots, `/api/plc/types` lists siemens_s7, modbus_tcp, opc_ua, allen_bradley as usable. Packaged-engine smoke: snap7 → FakeS7Server (read 4321, write 777 read back), asyncua → OPC UA server (read 12.5, write 31.5 read back), pycomm3 → cpppo Logix sim (connect + reads; write refused by the simulator as documented).
+
 **2026-09-24: First PLCSIM contact — S7 identity read fixed, diagnostics surfaced (1.2.4)**
 
 - The operator ran the generated TIA project in PLCSIM successfully. Device Discovery →

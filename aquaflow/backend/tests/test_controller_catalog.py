@@ -43,10 +43,15 @@ def test_catalog_ids_unique_and_nonempty():
 
 
 def test_tiers_agree_with_runtime_support():
-    """The catalog can never advertise drivability the runtime doesn't have."""
+    """The catalog can never advertise drivability the runtime doesn't have.
+    Catalog protocols that the PLC panel drives under another name (EtherNet/IP
+    → plc_type allen_bradley) are resolved through CONFIGURABLE_PROTOCOLS — the
+    same map discovery uses to build the PLC prefill."""
+    from engine.controller_identify import CONFIGURABLE_PROTOCOLS
     for e in CATALOG:
-        if e.protocol in PLC_SUPPORT:
-            assert e.tier == PLC_SUPPORT[e.protocol], e.id
+        plc_key = CONFIGURABLE_PROTOCOLS.get(e.protocol, e.protocol)
+        if plc_key in PLC_SUPPORT:
+            assert e.tier == PLC_SUPPORT[plc_key], e.id
         elif e.protocol in PROTOCOL_SUPPORT:
             assert e.tier == PROTOCOL_SUPPORT[e.protocol], e.id
         else:
@@ -82,7 +87,9 @@ def test_port_index_and_dict_shape():
     d = catalog_dict()
     assert d["count"] == len(CATALOG)
     assert "ican-music-fountain" in d["drivable"]
-    assert "allen-bradley-logix" not in d["drivable"]
+    assert "allen-bradley-logix" in d["drivable"]          # pycomm3 bundled (1.2.5)
+    assert "opcua-server" in d["drivable"]                 # asyncua bundled (1.2.5)
+    assert "beckhoff-ads" not in d["drivable"]
 
 
 # ── identification (protocol-level, against the fakes) ─────────────────────────

@@ -33,14 +33,17 @@ class PLCType(str, Enum):
 # didn't recognise — so "Beckhoff TwinCAT" opened a Modbus connection to port 4840
 # and reported whatever that produced. Nothing may claim support it does not have.
 PLC_SUPPORT = {
-    "siemens_s7": "REAL",         # snap7 preferred + validated raw S7comm (AF-IO-005)
+    "siemens_s7": "REAL",         # python-snap7 (bundled, pure Python since 3.x) preferred
+                                  #   + validated raw S7comm fallback (AF-IO-005)
     "modbus_tcp": "REAL",         # engine/modbus_client.py (AF-IO-001)
-    "opc_ua":     "GATED",        # OPCUADriver code exists, but asyncua is not a
-                                  # declared dependency and it has never been tested
+    "opc_ua":     "REAL",         # OPCUADriver on asyncua (bundled); typed read/write
+                                  #   proven against an asyncua server in tests
     "delta":      "GATED",        # many units speak Modbus TCP — connect those
     "mitsubishi": "GATED",        #   EXPLICITLY as modbus_tcp; the family-specific
     "omron":      "GATED",        #   protocols (MC, FINS) are not implemented
-    "allen_bradley": "UNSUPPORTED",  # no EtherNet/IP (pycomm3) code exists at all
+    "allen_bradley": "REAL",      # AllenBradleyDriver on pycomm3 (bundled): EtherNet/IP
+                                  #   + CIP Read/Write Tag; connect/identity/reads proven
+                                  #   against the cpppo Logix simulator, writes unit-tested
     "beckhoff":   "UNSUPPORTED",     # was the silent Modbus-on-port-4840 case
 }
 REAL_PLC_TYPES = [t for t, tier in PLC_SUPPORT.items() if tier == "REAL"]
@@ -158,13 +161,15 @@ class SiemensS7Driver(PLCDriver):
             import snap7
             loop = asyncio.get_event_loop()
             client = snap7.client.Client()
+            port = int(self.config.port or self.S7COMM_PORT)
             await loop.run_in_executor(
                 None,
-                lambda: client.connect(self.config.ip, self.config.rack, self.config.slot)
+                lambda: client.connect(self.config.ip, self.config.rack, self.config.slot,
+                                       tcp_port=port)
             )
             self._snap7 = client
             self._connected = True
-            logger.info(f"Siemens S7 connected via snap7: {self.config.ip}")
+            logger.info(f"Siemens S7 connected via snap7: {self.config.ip}:{port}")
             return True
         except Exception as e:
             self.config.last_error = str(e)
@@ -224,10 +229,15 @@ class SiemensS7Driver(PLCDriver):
                 return util.get_real(data, 0)
             return util.get_dword(data, 0)
         elif "DBX" in area:
-            parts2 = parts[1].replace("DBX", "").split(".")
-            offset, bit = int(parts2[0]), int(parts2[1])
+            # "DB1.DBX8.3" splits on '.' into ["DB1", "DBX8", "3"] — the bit is parts[2].
+            # (The old code re-split parts[1] and raised IndexError on every bit read.)
+            offset, bit = int(parts[1][3:]), int(parts[2])
             data = await loop.run_in_executor(None, lambda: self._snap7.db_read(db_num, offset, 1))
             return util.get_bool(data, 0, bit)
+        elif "DBB" in area:
+            offset = int(parts[1][3:])
+            data = await loop.run_in_executor(None, lambda: self._snap7.db_read(db_num, offset, 1))
+            return int(data[0])
         return None
 
     async def _read_raw_db(self, tag: PLCTag) -> Any:
@@ -250,12 +260,30 @@ class SiemensS7Driver(PLCDriver):
         try:
             if self._has_snap7 and self._snap7:
                 import snap7, snap7.util as util
+                loop = asyncio.get_event_loop()
                 parts = tag.address.upper().split(".")
                 db_num = int(parts[0].replace("DB", ""))
-                offset = int(''.join(filter(str.isdigit, parts[1])))
-                data = bytearray(2)
-                util.set_int(data, 0, int(value))
-                loop = asyncio.get_event_loop()
+                area = parts[1][:3]
+                if area == "DBX":
+                    # bit write = read-modify-write of the containing byte
+                    offset, bit = int(parts[1][3:]), int(parts[2])
+                    cur = await loop.run_in_executor(None, lambda: self._snap7.db_read(db_num, offset, 1))
+                    data = bytearray(cur)
+                    util.set_bool(data, 0, bit, bool(value))
+                elif area == "DBD":
+                    offset = int(parts[1][3:])
+                    data = bytearray(4)
+                    if tag.tag_type == TagType.REAL:
+                        util.set_real(data, 0, float(value))
+                    else:
+                        util.set_dword(data, 0, int(value) & 0xFFFFFFFF)
+                elif area == "DBB":
+                    offset = int(parts[1][3:])
+                    data = bytearray([int(value) & 0xFF])
+                else:                                        # DBW
+                    offset = int(parts[1][3:])
+                    data = bytearray(2)
+                    util.set_int(data, 0, int(value))
                 await loop.run_in_executor(None, lambda: self._snap7.db_write(db_num, offset, data))
                 return True
             # AF-IO-005 — the raw path can now WRITE too (DBX/DBB/DBW/DBD; the old
@@ -369,68 +397,315 @@ class ModbusTCPPLCDriver(PLCDriver):
 
 
 class OPCUADriver(PLCDriver):
-    """OPC UA client driver — works with Siemens, Beckhoff, any OPC UA server"""
+    """OPC UA client driver (asyncua) — Siemens S7-1500 OPC UA server, Beckhoff,
+    any OPC UA server.
+
+    Tag address = the NodeId string exactly as the server publishes it
+    (`ns=3;s="DB_Fountain"."Pump1_Speed"` on an S7-1500, `ns=2;i=1002`, ...).
+    Reads return the server's value with its real type: booleans stay booleans,
+    numbers are scaled by the tag's scale/offset. Writes are typed from the
+    node's own DataType (Boolean / Int16..UInt64 / Float / Double / String), so a
+    REAL node never receives a Double variant it would reject. Path is
+    `opc.tcp://ip:port` (default 4840); the `slot` field is unused."""
+
+    CONNECT_TIMEOUT = 5.0
 
     def __init__(self, config: PLCConnection):
         super().__init__(config)
         self._client = None
         self._has_opcua = self._check_opcua()
+        self._vt_cache: dict[str, Any] = {}
 
     def _check_opcua(self) -> bool:
         try:
-            import asyncua
+            import asyncua  # noqa: F401
             return True
         except ImportError:
-            try:
-                import opcua
-                return True
-            except ImportError:
-                return False
+            return False
+
+    @property
+    def url(self) -> str:
+        # The operator may paste the server's full endpoint (with its path, e.g.
+        # opc.tcp://192.168.5.30:4840/OPCUA/SimulationServer) into the IP field.
+        ip = (self.config.ip or "").strip()
+        if ip.lower().startswith("opc.tcp://"):
+            return ip
+        return f"opc.tcp://{ip}:{self.config.port or 4840}"
 
     async def connect(self) -> bool:
         if not self._has_opcua:
+            self.config.last_error = "asyncua is not available in this build"
             logger.warning("OPC UA library not installed. Run: pip install asyncua")
             return False
         try:
             from asyncua import Client
-            url = f"opc.tcp://{self.config.ip}:{self.config.port or 4840}"
-            self._client = Client(url=url)
-            await asyncio.wait_for(self._client.connect(), timeout=5.0)
+            self._client = Client(url=self.url, timeout=self.CONNECT_TIMEOUT)
+            await asyncio.wait_for(self._client.connect(), timeout=self.CONNECT_TIMEOUT)
             self._connected = True
-            logger.info(f"OPC UA connected: {url}")
+            self._vt_cache.clear()
+            logger.info(f"OPC UA connected: {self.url}")
             return True
         except Exception as e:
-            self.config.last_error = str(e)
-            logger.warning(f"OPC UA connect failed: {e}")
+            self.config.last_error = f"{e.__class__.__name__}: {e}"
+            logger.warning(f"OPC UA connect failed: {self.config.last_error}")
+            self._client = None
             return False
 
+    def _scaled(self, tag: PLCTag, value: Any) -> Any:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return float(value) * tag.scale_factor + tag.offset
+        return value
+
     async def read_tag(self, tag: PLCTag) -> Any:
-        if not self._connected or not self._client: return None
+        if not self._connected or not self._client:
+            return None
         try:
             node = self._client.get_node(tag.address)
-            value = await node.read_value()
-            return float(value) * tag.scale_factor + tag.offset
+            dv = await node.read_data_value()
+            if dv.StatusCode is not None and not dv.StatusCode.is_good():
+                logger.debug(f"OPC UA {tag.address}: status {dv.StatusCode.name}")
+                return None
+            return self._scaled(tag, dv.Value.Value)
         except Exception as e:
             logger.debug(f"OPC UA read error {tag.address}: {e}")
             return None
 
+    async def _variant_type(self, node):
+        key = node.nodeid.to_string()
+        vt = self._vt_cache.get(key)
+        if vt is None:
+            vt = await node.read_data_type_as_variant_type()
+            self._vt_cache[key] = vt
+        return vt
+
     async def write_tag(self, tag: PLCTag, value: Any) -> bool:
-        if not self._connected or not self._client: return False
+        if not self._connected or not self._client:
+            return False
         try:
             from asyncua import ua
             node = self._client.get_node(tag.address)
-            scaled = (float(value) - tag.offset) / max(tag.scale_factor, 0.001)
-            await node.write_value(ua.DataValue(ua.Variant(scaled, ua.VariantType.Float)))
+            vt = await self._variant_type(node)
+            name = vt.name
+            if name == "Boolean":
+                typed = bool(value)
+            elif name in ("SByte", "Byte", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64"):
+                typed = int(round((float(value) - tag.offset) / (tag.scale_factor or 1.0)))
+            elif name in ("Float", "Double"):
+                typed = (float(value) - tag.offset) / (tag.scale_factor or 1.0)
+            elif name == "String":
+                typed = str(value)
+            else:
+                logger.debug(f"OPC UA write: unsupported variant {name} at {tag.address}")
+                return False
+            await node.write_value(ua.DataValue(ua.Variant(typed, vt)))
             return True
         except Exception as e:
-            logger.debug(f"OPC UA write error: {e}")
+            logger.debug(f"OPC UA write error {tag.address}: {e}")
             return False
 
     async def disconnect(self):
         self._connected = False
         if self._client:
-            try: await self._client.disconnect()
-            except: pass
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+            self._client = None
+
+    async def read_all_tags(self, tags: list) -> dict:
+        results = {}
+        for tag in tags:
+            val = await self.read_tag(tag)
+            if val is not None:
+                results[tag.id] = val
+        return results
+
+
+class AllenBradleyDriver(PLCDriver):
+    """Allen-Bradley Logix driver (ControlLogix / CompactLogix / Micro800) on
+    pycomm3 — EtherNet/IP encapsulation + CIP Read Tag / Write Tag services.
+
+    Tag address = the controller tag name exactly as in Studio 5000:
+    `Pump1_Speed`, `Speeds[2]`, `Program:MainProgram.Valve1`. Path is the
+    controller IP (`ip:port` when not 44818) plus `/slot` for a ControlLogix
+    CPU in a rack slot other than 0.
+
+    Types: when the controller serves its tag list (every real Logix does)
+    pycomm3's uploaded definitions are used. When it does not (simulators,
+    locked controllers) the operator's declared `tag_type` is injected as the
+    definition — BOOL / INT / DINT / REAL (WORD→INT, DWORD→DINT); STRING and
+    UDT members need the controller's own definitions. pycomm3 is synchronous:
+    every call runs in the default executor behind one lock, one tag per
+    request, so nothing here blocks the event loop and no multi-service
+    packet is ever needed."""
+
+    DEFAULT_PORT = 44818
+    TYPE_MAP = {TagType.BOOL: "BOOL", TagType.INT: "INT", TagType.DINT: "DINT",
+                TagType.REAL: "REAL", TagType.WORD: "INT", TagType.DWORD: "DINT"}
+
+    def __init__(self, config: PLCConnection):
+        super().__init__(config)
+        self._plc = None
+        self._lock = asyncio.Lock()
+        self.identity: dict = {}
+        self.tag_list_available = False
+        self._has_pycomm3 = self._check_pycomm3()
+
+    def _check_pycomm3(self) -> bool:
+        try:
+            import pycomm3  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    @property
+    def path(self) -> str:
+        port = int(self.config.port or self.DEFAULT_PORT)
+        base = self.config.ip if port == self.DEFAULT_PORT else f"{self.config.ip}:{port}"
+        return f"{base}/{self.config.slot}" if self.config.slot else base
+
+    async def _call(self, fn):
+        async with self._lock:
+            return await asyncio.get_event_loop().run_in_executor(None, fn)
+
+    async def connect(self) -> bool:
+        if not self._has_pycomm3:
+            self.config.last_error = "pycomm3 is not available in this build"
+            logger.warning("pycomm3 not installed. Run: pip install pycomm3")
+            return False
+        from pycomm3 import LogixDriver
+
+        def open_with_tags():
+            plc = LogixDriver(self.path, init_tags=True, init_program_tags=True)
+            plc.open()
+            return plc, True
+
+        def open_without_tags():
+            plc = LogixDriver(self.path, init_tags=False, init_program_tags=False)
+            plc.open()
+            return plc, False
+
+        try:
+            try:
+                self._plc, self.tag_list_available = await self._call(open_with_tags)
+            except Exception as first:
+                logger.info("Logix %s: tag list not served (%s) — using declared tag types",
+                            self.path, first)
+                self._plc, self.tag_list_available = await self._call(open_without_tags)
+            info = dict(self._plc.info or {})
+            self.identity = {k: info.get(k) for k in ("vendor", "product_type", "product_name",
+                                                       "revision", "serial", "name", "keyswitch")}
+            self._connected = True
+            logger.info("Allen-Bradley connected via pycomm3: %s (%s, tag list %s)", self.path,
+                        self.identity.get("product_name"), "served" if self.tag_list_available else "declared")
+            return True
+        except Exception as e:
+            self.config.last_error = f"{e.__class__.__name__}: {e}"
+            logger.warning(f"pycomm3 connect failed: {self.config.last_error}")
+            self._plc = None
+            return False
+
+    @staticmethod
+    def _base_and_index(address: str) -> tuple[str, Optional[int]]:
+        name = address.strip()
+        idx = None
+        if name.endswith("]") and "[" in name:
+            name, _, rest = name.rpartition("[")
+            try:
+                idx = int(rest[:-1].split(",")[0])
+            except ValueError:
+                idx = None
+        return name, idx
+
+    def _declare(self, tag: PLCTag) -> Optional[str]:
+        """Inject the operator's declared type as pycomm3's tag definition when the
+        controller did not serve one. Returns an error string, or None."""
+        if self._plc is None:
+            return "not connected"
+        base, idx = self._base_and_index(tag.address)
+        if base in self._plc.tags:
+            return None                                  # controller definition wins
+        if "." in base and not base.startswith("Program:"):
+            return f"{tag.address}: structure members need the controller's tag list"
+        dt = self.TYPE_MAP.get(tag.tag_type)
+        if dt is None:
+            return f"{tag.address}: {tag.tag_type.value} needs the controller's tag list"
+        from pycomm3.cip import DataTypes, Array
+        type_class = DataTypes.get(dt)
+        dim, dims = 0, [0, 0, 0]
+        if idx is not None:
+            dim, dims = 1, [idx + 1, 0, 0]
+            type_class = Array(length_=idx + 1, element_type_=type_class)
+        self._plc._tags[base] = {
+            "tag_name": base, "dim": dim, "dimensions": dims, "instance_id": 0,
+            "symbol_address": 0, "symbol_object_address": 0, "software_control": 0,
+            "alias": False, "external_access": "Read/Write", "tag_type": "atomic",
+            "data_type": dt, "data_type_name": dt, "type_class": type_class,
+        }
+        return None
+
+    def _scaled(self, tag: PLCTag, value: Any) -> Any:
+        if isinstance(value, bool) or tag.tag_type == TagType.BOOL:
+            return bool(value)
+        if isinstance(value, (int, float)):
+            return float(value) * tag.scale_factor + tag.offset
+        return value
+
+    async def read_tag(self, tag: PLCTag) -> Any:
+        if not self._connected or self._plc is None:
+            return None
+        try:
+            err = self._declare(tag)
+            if err:
+                logger.debug(f"Logix read refused: {err}")
+                return None
+            result = await self._call(lambda: self._plc.read(tag.address))
+            if result.error:
+                logger.debug(f"Logix read error {tag.address}: {result.error}")
+                return None
+            return self._scaled(tag, result.value)
+        except Exception as e:
+            logger.debug(f"Logix read exception {tag.address}: {e}")
+            self._connected = bool(self._plc and self._plc.connected)
+            return None
+
+    def _typed(self, tag: PLCTag, value: Any) -> Any:
+        if tag.tag_type == TagType.BOOL:
+            return bool(value)
+        raw = (float(value) - tag.offset) / (tag.scale_factor or 1.0)
+        if tag.tag_type == TagType.REAL:
+            return float(raw)
+        return int(round(raw))
+
+    async def write_tag(self, tag: PLCTag, value: Any) -> bool:
+        if not self._connected or self._plc is None:
+            return False
+        try:
+            err = self._declare(tag)
+            if err:
+                logger.debug(f"Logix write refused: {err}")
+                return False
+            typed = self._typed(tag, value)
+            result = await self._call(lambda: self._plc.write((tag.address, typed)))
+            if result.error:
+                logger.debug(f"Logix write error {tag.address}: {result.error}")
+                return False
+            return True
+        except Exception as e:
+            logger.debug(f"Logix write exception {tag.address}: {e}")
+            self._connected = bool(self._plc and self._plc.connected)
+            return False
+
+    async def disconnect(self):
+        self._connected = False
+        if self._plc is not None:
+            plc, self._plc = self._plc, None
+            try:
+                await self._call(plc.close)
+            except Exception:
+                pass
 
     async def read_all_tags(self, tags: list) -> dict:
         results = {}
@@ -481,6 +756,10 @@ class PLCManager:
                 f"Usable types: {', '.join(REAL_PLC_TYPES)}")
         if config.plc_type == PLCType.SIEMENS_S7:
             return SiemensS7Driver(config)
+        if config.plc_type == PLCType.OPC_UA:
+            return OPCUADriver(config)
+        if config.plc_type == PLCType.ALLEN_BRADLEY:
+            return AllenBradleyDriver(config)
         return ModbusTCPPLCDriver(config)
 
     async def add_plc(self, config: PLCConnection) -> dict:

@@ -21,7 +21,9 @@ from plc.plc_engine import (
     PLCType,
     PLC_SUPPORT,
     REAL_PLC_TYPES,
+    AllenBradleyDriver,
     ModbusTCPPLCDriver,
+    OPCUADriver,
     SiemensS7Driver,
 )
 
@@ -34,19 +36,22 @@ def _cfg(plc_type, port=502):
 def test_matrix_is_exactly_what_the_code_delivers():
     assert PLC_SUPPORT["siemens_s7"] == "REAL"
     assert PLC_SUPPORT["modbus_tcp"] == "REAL"
-    assert sorted(REAL_PLC_TYPES) == ["modbus_tcp", "siemens_s7"]
+    # 1.2.5: asyncua and pycomm3 are bundled and their drivers are tested against
+    # independent servers (asyncua Server, cpppo Logix simulator).
+    assert PLC_SUPPORT["opc_ua"] == "REAL"
+    assert PLC_SUPPORT["allen_bradley"] == "REAL"
+    assert sorted(REAL_PLC_TYPES) == ["allen_bradley", "modbus_tcp", "opc_ua", "siemens_s7"]
     # Every enum member is classified — nothing falls through to a default.
     for t in PLCType:
         assert t.value in PLC_SUPPORT
-    assert PLC_SUPPORT["allen_bradley"] == "UNSUPPORTED"
     assert PLC_SUPPORT["beckhoff"] == "UNSUPPORTED"
-    for gated in ("opc_ua", "delta", "mitsubishi", "omron"):
+    for gated in ("delta", "mitsubishi", "omron"):
         assert PLC_SUPPORT[gated] == "GATED"
 
 
 def test_no_silent_modbus_substitution():
     mgr = PLCManager()
-    for t in ("beckhoff", "allen_bradley", "opc_ua", "omron"):
+    for t in ("beckhoff", "omron", "delta", "mitsubishi"):
         with pytest.raises(ValueError):
             mgr._create_driver(_cfg(t))
 
@@ -55,6 +60,18 @@ def test_real_types_get_their_own_driver():
     mgr = PLCManager()
     assert isinstance(mgr._create_driver(_cfg("siemens_s7", 102)), SiemensS7Driver)
     assert isinstance(mgr._create_driver(_cfg("modbus_tcp")), ModbusTCPPLCDriver)
+    assert isinstance(mgr._create_driver(_cfg("opc_ua", 4840)), OPCUADriver)
+    assert isinstance(mgr._create_driver(_cfg("allen_bradley", 44818)), AllenBradleyDriver)
+
+
+def test_bundled_plc_libraries_import():
+    """The three libraries the PLC panel lists are real dependencies now, not
+    'pip install later' hints — and python-snap7 3.x needs no snap7.dll."""
+    import snap7, asyncua, pycomm3  # noqa: F401
+    assert int(snap7.__version__.split(".")[0]) >= 3
+    assert SiemensS7Driver(_cfg("siemens_s7", 102))._has_snap7 is True
+    assert OPCUADriver(_cfg("opc_ua", 4840))._has_opcua is True
+    assert AllenBradleyDriver(_cfg("allen_bradley", 44818))._has_pycomm3 is True
 
 
 def test_add_plc_refuses_before_storing_anything():
@@ -93,8 +110,9 @@ def test_types_route_lists_all_families_honestly():
     for gated in ("delta", "mitsubishi", "omron"):
         assert by_id[gated]["connect_as"] == "modbus_tcp"
         assert "Modbus" in by_id[gated]["label"]
-    # Identify-only families are visible but not connectable.
-    assert by_id["allen_bradley"]["connectable"] is False
+    # Bundled-library families connect as themselves; Beckhoff stays identify-only.
+    assert by_id["allen_bradley"]["connectable"] is True and by_id["allen_bradley"]["connect_as"] == "allen_bradley"
+    assert by_id["opc_ua"]["connectable"] is True and by_id["opc_ua"]["connect_as"] == "opc_ua"
     assert by_id["beckhoff"]["connectable"] is False
     assert payload["support"]["plc_types"] == PLC_SUPPORT
     assert payload["support"]["usable"] == REAL_PLC_TYPES

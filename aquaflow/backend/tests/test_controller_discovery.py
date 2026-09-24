@@ -300,14 +300,21 @@ def test_open_port_never_becomes_a_confirmed_protocol():
     assert d["drivable"] is False and d["configurable"] is False and d["plc_prefill"] == {}
 
 
-def test_unsupported_controllers_stay_identify_only_and_nothing_gets_fake_health():
+def test_identified_controllers_never_get_fake_health_or_stage():
+    """Identification (even a confirmed one, even for a drivable family) leaves
+    status 'unverified' and health unmeasured — only a real connection may
+    advance the stage. Allen-Bradley became drivable in 1.2.5 (pycomm3); Beckhoff
+    stays identify-only."""
     net = _Net({"192.168.5.20": {44818: _det("192.168.5.20", 44818, "allen-bradley-logix", "confirmed", "identity_confirmed")},
-                "192.168.5.10": {102: _det("192.168.5.10", 102)}})
+                "192.168.5.10": {102: _det("192.168.5.10", 102)},
+                "192.168.5.21": {48898: _det("192.168.5.21", 48898, "beckhoff-ads", "port_only", "port_open")}})
     res = _run(subnet="192.168.5.0/27", port_checker=net.port_open, identifier=net.identify)
     by_id = {d["catalog_id"]: d for d in res["detected"]}
     ab = by_id["allen-bradley-logix"]
-    assert ab["tier"] == "UNSUPPORTED" and ab["drivable"] is False and ab["configurable"] is False
-    assert ab["confidence"] == "confirmed"                 # identified, honestly, but not drivable
+    assert ab["tier"] == "REAL" and ab["drivable"] is True
+    assert ab["confidence"] == "confirmed"
+    bk = by_id["beckhoff-ads"]
+    assert bk["tier"] == "UNSUPPORTED" and bk["drivable"] is False and bk["configurable"] is False
     for d in res["detected"]:
         assert d["status"] == "unverified"
         assert d["health"] is None

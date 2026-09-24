@@ -197,7 +197,7 @@ async def get_plc_types():
     instead of the old silent wrong-driver connection."""
     return {
         "types": [
-            {"id": "siemens_s7", "label": "Siemens S7 (S7-1200/1500, raw + snap7)",
+            {"id": "siemens_s7", "label": "Siemens S7 (S7-1200/1500, python-snap7 bundled + raw S7comm)",
              "port": 102, "tier": "REAL", "connect_as": "siemens_s7", "connectable": True},
             {"id": "modbus_tcp", "label": "Modbus TCP (Universal)",
              "port": 502, "tier": "REAL", "connect_as": "modbus_tcp", "connectable": True},
@@ -207,10 +207,10 @@ async def get_plc_types():
              "port": 502, "tier": "GATED", "connect_as": "modbus_tcp", "connectable": True},
             {"id": "omron", "label": "Omron CJ/CS/NX (via Modbus TCP)",
              "port": 502, "tier": "GATED", "connect_as": "modbus_tcp", "connectable": True},
-            {"id": "opc_ua", "label": "OPC UA (driver gated — untested)",
-             "port": 4840, "tier": "GATED", "connect_as": None, "connectable": False},
-            {"id": "allen_bradley", "label": "Allen Bradley (identify-only)",
-             "port": 44818, "tier": "UNSUPPORTED", "connect_as": None, "connectable": False},
+            {"id": "opc_ua", "label": "OPC UA client (asyncua bundled; tag address = NodeId string)",
+             "port": 4840, "tier": "REAL", "connect_as": "opc_ua", "connectable": True},
+            {"id": "allen_bradley", "label": "Allen Bradley Logix (pycomm3 bundled; EtherNet/IP CIP tags)",
+             "port": 44818, "tier": "REAL", "connect_as": "allen_bradley", "connectable": True},
             {"id": "beckhoff", "label": "Beckhoff TwinCAT (identify-only)",
              "port": 4840, "tier": "UNSUPPORTED", "connect_as": None, "connectable": False},
         ],

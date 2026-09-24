@@ -21,6 +21,8 @@ block_cipher = None
 datas = []
 datas += collect_data_files("data", include_py_files=False)        # backend/data/*.json
 datas += [("data", "data")]                                        # ensure the folder ships
+# asyncua ships its standard address space as a pickle next to the package.
+datas += collect_data_files("asyncua", include_py_files=False)
 
 # ── Hidden imports PyInstaller's static analysis can miss ──────────────────────────
 # uvicorn's protocol/loop implementations are imported by string at runtime, and several
@@ -31,6 +33,14 @@ hiddenimports += collect_submodules("api.routes")
 hiddenimports += collect_submodules("services")
 hiddenimports += collect_submodules("engine")
 hiddenimports += collect_submodules("safety")
+# PLC integration libraries (1.2.5): python-snap7 (pure Python), asyncua (+ its
+# crypto stack), pycomm3. All three are imported lazily inside driver methods,
+# which PyInstaller's static analysis does not follow.
+hiddenimports += collect_submodules("snap7")
+hiddenimports += collect_submodules("asyncua")
+hiddenimports += collect_submodules("pycomm3")
+hiddenimports += collect_submodules("cryptography")
+hiddenimports += ["OpenSSL", "OpenSSL.crypto", "sortedcontainers", "dateutil", "pytz", "aiosqlite"]
 hiddenimports += [
     "uvicorn.logging",
     "uvicorn.loops.auto", "uvicorn.loops.asyncio",

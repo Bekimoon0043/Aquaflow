@@ -76,7 +76,10 @@ STAGES = ("host_seen", "port_open", "protocol_confirmed", "identity_confirmed",
           "data_access_verified", "configured", "commissioned")
 
 # Catalog protocols the PLC panel can actually configure (REAL drivers only).
-CONFIGURABLE_PROTOCOLS = {"siemens_s7": "siemens_s7", "modbus_tcp": "modbus_tcp"}
+# catalog protocol → PLC panel plc_type, for families with a REAL driver (the tier
+# check in _from_entry keeps a GATED/UNSUPPORTED family out even if listed here).
+CONFIGURABLE_PROTOCOLS = {"siemens_s7": "siemens_s7", "modbus_tcp": "modbus_tcp",
+                          "ethernet_ip": "allen_bradley", "opc_ua": "opc_ua"}
 
 
 @dataclass
@@ -310,9 +313,15 @@ async def _identify_enip(ip: str, port: int) -> Optional[DetectedController]:
     det.product = identity.product_name
     det.model = identity.product_name or det.model
     det.revision = identity.revision
-    det.label = f"{identity.product_name or identity.vendor} (EtherNet/IP — identify-only)"
+    det.label = f"{identity.product_name or identity.vendor} (EtherNet/IP)"
     det.warnings.extend(identity.warnings)
-    det.warnings.append("identify-only: AquaFlow has no EtherNet/IP control driver")
+    if det.configurable:
+        det.plc_prefill["model"] = identity.product_name or det.plc_prefill.get("model", "")
+        det.warnings.append("ListIdentity confirms the device, not data access: connect it in the PLC "
+                            "panel (pycomm3). Tag types come from the controller's tag list when served; "
+                            "the driver is not yet verified on a physical Logix.")
+    else:
+        det.warnings.append("identify-only: AquaFlow has no EtherNet/IP control driver")
     return det
 
 

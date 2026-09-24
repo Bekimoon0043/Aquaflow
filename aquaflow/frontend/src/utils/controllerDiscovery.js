@@ -57,8 +57,10 @@ export function discoveredDeviceProjection(d) {
   };
 }
 
-// The PLC panel prefill. Only a backend-marked configurable result (Siemens S7
-// or Modbus TCP with a REAL driver) yields one; everything else is identify-only.
+// The PLC panel prefill. Only a backend-marked configurable result (a family
+// with a REAL driver: Siemens S7, Modbus TCP, Allen Bradley Logix, OPC UA)
+// yields one; everything else is identify-only.
+const DEFAULT_PLC_PORT = { siemens_s7: 102, modbus_tcp: 502, allen_bradley: 44818, opc_ua: 4840 };
 export function plcPrefillFromDetection(d) {
   if (!d || !d.configurable || !d.plc_prefill || !d.plc_prefill.plc_type) return null;
   const p = d.plc_prefill;
@@ -66,9 +68,9 @@ export function plcPrefillFromDetection(d) {
     name: p.name || `${p.vendor || d.vendor || "PLC"} @ ${d.ip}`,
     plc_type: p.plc_type,
     ip: p.ip || d.ip,
-    port: Number(p.port ?? d.port ?? (p.plc_type === "siemens_s7" ? 102 : 502)),
+    port: Number(p.port ?? d.port ?? DEFAULT_PLC_PORT[p.plc_type] ?? 502),
     rack: Number(p.rack ?? 0),
-    slot: Number(p.slot ?? 1),
+    slot: Number(p.slot ?? (p.plc_type === "allen_bradley" ? 0 : 1)),
     unit_id: Number(p.unit_id ?? 1),
     vendor: p.vendor || d.vendor || "",
     model: p.model || d.model || "",

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useShowStore } from "../../store/showStore";
 import { API_BASE_URL } from "../../config";
 import { apiGet, apiPost } from "../../utils/apiClient";
+import SiemensSitePanel from "./SiemensSitePanel";
 import {
   PREFILL_KEY, PREFILL_EVENT, applyPlcPrefill, buildConnectBody, profileGateSatisfied,
   parseModbusPoints, verifyOutcomeStyle, verifySummary,
@@ -22,10 +23,10 @@ export const PLC_TYPES = [
   { id: "delta",         label: "Delta DVP/AS",       port: 502,   color: "#06b6d4", tier: "GATED", connectAs: "modbus_tcp" },
   { id: "mitsubishi",    label: "Mitsubishi MELSEC",  port: 502,   color: "#10b981", tier: "GATED", connectAs: "modbus_tcp" },
   { id: "omron",         label: "Omron CJ/CS/NX",     port: 502,   color: "#f43f5e", tier: "GATED", connectAs: "modbus_tcp" },
-  { id: "opc_ua",        label: "OPC UA",             port: 4840,  color: "#8b5cf6", tier: "GATED",
-    reason: "OPC UA driver exists but is untested — not connectable yet" },
-  { id: "allen_bradley", label: "Allen Bradley",      port: 44818, color: "#f59e0b", tier: "UNSUPPORTED",
-    reason: "EtherNet/IP driver not implemented — identifiable in Discovery → Controllers, not drivable" },
+  { id: "opc_ua",        label: "OPC UA",             port: 4840,  color: "#8b5cf6", tier: "REAL",
+    hint: "asyncua bundled — tag address is the NodeId string, e.g. ns=3;s=\"DB_Fountain\".\"Pump1_Speed\"" },
+  { id: "allen_bradley", label: "Allen Bradley",      port: 44818, color: "#f59e0b", tier: "REAL",
+    hint: "pycomm3 bundled — tag address is the Logix tag name, e.g. Pump1_Speed, Speeds[2], Program:Main.Valve1" },
   { id: "beckhoff",      label: "Beckhoff TwinCAT",   port: 4840,  color: "#a78bfa", tier: "UNSUPPORTED",
     reason: "ADS driver not implemented — identifiable in Discovery → Controllers, not drivable" },
 ];
@@ -53,7 +54,7 @@ export default function PLCPanel() {
       </div>
 
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--bg-surface)", flexShrink: 0 }}>
-        {[["connect","Connect"],["tags","Tag Browser"],["map","Tag Map"],["monitor","Monitor"],["fieldio","Field I/O"]].map(([key, label]) => (
+        {[["connect","Connect"],["site","Siemens Site"],["tags","Tag Browser"],["map","Tag Map"],["monitor","Monitor"],["fieldio","Field I/O"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{
             flex: 1, padding: "7px 0", background: "transparent", border: "none",
             borderBottom: tab === key ? "2px solid var(--accent)" : "2px solid transparent",
@@ -68,8 +69,9 @@ export default function PLCPanel() {
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         {tab === "connect" && <ConnectTab addServerLog={addServerLog} />}
+        {tab === "site" && <SiemensSitePanel />}
         {tab === "tags"    && <TagBrowserTab addServerLog={addServerLog} />}
-        {tab === "map"     && <TagMapTab devices={devices} addServerLog={addServerLog} />}
+        {tab === "map"     && <SiemensSitePanel />}
         {tab === "monitor" && <MonitorTab />}
         {tab === "fieldio" && <FieldIOTab />}
       </div>
@@ -461,16 +463,16 @@ function ConnectTab({ addServerLog }) {
         );
       })}
 
-      {/* Library requirements */}
-      <SectionLabel>Required Libraries</SectionLabel>
+      {/* Bundled protocol libraries — shipped inside the engine since 1.2.5; nothing to pip install */}
+      <SectionLabel>Bundled PLC Libraries</SectionLabel>
       {[
-        { label: "Siemens S7", cmd: "pip install python-snap7", note: "Optional — the validated raw S7comm client needs nothing" },
-        { label: "OPC UA",     cmd: "pip install asyncua" },
-        { label: "Allen Bradley", cmd: "pip install pycomm3", note: "Identify-only today: no EtherNet/IP control driver" },
+        { label: "Siemens S7", lib: "python-snap7 (pure Python) + validated raw S7comm fallback", note: "Tag address: DB1.DBW0 / DB1.DBD4 / DB1.DBX2.0 — PUT/GET permitted, DB non-optimized" },
+        { label: "OPC UA",     lib: "asyncua", note: "Tag address: NodeId string as the server publishes it (ns=3;s=\"DB\".\"Tag\" or ns=2;i=1002). Writes are typed from the node's DataType." },
+        { label: "Allen Bradley", lib: "pycomm3 (EtherNet/IP + CIP Read/Write Tag)", note: "Tag address: Logix tag name (Pump1_Speed, Speeds[2], Program:Main.Valve1). Types from the controller's tag list, else from your declared type." },
       ].map((lib) => (
         <div key={lib.label} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
-          <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 2 }}>{lib.label}</div>
-          <code style={{ fontSize: 10, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>{lib.cmd}</code>
+          <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 2 }}>{lib.label} <span style={{ color: "var(--green)" }}>● bundled</span></div>
+          <code style={{ fontSize: 10, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>{lib.lib}</code>
           {lib.note && <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2 }}>{lib.note}</div>}
         </div>
       ))}
@@ -594,88 +596,6 @@ function TagBrowserTab({ addServerLog }) {
 }
 
 // ── Tag Map Tab ────────────────────────────────────────────────────────────────
-function TagMapTab({ devices, addServerLog }) {
-  const [plcs, setPlcs] = useState([]);
-  const [selectedPlc, setSelectedPlc] = useState("");
-  const [tags, setTags] = useState([]);
-  const [mappings, setMappings] = useState([
-    { tag: "pump_speed",  device: "pump-01",  param: "speed",    description: "Controls pump VFD speed 0-100%" },
-    { tag: "pump_run",    device: "pump-01",  param: "run",      description: "Pump run/stop command" },
-    { tag: "valve_bank",  device: "valve-01", param: "pattern",  description: "Solenoid valve bit pattern" },
-    { tag: "pressure",    device: "sensor-01",param: "pressure", description: "Pressure sensor feedback" },
-  ]);
-
-  useEffect(() => {
-    fetch(`${API}/`).then(r=>r.json()).then(d=>setPlcs(d.plcs||[])).catch(()=>{});
-  }, []);
-
-  return (
-    <div style={{ padding: 12 }}>
-      <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
-        Map PLC tags to AquaFlow device parameters. During show playback, values are automatically written to the PLC.
-      </div>
-
-      <SectionLabel>Current Mappings</SectionLabel>
-      {mappings.map((m, i) => (
-        <div key={i} style={{ padding: "8px 10px", marginBottom: 6, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-            <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--accent)" }}>{m.tag}</span>
-            <span style={{ fontSize: 10, color: "var(--text-muted)" }}>→</span>
-            <span style={{ fontSize: 11, color: "var(--text-primary)" }}>{m.device}</span>
-            <span style={{ fontSize: 10, color: "var(--text-muted)" }}>.</span>
-            <span style={{ fontSize: 11, color: "var(--amber)" }}>{m.param}</span>
-            <button className="btn" style={{ marginLeft: "auto", padding: "1px 6px", fontSize: 9 }}
-              onClick={() => setMappings(ms => ms.filter((_, j) => j !== i))}>✕</button>
-          </div>
-          <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{m.description}</div>
-        </div>
-      ))}
-
-      <SectionLabel>Add Mapping</SectionLabel>
-      <AddMappingForm devices={devices} onAdd={(m) => { setMappings(ms => [...ms, m]); addServerLog({ level: "info", msg: `Tag mapped: ${m.tag} → ${m.device}.${m.param}` }); }} />
-
-      {/* Safety interlocks */}
-      <SectionLabel>Safety Interlocks</SectionLabel>
-      {[
-        { label: "Max Pump Speed",    value: "85%",    tag: "pump_speed",  condition: ">" },
-        { label: "Min Water Pressure",value: "1.5 bar",tag: "pressure",    condition: "<" },
-        { label: "Emergency Stop",    value: "0",      tag: "estop",       condition: "==" },
-      ].map((s, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", marginBottom: 4, background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: "var(--radius-sm)" }}>
-          <span style={{ fontSize: 10, color: "var(--red)" }}>⚠</span>
-          <span style={{ fontSize: 11, color: "var(--text-secondary)", flex: 1 }}>{s.label}</span>
-          <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--red)" }}>{s.condition} {s.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AddMappingForm({ devices, onAdd }) {
-  const [form, setForm] = useState({ tag: "", device: "", param: "speed", description: "" });
-  const PARAMS = ["speed", "run", "pattern", "intensity", "pressure", "flow", "temperature"];
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-      <input className="input" placeholder="Tag address (e.g. pump_speed)" value={form.tag}
-        onChange={e => setForm(f=>({...f, tag: e.target.value}))} style={{ fontSize: 11, fontFamily: "var(--font-mono)" }} />
-      <div style={{ display: "flex", gap: 6 }}>
-        <select className="select" value={form.device} onChange={e => setForm(f=>({...f, device: e.target.value}))} style={{ flex: 1, fontSize: 11 }}>
-          <option value="">Device...</option>
-          {devices.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
-        </select>
-        <select className="select" value={form.param} onChange={e => setForm(f=>({...f, param: e.target.value}))} style={{ flex: 1, fontSize: 11 }}>
-          {PARAMS.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
-      <button className="btn primary" onClick={() => { if (form.tag && form.device) { onAdd(form); setForm({ tag: "", device: "", param: "speed", description: "" }); } }}
-        style={{ justifyContent: "center", fontSize: 11 }}>
-        + Add Mapping
-      </button>
-    </div>
-  );
-}
-
-// ── Monitor Tab ────────────────────────────────────────────────────────────────
 function MonitorTab() {
   const [values, setValues] = useState({});
   const [plcs, setPlcs] = useState([]);

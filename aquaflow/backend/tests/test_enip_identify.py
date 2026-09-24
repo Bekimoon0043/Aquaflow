@@ -105,6 +105,12 @@ def test_live_probe_accepts_only_a_valid_payload():
     assert out["det_bad"] == []
     det = out["det_good"][0]
     assert det.catalog_id == "allen-bradley-logix" and det.confidence == "confirmed"
-    assert det.stage == "identity_confirmed" and det.drivable is False and det.configurable is False
+    assert det.stage == "identity_confirmed"
+    # 1.2.5: pycomm3 is bundled — a validated ListIdentity now yields a configurable
+    # Allen Bradley entry (PLC panel prefill), still 'unverified' until the operator
+    # connects. ListIdentity alone never claims data access.
+    assert det.drivable is True and det.configurable is True
+    assert det.plc_prefill["plc_type"] == "allen_bradley" and det.plc_prefill["port"] == 44818
     assert det.product == "CompactLogix 5380" and det.revision == "33.011"
-    assert any("identify-only" in w for w in det.warnings)
+    assert not any("identify-only" in w for w in det.warnings)
+    assert any("not yet" in w or "tag list" in w for w in det.warnings), det.warnings

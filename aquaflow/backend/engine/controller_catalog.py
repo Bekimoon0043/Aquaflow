@@ -278,23 +278,26 @@ CATALOG: list[ControllerEntry] = [
         source="saferain.com product data (2026-09 research)",
     ),
 
-    # ── Identify-only PLC families (detectable, NOT drivable — say so) ────────
+    # ── Allen-Bradley Logix + OPC UA — drivable since 1.2.5 (pycomm3 / asyncua bundled) ─
     ControllerEntry(
         id="allen-bradley-logix",
         vendor="Allen-Bradley / Rockwell",
-        model="ControlLogix / CompactLogix",
+        model="ControlLogix / CompactLogix / Micro800",
         category="plc",
         protocol="ethernet_ip",
         tier=PLC_SUPPORT.get("allen_bradley", "UNSUPPORTED"),
         detect_method="enip_list_identity",  # standard, read-only
         detect_ports=[44818],
-        default_config={},
+        default_config={"ip": "192.168.5.20", "port": 44818, "rack": 0, "slot": 0},
+        configure_in="PLC panel (type Allen Bradley; tag address = controller tag name)",
         notes=(
             "Common in North-American fountain plants (Grand Haven ran PLC-2/PLC-5). "
-            "AquaFlow can IDENTIFY it via EtherNet/IP ListIdentity but has no "
-            "EtherNet/IP driver — detected units are shown as not drivable."
+            "Identified via EtherNet/IP ListIdentity; driven via pycomm3 (CIP Read/Write "
+            "Tag). Tag types come from the controller's tag list when it serves one, "
+            "otherwise from the operator's declaration. Proven against the cpppo Logix "
+            "simulator (connect, identity, reads) — not yet on a physical Logix."
         ),
-        source="ghfountain.org + industry research (2026-09)",
+        source="ghfountain.org + industry research (2026-09); pycomm3 1.2",
     ),
     ControllerEntry(
         id="opcua-server",
@@ -305,8 +308,11 @@ CATALOG: list[ControllerEntry] = [
         tier=PLC_SUPPORT.get("opc_ua", "UNSUPPORTED"),
         detect_method="port_hint",
         detect_ports=[4840],
-        default_config={},
-        notes="Driver code exists but is GATED (untested, undeclared dependency) — identify-only for now.",
+        default_config={"ip": "192.168.5.30", "port": 4840},
+        configure_in="PLC panel (type OPC UA; tag address = NodeId string, e.g. ns=3;s=\"DB\".\"Tag\")",
+        notes=("Driven via asyncua (typed reads/writes by NodeId; proven against an asyncua "
+               "server). Detection on 4840 is a port hint only — an open port is not an "
+               "OPC UA server until a session is established in the PLC panel."),
     ),
     ControllerEntry(
         id="mitsubishi-melsec",
