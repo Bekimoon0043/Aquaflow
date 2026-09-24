@@ -1,5 +1,210 @@
 # AquaFlow Studio — Current Status
 
+**2026-09-24: First PLCSIM contact — S7 identity read fixed, diagnostics surfaced (1.2.4)**
+
+- The operator ran the generated TIA project in PLCSIM successfully. Device Discovery →
+  Controllers → DETECT found the endpoint and confirmed S7comm, but showed no CPU identity.
+  Root-caused in `engine/s7_identify.py` (verified against snap7's client):
+  1. **Multi-part SZL replies were rejected.** A CPU whose list does not fit one PDU answers
+     with "last data unit = 1" and a sequence number; the client must send the SZL-NEXT
+     telegram (12-byte param, `0a 00 00 00` data) until the flag clears. A real S7-1200
+     negotiates PDU 240 and ALWAYS splits its 0x001C component list. We read only the first
+     part and refused it as "record length × count != bytes". Continuation is now
+     implemented (bounded at 16 parts) and pinned by test.
+  2. **Firmware version decoded from the wrong bytes.** Index 7 carries Ausbg1 = 'V'<<8|major,
+     Ausbe = minor<<8|patch; the parser printed "V86.4.2" for V4.5.2. Fixed; `FakeS7Server`
+     now encodes the wire format so the tests cannot mask it again.
+  3. **The reason was invisible.** SZL failures were logged as a bare warning with no bytes.
+     Every SZL reply frame is now kept (`szl_frames`), the warning carries the reason plus
+     a hex excerpt, and discovery adds a plain-language note that identity is optional:
+     Verify checks the AquaFlow DB contract directly. Siemens site → Identify CPU reports
+     stage, PDU and reasons instead of only "identity unavailable".
+- Discovery now lists a host that speaks ISO-on-TCP on 102 but refuses S7 setup as
+  "not an S7 CPU (setup refused)" with the NetToPLCsim / PLCSIM Advanced hint (a TIA
+  Portal PC's S7ONLINE service is the usual cause). Junk/silence on 102 stays unlisted.
+- Docs: `SIEMENS-RUNTIME-COMMISSIONING.md` §6a — simulator reachability table (standard
+  S7-PLCSIM is unreachable without NetToPLCsim; PLCSIM Advanced is S7-1500 only), what each
+  discovery label means, and `Test-NetConnection <ip> -Port 102` as the first check.
+- Validation: backend **897 passed, 50 skipped**; frontend **531 passed (43 files)**; web
+  build green with zero circular-chunk warnings; PyInstaller engine rebuilt (py -3.12);
+  installer **AquaFlowSetup-1.2.4.exe** built. End-to-end through the packaged engine
+  against a fake PLC serving SZL in 60-byte parts: `identity_confirmed`, 0x0011 in 2 parts,
+  0x001C in 4 parts, order number and `V4.5.2` decoded, zero warnings.
+- Release folder: `release/AquaFlow-1.2.4-Siemens-PLCSIM-Identity/` (installer, SHA256SUMS,
+  INSTALL-README, Siemens docs, PLCSIM test guide PDF).
+- Still unverified: PLCSIM and physical S7-1200 rows stay UNVERIFIED until the operator
+  re-runs DETECT with 1.2.4 and reports the warning text; identity may legitimately be
+  absent on a simulator, in which case Verify is the path forward.
+
+**2026-09-17 → 09-24 (catch-up, previously undocumented here):** AutoCAD DXF/DWG design
+exchange (`AUTOCAD-DESIGN-EXCHANGE.md`, `desktop/cad-native.js`, `CADImportDialog`);
+Siemens investigation (TIA Openness bridge — never compiled; independent-programming
+feasibility audit — not viable without Siemens tooling; SIMATIC AX gate plan; TIA project
+file dossier); pivot to **TIA Portal engineers once, AquaFlow operates the runtime**
+(`SIEMENS-RUNTIME-AUDIT/ARCHITECTURE/COMMISSIONING.md`, contract v2 in
+`engine/siemens_contract.py`, `siemens_runtime.py`, `SiemensSitePanel`); Electron
+will-download handler fixing every export button; releases 1.2.3 and 1.2.3-fixed.
+
+**2026-09-16: Unified AI/music block authoring in Show Programmer**
+
+- Replaced the unconnected Show Programmer AI tab with an offline supported-style
+  prompt/music builder using existing read-only choreography APIs. Generate a proposal,
+  preview it in local 3D, then explicitly append prompt blocks or replace the timeline
+  with a music dance. Applying participates in undo/redo; no automatic save or run.
+- WAV analysis uses the configured local backend URL, real analysis jobs and measured
+  beat objects. Metadata-only estimates are rejected for music choreography. Duration
+  selects an excerpt from the start of the track at timeline 0. Valve changes, OFF
+  gaps, phrase lead-ins and terminal OFF remain, with a minimum 100-ms physical state.
+  Sustained ON runs coalesce within editable phrases. Beats use measured timestamps.
+- Proposal/settings/music survive in-session 3D navigation. File changes invalidate
+  analysis/proposal, engineering mapping/track changes require regeneration, and
+  pending request cancellation cannot apply late results to the timeline. Music
+  decoding now handles errors/stale selection and releases audio objects/contexts.
+  The local timeline uses detected tempo and labels source music vs water-dance length.
+- JSON/local saves retain clip blocks, beat markers and source provenance. WAV files
+  require separate transfer/reselection. Generated phrases have explicit clips rather
+  than array recipes; individual editing/duplication works, and movement regeneration
+  uses the existing Arrays editor. Libraries and layering use the same block format.
+- Validation: **506 frontend tests passed (41 files)**; production desktop web build
+  passed. Native desktop checks cover prompt append/undo, measured PCM WAV analysis,
+  music replacement, proposal and applied-show 3D round trips, beat retention and
+  terminal OFF. Additional native checks reject a late response after cancellation,
+  round-trip the one-minute music-6 example through JSON import/export, show its
+  detected BPM and verify OFF at 59.95 seconds. Observed zero hardware requests,
+  global playback frames or renderer exceptions; original saved show and reusable
+  section library preserved and restored in the current session.
+- Added `C:/Users/buroo/Downloads/4KILO-60-second-AI-music-6.json` using the site's
+  existing measured music-6 analysis: seven blocks/788 clips, 194 beat markers and
+  51 exact states over 60 seconds. Existing backend normalization accepts it; groups
+  2, 17 and 25 remain empty and the final state is all OFF. No physical outputs ran.
+- Installed web backup:
+  `C:/Users/buroo/AppData/Local/Temp/aquaflow-web-before-ai-blocks-20260916-085652`.
+  All 47 installed web files match the build; all six protected I-CAN control file
+  hashes match the pre-change values. Gateway/runner remain idle and disarmed with
+  zero streamed frames and an empty audit.
+  Remaining work includes calibrated 3D/hydraulic response, additional physical
+  commissioning and site rehearsal. This phase does not add unrestricted AI reasoning
+  or independent pump/frequency choreography; protected Fountain Control is preserved.
+
+**2026-09-16: Layered reusable show sections**
+
+- Added Show Sections and block-selection checkboxes. Sequence selected blocks with
+  a gap, align their starts for simultaneous zone patterns, or move the selection
+  while preserving internal offsets. Each operation participates in undo/redo.
+- Save selected combinations to a persistent named library, export/import individual
+  sections or the library, and insert repeated sections with independent editable
+  blocks. Relative timings, OFF intervals, recipes and individual clip edits remain.
+  Insertion verifies outlet identities and matching tracks in the current engineering
+  project. Missing outlets are rejected rather than remapped. Existing saved section
+  names are not automatically overwritten; invalid imports preserve stored data.
+- Fixed generated block clip identity collisions when a plan is reused rapidly.
+  New blocks receive independent IDs, and copying large sections avoids counting
+  temporary template clips against the destination show's 20,000-clip limit.
+- Validation: **497 frontend tests passed (40 files)**; desktop production web build
+  passed. Desktop checks cover checkbox selection, sequence/layer/move, persistent
+  library save/remount, repeated insertion, undo/redo, 3D preview/Stop, draft settings,
+  site handoff and section export/import. Network monitoring observed 45 requests in
+  the main workflow and 30 in the examples/import workflow, with zero hardware
+  requests, global playback frames or renderer exceptions. Gateway idle/disarmed,
+  zero streamed frames and empty audit; original I-CAN control hashes unchanged.
+- Added two section-library examples: **4KILO 60-second three-block section** and
+  **4KILO 20-second valve duet**. Preserved the operator's existing local show.
+  Download exports: `C:/Users/buroo/Downloads/4KILO-show-section-library.json` and
+  `C:/Users/buroo/Downloads/4KILO-60-second-layered-valve-duet.json`. The latter has
+  six blocks/1,920 clips and converts to 240 exact states over 60 seconds, accepted
+  by the existing backend normalizer. Support defaults OFF; protected frequency/fire
+  groups and final state remain OFF. No physical outputs activated.
+- Installed web backup:
+  `C:/Users/buroo/AppData/Local/Temp/aquaflow-web-before-show-sections-20260916-083131`.
+  All 47 installed web files match the build. Final desktop checks verify keyboard
+  undo/redo retains the block selection, both library examples survive reload, and
+  the original saved show/library data stays unchanged during verification.
+  Remaining phases: unified AI/music block authoring, calibrated 3D response and
+  remaining physical commissioning/rehearsals. Section libraries are local exports;
+  they do not bundle WAV files or automatically adapt to a different fountain.
+
+**2026-09-16: Whole pattern-block editing in Show Programmer**
+
+- Generated arrays now appear as named pattern blocks containing their outlet clips.
+  Move, proportionally stretch, rename, change array cycles, duplicate, delete or
+  regenerate the selected block's movement/outlet selection. Detailed clips remain
+  available for individual changes; these changes disable cycle regeneration so
+  it cannot silently replace them. Duplication preserves individual edits.
+- Blocks, recipes and programmed trailing OFF intervals persist within the existing
+  local/backend save and JSON import/export format. Existing exported arrays group
+  by generation stamp without altering their timing. Partial target replacement
+  preserves remaining clips and marks their block as individually edited.
+- Added Fit show, adaptive ruler/measure labels and collapsible 3D/site controls
+  to keep block timing controls accessible. In-session preview navigation preserves
+  unsaved edits even when a different local show was previously saved.
+- Validation: frontend **484 passed (39 files)**, desktop production web build
+  passed. Installed-desktop checks cover native pointer move/resize, cycles,
+  duplication, undo/redo, selected-block regeneration, detailed view, JSON round
+  trip, exact 3D preview and site handoff. Zero hardware requests, global playback
+  frames or renderer exceptions. The original I-CAN control file hashes match.
+- Installed all 47 generated web files and verified matching hashes. Backup:
+  `C:/Users/buroo/AppData/Local/Temp/aquaflow-web-before-pattern-blocks-20260916-080159`.
+  Saved a new 60-second, three-block example locally because no operator local show
+  existed: Traveling blocks (0-20s), Mirrored blocks (20-40s), Return blocks (40-60s).
+  It contains 1,280 outlet clips and converts to 240 exact valve states, accepted
+  by the existing backend normalizer. Support defaults OFF; groups 2 and 25 remain
+  empty and the final state is all OFF. No physical outputs activated.
+- Remaining boss-request phases include reusable layered show sections, a unified
+  AI/music block workflow, calibrated 3D response and remaining site commissioning.
+
+**2026-09-16: Visual Show Programmer arrays and Site I-CAN handoff**
+
+- Added clickable engineering-plan outlet selection, keyboard selection, odd/even,
+  half-array and invert tools, named persistent zones, array ordering and a stage
+  scrubber with physical outlet names. The library now includes 16 movements,
+  including mirrored blocks, traveling windows and fill/drain. Custom stages
+  preserve OFF intervals and report invalid selectors. Reusable presets include
+  selection and mode; generated arrays are limited to 20,000 clips per action.
+- Site water tracks now distinguish mapped Valve ON/OFF from uncommissioned design
+  intensity, and separate physical pump equipment. A compact toolbar with expandable
+  additional tools and the program's own timeline keeps the array editor visible.
+  Preview navigation preserves
+  timeline, local WAV, builder settings and site conversion options in-session.
+- Added all-outlet local design simulation and exact mapped-valve timeline
+  conversion to the existing Site I-CAN editor. Unsupported or unresolved tracks,
+  fades/analogue values, effects and incompatible timing block real-run conversion.
+  Overlapping ON clips combine, gaps stay OFF, trailing programmed OFF stages remain,
+  and every converted pattern ends OFF. Captured support is optional, defaults OFF
+  and stays steady through valve gaps; no independent pump/frequency commands added.
+- Validation: frontend **472 passed (38 files)**; desktop production web build
+  passed. Existing backend normalization accepts the 60-second, 240-state,
+  960-clip demo. Installed-desktop UI checks passed for keyboard/visual selection,
+  saved zones/presets, settings and timeline preservation, both 3D preview modes,
+  editor handoff and blocked unresolved foam conversion, with zero hardware requests,
+  global playback WebSocket frames or renderer exceptions.
+  Protected transport, mapping, routes and Fountain Control panel
+  hashes still match their pre-task values. No physical outputs activated.
+- Updated installed desktop web assets with a backup at
+  `C:/Users/buroo/AppData/Local/Temp/aquaflow-web-before-array-tools-20260916-042244`.
+  Step-by-step instructions and 60-second settings are in
+  `SITE-ICAN-DESIGN-TEST-GUIDE.md`.
+
+**2026-09-16: Site I-CAN pattern simulation**
+
+- Added **PREVIEW THIS PATTERN IN 3D** to the site step editor. A separate local playback
+  clock supports play, pause, replay, seek, repeat, stop and selected-WAV playback.
+- Preview animates the 64 capture-mapped running valves by engineering fixture ID and
+  explicit address metadata. Corrected positions and basin geometry remain unchanged.
+  Unmapped outlets remain off; water heights and pump/frequency behavior are not calibrated.
+- Saved/manual/AI/music/imported patterns use the same preview path. Drafts survive editor
+  and preview navigation. Main toolbar and ruler seeking stay local while simulation is active.
+- Renderer OFF states suppress decorative idle water. Engineering layout sync now recognizes
+  a recreated renderer when quality changes.
+- Proven I-CAN control transport, mapping, backend routes and Fountain Control panel were
+  left unchanged during this task. No physical outputs were activated.
+- Validation: frontend suite **457 passed (37 files)**; focused mapping, timing, isolation
+  and renderer tests passed; desktop production web build passed. Installed-desktop UI
+  check passed for play/pause/seek/replay/stop, main toolbar, draft preservation, and CPU
+  render quality changes, with zero renderer exceptions, hardware requests, or global
+  playback WebSocket frames. Control-file hashes match their pre-task values; gateway
+  remains idle/disarmed with zero streamed frames and zero audit actions.
+
+
 > **AUTHORITATIVE (2026-09-08, manual I-CAN patterns):** backend pytest
 > **831 passed, 21 skipped**; frontend vitest **440 passed (34 files)**;
 > `npm run build` green; desktop **1.2.1**. Single source of truth:

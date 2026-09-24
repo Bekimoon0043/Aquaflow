@@ -175,7 +175,24 @@ async def _identify_s7(ip: str, port: int) -> Optional[DetectedController]:
     r = await s7_identify(ip, port, connect_timeout=CONNECT_TIMEOUT, timeout=PROBE_TIMEOUT)
     if not r.s7_confirmed:
         logger.debug("S7 %s:%s not confirmed at %s: %s", ip, port, r.stage, r.reason)
-        return None
+        if r.stage != "cotp_connected":
+            return None                              # junk or silence on 102: not a controller
+        # The host runs a real ISO-on-TCP stack (COTP accepted) but refused the S7
+        # setup on both rack/slot profiles. The commonest cause on a test bench is a
+        # PC with TIA Portal: its S7ONLINE service (s7oiehsx64) holds port 102 and is
+        # not a PLC. Report the address as unverified so the operator sees WHY.
+        entry = get_entry("siemens-s7-1200")
+        det = _from_entry(entry, ip, port, "port_only", stage="port_open",
+                          evidence=list(r.evidence) + [f"S7 setup not acknowledged: {r.reason}"])
+        det.label = "ISO-on-TCP endpoint on 102 — not an S7 CPU (setup refused)"
+        det.configurable = False
+        det.plc_prefill = {}
+        det.warnings.append(f"port match only: COTP connected but S7 setup was refused ({r.reason})")
+        det.warnings.append("If this is a PC running TIA Portal/S7-PLCSIM, port 102 belongs to the Siemens "
+                            "S7ONLINE service, not to the simulated CPU. Standard S7-PLCSIM is reachable "
+                            "only through NetToPLCsim (rack 0, slot 1) or by using S7-PLCSIM Advanced "
+                            "with a PLCSIM Virtual Ethernet Adapter address.")
+        return det
     entry = get_entry("siemens-s7-1200")             # family entry; model unknown
     identity = {"handshake": "COTP + S7 setup acknowledged", "profile": r.profile,
                 "pdu_size": r.pdu_size, **r.identity}
@@ -196,6 +213,13 @@ async def _identify_s7(ip: str, port: int) -> Optional[DetectedController]:
             det.plc_prefill["model"] = order
     else:
         det.warnings.append("CPU model not claimed: a generic S7 handshake does not identify the CPU")
+        det.warnings.append("Identity lists (SZL 0x0011/0x001C) were not readable. Simulators (S7-PLCSIM via "
+                            "NetToPLCsim, some PLCSIM Advanced setups) may not serve them; a real CPU with "
+                            "access protection may refuse them. AquaFlow does not need the identity to "
+                            "verify a Siemens site — leave 'expected order number/firmware' blank and use "
+                            "Verify, which checks the AquaFlow DB contract directly.")
+    if r.szl_frames:
+        det.identity["szl_frames"] = r.szl_frames
     return det
 
 

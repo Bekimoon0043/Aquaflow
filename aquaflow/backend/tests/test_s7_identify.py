@@ -18,10 +18,12 @@ from engine.s7_identify import (
     s7_handshake,
     s7_identify,
     s7_setup_request,
+    s7_szl_next_request,
     s7_szl_request,
     tpkt,
     validate_cotp_cc,
     validate_s7_setup_ack,
+    validate_szl_part,
     validate_szl_response,
     validate_tpkt,
 )
@@ -183,3 +185,90 @@ def test_szl_validation_and_parsing():
 
 def test_profiles_are_the_documented_rack_slots():
     assert [(p["rack"], p["slot"]) for p in CONNECTION_PROFILES] == [(0, 1), (0, 2)]
+
+
+def test_iso_endpoint_that_refuses_s7_setup_is_listed_unverified_with_the_reason():
+    """A TIA Portal PC's S7ONLINE service holds port 102 and speaks COTP but is
+    not a CPU. Discovery must show the address as 'port match only' WITH the
+    refusal reason and the PLCSIM hint — not silently drop it, and never claim
+    a controller."""
+    from engine.controller_identify import identify_service
+
+    async def run(server):
+        return await identify_service("127.0.0.1", server.port, 102)
+    found = _with_server(run, handshake_mode="setup_error")
+    assert len(found) == 1
+    d = found[0]
+    assert d.confidence == "port_only" and d.stage == "port_open"
+    assert d.configurable is False and d.plc_prefill == {}
+    assert any("setup was refused" in w for w in d.warnings), d.warnings
+    assert any("NetToPLCsim" in w for w in d.warnings), d.warnings
+    # Junk / silence on 102 is still nothing at all.
+    found = _with_server(run, handshake_mode="cc_short")
+    assert found == []
+
+
+def test_s7_without_identity_tells_the_operator_identity_is_optional():
+    from engine.controller_identify import identify_service
+
+    async def run(server):
+        return await identify_service("127.0.0.1", server.port, 102)
+    found = _with_server(run, szl_supported=False)
+    assert len(found) == 1 and found[0].confidence == "confirmed"
+    assert any("does not need the identity" in w for w in found[0].warnings), found[0].warnings
+    assert "0x0011" in found[0].identity["szl_frames"]
+
+
+# ── multi-part SZL (the real S7-1200 case: PDU 240, 0x001C ≈ 10 × 34 bytes) ─
+def test_multipart_szl_is_followed_with_next_telegrams():
+    """A CPU that serves the component list in several 'more data follows'
+    parts must still yield the module name — and the exchange must use the
+    SZL-NEXT telegram with the CPU's sequence number, not a fresh request."""
+    def go(s):
+        async def run(server):
+            r = await s7_identify("127.0.0.1", server.port, timeout=0.5)
+            return r, server.szl_reads, server.szl_next_reads
+        return run(s)
+    r, first_reads, next_reads = _with_server(go, szl_max_part=60)
+    assert r.stage == "identity_confirmed", (r.reason, r.warnings)
+    assert r.identity["order_number"] == "6ES7 215-1AG40-0XB0"
+    assert r.identity["module_name"] == "CPU 1215C DC/DC/DC"
+    assert r.identity["plc_name"] == "AquaFlowPLC"
+    assert first_reads == 2 and next_reads >= 4, (first_reads, next_reads)
+    assert any("SZL 0x001C" in e and "parts" in e for e in r.evidence), r.evidence
+    assert not r.warnings, r.warnings
+    # every reply frame is kept for diagnostics
+    assert len(r.szl_frames["0x001C"]) == 1 + next_reads - (len(r.szl_frames["0x0011"]) - 1)
+
+
+def test_szl_next_request_is_the_known_bytes():
+    nxt = s7_szl_next_request(0x0102, 0x2B)
+    assert nxt[3] == 0x32 and nxt[4] == 0x07                  # S7 userdata
+    assert nxt[9:13] == b"\x00\x0c\x00\x04"                   # param 12, data 4
+    assert nxt[13:25] == bytes([0, 1, 0x12, 8, 0x12, 0x44, 1, 0x2B, 0, 0, 0, 0])
+    assert nxt[25:29] == b"\x0a\x00\x00\x00"
+
+
+def test_single_frame_validator_refuses_a_more_follows_part():
+    rec = struct.pack(">H", 1) + b"6ES7 215-1AG40-0XB0 " + struct.pack(">HHH", 0, 1, 0)
+    body = struct.pack(">HHHH", 0x0011, 0, 28, 2) + rec        # says 2 records, carries 1
+    param = bytes([0, 1, 0x12, 8, 0x12, 0x84, 1, 7, 0, 1, 0, 0])   # seq 7, last data unit = NO
+    data = bytes([0xFF, 0x09]) + struct.pack(">H", len(body)) + body
+    s7 = bytes([0x32, 0x07, 0, 0, 0, 5]) + struct.pack(">HH", len(param), len(data)) + param + data
+    payload = bytes([0x02, 0xF0, 0x80]) + s7
+    part = validate_szl_part(payload, pdu_ref=5, szl_id=0x0011, first=True)
+    assert part.more and part.seq == 7 and part.count == 2 and part.rec_len == 28
+    with pytest.raises(S7IdentifyError, match="multi-part"):
+        validate_szl_response(payload, pdu_ref=5, szl_id=0x0011)
+
+
+def test_firmware_version_decodes_the_wire_encoding():
+    """Index 7: Ausbg1 = 'V'<<8 | major, Ausbe = minor<<8 | patch (snap7 V1/V2/V3)."""
+    def rec(idx, ausbg1, ausbe):
+        return struct.pack(">H", idx) + b"6ES7 215-1AG40-0XB0 " + struct.pack(">HHH", 0, ausbg1, ausbe)
+    out = parse_szl_0011([rec(1, 0x0001, 0), rec(6, 0x0001, 0), rec(7, 0x5604, 0x0502)])
+    assert out["firmware_version"] == "V4.5.2"
+    assert out["hardware_version"] == "1"
+    assert "firmware_version_raw" not in out
+    # S7-1500 style V2.9.4
+    assert parse_szl_0011([rec(7, 0x5602, 0x0904)])["firmware_version"] == "V2.9.4"

@@ -55,7 +55,7 @@ class FakeS7Server:
 
     def __init__(self, mode: Optional[str] = None, *, expected_slot: Optional[int] = None,
                  handshake_mode: Optional[str] = None, identity: Optional[dict] = None,
-                 szl_supported: bool = True):
+                 szl_supported: bool = True, szl_max_part: int = 0):
         self.mode = mode
         self.expected_slot = expected_slot
         self.handshake_mode = handshake_mode
@@ -65,7 +65,16 @@ class FakeS7Server:
             "hardware_version": (1, 0), "firmware_version": (4, 5, 2),
         }
         self.szl_supported = szl_supported
+        # szl_max_part > 0 models a CPU whose SZL data does not fit one PDU: the
+        # list is served in parts of at most this many data bytes, each flagged
+        # 'last data unit = 1' except the final one, and the client must fetch the
+        # rest with SZL-NEXT telegrams carrying the sequence number we hand out.
+        # A real S7-1200 (PDU 240) does exactly this for SZL 0x001C.
+        self.szl_max_part = int(szl_max_part)
+        self._szl_pending: dict[int, bytes] = {}       # seq → remaining list bytes
+        self._szl_seq = 0
         self.szl_reads = 0
+        self.szl_next_reads = 0
         self.dbs: dict[int, bytearray] = {1: bytearray(64)}
         self.reads = 0
         self.writes = 0
@@ -261,11 +270,22 @@ class FakeS7Server:
     def _userdata(self, pdu_ref: bytes, s7: bytes) -> bytes:
         """Answer a read-SZL userdata request (0x0011 module id, 0x001C component
         id). Anything else, or szl_supported=False, gets a userdata error reply."""
-        self.szl_reads += 1
         plen, dlen = struct.unpack(">HH", s7[6:10])
         param = s7[10:10 + plen]
         data = s7[10 + plen:10 + plen + dlen]
         seq = param[7] if len(param) >= 8 else 0
+
+        # SZL-NEXT: 12-byte parameter block echoing our sequence number, empty data.
+        if plen == 12 and len(data) >= 1 and data[0] == 0x0A:
+            self.szl_next_reads += 1
+            remaining = self._szl_pending.pop(seq, None)
+            if remaining is None:
+                rparam = (bytes([0x00, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, seq, 0x00, 0x00]) +
+                          struct.pack(">H", 0xD402))           # unknown sequence
+                return self._s7_userdata(pdu_ref, rparam, bytes([0x0A, 0x00, 0x00, 0x00]))
+            return self._szl_part(pdu_ref, seq, remaining, first=False)
+
+        self.szl_reads += 1
         szl_id = struct.unpack(">H", data[4:6])[0] if len(data) >= 8 else 0
         records: list[bytes] = []
         rec_len = 0
@@ -275,12 +295,19 @@ class FakeS7Server:
             hw = idn.get("hardware_version", (1, 0))
             fw = idn.get("firmware_version", (4, 5, 2))
             mlfb = idn.get("order_number", "").encode("ascii").ljust(20, b"\x00")[:20]
+            # Real CPUs encode the version words as on the wire: index 1 carries the
+            # hardware issue in Ausbg1; index 7 carries 'V'<<8 | major in Ausbg1 and
+            # minor<<8 | patch in Ausbe (snap7 GetOrderCode reads V1/V2/V3 from the
+            # last three bytes of the list — exactly these).
             records.append(struct.pack(">H", 1) + mlfb + struct.pack(">HHH", 0, (hw[0] << 8) | hw[1], 0))
-            records.append(struct.pack(">H", 7) + mlfb + struct.pack(">HHH", 0, (fw[0] << 8) | fw[1], fw[2]))
+            records.append(struct.pack(">H", 6) + mlfb + struct.pack(">HHH", 0, (hw[0] << 8) | hw[1], 0))
+            records.append(struct.pack(">H", 7) + mlfb +
+                           struct.pack(">HHH", 0, (0x56 << 8) | fw[0], (fw[1] << 8) | fw[2]))
         elif self.szl_supported and szl_id == 0x001C:
             rec_len = 34
             idn = self.identity
-            for idx, key in ((1, "plc_name"), (2, "module_name"), (5, "serial_number")):
+            for idx, key in ((1, "plc_name"), (2, "module_name"), (3, "plant_designation"),
+                             (4, "copyright"), (5, "serial_number"), (7, "module_type_name")):
                 text = idn.get(key, "").encode("ascii").ljust(32, b"\x00")[:32]
                 records.append(struct.pack(">H", idx) + text)
         if not records:
@@ -289,8 +316,21 @@ class FakeS7Server:
             rdata = bytes([0x0A, 0x00, 0x00, 0x00])
             return self._s7_userdata(pdu_ref, rparam, rdata)
         body = struct.pack(">HHHH", szl_id, 0, rec_len, len(records)) + b"".join(records)
-        rparam = bytes([0x00, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, seq, 0x00, 0x00, 0x00, 0x00])
-        rdata = bytes([0xFF, 0x09]) + struct.pack(">H", len(body)) + body
+        return self._szl_part(pdu_ref, seq, body, first=True)
+
+    def _szl_part(self, pdu_ref: bytes, seq: int, body: bytes, *, first: bool) -> bytes:
+        """Serve `body` (the SZL list, header included on the first part) either
+        whole or as the next slice of a multi-part transfer."""
+        if self.szl_max_part and len(body) > self.szl_max_part:
+            part, rest = body[:self.szl_max_part], body[self.szl_max_part:]
+            self._szl_seq = (self._szl_seq % 0xFF) + 1
+            out_seq = self._szl_seq
+            self._szl_pending[out_seq] = rest
+            last = 0x01                                       # more follows
+        else:
+            part, out_seq, last = body, seq, 0x00
+        rparam = bytes([0x00, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, out_seq, 0x00, last, 0x00, 0x00])
+        rdata = bytes([0xFF, 0x09]) + struct.pack(">H", len(part)) + part
         return self._s7_userdata(pdu_ref, rparam, rdata)
 
     def _s7_userdata(self, pdu_ref: bytes, param: bytes, data: bytes) -> bytes:

@@ -74,6 +74,7 @@ class S7IdentifyResult:
     evidence: list = field(default_factory=list)
     tx_hex: str = ""
     rx_hex: str = ""
+    szl_frames: dict = field(default_factory=dict)   # "0x0011" → [reply hex, ...] (diagnostics)
 
     @property
     def s7_confirmed(self) -> bool:
@@ -112,6 +113,27 @@ def s7_szl_request(pdu_ref: int, szl_id: int, index: int = 0, seq: int = 0) -> b
     header = (bytes([0x32, 0x07, 0x00, 0x00]) + struct.pack(">H", pdu_ref) +
               struct.pack(">HH", len(param), len(data)))
     return bytes([0x02, 0xF0, 0x80]) + header + param + data
+
+
+def s7_szl_next_request(pdu_ref: int, seq: int) -> bytes:
+    """Continuation of a multi-part SZL read (the snap7 `S7_SZL_NEXT` telegram).
+
+    A CPU whose SZL does not fit one PDU answers the first request with
+    'last data unit = 1' and a sequence number; the client must echo that
+    sequence in a 12-byte parameter block with an empty data part
+    (return code 0x0A "object does not exist", length 0) until the CPU sets
+    'last data unit = 0'. A real S7-1200 negotiates a 240-byte PDU, so its
+    0x001C component list (≈10 × 34 bytes) ALWAYS arrives this way; a client
+    that only reads the first part sees a record count that does not match
+    the bytes present and wrongly concludes the reply is malformed."""
+    param = bytes([0x00, 0x01, 0x12, 0x08, 0x12, 0x44, 0x01, seq & 0xFF, 0x00, 0x00, 0x00, 0x00])
+    data = bytes([0x0A, 0x00, 0x00, 0x00])
+    header = (bytes([0x32, 0x07, 0x00, 0x00]) + struct.pack(">H", pdu_ref) +
+              struct.pack(">HH", len(param), len(data)))
+    return bytes([0x02, 0xF0, 0x80]) + header + param + data
+
+
+MAX_SZL_PARTS = 16          # bound on continuation round-trips (a CPU list is a few PDUs at most)
 
 
 # ── validators (pure) ────────────────────────────────────────────────────────
@@ -184,9 +206,24 @@ def validate_s7_setup_ack(payload: bytes, *, pdu_ref: int) -> dict:
     return {"pdu_size": pdu_size, "amq_caller": amq_caller, "amq_callee": amq_callee}
 
 
-def validate_szl_response(payload: bytes, *, pdu_ref: int, szl_id: int) -> tuple[int, list[bytes]]:
-    """Returns (index, records). Raises on any inconsistency, including a PLC
-    that answers the userdata request with an error (SZL unsupported)."""
+@dataclass
+class SzlPart:
+    """One userdata reply of a (possibly multi-part) SZL read."""
+    seq: int                 # sequence number the CPU wants echoed in the NEXT request
+    more: bool               # 'last data unit' == 0x01 → further parts follow
+    payload: bytes           # list bytes carried by this part (header stripped on the first)
+    index: int = 0           # first part only: SZL index echoed by the CPU
+    rec_len: int = 0         # first part only: bytes per record
+    count: int = 0           # first part only: records in the WHOLE list
+
+
+def validate_szl_part(payload: bytes, *, pdu_ref: int, szl_id: Optional[int] = None,
+                      first: bool = True) -> SzlPart:
+    """Strictly validate one SZL userdata reply. `first=True` expects the 8-byte
+    list header (SZL-ID, index, record length, count) and checks the SZL-ID
+    echo; `first=False` validates a continuation part, whose data is just the
+    next slice of list bytes. Raises on any inconsistency, including a PLC that
+    answers the request with an error (SZL unsupported)."""
     if len(payload) < 3 or payload[0] != 0x02 or payload[1] != 0xF0:
         raise S7IdentifyError("s7_confirmed", "SZL reply is not a COTP data TPDU")
     s7 = payload[3:]
@@ -209,6 +246,7 @@ def validate_szl_response(payload: bytes, *, pdu_ref: int, szl_id: int) -> tuple
     err = struct.unpack(">H", param[10:12])[0]
     if err:
         raise S7IdentifyError("s7_confirmed", f"SZL read refused (error 0x{err:04X}) — CPU does not expose this list")
+    seq, more = param[7], param[9] != 0x00           # param[9]: last data unit (0x00 yes / 0x01 no)
     if len(data) < 4:
         raise S7IdentifyError("s7_confirmed", "SZL data head truncated")
     if data[0] != 0xFF:
@@ -219,15 +257,33 @@ def validate_szl_response(payload: bytes, *, pdu_ref: int, szl_id: int) -> tuple
     body = data[4:]
     if len(body) != length:
         raise S7IdentifyError("s7_confirmed", f"SZL declared {length} data bytes, {len(body)} present")
+    if not first:
+        return SzlPart(seq=seq, more=more, payload=body)
     if length < 8:
         raise S7IdentifyError("s7_confirmed", "SZL body too short for its header")
     r_id, index, rec_len, count = struct.unpack(">HHHH", body[:8])
-    if r_id != szl_id:
+    if szl_id is not None and r_id != szl_id:
         raise S7IdentifyError("s7_confirmed", f"SZL-ID 0x{r_id:04X} echoed instead of 0x{szl_id:04X}")
-    records = body[8:]
-    if rec_len == 0 or rec_len * count != len(records):
-        raise S7IdentifyError("s7_confirmed", f"SZL record length {rec_len} × {count} != {len(records)} bytes")
-    return index, [records[i * rec_len:(i + 1) * rec_len] for i in range(count)]
+    if rec_len == 0:
+        raise S7IdentifyError("s7_confirmed", "SZL record length 0")
+    return SzlPart(seq=seq, more=more, payload=body[8:], index=index, rec_len=rec_len, count=count)
+
+
+def split_szl_records(rec_len: int, count: int, data: bytes) -> list[bytes]:
+    """The whole list must be exactly `count` records of `rec_len` bytes."""
+    if rec_len == 0 or rec_len * count != len(data):
+        raise S7IdentifyError("s7_confirmed", f"SZL record length {rec_len} × {count} != {len(data)} bytes")
+    return [data[i * rec_len:(i + 1) * rec_len] for i in range(count)]
+
+
+def validate_szl_response(payload: bytes, *, pdu_ref: int, szl_id: int) -> tuple[int, list[bytes]]:
+    """Single-frame SZL reply → (index, records). A reply flagged 'more data
+    follows' is refused here; the exchange path (`_read_szl_list`) handles
+    continuation."""
+    part = validate_szl_part(payload, pdu_ref=pdu_ref, szl_id=szl_id, first=True)
+    if part.more:
+        raise S7IdentifyError("s7_confirmed", "SZL reply is multi-part (last data unit = 0) — continuation required")
+    return part.index, split_szl_records(part.rec_len, part.count, part.payload)
 
 
 def _clean(raw: bytes) -> str:
@@ -235,7 +291,14 @@ def _clean(raw: bytes) -> str:
 
 
 def parse_szl_0011(records: list[bytes]) -> dict:
-    """Module identification: index 1 = order number, 6 = basic hardware, 7 = firmware."""
+    """Module identification: index 1 = order number, 6 = basic hardware, 7 = firmware.
+
+    Record = index(2) MlfB(20) BGTyp(2) Ausbg1(2) Ausbe(2). On the wire the
+    firmware record carries Ausbg1 = 'V' (0x56) << 8 | major and
+    Ausbe = minor << 8 | patch — the three bytes snap7's GetOrderCode returns
+    as V1/V2/V3 from the tail of the list. (An earlier reading of this field
+    printed 'V86.4.2' for V4.5.2.) The hardware issue in index 1 is an
+    opaque issue number; it is reported as the CPU sends it."""
     out: dict = {}
     for rec in records:
         if len(rec) < 28:
@@ -245,11 +308,14 @@ def parse_szl_0011(records: list[bytes]) -> dict:
         bgtyp, ausbg1, ausbe = struct.unpack(">HHH", rec[22:28])
         if idx == 0x0001:
             out["order_number"] = mlfb
-            out["hardware_version"] = f"{ausbg1 >> 8}.{ausbg1 & 0xFF}"
+            out["hardware_version"] = str(ausbg1) if ausbg1 < 0x100 else f"{ausbg1 >> 8}.{ausbg1 & 0xFF}"
         elif idx == 0x0006:
             out["basic_hardware"] = mlfb
         elif idx == 0x0007:
-            out["firmware_version"] = f"V{(ausbg1 >> 8) & 0xFF}.{ausbg1 & 0xFF}.{ausbe & 0xFF}"
+            major, minor, patch = ausbg1 & 0xFF, ausbe >> 8, ausbe & 0xFF
+            out["firmware_version"] = f"V{major}.{minor}.{patch}"
+            if (ausbg1 >> 8) not in (0x56, 0x00):          # neither 'V' nor blank: say so
+                out["firmware_version_raw"] = f"0x{ausbg1:04X} 0x{ausbe:04X}"
             out.setdefault("basic_firmware", mlfb)
     return out
 
@@ -291,6 +357,43 @@ async def _read_tpkt(reader: asyncio.StreamReader, timeout: float) -> bytes:
     except asyncio.TimeoutError:
         raise S7IdentifyError("tcp_open", "TPKT body timed out")
     return head + rest
+
+
+def _reply_note(frames: list[str], limit: int = 200) -> str:
+    """Short hex excerpt of the last reply for the operator-facing warning."""
+    if not frames:
+        return " [no reply frame]"
+    h = frames[-1]
+    return f" [reply {h[:limit]}{'…' if len(h) > limit else ''}]"
+
+
+async def _read_szl_list(reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                         pdu_ref: int, szl_id: int, timeout: float,
+                         frames: list[str]) -> tuple[list[bytes], int, int]:
+    """Read one complete SZL list, following 'more data follows' parts with
+    SZL-NEXT telegrams (bounded by MAX_SZL_PARTS). Returns (records, last
+    pdu_ref used, number of parts). Appends every reply frame's hex to
+    `frames`. Read-only: the CPU is asked for lists, nothing is written."""
+    pdu_ref += 1
+    writer.write(tpkt(s7_szl_request(pdu_ref, szl_id)))
+    await writer.drain()
+    reply = await _read_tpkt(reader, timeout)
+    frames.append(reply.hex())
+    first = validate_szl_part(validate_tpkt(reply), pdu_ref=pdu_ref, szl_id=szl_id, first=True)
+    buf = bytearray(first.payload)
+    seq, more, parts = first.seq, first.more, 1
+    while more:
+        if parts >= MAX_SZL_PARTS:
+            raise S7IdentifyError("s7_confirmed", f"more than {MAX_SZL_PARTS} SZL parts — giving up")
+        pdu_ref += 1
+        writer.write(tpkt(s7_szl_next_request(pdu_ref, seq)))
+        await writer.drain()
+        reply = await _read_tpkt(reader, timeout)
+        frames.append(reply.hex())
+        nxt = validate_szl_part(validate_tpkt(reply), pdu_ref=pdu_ref, first=False)
+        buf += nxt.payload
+        seq, more, parts = nxt.seq, nxt.more, parts + 1
+    return split_szl_records(first.rec_len, first.count, bytes(buf)), pdu_ref, parts
 
 
 async def s7_handshake(ip: str, port: int = S7_PORT, rack: int = 0, slot: int = 1, *,
@@ -341,21 +444,30 @@ async def s7_handshake(ip: str, port: int = S7_PORT, rack: int = 0, slot: int = 
             return res
 
         # SZL identity (read-only). A refusal here leaves stage at s7_confirmed.
+        # Every reply frame is kept (hex) so an operator can show us exactly what
+        # the CPU or simulator answered when the identity comes back empty.
         identity: dict = {}
         for szl_id, parser in ((0x0011, parse_szl_0011), (0x001C, parse_szl_001c)):
-            pdu_ref += 1
-            req = tpkt(s7_szl_request(pdu_ref, szl_id))
-            writer.write(req)
-            await writer.drain()
+            frames: list[str] = []
             try:
-                reply = await _read_tpkt(reader, timeout)
-                _, records = validate_szl_response(validate_tpkt(reply), pdu_ref=pdu_ref, szl_id=szl_id)
+                records, pdu_ref, parts = await _read_szl_list(reader, writer, pdu_ref, szl_id,
+                                                               timeout, frames)
+                res.szl_frames[f"0x{szl_id:04X}"] = frames
+                if frames:
+                    res.rx_hex = frames[-1]
                 parsed = parser(records)
                 if parsed:
                     identity.update(parsed)
-                    res.evidence.append(f"SZL 0x{szl_id:04X}: {len(records)} record(s)")
+                    res.evidence.append(f"SZL 0x{szl_id:04X}: {len(records)} record(s)"
+                                        + (f" in {parts} parts" if parts > 1 else ""))
+                else:
+                    res.warnings.append(f"SZL 0x{szl_id:04X}: {len(records)} record(s) but none of the "
+                                        f"known indexes present")
             except S7IdentifyError as e:
-                res.warnings.append(f"SZL 0x{szl_id:04X}: {e.reason}")
+                res.szl_frames[f"0x{szl_id:04X}"] = frames
+                if frames:
+                    res.rx_hex = frames[-1]
+                res.warnings.append(f"SZL 0x{szl_id:04X}: {e.reason}" + _reply_note(frames))
                 if "closed" in e.reason or "timeout" in e.reason:
                     break
         if identity.get("order_number") or identity.get("module_name") or identity.get("plc_name"):
