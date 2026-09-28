@@ -231,7 +231,7 @@ function ControllersTab({ addServerLog }) {
             </div>
           )}
           {(result.detected || []).map((d) => {
-            const badge = controllerTierBadge(d.tier);
+            const badge = controllerTierBadge(d.tier, d);
             const ican = isIcanGateway(d);
             const isOpen = expanded === d.discovery_id;
             const prefill = plcPrefillFromDetection(d);

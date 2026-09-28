@@ -7,7 +7,13 @@
 //   * a discovered device is never projected as online/healthy/configured;
 //   * only Siemens/Modbus results with a backend prefill can open the PLC panel.
 
-export function controllerTierBadge(tier) {
+// `detection` is optional: when the row is a port-only hit (an open port, no protocol
+// exchange) the badge must not advertise the FAMILY's drivability — we do not even know
+// the device is that family yet. Such rows read UNVERIFIED whatever the tier.
+export function controllerTierBadge(tier, detection) {
+  if (detection && (detection.confidence === "port_only" || detection.stage === "port_open")) {
+    return { color: "#f59e0b", label: "UNVERIFIED" };
+  }
   switch (tier) {
     case "REAL": return { color: "var(--green)", label: "DRIVABLE" };
     case "GATED": return { color: "#f59e0b", label: "GATED" };

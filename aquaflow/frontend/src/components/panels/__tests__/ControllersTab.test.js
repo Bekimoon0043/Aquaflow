@@ -51,6 +51,16 @@ describe("controller tier rendering", () => {
     expect(controllerTierBadge("UNSUPPORTED").color).toBe("var(--red)");
   });
 
+  it("a port-only hit reads UNVERIFIED even for a drivable family", () => {
+    // An open 4840 on some Windows PC is not an OPC UA server until a session is
+    // established; the family badge (DRIVABLE) must not be shown for it.
+    const portHit = { tier: "REAL", confidence: "port_only", stage: "port_open" };
+    expect(controllerTierBadge("REAL", portHit)).toEqual({ color: "#f59e0b", label: "UNVERIFIED" });
+    expect(controllerTierBadge("REAL", { tier: "REAL", confidence: "confirmed", stage: "protocol_confirmed" }).label).toBe("DRIVABLE");
+    expect(controllerTierBadge("REAL", { confidence: "confirmed", stage: "port_open" }).label).toBe("UNVERIFIED");
+    expect(controllerTierBadge("UNSUPPORTED", portHit).label).toBe("UNVERIFIED");
+  });
+
   it("labels detection confidence honestly", () => {
     expect(confidenceLabel("confirmed")).toBe("protocol confirmed");
     expect(confidenceLabel("probable")).toBe("probable");
