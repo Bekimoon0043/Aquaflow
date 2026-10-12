@@ -35,8 +35,12 @@ export function poolPerimeterSegments(points = []) {
   }).filter(segment => segment.length > 0.001);
 }
 
-export function poolShapeGeometry(T, points = []) {
-  if (points.length < 3) return null;
+// Flat meshes use rotation.x = -PI/2 (local y → world -z); walls and fixtures put plan y at world +z.
+const toShapePlane = points => points.map(point => ({ x: point.x, y: -point.y }));
+
+export function poolShapeGeometry(T, planPoints = []) {
+  if (planPoints.length < 3) return null;
+  const points = toShapePlane(planPoints);
   const shape = new T.Shape();
   shape.moveTo(points[0].x, points[0].y);
   points.slice(1).forEach(point => shape.lineTo(point.x, point.y));
@@ -56,7 +60,8 @@ const pointInPolygon = (x, y, points) => {
 };
 
 /** Tessellated freeform water plane. Cells are clipped to the supplied basin polygon. */
-export function polygonWaterGeometry(T, points = [], resolution = 96) {
+export function polygonWaterGeometry(T, planPoints = [], resolution = 96) {
+  const points = toShapePlane(planPoints);
   const bounds = poolPolygonBounds(points);
   if (!bounds || bounds.width <= 0 || bounds.length <= 0) return null;
   const nx = Math.max(12, Math.round(resolution * bounds.width / Math.max(bounds.width, bounds.length)));
@@ -93,8 +98,9 @@ export function basinOpening(T, { poolType = 'circular', radius = 6, width = 12,
   const hole = new T.Path();
   if (poolType === 'circular') hole.absarc(0, 0, radius, 0, Math.PI * 2, true);
   else if (poolType === 'freeform' && points.length >= 3) {
-    hole.moveTo(points[0].x, points[0].y);
-    points.slice(1).forEach(point => hole.lineTo(point.x, point.y));
+    const outline = toShapePlane(points);
+    hole.moveTo(outline[0].x, outline[0].y);
+    outline.slice(1).forEach(point => hole.lineTo(point.x, point.y));
     hole.closePath();
   }
   else {
