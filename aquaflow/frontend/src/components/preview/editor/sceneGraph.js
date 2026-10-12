@@ -108,12 +108,39 @@ export class SceneGraph {
     this.layers = new Map();     // id -> {id, name, visible, locked}
     this.selection = new Set();
     this._listeners = new Set();
+    this._batchDepth = 0;
+    this._batchedReason = null;
     this.addLayer("Default", "layer-default");
   }
 
   // ── change notification ───────────────────────────────────────────────────
   subscribe(fn) { this._listeners.add(fn); return () => this._listeners.delete(fn); }
-  _emit(reason) { for (const fn of this._listeners) { try { fn(reason, this); } catch { /* a bad listener must not break the graph */ } } }
+  _emit(reason) {
+    if (this._batchDepth > 0) {
+      this._batchedReason = this._batchedReason || reason || "batch";
+      return;
+    }
+    for (const fn of this._listeners) { try { fn(reason, this); } catch { /* a bad listener must not break the graph */ } }
+  }
+
+  /**
+   * Apply a structural refresh atomically. Importing an Engineering revision can add,
+   * remove and reparent many nodes; subscribers must see one coherent graph rather than
+   * publish every intermediate state back to Engineering.
+   */
+  transaction(fn, reason = "batch") {
+    this._batchDepth += 1;
+    try {
+      return fn(this);
+    } finally {
+      this._batchDepth -= 1;
+      if (this._batchDepth === 0) {
+        const finalReason = reason || this._batchedReason || "batch";
+        this._batchedReason = null;
+        this._emit(finalReason);
+      }
+    }
+  }
 
   // ── layers ────────────────────────────────────────────────────────────────
   addLayer(name, id = null) {
@@ -284,6 +311,30 @@ export class SceneGraph {
     return true;
   }
 
+  setName(id, name) {
+    const n = this.nodes.get(id);
+    if (!n) return false;
+    n.name = String(name ?? "");
+    this._emit("rename");
+    return true;
+  }
+
+  setLocked(id, locked) {
+    const n = this.nodes.get(id);
+    if (!n) return false;
+    n.locked = !!locked;
+    this._emit("lock");
+    return true;
+  }
+
+  setProps(id, patch) {
+    const n = this.nodes.get(id);
+    if (!n || !patch || typeof patch !== "object") return false;
+    n.props = { ...n.props, ...patch };
+    this._emit("props");
+    return true;
+  }
+
   /** Is the node editable? Locked nodes, and children of locked nodes, are not. */
   isLocked(id) {
     const n = this.nodes.get(id);
@@ -422,6 +473,18 @@ export class SceneGraph {
       rootIds: [...this.rootIds],
       layers: [...this.layers.values()],
     };
+  }
+
+  /** Replace graph contents in place so every editor/UI subscription remains valid. */
+  replaceFromJSON(data, { selection = [], reason = "restore" } = {}) {
+    const restored = SceneGraph.fromJSON(data);
+    this.transaction(() => {
+      this.nodes = restored.nodes;
+      this.rootIds = restored.rootIds;
+      this.layers = restored.layers;
+      this.selection = new Set((selection || []).filter(id => this.nodes.has(id)));
+    }, reason);
+    return this;
   }
 
   static fromJSON(data) {

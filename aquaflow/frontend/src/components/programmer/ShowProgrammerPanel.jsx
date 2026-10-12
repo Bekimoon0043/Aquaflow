@@ -17,10 +17,26 @@ import useEngineeringStore from "../../store/engineeringStore";
 import { generateAutoTracks, getEquipmentCategory } from "../../runtime/autoTrackGenerator";
 import { buildRuntimeDeviceGraph, getTrackDevices } from "../../runtime/runtimeDeviceGraph";
 import { useShowStore } from "../../store/showStore";
+import useProjectStore from "../../store/projectStore";
 import AudioWaveform from "./AudioWaveform";
 import BeatMarkerLane from "./BeatMarkerLane";
 // ─── TEAM C: import AI panel (reads from showStore.audioData separately)
-import AIChoreographyPanel from "./AIChoreographyPanel";
+import ShowChoreographyAssistant from "./ShowChoreographyAssistant";
+import ArrayPatternBuilder from "./ArrayPatternBuilder";
+import SiteShowActions from "./SiteShowActions";
+import SiemensShowControls from "./SiemensShowControls";
+import ShowSectionEditor from "./ShowSectionEditor";
+import { arrangeShowBlocks, insertShowSection } from "../../utils/showSections";
+import { useICANPreviewStore } from "../../store/icanPreviewStore";
+import { createDesignShowPreview, createSiteWaterTrack } from "../../utils/siteShowCompiler";
+import { createFourKiloDemoShow } from "../../utils/fourKiloDemoShow";
+import { createICANSiteEngineeringProject } from "../../data/icanSiteEngineeringProject";
+import { createAuroraDemoProject, AURORA_DEMO_ID } from "../../data/auroraDemoProject";
+import { createAuroraDemoShow } from "../../utils/auroraDemoShow";
+import { createFullShowPreview } from "../../utils/fullShowPreview";
+import { PatternBlockInspector, PatternBlockLanes, PatternBlockList } from "./PatternBlocks";
+import { createPatternBlock, getPatternBlocks, patternBlockId, transformPatternBlock, repeatPatternBlock,
+  duplicatePatternBlock, deletePatternBlock, unpackPatternBlock, editPatternClip, standaloneClip, filterPatternClips } from "../../utils/patternBlocks";
 
 // ─── BACKEND API IMPORTS (Team B - Phase 1) ────────────────────────────
 import { 
@@ -275,14 +291,31 @@ export default function ShowProgrammerPanel() {
   // ── existing Team B state ──────────────────────────────────────────────
   const fixtures = useEngineeringStore((s) => s.fixtures);
   const devices  = useShowStore((s) => s.devices);
-  const [timelineClips, setTimelineClips]   = useState([]);
+  const initialProjectState = useProjectStore.getState();
+  const rememberedDraft = initialProjectState.programmer
+    || (initialProjectState.loadRevision === 0
+      ? useICANPreviewStore.getState().programmerDraft
+      : null);
+  const projectLoadRevision = useProjectStore((state) => state.loadRevision);
+  const rememberProjectProgrammer = useProjectStore((state) => state.rememberProgrammer);
+  const [timelineClips, setTimelineClips]   = useState(() => rememberedDraft?.timelineClips || []);
   const [selectedClipId, setSelectedClipId] = useState(null);
-  const [audioFile, setAudioFile]           = useState(null);
-  const [audioBuffer, setAudioBuffer]       = useState(null);
-  const [audioDuration, setAudioDuration]   = useState(120);
-  const [currentTime, setCurrentTime]       = useState(0);
-  const [zoom, setZoom]                     = useState(80);
-  const [beatMarkers, setBeatMarkers]       = useState([]);
+  const [timelineView, setTimelineView] = useState(() => rememberedDraft?.timelineView || "blocks");
+  const [selectedBlockId, setSelectedBlockId] = useState(() => rememberedDraft?.selectedBlockId || null);
+  const [sectionBlockIds, setSectionBlockIds] = useState(() => rememberedDraft?.sectionBlockIds || []);
+  const [editingBlock, setEditingBlock] = useState(null);
+  const patternBlocks = useMemo(() => getPatternBlocks(timelineClips), [timelineClips]);
+  const selectedBlock = patternBlocks.find(b => b.id === selectedBlockId) || patternBlocks[0] || null;
+  useEffect(() => {
+    const available = new Set(patternBlocks.map(b => b.id));
+    setSectionBlockIds(previous => previous.every(id => available.has(id)) ? previous : previous.filter(id => available.has(id)));
+  }, [patternBlocks]);
+  const [audioFile, setAudioFile]           = useState(() => rememberedDraft?.audioFile || null);
+  const [audioBuffer, setAudioBuffer]       = useState(() => rememberedDraft?.audioBuffer || null);
+  const [audioDuration, setAudioDuration]   = useState(() => rememberedDraft?.audioDuration || 120);
+  const [currentTime, setCurrentTime]       = useState(() => rememberedDraft?.currentTime || 0);
+  const [zoom, setZoom]                     = useState(() => rememberedDraft?.zoom || 80);
+  const [beatMarkers, setBeatMarkers]       = useState(() => rememberedDraft?.beatMarkers || []);
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [draggingClip, setDraggingClip]     = useState(null);
   const [resizingClip, setResizingClip]     = useState(null);
@@ -303,9 +336,49 @@ export default function ShowProgrammerPanel() {
   const timelineContainerRef = useRef(null);
 
   // ─── TEAM C: new state ─────────────────────────────────────────────────
-  const bpmFromStore = useShowStore((s) => s.currentShow?.bpm || 128);
-  const [rightTab, setRightTab] = useState("clip"); // clip | ai | cues
-  const [cues, setCues]         = useState([]);
+  const sharedBpm = useShowStore((s) => s.currentShow?.bpm || 128);
+  const bpmFromStore = beatMarkers.find(marker => Number.isFinite(marker.bpm) && marker.bpm > 0)?.bpm || sharedBpm;
+  const [rightTab, setRightTab] = useState(() => rememberedDraft?.rightTab || "blocks");
+  useEffect(() => {
+    const openAI = () => setRightTab("ai");
+    window.addEventListener("aquaflow:open-show-ai", openAI);
+    return () => window.removeEventListener("aquaflow:open-show-ai", openAI);
+  }, []);
+  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
+  const [cues, setCues]         = useState(() => rememberedDraft?.cues || []);
+  useEffect(() => {
+    const draft = { timelineClips, audioFile, audioBuffer, audioDuration, currentTime, zoom, beatMarkers, cues, timelineView, selectedBlockId, sectionBlockIds, rightTab };
+    useICANPreviewStore.getState().rememberProgrammer(draft);
+    rememberProjectProgrammer(draft);
+  }, [timelineClips, audioFile, audioBuffer, audioDuration, currentTime, zoom, beatMarkers, cues, timelineView, selectedBlockId, sectionBlockIds, rightTab, rememberProjectProgrammer]);
+
+  // A project can be opened while this keep-alive workspace is already mounted.
+  // Rehydrate the local editing controls when the shared project document changes;
+  // otherwise the old timeline would remain visible until the application restarts.
+  useEffect(() => {
+    if (!projectLoadRevision) return;
+    const draft = useProjectStore.getState().programmer;
+    if (!draft) {
+      setTimelineClips([]);
+      setBeatMarkers([]);
+      setCues([]);
+      setSelectedClipId(null);
+      setSelectedBlockId(null);
+      setSectionBlockIds([]);
+      return;
+    }
+    setTimelineClips(Array.isArray(draft.timelineClips) ? draft.timelineClips : []);
+    setBeatMarkers(Array.isArray(draft.beatMarkers) ? draft.beatMarkers : []);
+    setCues(Array.isArray(draft.cues) ? draft.cues : []);
+    setAudioDuration(Number(draft.audioDuration) || 120);
+    setCurrentTime(Number(draft.currentTime) || 0);
+    setZoom(Number(draft.zoom) || 80);
+    setTimelineView(draft.timelineView || "blocks");
+    setSelectedBlockId(draft.selectedBlockId || null);
+    setSectionBlockIds(Array.isArray(draft.sectionBlockIds) ? draft.sectionBlockIds : []);
+    setRightTab(draft.rightTab || "blocks");
+    setSelectedClipId(null);
+  }, [projectLoadRevision]);
   const clipboardRef            = useRef(null);
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
@@ -322,12 +395,14 @@ export default function ShowProgrammerPanel() {
   });
   
   // ─── CATEGORY ORDER AND FUNCTION (defined ONCE here) ────────────────────
-  const categoryOrder = ["Lighting", "Pumps", "Motion", "Fire", "Fog", "Lasers", "General"];
+  const categoryOrder = ["Water Outlets", "Lighting", "Pumps", "Valves", "Motion", "Fire", "Fog", "Lasers", "General"];
   
   const getCategoryFromTrack = (track) => {
+    if (track.siteWaterOutlet) return "Water Outlets";
     const type = String(track.type || "").toLowerCase();
     if (type.includes("lighting") || type.includes("rgb")) return "Lighting";
     if (type.includes("pump")) return "Pumps";
+    if (type.includes("solenoid")) return "Valves";
     if (type.includes("motion") || type.includes("pan") || type.includes("tilt") || type.includes("angle")) return "Motion";
     if (type.includes("fire") || type.includes("flame")) return "Fire";
     if (type.includes("fog") || type.includes("mist")) return "Fog";
@@ -498,6 +573,8 @@ export default function ShowProgrammerPanel() {
       const fxLabel = fx.label || fx.name || fx.type || `Item ${index + 1}`;
       const fxType  = String(fx.type || fx.kind || "").toLowerCase();
       const category = getEquipmentCategory(fxType);
+      const siteWaterTrack = createSiteWaterTrack(fx);
+      if (siteWaterTrack) { tracks.push(siteWaterTrack); return; }
       
       // Track type mapping based on category
       if (category === "lighting") {
@@ -558,6 +635,7 @@ export default function ShowProgrammerPanel() {
     // Add generated tracks from store (if any) - these are engineering fixture tracks
     if (generatedTracksFromStore && generatedTracksFromStore.length > 0) {
       for (const genTrack of generatedTracksFromStore) {
+        if (sourceItems.some(f => f.id === genTrack.fixtureId && createSiteWaterTrack(f))) continue;
         // Check if track already exists (avoid duplicates)
         const exists = tracks.some(t => t.id === genTrack.id);
         if (!exists) {
@@ -632,6 +710,7 @@ export default function ShowProgrammerPanel() {
 
   const pushHistory = () => {
     undoStackRef.current.push({
+      sectionBlockIds: [...sectionBlockIds],
       timelineClips: JSON.parse(JSON.stringify(timelineClips)),
       beatMarkers: JSON.parse(JSON.stringify(beatMarkers)),
       cues: JSON.parse(JSON.stringify(cues)),
@@ -644,11 +723,80 @@ export default function ShowProgrammerPanel() {
     }
   };
 
+  const previewWaterTimeline = (clipsToPreview = timelineClips, siteFixtures = fixtures, name = "Water show design") => {
+    try {
+      const pattern = createDesignShowPreview(clipsToPreview, siteFixtures, name);
+      const preview = useICANPreviewStore.getState();
+      preview.load(pattern, 1, audioFile, "show_programmer");
+      preview.play();
+      window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "preview" } }));
+    } catch (error) {
+      notify(error.message, "error");
+    }
+  };
+
+  const previewFullTimeline = (clipsToPreview = timelineClips, designFixtures = fixtures, name = "Fountain show design", previewAudio = audioFile) => {
+    try {
+      const pattern = createFullShowPreview(clipsToPreview, designFixtures, name);
+      const preview = useICANPreviewStore.getState();
+      preview.load(pattern, 1, previewAudio, "show_programmer");
+      preview.play();
+      window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "preview" } }));
+    } catch (error) {
+      notify(error.message, "error");
+    }
+  };
+
+  const loadAuroraDemo = () => {
+    const engineering = useEngineeringStore.getState();
+    const isAurora = engineering.projectId === AURORA_DEMO_ID;
+    if ((timelineClips.length || !isAurora)
+      && !window.confirm(`Load the separate Aurora Theatre demo?${timelineClips.length ? ` This replaces ${timelineClips.length} current show clips.` : ""}${!isAurora ? " The current engineering design will be replaced in the editor." : ""}`)) return;
+    try {
+      const project = isAurora ? engineering.getProjectPayload() : createAuroraDemoProject();
+      const show = createAuroraDemoShow(project);
+      pushHistory();
+      if (!isAurora) engineering.loadProject(project);
+      setTimelineClips(show.clips);
+      setTimelineView("clips");
+      setSelectedClipId(null);
+      setCurrentTime(0);
+      setAudioDuration(Math.max(audioDuration, 24));
+      setHasUnsavedChanges(true);
+      previewFullTimeline(show.clips, project.fixtures, "Aurora Theatre — water, motion and RGB show", null);
+    } catch (error) {
+      notify(error.message, "error");
+    }
+  };
+
+  const loadFourKiloDemo = () => {
+    const engineering = useEngineeringStore.getState();
+    const isFourKilo = engineering.projectId === "ican-4kilo-site-v1"
+      || String(engineering.projectName || "").toLowerCase().includes("4kilo");
+    if ((timelineClips.length || !isFourKilo)
+      && !window.confirm(`Load the 4KILO visual example?${timelineClips.length ? ` This replaces ${timelineClips.length} current show clips.` : ""}${!isFourKilo ? " The current engineering layout will be replaced with the example layout." : ""}`)) return;
+    try {
+      const site = isFourKilo ? engineering : createICANSiteEngineeringProject();
+      const demo = createFourKiloDemoShow(site.fixtures);
+      pushHistory();
+      if (!isFourKilo) engineering.loadProject(site);
+      setTimelineClips(demo.clips);
+      setTimelineView("clips");
+      setSelectedClipId(null);
+      setHasUnsavedChanges(true);
+      previewWaterTimeline(demo.clips, site.fixtures, "4KILO example water dance — design simulation");
+    } catch (error) {
+      notify(error.message, "error");
+    }
+  };
+
   const restoreHistoryState = (snapshot) => {
     setTimelineClips(snapshot.timelineClips || []);
     setBeatMarkers(snapshot.beatMarkers || []);
     setCues(snapshot.cues || []);
+    setSectionBlockIds(snapshot.sectionBlockIds || []);
     setSelectedClipId(null);
+    setEditingBlock(null);
   };
 
   const undoProgramEdit = () => {
@@ -656,6 +804,7 @@ export default function ShowProgrammerPanel() {
     if (!last) return;
 
     redoStackRef.current.push({
+      sectionBlockIds: [...sectionBlockIds],
       timelineClips: JSON.parse(JSON.stringify(timelineClips)),
       beatMarkers: JSON.parse(JSON.stringify(beatMarkers)),
       cues: JSON.parse(JSON.stringify(cues)),
@@ -669,6 +818,7 @@ export default function ShowProgrammerPanel() {
     if (!next) return;
 
     undoStackRef.current.push({
+      sectionBlockIds: [...sectionBlockIds],
       timelineClips: JSON.parse(JSON.stringify(timelineClips)),
       beatMarkers: JSON.parse(JSON.stringify(beatMarkers)),
       cues: JSON.parse(JSON.stringify(cues)),
@@ -711,37 +861,85 @@ export default function ShowProgrammerPanel() {
   };
 
   const updateClip = (clipId, updates) => {
-    setTimelineClips((prev) => prev.map((c) => c.id === clipId ? { ...c, ...updates } : c));
+    setTimelineClips((prev) => editPatternClip(prev, clipId, updates));
   };
 
   const selectedClip = timelineClips.find((c) => c.id === selectedClipId) || null;
 
   const updateSelectedClip = (patch) => {
     if (!selectedClipId) return;
-    setTimelineClips((prev) => prev.map((c) =>
-      c.id === selectedClipId
-        ? { ...c, ...patch, effects: [{ ...(c.effects?.[0] || {}), duration: patch.duration ?? c.duration, params: { ...(c.effects?.[0]?.params || {}), value: patch.value ?? c.value } }] }
-        : c
-    ));
+    pushHistory();
+    setTimelineClips((prev) => editPatternClip(prev, selectedClipId, patch));
   };
 
   const deleteSelectedClip = useCallback(() => {
     if (!selectedClipId) return;
     pushHistory();
-    setTimelineClips((prev) => prev.filter((c) => c.id !== selectedClipId));
+    setTimelineClips((prev) => editPatternClip(prev, selectedClipId, {}, true));
     setSelectedClipId(null);
-  }, [selectedClipId]);
+  }, [selectedClipId, timelineClips, beatMarkers, cues]);
+
+  const selectPatternBlock = id => { setSelectedBlockId(id); setSelectedClipId(null); setRightTab("blocks"); };
+  const applyBlockEdit = operation => {
+    try {
+      const result = operation(timelineClips);
+      pushHistory(); setTimelineClips(result); setHasUnsavedChanges(true);
+      setAudioDuration(previous => Math.max(previous, ...getPatternBlocks(result).map(b => b.endTime)));
+      setEditingBlock(null);
+      return true;
+    } catch (error) { notify(error.message, "warning"); return false; }
+  };
+  const changePatternBlock = (id, changes) => applyBlockEdit(clips => transformPatternBlock(clips, id, changes));
+  const duplicateBlock = id => {
+    let duplicate;
+    if (applyBlockEdit(clips => { duplicate = duplicatePatternBlock(clips, id); return duplicate.clips; })) selectPatternBlock(duplicate.id);
+  };
+  const toggleSectionBlock = id => {
+    setSectionBlockIds(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]);
+    setRightTab("sections");
+  };
+  const insertSection = (section, options) => {
+    let inserted;
+    if (applyBlockEdit(clips => { inserted = insertShowSection(clips, section, fixtures, programmableTracks, options); return inserted.clips; })) {
+      setSectionBlockIds(inserted.ids); setSelectedBlockId(inserted.ids[0]);
+      setTimelineView("blocks"); setRightTab("sections");
+      notify(`Inserted ${inserted.ids.length} independent blocks from “${section.name}”.`, "success");
+    }
+  };
+  const showBlockDetails = () => { setTimelineView("clips"); setRightTab("clip"); setEditingBlock(null); };
+  const editBlockMovement = block => {
+    const recipe = block.recipe || { target: "all_water", patternId: block.members[0].arrayPattern?.patternId || "all_pulse",
+      startTime: block.startTime, stepDuration: 0.5, pulseDuration: 0.4, intensity: 100, repeats: 1, repeatGap: 0,
+      blockSize: 4, customProgram: "all | off", order: "outlet", valveMode: true,
+      selectedFixtureIds: [...new Set(block.members.map(c => c.fixtureId))] };
+    setEditingBlock({ id: block.id, name: block.name, recipe }); setRightTab("patterns");
+  };
+  const rulerLabelStep = [1, 2, 5, 10, 15, 30, 60, 120].find(step => step * zoom >= 80) || 120;
+  const fitPatternShow = () => {
+    const end = Math.max(1, ...patternBlocks.map(b => b.endTime), ...timelineClips.map(c => c.startTime + c.duration));
+    setZoom(Math.max(1, Math.min(240, ((timelineContainerRef.current?.clientWidth || 400) - 20) / (audioFile ? Math.max(end, audioDuration) : end))));
+    if (timelineContainerRef.current) timelineContainerRef.current.scrollLeft = 0;
+  };
 
   // ── existing Team B: audio handlers ────────────────────────────────────
-  const handleAudioUpload = async (e) => {
+  const handleAudioUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    audioElementRef.current?.pause();
     setAudioFile(file);
+  };
+
+  useEffect(() => {
+    if (!audioFile) return;
+    let active = true;
+    setAudioBuffer(null);
+    const file = audioFile;
     const audioUrl = URL.createObjectURL(file);
     const audio = new Audio(audioUrl);
     audioElementRef.current = audio;
-    audio.addEventListener("loadedmetadata", () => { setAudioDuration(audio.duration || 120); });
+    audio.addEventListener("loadedmetadata", () => { if (active && Number.isFinite(audio.duration)) setAudioDuration(audio.duration); });
     audio.addEventListener("timeupdate", () => {
+      if (!active) return;
       const t = audio.currentTime || 0;
       setCurrentTime(t);
       // Push to shared store so PreviewPanel receives the playhead position
@@ -749,11 +947,23 @@ export default function ShowProgrammerPanel() {
         useShowStore.getState().setPlayhead(t);
       }
     });
-    const arrayBuffer  = await file.arrayBuffer();
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const decoded      = await audioContext.decodeAudioData(arrayBuffer);
-    setAudioBuffer(decoded);
-  };
+    (async () => {
+      let audioContext;
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        if (!active) return;
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const decoded = await audioContext.decodeAudioData(arrayBuffer);
+        if (active) { setAudioBuffer(decoded); setAudioDuration(decoded.duration); }
+      } catch (error) {
+        if (active) notify(`Cannot decode music for the waveform: ${error.message}. Choose a PCM WAV.`, "warning");
+      } finally { if (audioContext) await audioContext.close(); }
+    })();
+    return () => {
+      active = false; audio.pause(); audio.removeAttribute("src"); audio.load(); URL.revokeObjectURL(audioUrl);
+      if (audioElementRef.current === audio) audioElementRef.current = null;
+    };
+  }, [audioFile, notify]);
 
   const togglePlayback = useCallback(() => {
     if (!audioElementRef.current) {
@@ -834,6 +1044,12 @@ export default function ShowProgrammerPanel() {
         e.target.isContentEditable
       ) return;
       const ctrl = e.ctrlKey || e.metaKey;
+      if (timelineView === "blocks" && selectedBlock) {
+        if (ctrl && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateBlock(selectedBlock.id); return; }
+        if (["ArrowLeft", "ArrowRight"].includes(e.key) && !ctrl) {
+          e.preventDefault(); changePatternBlock(selectedBlock.id, { startTime: Math.max(0, selectedBlock.startTime + (e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? 1 : 0.1)) }); return;
+        }
+      }
 
       // Space → play/pause
       if (e.key === " " && !ctrl) { e.preventDefault(); togglePlayback(); return; }
@@ -841,6 +1057,7 @@ export default function ShowProgrammerPanel() {
       // Delete / Backspace → delete selected clip
       if ((e.key === "Delete" || e.key === "Backspace") && !ctrl) {
         e.preventDefault(); // prevent browser back-navigation on Backspace
+        if (timelineView === "blocks" && selectedBlock) { applyBlockEdit(clips => deletePatternBlock(clips, selectedBlock.id)); return; }
         deleteSelectedClip(); return;
       }
 
@@ -869,10 +1086,9 @@ export default function ShowProgrammerPanel() {
       // Ctrl+V → paste at current time
       if (ctrl && e.key.toLowerCase() === "v" && clipboardRef.current) {
         const src = clipboardRef.current;
+        pushHistory();
         const pasted = {
-          ...src,
-          id: `clip-${Date.now()}`,
-          startTime: currentTime,
+          ...standaloneClip(src, currentTime),
           name: src.name + " (copy)",
           effects: (src.effects || []).map(ef => ({ ...ef, params: { ...(ef.params || {}) } })),
         };
@@ -884,10 +1100,9 @@ export default function ShowProgrammerPanel() {
       // Ctrl+D → duplicate
       if (ctrl && e.key.toLowerCase() === "d" && selectedClip) {
         e.preventDefault();
+        pushHistory();
         const dup = {
-          ...selectedClip,
-          id: `clip-${Date.now()}`,
-          startTime: selectedClip.startTime + selectedClip.duration + 0.1,
+          ...standaloneClip(selectedClip, selectedClip.startTime + selectedClip.duration + 0.1),
           effects: (selectedClip.effects || []).map(ef => ({ ...ef, params: { ...(ef.params || {}) } })),
         };
         setTimelineClips((prev) => [...prev, dup]);
@@ -911,7 +1126,7 @@ export default function ShowProgrammerPanel() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedClip, currentTime, deleteSelectedClip, togglePlayback]);
+  }, [selectedClip, currentTime, deleteSelectedClip, togglePlayback, timelineView, selectedBlock, timelineClips, sectionBlockIds]);
 
   // ─── LOCAL SAVE / LOAD ─────────────────────────────────────────────────
 const saveLocalProgram = () => {
@@ -947,6 +1162,8 @@ const loadLocalProgram = () => {
   try {
     const payload = JSON.parse(raw);
 
+    pushHistory();
+    setEditingBlock(null);
     setTimelineClips(Array.isArray(payload.timelineClips) ? payload.timelineClips : []);
     setBeatMarkers(Array.isArray(payload.beatMarkers) ? payload.beatMarkers : []);
     setCues(Array.isArray(payload.cues) ? payload.cues : []);
@@ -969,7 +1186,7 @@ const exportProgramJson = () => {
   const estimatedDuration = timelineClips.length
     ? Math.max(
         ...timelineClips.map(
-          (clip) => Number(clip.startTime || 0) + Number(clip.duration || 0)
+          (clip) => Math.max(Number(clip.startTime || 0) + Number(clip.duration || 0), Number(clip.arrayPattern?.sequenceEndTime || 0))
         )
       )
     : 0;
@@ -1019,6 +1236,7 @@ const importProgramJson = async (e) => {
     const payload = JSON.parse(text);
 
     pushHistory();
+    setEditingBlock(null);
     setTimelineClips(Array.isArray(payload.timelineClips) ? payload.timelineClips : []);
     setBeatMarkers(Array.isArray(payload.beatMarkers) ? payload.beatMarkers : []);
     setCues(Array.isArray(payload.cues) ? payload.cues : []);
@@ -1046,6 +1264,7 @@ const clearLocalProgram = () => {
 
   if (!confirmed) return;
   pushHistory();
+  setEditingBlock(null);
 
   setTimelineClips([]);
   setBeatMarkers([]);
@@ -1136,6 +1355,7 @@ const clearLocalProgram = () => {
         pushHistory();
         
         // Restore the saved state
+        setEditingBlock(null);
         setTimelineClips(result.program.timelineClips || []);
         setBeatMarkers(result.program.beatMarkers || []);
         setCues(result.program.cues || []);
@@ -1427,6 +1647,7 @@ const startDryRunPreview = async () => {
 
   // ─── AUTO LOAD SAVED PROGRAM ON STARTUP ────────────────────────────────
   useEffect(() => {
+    if (rememberedDraft) return;
     const raw = localStorage.getItem(SHOW_PROGRAMMER_STORAGE_KEY);
 
     if (!raw) return;
@@ -1482,9 +1703,49 @@ const startDryRunPreview = async () => {
     if (next) handleSeek(next.time);
   };
 
+  const applyArrayPattern = (plan, options = {}) => {
+    if (!plan?.clips?.length) {
+      notify("This array pattern did not create any clips. Check the target and custom stages.", "warning");
+      return;
+    }
+    if (plan.endTime > 600) { notify("Pattern blocks must end within 10 minutes.", "warning"); return; }
+    const targetTrackIds = new Set(plan.clips.map((clip) => clip.trackId));
+    const retained = editingBlock ? deletePatternBlock(timelineClips, editingBlock.id) : options.replaceTarget
+      ? filterPatternClips(timelineClips, clip => !targetTrackIds.has(clip.trackId)) : timelineClips;
+    if (retained.length + plan.clips.length > 20000) { notify("The show would exceed 20,000 clips.", "warning"); return; }
+    const members = createPatternBlock(plan, editingBlock ? { id: editingBlock.id, name: editingBlock.name } : {});
+    pushHistory();
+    setTimelineClips([...retained, ...members].sort((a, b) => a.startTime - b.startTime));
+    setEditingBlock(null); setTimelineView("blocks"); selectPatternBlock(members[0].patternBlockId);
+    setZoom(Math.max(1, Math.min(80, ((timelineContainerRef.current?.clientWidth || 400) - 20) / Math.max(1, plan.endTime, ...getPatternBlocks(retained).map(b => b.endTime)))));
+    setAudioDuration((previous) => Math.max(previous, plan.endTime + 2));
+    setHasUnsavedChanges(true);
+    notify(
+      `${plan.clips.length} clips created across ${plan.fixtures.length} outlets and ${plan.stages.length} stages.`,
+      "success"
+    );
+  };
+
+  const applyChoreography = (proposal, { replace }) => {
+    const retained = replace ? [] : timelineClips;
+    if (retained.length + proposal.clips.length > 20000) { notify("The show would exceed 20,000 clips.", "warning"); return false; }
+    pushHistory();
+    setTimelineClips([...retained, ...proposal.clips].sort((a, b) => a.startTime - b.startTime));
+    if (proposal.music) { setBeatMarkers(proposal.beatMarkers); setCurrentTime(0); audioElementRef.current?.pause(); if (audioElementRef.current) audioElementRef.current.currentTime = 0; }
+    setSectionBlockIds([]); setSelectedBlockId(proposal.clips[0].patternBlockId); setSelectedClipId(null);
+    setEditingBlock(null); setTimelineView("blocks"); setHasUnsavedChanges(true);
+    setAudioDuration(previous => Math.max(previous, proposal.endTime));
+    setZoom(Math.max(1, Math.min(80, ((timelineContainerRef.current?.clientWidth || 400) - 20) / Math.max(1, audioFile ? audioDuration : proposal.endTime))));
+    notify(`${proposal.blockCount} editable choreography blocks applied.`, "success");
+    return true;
+  };
+
   // ─── TEAM C: right panel tabs config ────────────────────────────────────
   const RIGHT_TABS = [
+    { key: "sections", label: "Sections", icon: "▤" },
+    { key: "blocks", label: "Block", icon: "▰" },
     { key: "clip", label: "Clip",  icon: "◈" },
+    { key: "patterns", label: "Arrays", icon: "▦" },
     { key: "ai",   label: "AI",    icon: "✨" },
     { key: "cues", label: "Cues",  icon: "▶" },
   ];
@@ -1604,7 +1865,7 @@ const importFromEngineering = () => {
 };
 
   return (
-    <div style={{ width: "100%", height: "100%", background: "#0b0f14", color: "#d7e3f4", display: "flex", flexDirection: "column" }}>
+    <div style={{ width: "100%", height: "100%", minHeight: 0, overflow: "hidden", background: "#0b0f14", color: "#d7e3f4", display: "flex", flexDirection: "column" }}>
 
       {/* ── HEADER (Team B — unchanged, TEAM C: added timecode) ─────── */}
       <div style={{ height: 48, borderBottom: "1px solid #1d2733", display: "flex", alignItems: "center", padding: "0 16px", background: "#111827", flexShrink: 0 }}>
@@ -1656,9 +1917,27 @@ const importFromEngineering = () => {
       </div>
 
       {/* ── PROFESSIONAL TOOLBAR — TEAM E VISUAL PASS ONLY ───────────── */}
-      <div
+      <div aria-label="Show programming tools" style={{ display: "flex", gap: 5, flexWrap: "wrap", padding: "8px 10px", flexShrink: 0, borderBottom: "1px solid #27394d" }}>
+        <input aria-label="Music for show" type="file" accept="audio/*" onChange={handleAudioUpload} style={{ width: 160, alignSelf: "center", fontSize: 10 }} />
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={togglePlayback}>Play / Pause</button>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={undoProgramEdit}>↶ Undo</button>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={redoProgramEdit}>↷ Redo</button>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={saveLocalProgram}>Save</button>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={loadLocalProgram}>Load</button>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={exportProgramJson}>Export</button>
+        <label style={TOOLBAR_BUTTON_STYLE}>Import<input type="file" accept="application/json" onChange={importProgramJson} style={{ display: "none" }} /></label>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={clearLocalProgram}>Clear</button>
+        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "#6de2ff" }} onClick={() => { setTimelineView("blocks"); setRightTab("blocks"); }}>Pattern Blocks</button>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={showBlockDetails}>Detailed clips</button>
+        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "#91efe4" }} onClick={() => { setTimelineView("blocks"); setEditingBlock(null); setRightTab("sections"); }}>Show Sections</button>
+        <button style={TOOLBAR_BUTTON_STYLE} onClick={fitPatternShow}>Fit show</button>
+        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "#c4b5fd" }} onClick={() => { setEditingBlock(null); setRightTab("patterns"); }}>Array Patterns</button>
+        <button style={TOOLBAR_BUTTON_STYLE} aria-expanded={showAdvancedTools} onClick={() => setShowAdvancedTools(!showAdvancedTools)}>{showAdvancedTools ? "Fewer tools" : "More tools"}</button>
+      </div>
+      {showAdvancedTools && <div
         style={{
-          minHeight: 92,
+          maxHeight: 160,
+          overflowY: "auto",
           borderBottom: "1px solid rgba(148,163,184,0.16)",
           background: "linear-gradient(180deg,#0d1520 0%,#080e18 100%)",
           display: "flex",
@@ -1821,6 +2100,18 @@ const importFromEngineering = () => {
           >
             ✅ Validate Import
           </button>
+          <button
+            onClick={() => setRightTab("patterns")}
+            style={{
+              ...TOOLBAR_BUTTON_STYLE,
+              background: "linear-gradient(135deg,#4c1d95,#6d28d9)",
+              border: "1px solid #8b5cf6",
+              color: "#ede9fe",
+            }}
+            title="Open the array pattern builder for large nozzle groups"
+          >
+            ▦ Array Patterns
+          </button>
         </div>
 
         <div style={PROFESSIONAL_TOOLBAR_GROUP_STYLE}>
@@ -1869,6 +2160,36 @@ const importFromEngineering = () => {
 
         <div style={PROFESSIONAL_TOOLBAR_GROUP_STYLE}>
           <span style={PROFESSIONAL_TOOLBAR_LABEL_STYLE}>Preview</span>
+          <button
+            onClick={loadAuroraDemo}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#412059", color: "#f4d8ff", border: "1px solid #9b55cf" }}
+            title="Load a separate fountain design with jets, arches, moving nozzles and RGB lights, then play its show in 3D."
+          >
+            Aurora Demo → 3D
+          </button>
+          <button
+            onClick={() => previewFullTimeline()}
+            disabled={timelineClips.length === 0}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#18413d", color: "#b8ffdd", border: "1px solid #30a081", opacity: timelineClips.length ? 1 : 0.5 }}
+            title="Play the current water, RGB light and moving-nozzle clips in the 3D design simulation."
+          >
+            Play Full Show in 3D
+          </button>
+          <button
+            onClick={loadFourKiloDemo}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#14384a", color: "#a9edff", border: "1px solid #2383a3" }}
+            title="Load a 4KILO water dance into the timeline and play it in the 3D design simulation. No hardware output."
+          >
+            4KILO Example → 3D
+          </button>
+          <button
+            onClick={() => previewWaterTimeline()}
+            disabled={timelineClips.length === 0}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#103d32", color: "#adf0ce", border: "1px solid #278957", opacity: timelineClips.length ? 1 : 0.5 }}
+            title="Play current water outlet clips on the engineering layout in 3D. Design simulation only."
+          >
+            Play Water Show in 3D
+          </button>
           <button
             onClick={dryRunPreviewActive ? stopDryRunPreview : startDryRunPreview}
             disabled={isBackendAction}
@@ -1929,7 +2250,7 @@ const importFromEngineering = () => {
             />
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ─── PROGRAM LIST MODAL (Team B - Phase 1) ──────────────────────── */}
       {showProgramList && (
@@ -2148,10 +2469,13 @@ const importFromEngineering = () => {
 
 
       {/* ── BODY ─────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
 
         {/* ── TRACK LIST — enhanced UX for large equipment counts ───── */}
-        <div style={{ width: 320, borderRight: "1px solid #1d2733", overflowY: "auto", background: "#0f1722", display: "flex", flexDirection: "column" }}>
+        {timelineView === "blocks" && <PatternBlockList blocks={patternBlocks} selectedId={selectedBlock?.id} onSelect={selectPatternBlock}
+          checkedIds={sectionBlockIds} onToggle={toggleSectionBlock}
+          onCreate={() => { setEditingBlock(null); setRightTab("patterns"); }} onDetails={showBlockDetails} />}
+        <div style={{ width: 320, borderRight: "1px solid #1d2733", overflowY: "auto", background: "#0f1722", display: timelineView === "clips" ? "flex" : "none", flexDirection: "column" }}>
           {/* Header with search + filter + dense toggle */}
           <div style={{ padding: "10px 14px", borderBottom: "1px solid #1d2733", position: "sticky", top: 0, background: "#111827", zIndex: 10, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#8fa3bf" }}>
@@ -2504,7 +2828,7 @@ const importFromEngineering = () => {
             const mouseTime = (mouseX + container.scrollLeft) / zoom;
 
             const delta = e.deltaY > 0 ? -10 : 10;
-            const newZoom = Math.max(40, Math.min(240, zoom + delta));
+            const newZoom = Math.max(1, Math.min(240, zoom + delta));
 
             // Center zoom around mouse
             const newScrollLeft = (mouseTime * newZoom) - mouseX;
@@ -2561,6 +2885,7 @@ const importFromEngineering = () => {
 
           {/* TIME RULER — TEAM E PROFESSIONAL VISUAL PASS */}
           <div
+            aria-label="Show time ruler"
             style={{
               height: 46,
               borderBottom: "1px solid rgba(148,163,184,0.22)",
@@ -2575,7 +2900,8 @@ const importFromEngineering = () => {
             }}
           >
             {Array.from({ length: Math.ceil(audioDuration) + 1 }).map((_, i) => {
-              const isMajor = i % 5 === 0;
+              const isMajor = i % rulerLabelStep === 0;
+              if (!isMajor && i % Math.max(1, Math.ceil(8 / zoom)) !== 0) return null;
 
               return (
                 <div
@@ -2604,6 +2930,7 @@ const importFromEngineering = () => {
                   />
                   {isMajor && (
                     <span
+                      data-time={i}
                       style={{
                         fontSize: 11,
                         color: "#cbd5e1",
@@ -2611,6 +2938,7 @@ const importFromEngineering = () => {
                         marginTop: 1,
                         fontFamily: "monospace",
                         fontWeight: 800,
+                        whiteSpace: "nowrap",
                         textShadow: "0 0 10px rgba(56,189,248,0.22)",
                       }}
                     >
@@ -2665,8 +2993,10 @@ const importFromEngineering = () => {
           )}
 
           {/* TRACK ROWS (Team B — unchanged) */}
+          {timelineView === "blocks" && <PatternBlockLanes blocks={patternBlocks} zoom={zoom} duration={Math.max(audioDuration, ...patternBlocks.map(b => b.endTime))}
+            selectedId={selectedBlock?.id} onSelect={selectPatternBlock} onChange={changePatternBlock} />}
           <div>
-            {filteredTracks.map((track) => (
+            {filteredTracks.filter(track => timelineView === "clips" || timelineClips.some(c => c.trackId === track.id && !patternBlockId(c))).map((track) => (
               <div
                 key={track.id}
                 onClick={(e) => {
@@ -2734,7 +3064,7 @@ const importFromEngineering = () => {
                   }
                   return lines;
                 })()}
-                {timelineClips.filter((c) => c.trackId === track.id).map((clip) => (
+                {timelineClips.filter((c) => c.trackId === track.id && (timelineView === "clips" || !patternBlockId(c))).map((clip) => (
                                                       <div
                     key={clip.id}
                     onMouseDown={(e) => {
@@ -2817,7 +3147,7 @@ const importFromEngineering = () => {
         </div>
 
         {/* ─── TEAM C: tabbed right panel ─────────────────────────────── */}
-        <div style={{ width: 320, borderLeft: "1px solid #1d2733", background: "#0f1722", display: "flex", flexDirection: "column" }}>
+        <div style={{ width: 320, flexShrink: 0, minHeight: 0, borderLeft: "1px solid #1d2733", background: "#0f1722", display: "flex", flexDirection: "column" }}>
 
           {/* Tab bar */}
           <div style={{ display: "flex", borderBottom: "1px solid #1d2733", background: "#111827", flexShrink: 0 }}>
@@ -2835,6 +3165,27 @@ const importFromEngineering = () => {
           </div>
 
           {/* ── Clip tab: enhanced inspector ─────────────────────────── */}
+          {rightTab === "blocks" && <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+            <details open={!selectedBlock}>
+              <summary style={{ padding: 12, cursor: "pointer", color: "#9ce7fc", fontSize: 12 }}>3D preview / site controls</summary>
+              <SiteShowActions clips={timelineClips} fixtures={fixtures} audioFile={audioFile} />
+            </details>
+            <PatternBlockInspector block={selectedBlock} currentTime={currentTime} bpm={bpmFromStore} onChange={changePatternBlock}
+              onRepeat={(id, cycles) => applyBlockEdit(clips => repeatPatternBlock(clips, id, cycles, fixtures, programmableTracks))}
+              onDuplicate={duplicateBlock} onDelete={id => applyBlockEdit(clips => deletePatternBlock(clips, id))}
+              onUnpack={id => { if (applyBlockEdit(clips => unpackPatternBlock(clips, id))) showBlockDetails(); }}
+              onEditMovement={editBlockMovement} onDetails={showBlockDetails} />
+          </div>}
+          {rightTab === "sections" && <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+            <details>
+              <summary style={{ padding: 12, cursor: "pointer", color: "#9ce7fc", fontSize: 12 }}>3D preview / site controls</summary>
+              <SiteShowActions clips={timelineClips} fixtures={fixtures} audioFile={audioFile} />
+            </details>
+            <ShowSectionEditor clips={timelineClips} blocks={patternBlocks} selectedIds={sectionBlockIds}
+              onSelection={setSectionBlockIds} currentTime={currentTime} notify={notify}
+              onArrange={(ids, options) => applyBlockEdit(clips => arrangeShowBlocks(clips, ids, options))}
+              onInsert={insertSection} />
+          </div>}
           {rightTab === "clip" && (
             <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
               {selectedClip ? (
@@ -3094,10 +3445,31 @@ const importFromEngineering = () => {
             </div>
           )}
 
+          {rightTab === "patterns" && (
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+            <SiemensShowControls clips={timelineClips} onLoadExample={clips => {
+              pushHistory(); setTimelineClips(clips); setTimelineView("clips");
+              setCurrentTime(0); setSelectedClipId(clips[0]?.id || null); setHasUnsavedChanges(true);
+            }} />
+            <SiteShowActions clips={timelineClips} fixtures={fixtures} audioFile={audioFile} />
+            <ArrayPatternBuilder
+              editingBlock={editingBlock}
+              onCancelEdit={() => { setEditingBlock(null); setRightTab("blocks"); }}
+              fixtures={fixtures}
+              tracks={programmableTracks}
+              currentTime={currentTime}
+              bpm={bpmFromStore}
+              onApply={applyArrayPattern}
+            />
+            </div>
+          )}
+
           {/* ── AI tab: full AI choreography panel ───────────────────── */}
           {rightTab === "ai" && (
             <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-              <AIChoreographyPanel />
+              <ShowChoreographyAssistant fixtures={fixtures} tracks={programmableTracks} audioFile={audioFile}
+                onMusicFile={handleAudioUpload} onApply={applyChoreography}
+                timelineEnd={Math.max(0, ...patternBlocks.map(b => b.endTime), ...timelineClips.map(c => c.startTime + c.duration))} />
             </div>
           )}
 
@@ -3169,7 +3541,7 @@ const importFromEngineering = () => {
             )}
             <span style={{ fontFamily: "monospace", color: "#8fa3bf" }}>{bpmFromStore} BPM</span>
             <span style={{ color: "#1a2a3a" }}>|</span>
-            <span style={{ fontFamily: "monospace", color: "#8fa3bf" }}>{fmtTC(audioDuration)} total</span>
+            <span style={{ fontFamily: "monospace", color: "#8fa3bf" }}>{fmtTC(audioDuration)} {audioFile ? "source music" : "total"}{audioFile && patternBlocks.length > 0 ? ` · ${fmtTC(Math.max(...patternBlocks.map(block => block.endTime)))} water dance` : ""}</span>
           </div>
         </div>
 

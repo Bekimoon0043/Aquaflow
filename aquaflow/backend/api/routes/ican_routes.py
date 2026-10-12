@@ -21,6 +21,11 @@ from engine.ican_manual_patterns import (
 )
 from engine.ican_mapping import ChannelMap
 from engine.ican_site_demo import ICANSiteDemo, SiteDemoStartError
+from engine.ican_site_pump_test import (
+    SITE_PUMP_TEST_DURATION_S,
+    SITE_PUMP_TEST_EVENTS,
+    SITE_PUMP_TEST_SCHEDULE,
+)
 from engine.ican_site_choreography import STYLES, generate_site_pattern
 from engine.ican_legacy_importer import LegacyImportError, import_legacy_programs
 
@@ -40,6 +45,7 @@ def _map() -> ChannelMap:
 # manager only ever transmits the SAFE probe until output is explicitly enabled.
 _conn: Optional[ICANConnection] = None
 _site_demo: Optional[ICANSiteDemo] = None
+_site_pump_test: Optional[ICANSiteDemo] = None
 _manual_pattern_runner: Optional[ICANManualPatternRunner] = None
 _manual_pattern_store: Optional[ManualPatternStore] = None
 
@@ -56,6 +62,16 @@ def _demo() -> ICANSiteDemo:
     if _site_demo is None:
         _site_demo = ICANSiteDemo()
     return _site_demo
+
+
+def _pump_test() -> ICANSiteDemo:
+    global _site_pump_test
+    if _site_pump_test is None:
+        _site_pump_test = ICANSiteDemo(
+            events=SITE_PUMP_TEST_EVENTS,
+            duration_s=SITE_PUMP_TEST_DURATION_S,
+        )
+    return _site_pump_test
 
 
 def _manual_runner() -> ICANManualPatternRunner:
@@ -110,6 +126,7 @@ async def status():
 async def connect(req: ManualConnect):
     """Manual override: connect to an explicit gateway IP/port (read-only verify)."""
     await _demo().stop("reconnected")
+    await _pump_test().stop("reconnected")
     await _manual_runner().stop("reconnected")
     m = _manager()
     m.cfg.gateway_ip = req.gateway_ip
@@ -129,6 +146,7 @@ async def connect(req: ManualConnect):
 async def auto_connect(req: DiscoverRequest):
     """Discover then connect in one call. Emits no output."""
     await _demo().stop("reconnected")
+    await _pump_test().stop("reconnected")
     await _manual_runner().stop("reconnected")
     m = _manager()
     m.cfg.gateway_port = req.gateway_port
@@ -152,6 +170,7 @@ async def probe():
 async def disconnect():
     m = _manager()
     await _demo().stop("disconnected")
+    await _pump_test().stop("disconnected")
     await _manual_runner().stop("disconnected")
     await m.blackout()
     await m.close()
@@ -181,6 +200,7 @@ async def start_site_demo():
     """Start the one-minute choreography captured from the original site software."""
     try:
         await _manual_runner().stop("replaced")
+        await _pump_test().stop("replaced")
         return await _demo().start(_manager())
     except SiteDemoStartError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -194,9 +214,37 @@ async def stop_site_demo():
     return state
 
 
+# Four-minute water-function observation test. The recovered controller exposes one
+# command for the four middle motors, not four independent motor commands.
+@router.get("/pump-test/status")
+async def site_pump_test_status():
+    return {**_pump_test().status(), "schedule": list(SITE_PUMP_TEST_SCHEDULE)}
+
+
+@router.post("/pump-test/start")
+async def start_site_pump_test():
+    try:
+        await _demo().stop("replaced")
+        await _manual_runner().stop("replaced")
+        return {
+            **(await _pump_test().start(_manager())),
+            "schedule": list(SITE_PUMP_TEST_SCHEDULE),
+        }
+    except SiteDemoStartError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/pump-test/stop")
+async def stop_site_pump_test():
+    state = await _pump_test().stop("stopped")
+    await _manager().blackout()
+    return {**state, "schedule": list(SITE_PUMP_TEST_SCHEDULE)}
+
+
 async def shutdown_ican():
     """Application shutdown hook: stop the site demo, blackout, then release UDP 2002."""
     await _demo().stop("shutdown")
+    await _pump_test().stop("shutdown")
     await _manual_runner().stop("shutdown")
     if _conn is not None:
         await _conn.blackout()
@@ -280,6 +328,7 @@ async def run_manual_pattern(req: ManualPatternRunRequest):
             detail=f'manual hardware playback requires confirm="{MANUAL_RUN_CONFIRMATION}"',
         )
     await _demo().stop("replaced")
+    await _pump_test().stop("replaced")
     try:
         return await _manual_runner().start(_manager(), req.pattern, req.repeat)
     except ManualPatternError as exc:
@@ -570,6 +619,7 @@ async def stop_output():
     """Blackout every attached channel. Never gated — stopping is always allowed."""
     from app_state import protocol_bus
     await _demo().stop("stopped")
+    await _pump_test().stop("stopped")
     await _manual_runner().stop("stopped")
     await protocol_bus.blackout()
     await _manager().blackout()
@@ -594,6 +644,7 @@ async def arm_output(req: ArmRequest):
         )
     if not req.enabled:
         await _demo().stop("disarmed")
+        await _pump_test().stop("disarmed")
         await _manual_runner().stop("disarmed")
     m.enable_output(bool(req.enabled))
     if not req.enabled:

@@ -3,6 +3,7 @@ import { Component } from "react";
 import { WebSocketProvider } from "./hooks/WebSocketContext";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useServerShowSync } from "./hooks/useServerShowSync";
+import { useICANPreviewClock } from "./hooks/useICANPreviewClock";
 import TopBar from "./components/TopBar";
 import NodeEditor from "./components/nodes/NodeEditor";
 import Timeline from "./components/timeline/Timeline";
@@ -43,7 +44,7 @@ const KeyframeEditor = lazy(() => import("./components/timeline/KeyframeEditor")
 const PoolGeometryDesigner = lazy(() => import("./components/panels/PoolGeometryDesigner"));
 const PatternDesignerPanel = lazy(() => import("./components/panels/PatternDesignerPanel"));
 const Export3DPanel = lazy(() => import("./components/panels/Export3DPanel"));
-const ShowProgrammerPanel = lazy(() => import("./components/programmer/ShowProgrammerPanel"));
+const ShowProgrammerPanel = lazy(() => import("./components/programmer/studio/ShowStudio"));
 const FountainControlPanel = lazy(() => import("./components/panels/FountainControlPanel"));
 import ResizeHandle from "./components/layout/ResizeHandle";
 import { useResizableLayout } from "./components/layout/useResizableLayout";
@@ -53,11 +54,14 @@ import CommissioningBanner from "./components/CommissioningBanner";
 import LogPanel from "./components/LogPanel";
 import ShowBrowser from "./components/ShowBrowser";
 import { useShowStore } from "./store/showStore";
+import useProjectStore from "./store/projectStore";
 import "./styles/globals.css";
+import PanelErrorBoundary from "./components/PanelErrorBoundary";
 
 
 
 function StudioApp() {
+  useICANPreviewClock();
   // Panel sizes are now draggable and persisted, rather than the frozen literal this
   // used to be. Defaults are unchanged (260 / 300 / 280), so a first run looks identical.
   const { layout, resize, beginDrag, endDrag, resetPanel } = useResizableLayout();
@@ -67,7 +71,30 @@ function StudioApp() {
   const centerRef = useRef(null);
   const workspacePx = () => workspaceRef.current?.clientWidth || 0;
   const centerHeightPx = () => centerRef.current?.clientHeight || 0;
-  const [activePanel, setActivePanel] = useState("nodes");
+  // Workspace navigation is part of the project document. Keeping it in a shared
+  // store lets Save/Open restore the designer's working context and gives every
+  // workspace one navigation authority instead of isolated component state.
+  const activePanel = useProjectStore((state) => state.workspace.activePanel);
+  const setActivePanel = useProjectStore((state) => state.setActivePanel);
+  // Keep a panel mounted after its first visit. PLC verification/arming, selected
+  // Siemens sites, show-programmer drafts, undo history and viewport context are
+  // workspace state; changing tools must not silently destroy that state.
+  const visitedPanelsRef = useRef(new Set([activePanel]));
+  visitedPanelsRef.current.add(activePanel);
+  const keepAlivePanel = (panel, content) => visitedPanelsRef.current.has(panel) ? (
+    <div
+      key={panel}
+      className="workspace-panel-slot"
+      hidden={activePanel !== panel}
+      aria-hidden={activePanel !== panel}
+    >
+      {content}
+    </div>
+  ) : null;
+  useEffect(() => {
+    try { window.sessionStorage.setItem("aquaflow.activePanel", activePanel); }
+    catch {}
+  }, [activePanel]);
   // AF-DISC — Device Discovery can hand the operator to the PLC panel (with a
   // prefill) or to Fountain Control. Navigation only: nothing connects or arms.
   useEffect(() => {
@@ -78,6 +105,7 @@ function StudioApp() {
   const [showLogs, setShowLogs] = useState(false);
   const [showBrowser, setShowBrowser] = useState(null);
   const { isDirty } = useShowStore();
+  const projectDirty = useProjectStore((state) => state.dirty);
   const { lastSaved } = useAutoSave();
   useServerShowSync();
 
@@ -91,17 +119,27 @@ function StudioApp() {
         setActivePanel={setActivePanel}
         onToggleLogs={() => setShowLogs((v) => !v)}
         onOpenBrowser={(mode) => setShowBrowser(mode)}
-        isDirty={isDirty}
+        isDirty={isDirty || projectDirty}
         lastSaved={lastSaved}
       />
       <div className={`workspace${activePanel === "geometry" ? " engineering-workspace" : ""}`} ref={workspaceRef}>
-        {activePanel === "geometry" ? (
-          <div className="engineering-workspace-content">
+        {visitedPanelsRef.current.has("geometry") && (
+          <div className="engineering-workspace-content" hidden={activePanel !== "geometry"} aria-hidden={activePanel !== "geometry"}>
             <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
               <PoolGeometryDesigner />
             </Suspense>
           </div>
-        ) : (<>
+        )}
+        {visitedPanelsRef.current.has("show_programmer") && (
+          <div className="engineering-workspace-content" hidden={activePanel !== "show_programmer"} aria-hidden={activePanel !== "show_programmer"}>
+            <PanelErrorBoundary name="Show Programming">
+              <Suspense fallback={<div style={{ padding: 24 }}>Loading Show Programming…</div>}>
+                <ShowProgrammerPanel />
+              </Suspense>
+            </PanelErrorBoundary>
+          </div>
+        )}
+        <div className="standard-workspace-content" hidden={activePanel === "geometry" || activePanel === "show_programmer"} aria-hidden={activePanel === "geometry" || activePanel === "show_programmer"}>
         <DevicePanel width={layout.leftWidth} />
         <ResizeHandle
           axis="x"
@@ -116,41 +154,41 @@ function StudioApp() {
         <div className="center-stack" ref={centerRef}>
           <div className="editor-area">
            <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
-            {activePanel === "nodes"        && <NodeEditor />}
-            {activePanel === "preview"      && <PreviewPanel />}
-            {activePanel === "ai"           && <AIPanel />}
-            {activePanel === "devices"      && <DeviceDiscoveryPanel />}
-            {activePanel === "fountain"     && <FountainControlPanel />}
-            {activePanel === "audio"        && <AudioPanel />}
-            {activePanel === "plc"          && <PLCPanel />}
-            {activePanel === "scheduler"    && <SchedulerPanel />}
-            {activePanel === "safety"       && <SafetyMonitorPanel />}
-            {activePanel === "operator"     && <OperatorPanel />}
-            {activePanel === "diagnostics"  && <DiagnosticsPanel />}
-            {activePanel === "dependencies" && <DependencyGraphPanel />}
-            {activePanel === "validation"   && <RealtimeValidationPanel />}
-            {activePanel === "wind"         && <WindDriftPanel />}
-            {activePanel === "engtools"     && <EngineeringToolsPanel />}
-            {activePanel === "mobilemon"    && <MobileMonitorPanel />}
-            {activePanel === "collab"       && <CollaborationPanel />}
-            {activePanel === "envmaterial"  && <EnvironmentMaterialPanel />}
-            {activePanel === "academy"      && <TrainingAcademyPanel />}
-            {activePanel === "docs"         && <DocumentationPanel />}
-            {activePanel === "twin"         && <DigitalTwinPanel />}
-            {activePanel === "optimize"     && <OptimizationPanel />}
-            {activePanel === "adaptation"   && <AdaptationPanel />}
-            {activePanel === "fleet"        && <FleetPanel />}
-            {activePanel === "cloud"        && <CloudPanel />}
-            {activePanel === "generative"   && <GenerativeDesignerPanel />}
-            {activePanel === "compile"      && <CompilePanel />}
-            {activePanel === "presets"      && <PresetBrowser />}
-            {activePanel === "calibration"  && <CalibrationPanel />}
-            {activePanel === "keyframes"    && <KeyframeEditor durationMs={8000} />}
-            {activePanel === "patterns" && <PatternDesignerPanel />}
-            {activePanel === "show_programmer" && <ShowProgrammerPanel />}
-            {activePanel === "export3d"     && <Export3DPanel />}
+            {keepAlivePanel("nodes", <NodeEditor />)}
+            {keepAlivePanel("preview", <PreviewPanel />)}
+            {keepAlivePanel("ai", <AIPanel />)}
+            {keepAlivePanel("devices", <DeviceDiscoveryPanel />)}
+            {keepAlivePanel("fountain", <FountainControlPanel />)}
+            {keepAlivePanel("audio", <AudioPanel />)}
+            {keepAlivePanel("plc", <PLCPanel />)}
+            {keepAlivePanel("scheduler", <SchedulerPanel />)}
+            {keepAlivePanel("safety", <SafetyMonitorPanel />)}
+            {keepAlivePanel("operator", <OperatorPanel />)}
+            {keepAlivePanel("diagnostics", <DiagnosticsPanel />)}
+            {keepAlivePanel("dependencies", <DependencyGraphPanel />)}
+            {keepAlivePanel("validation", <RealtimeValidationPanel />)}
+            {keepAlivePanel("wind", <WindDriftPanel />)}
+            {keepAlivePanel("engtools", <EngineeringToolsPanel />)}
+            {keepAlivePanel("mobilemon", <MobileMonitorPanel />)}
+            {keepAlivePanel("collab", <CollaborationPanel />)}
+            {keepAlivePanel("envmaterial", <EnvironmentMaterialPanel />)}
+            {keepAlivePanel("academy", <TrainingAcademyPanel />)}
+            {keepAlivePanel("docs", <DocumentationPanel />)}
+            {keepAlivePanel("twin", <DigitalTwinPanel />)}
+            {keepAlivePanel("optimize", <OptimizationPanel />)}
+            {keepAlivePanel("adaptation", <AdaptationPanel />)}
+            {keepAlivePanel("fleet", <FleetPanel />)}
+            {keepAlivePanel("cloud", <CloudPanel />)}
+            {keepAlivePanel("generative", <GenerativeDesignerPanel />)}
+            {keepAlivePanel("compile", <CompilePanel />)}
+            {keepAlivePanel("presets", <PresetBrowser />)}
+            {keepAlivePanel("calibration", <CalibrationPanel />)}
+            {keepAlivePanel("keyframes", <KeyframeEditor durationMs={8000} />)}
+            {keepAlivePanel("patterns", <PatternDesignerPanel />)}
+            {keepAlivePanel("export3d", <Export3DPanel />)}
            </Suspense>
           </div>
+          <div className="workspace-timeline-slot" hidden={activePanel === "show_programmer"} aria-hidden={activePanel === "show_programmer"}>
           <ResizeHandle
             axis="y"
             title="Drag to resize the timeline · double-click to reset"
@@ -164,6 +202,7 @@ function StudioApp() {
             })}
           />
           <Timeline height={layout.timelineHeight} />
+          </div>
         </div>
         <ResizeHandle
           axis="x"
@@ -177,7 +216,7 @@ function StudioApp() {
           })}
         />
         <InspectorPanel width={layout.rightWidth} />
-        </>)}
+        </div>
       </div>
       {showLogs && <LogPanel onClose={() => setShowLogs(false)} />}
       {showBrowser && <ShowBrowser mode={showBrowser} onClose={() => setShowBrowser(null)} />}

@@ -28,6 +28,8 @@ export default function NodeEditor() {
     selectNode,
     moveNode,
     addNode,
+    removeNode,
+    duplicateNode,
     addConnection,
     beginHistoryTransaction,
     commitHistoryTransaction,
@@ -82,6 +84,80 @@ export default function NodeEditor() {
     addNode(type, pos.x, pos.y);
     setToolMode("select");
   }, [addNode, getViewportCenterWorld]);
+
+  const frameNodes = useCallback(() => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || !nodes.length) {
+      setView(DEFAULT_VIEW);
+      return;
+    }
+    const targets = selectedNodeId
+      ? nodes.filter((node) => node.id === selectedNodeId)
+      : nodes;
+    const minX = Math.min(...targets.map((node) => node.x));
+    const minY = Math.min(...targets.map((node) => node.y));
+    const maxX = Math.max(...targets.map((node) => node.x + node.width));
+    const maxY = Math.max(...targets.map((node) => node.y + node.height));
+    const contentWidth = Math.max(1, maxX - minX);
+    const contentHeight = Math.max(1, maxY - minY);
+    const scale = Math.max(0.2, Math.min(2.5, Math.min((rect.width - 120) / contentWidth, (rect.height - 120) / contentHeight)));
+    setView({
+      scale,
+      x: rect.width / 2 - ((minX + maxX) / 2) * scale,
+      y: rect.height / 2 - ((minY + maxY) / 2) * scale,
+    });
+  }, [nodes, selectedNodeId]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const target = event.target;
+      if (target?.closest?.("input, textarea, select, [contenteditable='true']")) return;
+      if (event.defaultPrevented) return;
+
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedNodeId) {
+        event.preventDefault();
+        removeNode(selectedNodeId);
+        addServerLog({ level: "warn", msg: "Selected node deleted" });
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && selectedNodeId) {
+        event.preventDefault();
+        duplicateNode(selectedNodeId);
+        addServerLog({ level: "info", msg: "Selected node duplicated" });
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        frameNodes();
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        setView(DEFAULT_VIEW);
+        return;
+      }
+      if (event.key === "Escape") {
+        setToolMode("select");
+        setPendingConn(null);
+        setContextMenu(null);
+        selectNode(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    const onEditCommand = (event) => {
+      if (event.detail?.command === "delete" && selectedNodeId) {
+        removeNode(selectedNodeId);
+        addServerLog({ level: "warn", msg: "Selected node deleted" });
+        event.detail.handled = true;
+      }
+      if (event.detail?.command === "deselect") { selectNode(null); event.detail.handled = true; }
+    };
+    window.addEventListener("aquaflow:edit-command", onEditCommand);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("aquaflow:edit-command", onEditCommand);
+    };
+  }, [addServerLog, duplicateNode, frameNodes, removeNode, selectNode, selectedNodeId]);
 
   useEffect(() => {
     const onAddNode = () => addNodeAtCenter("pump");
@@ -349,7 +425,7 @@ export default function NodeEditor() {
         background: "var(--bg-raised)", border: "1px solid var(--border)",
         padding: "4px 8px", borderRadius: "var(--radius-sm)",
       }}>
-        {Math.round(view.scale * 100)}%
+        {Math.round(view.scale * 100)}% · F frame · Home reset · Del delete · Ctrl+D duplicate
       </div>
 
       <div style={{

@@ -11,7 +11,7 @@ import {
   undoEngineeringHistory,
   redoEngineeringHistory,
 } from "../engineeringHistory.js";
-import { normalizeEngineeringProject, selectEngineeringPipes } from "../engineeringProject.js";
+import { normalizeEngineeringProject, parseEngineeringProjectFile, selectEngineeringPipes } from "../engineeringProject.js";
 import {
   BAR_TO_METRES_WATER,
   buildHydraulicPreviewPayload,
@@ -73,6 +73,27 @@ describe("pipe synchronization", () => {
     expect(selectEngineeringPipes({ manualPipes: [{ id: "manual" }], pipes: [{ id: "legacy" }] })[0].id).toBe("manual");
     expect(selectEngineeringPipes({ manualPipes: [], pipes: [{ id: "legacy" }] })[0].id).toBe("legacy");
     expect(normalizeEngineeringProject({ manualPipes: [], pipes: [{ id: "legacy" }] }).manualPipes[0].id).toBe("legacy");
+  });
+});
+
+describe("site surface persistence", () => {
+  it("preserves land geometry from both serialized and live project keys", () => {
+    const surface = { id:"grass-1", type:"grass", points:[{x:0,y:0},{x:2,y:0},{x:0,y:2}] };
+    expect(normalizeEngineeringProject({ site_surfaces:[surface] }).site_surfaces).toEqual([surface]);
+    expect(normalizeEngineeringProject({ siteSurfaces:[surface] }).site_surfaces).toEqual([surface]);
+  });
+});
+
+describe("engineering project file import", () => {
+  it("opens direct engineering exports and full AquaFlow show envelopes", () => {
+    const project = { format:"AquaFlowPoolGeometry", name:"Plaza", pool_type:"freeform", fixtures:[{ id:"n1" }] };
+    expect(parseEngineeringProjectFile(JSON.stringify(project))).toMatchObject({ name:"Plaza", pool_type:"freeform" });
+    expect(parseEngineeringProjectFile(JSON.stringify({ aquaflow:"1.0", engineering:project }))).toMatchObject({ name:"Plaza", fixtures:[{ id:"n1" }] });
+  });
+
+  it("rejects malformed and unrelated JSON", () => {
+    expect(() => parseEngineeringProjectFile("not json")).toThrow("not valid JSON");
+    expect(() => parseEngineeringProjectFile(JSON.stringify({ hello:"world" }))).toThrow("not an AquaFlow engineering project");
   });
 });
 

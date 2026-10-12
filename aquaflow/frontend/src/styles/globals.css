@@ -37,10 +37,14 @@
   --orange:      #f97316;
 
   /* Text */
-  --text-primary:   #e8dfc8;
-  --text-secondary: #9aaa96;
-  --text-muted:     #4a5a48;
-  --text-accent:    #c9a227;
+  --text-primary:   #f2ead7;
+  --text-secondary: #bdcbb9;
+  --text-muted:     #7f907b;
+  --text-accent:    #e2bd4f;
+  --text-button:    #f7f0df;
+  --text-button-hover: #fffaf0;
+  --text-button-muted: #adbcaa;
+  --text-button-disabled: #879483;
 
   /* Borders — green-tinted */
   --border:        rgba(26,107,58,0.15);
@@ -111,6 +115,33 @@ html, body, #root {
   min-height: 0;
   overflow: hidden;
   position: relative;
+}
+
+/* Workspace panels are lazy-mounted on first use and then hidden instead of
+   unmounted. This preserves PLC sessions, timeline edits, selections, undo
+   history and scroll position while the operator moves between workspaces. */
+.standard-workspace-content {
+  display: contents;
+}
+
+.standard-workspace-content[hidden],
+.engineering-workspace-content[hidden],
+.workspace-panel-slot[hidden],
+.workspace-timeline-slot[hidden] {
+  display: none !important;
+}
+
+.workspace-panel-slot {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-timeline-slot {
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 /* Center stack */
@@ -195,14 +226,15 @@ html, body, #root {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-mid);
   background: var(--bg-raised);
-  color: var(--text-primary);
+  color: var(--text-button);
   font-family: var(--font-body);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
-.btn:hover { background: var(--bg-hover); border-color: var(--border-bright); }
+.btn:hover { background: var(--bg-hover); border-color: var(--border-bright); color: var(--text-button-hover); }
 .btn:active { background: var(--bg-active); transform: scale(0.98); }
 .btn.primary {
   background: rgba(0,212,255,0.1);
@@ -220,6 +252,33 @@ html, body, #root {
 }
 .btn.danger { border-color: rgba(239,68,68,0.3); color: var(--red); }
 .btn.success { border-color: rgba(16,185,129,0.3); color: var(--green); }
+
+/* Keep controls legible in dense engineering/3D panels. Several older panels
+   still carry literal blue-gray label colors; target only those low-contrast
+   button values so semantic red/green/gold and selected-state colors survive. */
+button {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button:not(:disabled)[style*="--text-muted"] {
+  color: var(--text-button-muted) !important;
+}
+button:not(:disabled)[style*="#334455" i],
+button:not(:disabled)[style*="#445566" i],
+button:not(:disabled)[style*="#556677" i],
+button:not(:disabled)[style*="#667788" i] {
+  color: #aec0ca !important;
+}
+button:disabled,
+.btn:disabled {
+  color: var(--text-button-disabled) !important;
+  opacity: 0.68 !important;
+  cursor: not-allowed;
+}
+button:focus-visible {
+  outline: 2px solid rgba(226,189,79,0.9);
+  outline-offset: 2px;
+}
 
 /* Icon */
 .icon {

@@ -7,7 +7,8 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  poolCenter, poolBounds, engineeringToWorld, centerToWorld, fixturePlanCoords, AXIS_CONTRACT,
+  poolCenter, poolBounds, engineeringToWorld, worldToEngineering,
+  centerToWorld, fixturePlanCoords, AXIS_CONTRACT,
 } from "../geometryContract.js";
 
 describe("axis contract (engineering y → world z)", () => {
@@ -16,6 +17,13 @@ describe("axis contract (engineering y → world z)", () => {
   });
   it("engineeringToWorld with no center is the raw axis flip", () => {
     expect(engineeringToWorld({ x: 3, y: 5 })).toEqual({ x: 3, z: 5 });
+  });
+  it("worldToEngineering exactly reverses centering and preserves height", () => {
+    const center = { cx: 6, cy: 4 };
+    const world = { x: 2, y: 0.35, z: -1 };
+    expect(worldToEngineering(world, center)).toEqual({ x: 8, y: 3, z: 0.35 });
+    expect(engineeringToWorld(worldToEngineering(world, center), center))
+      .toEqual({ x: 2, z: -1 });
   });
   it("AXIS_CONTRACT documents z === engineering y", () => {
     expect(AXIS_CONTRACT.world).toMatch(/z === engineering y/);

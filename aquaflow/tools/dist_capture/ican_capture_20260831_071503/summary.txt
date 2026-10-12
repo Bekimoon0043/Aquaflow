@@ -1,0 +1,12 @@
+WHAT THE FOUNTAIN WAS DOING  vs  WHAT WENT ON THE WIRE
+==============================================================================
+
+### (before any note)
+    output frames : 3
+    groups seen   : [0]
+    channel sets  :
+        [1]
+
+==============================================================================
+total decoded frames: 3
+notes: 0

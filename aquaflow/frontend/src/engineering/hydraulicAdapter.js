@@ -1,10 +1,40 @@
+import { getFixtureLibraryEntry } from "../data/fixtureLibrary.js";
+
 const BAR_TO_METRES_WATER = 10.19716213;
 
+const DEFAULT_PIPE_DIAMETER_M = 0.05;
+
+/**
+ * Branch PIPE diameter for the solver. This is the fixture's connection size
+ * (DN25 → 0.025 m), never its orifice: `nozzleDiaMm` is the outlet bore (a
+ * 7 mm jet on a DN15 branch), and feeding it in as the pipe made the solver
+ * see absurd friction losses.
+ */
 function connectionDiameterM(engineering = {}) {
   if (Number(engineering.pipeDiameterM) > 0) return Number(engineering.pipeDiameterM);
-  if (Number(engineering.nozzleDiaMm) > 0) return Math.max(0.01, Number(engineering.nozzleDiaMm) / 1000);
-  const match = String(engineering.connectionSize || "").match(/(?:DN)?\s*(\d+(?:\.\d+)?)/i);
-  return match ? Math.max(0.01, Number(match[1]) / 1000) : 0.05;
+  const match = String(engineering.connectionSize || "").match(/^\s*(?:DN)?\s*(\d+(?:\.\d+)?)\s*(?:mm)?\s*$/i);
+  return match ? Math.max(0.01, Number(match[1]) / 1000) : DEFAULT_PIPE_DIAMETER_M;
+}
+
+const LEGACY_WATER_TYPE = /nozzle|jet|geyser|spray|fan|arch|laminar|foam|cascade|water_screen/i;
+const NOT_WATER_JET = /flame|fire|burner|fog|mist|haze|laser|light|pump|compressor/i;
+
+/**
+ * Only display-water nozzles belong in the low-pressure water network solve.
+ * Library fixtures are classified by category (Nozzles), excluding the mist /
+ * fog families that run on their own 6–70 bar circuit; flame burners, fog
+ * units and the high-pressure mist pump are never sent. Types not in the
+ * library fall back to the legacy name match minus those families.
+ */
+export function isWaterNozzleFixture(fixture = {}) {
+  const type = String(fixture.type || "");
+  const entry = getFixtureLibraryEntry(type);
+  if (entry) {
+    if (entry.category !== "Nozzles") return false;
+    const fam = `${entry.family || ""} ${entry.engineering?.group || ""}`;
+    return !/mist|fog/i.test(fam);
+  }
+  return LEGACY_WATER_TYPE.test(type) && !NOT_WATER_JET.test(type);
 }
 
 export function engineeringFixtureToSolverNozzle(fixture = {}) {
@@ -28,7 +58,7 @@ export function engineeringFixtureToSolverNozzle(fixture = {}) {
 
 export function buildHydraulicPreviewPayload({ fixtures = [], params = {}, volumeLitres = 0 } = {}) {
   const nozzles = fixtures
-    .filter((fixture) => /nozzle|jet|geyser|spray|fan|arch|laminar|foam|mist|cascade|water_screen/i.test(String(fixture.type || "")))
+    .filter(isWaterNozzleFixture)
     .map(engineeringFixtureToSolverNozzle);
   return {
     nozzles,

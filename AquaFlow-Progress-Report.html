@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AquaFlow Studio — What's Left</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@page { size: A4; margin: 14mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', sans-serif; color: #1a1a1a; background: #fff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  padding: 36px 40px;
+}
+.page-break { page-break-before: always; padding-top: 36px; }
+
+/* ── TOP HERO ── */
+.hero { text-align: center; margin-bottom: 32px; }
+.hero .big { font-size: 96px; font-weight: 900; color: #e07000; letter-spacing: -4px; line-height: 1; }
+.hero .sub { font-size: 16px; color: #666; margin-top: 6px; }
+.bar-bg { height: 14px; background: #eee; border-radius: 8px; margin: 20px auto 0; max-width: 600px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 8px; }
+
+/* ── STATS ROW ── */
+.stats { display: flex; justify-content: center; gap: 48px; margin: 28px 0 36px; }
+.stat { text-align: center; }
+.stat .v { font-size: 32px; font-weight: 800; color: #0d2847; }
+.stat .l { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* ── SECTION HEADER ── */
+h2 { font-size: 16px; font-weight: 700; color: #0d2847; margin: 28px 0 14px; display: flex; align-items: center; gap: 8px; }
+h2 .icon { font-size: 18px; }
+
+/* ── PROGRESS ROWS ── */
+.row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+.row:last-child { border-bottom: none; }
+.row-name { font-size: 13px; font-weight: 600; flex: 1; }
+.row-bar { width: 260px; height: 10px; background: #eee; border-radius: 6px; overflow: hidden; margin: 0 16px; }
+.row-fill { height: 100%; border-radius: 6px; }
+.fill-green { background: linear-gradient(90deg, #34c759, #0f8a4f); }
+.fill-orange { background: linear-gradient(90deg, #ffb74d, #e07000); }
+.fill-red { background: linear-gradient(90deg, #ef5350, #c0392b); }
+.row-badge { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; white-space: nowrap; }
+.badge-done { background: #e6f4ea; color: #0f8a4f; }
+.badge-partial { background: #fff3e0; color: #e07000; }
+.badge-pending { background: #fde8e8; color: #c0392b; }
+.row-pct { font-size: 14px; font-weight: 700; width: 44px; text-align: right; margin-left: 8px; }
+
+/* ── ITEMS LIST ── */
+.item { padding: 12px 14px; margin-bottom: 8px; border-radius: 8px; border-left: 5px solid; }
+.item-critical { border-color: #c0392b; background: #fef5f5; }
+.item-medium { border-color: #e07000; background: #fffaf0; }
+.item-low { border-color: #aaa; background: #fafafa; }
+.item .title { font-size: 13px; font-weight: 700; margin-bottom: 3px; display: flex; align-items: center; gap: 8px; }
+.item .desc { font-size: 11px; color: #555; line-height: 1.6; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.dot-red { background: #c0392b; }
+.dot-orange { background: #e07000; }
+.dot-gray { background: #aaa; }
+.tag { font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; float: right; }
+.tag-critical { background: #c0392b; color: #fff; }
+.tag-medium { background: #e07000; color: #fff; }
+.tag-low { background: #bbb; color: #fff; }
+
+/* ── BOTTOM BOX ── */
+.bottom { background: #f5f7fa; border: 1px solid #e0e4e8; border-radius: 10px; padding: 18px 22px; margin-top: 24px; }
+.bottom h3 { font-size: 14px; font-weight: 700; color: #0d2847; margin-bottom: 8px; }
+.bottom p { font-size: 12px; line-height: 1.7; color: #333; }
+
+/* ── CAVEAT BOXES (page 2) ── */
+.caveat { padding: 16px 18px; margin-bottom: 10px; border-radius: 10px; border-left: 5px solid; }
+.caveat-warn { border-color: #e07000; background: #fffaf0; }
+.caveat-info { border-color: #1565c0; background: #f0f6ff; }
+.caveat h4 { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+.caveat p { font-size: 11px; color: #444; line-height: 1.7; }
+.caveat ul { font-size: 11px; color: #444; line-height: 1.7; padding-left: 18px; margin-top: 4px; }
+
+.meta { text-align: center; font-size: 10px; color: #bbb; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ PAGE 1 ═══════════ -->
+
+<div class="hero">
+  <div class="big">24%</div>
+  <div class="sub">Remaining to production-ready — here's exactly what's left</div>
+  <div class="bar-bg">
+    <div class="bar-fill" style="width:76%;background:linear-gradient(90deg,#34c759,#0f8a4f)"></div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="v">9</div><div class="l">Items remaining</div></div>
+  <div class="stat"><div class="v">3</div><div class="l">Critical blockers</div></div>
+  <div class="stat"><div class="v">3</div><div class="l">Should-do soon</div></div>
+  <div class="stat"><div class="v">3</div><div class="l">Nice-to-have</div></div>
+</div>
+
+<h2><span class="icon">&#x1F4CA;</span> Stages — updated honest status</h2>
+
+<div class="row">
+  <div class="row-name">Stage 1 — Core engine</div>
+  <div class="row-bar"><div class="row-fill fill-green" style="width:100%"></div></div>
+  <span class="row-badge badge-done">Done</span>
+  <div class="row-pct" style="color:#0f8a4f">100%</div>
+</div>
+<div class="row">
+  <div class="row-name">Stage 2 — Engineering engines</div>
+  <div class="row-bar"><div class="row-fill fill-green" style="width:100%"></div></div>
+  <span class="row-badge badge-done">Done</span>
+  <div class="row-pct" style="color:#0f8a4f">100%</div>
+</div>
+<div class="row">
+  <div class="row-name">Stage 3 — AI, show and rendering</div>
+  <div class="row-bar"><div class="row-fill fill-green" style="width:100%"></div></div>
+  <span class="row-badge badge-done">Done</span>
+  <div class="row-pct" style="color:#0f8a4f">100%</div>
+</div>
+<div class="row">
+  <div class="row-name">Stage 4 — Platform and licensing</div>
+  <div class="row-bar"><div class="row-fill fill-green" style="width:100%"></div></div>
+  <span class="row-badge badge-done">Done</span>
+  <div class="row-pct" style="color:#0f8a4f">100%</div>
+</div>
+<div class="row">
+  <div class="row-name">Stage 5 — Intelligence and fleet</div>
+  <div class="row-bar"><div class="row-fill fill-green" style="width:100%"></div></div>
+  <span class="row-badge badge-done">Done</span>
+  <div class="row-pct" style="color:#0f8a4f">100%</div>
+</div>
+<div class="row">
+  <div class="row-name">Desktop packaging</div>
+  <div class="row-bar"><div class="row-fill fill-green" style="width:100%"></div></div>
+  <span class="row-badge badge-done">Done</span>
+  <div class="row-pct" style="color:#0f8a4f">100%</div>
+</div>
+<div class="row">
+  <div class="row-name">I-CAN fountain control</div>
+  <div class="row-bar"><div class="row-fill fill-green" style="width:100%"></div></div>
+  <span class="row-badge badge-done">Done</span>
+  <div class="row-pct" style="color:#0f8a4f">100%</div>
+</div>
+<div class="row">
+  <div class="row-name">PLC hardware validation</div>
+  <div class="row-bar"><div class="row-fill fill-red" style="width:20%"></div></div>
+  <span class="row-badge badge-pending">Pending</span>
+  <div class="row-pct" style="color:#c0392b">20%</div>
+</div>
+<div class="row">
+  <div class="row-name">Cloud &amp; multi-user infrastructure</div>
+  <div class="row-bar"><div class="row-fill fill-red" style="width:15%"></div></div>
+  <span class="row-badge badge-pending">Pending</span>
+  <div class="row-pct" style="color:#c0392b">15%</div>
+</div>
+<div class="row">
+  <div class="row-name">Deployment and ops</div>
+  <div class="row-bar"><div class="row-fill fill-orange" style="width:40%"></div></div>
+  <span class="row-badge badge-partial">Partial</span>
+  <div class="row-pct" style="color:#e07000">40%</div>
+</div>
+
+<h2><span class="icon">&#x26A0;</span> What's left</h2>
+
+<div style="display:flex;gap:12px;margin-bottom:14px;font-size:10px;font-weight:600">
+  <span><span class="dot dot-red" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>Critical</span>
+  <span><span class="dot dot-orange" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>Medium</span>
+  <span><span class="dot dot-gray" style="display:inline-block;vertical-align:middle;margin-right:4px"></span>Low</span>
+</div>
+
+<div class="item item-critical">
+  <div class="title"><span class="dot dot-red"></span>Physical S7-1200 PLC test<span class="tag tag-critical">Critical</span></div>
+  <div class="desc">All PLC code tested against fake servers only. Need real S7-1200 + TIA Portal validation. <strong>2-3 days with hardware + electrician.</strong></div>
+</div>
+
+<div class="item item-critical">
+  <div class="title"><span class="dot dot-red"></span>On-site fountain commissioning<span class="tag tag-critical">Critical</span></div>
+  <div class="desc">I-CAN nozzle presets are provisional. One-channel-at-a-time commissioning needed. Pump addresses unconfirmed. <strong>1-2 days on-site.</strong></div>
+</div>
+
+<div class="item item-critical">
+  <div class="title"><span class="dot dot-red"></span>Field I/O on physical sensor rack<span class="tag tag-critical">Critical</span></div>
+  <div class="desc">"Pull a sensor plug and the safety permit drops" acceptance test not yet run on real hardware. <strong>1 day.</strong></div>
+</div>
+
+<div class="item item-medium">
+  <div class="title"><span class="dot dot-orange"></span>Branch merge to main<span class="tag tag-medium">Medium</span></div>
+  <div class="desc">Development branch is 41+ commits ahead of origin/main. Needs merge and push. <strong>Half a day.</strong></div>
+</div>
+
+<div class="item item-medium">
+  <div class="title"><span class="dot dot-orange"></span>Update server deployment<span class="tag tag-medium">Medium</span></div>
+  <div class="desc">Auto-update URL configured but the shared LuxuryCon update server not yet hosted. <strong>1-2 days.</strong></div>
+</div>
+
+<div class="item item-medium">
+  <div class="title"><span class="dot dot-orange"></span>Code signing certificate<span class="tag tag-medium">Medium</span></div>
+  <div class="desc">Installer triggers Windows SmartScreen "Run anyway" warning. $200-400/year for certificate.</div>
+</div>
+
+<div class="item item-low">
+  <div class="title"><span class="dot dot-gray"></span>Real cloud infrastructure<span class="tag tag-low">Low</span></div>
+  <div class="desc">"Cloud" features (fleet, collaboration, backup) all save to local files. Real cloud needs database + API server. <strong>Weeks of work.</strong></div>
+</div>
+
+<div class="item item-low">
+  <div class="title"><span class="dot dot-gray"></span>Allen-Bradley &amp; OPC UA driver testing<span class="tag tag-low">Low</span></div>
+  <div class="desc">AB writes fail against simulator. OPC UA driver undeclared in production. Both need real hardware.</div>
+</div>
+
+<div class="item item-low">
+  <div class="title"><span class="dot dot-gray"></span>Calibrated 3D / hydraulic response<span class="tag tag-low">Low</span></div>
+  <div class="desc">Water heights and pump behavior in 3D preview not yet matched to real physics measurements from site.</div>
+</div>
+
+<div class="bottom">
+  <h3>Bottom line</h3>
+  <p>The software platform is built and tested (1,549+ tests). The <strong>critical blockers are all physical</strong>: real PLC hardware, on-site fountain commissioning, and sensor rack validation. Estimated <strong>3-5 working days</strong> to clear all critical items. Cloud and multi-user features are a separate, larger project — the desktop single-user product can ship without them.</p>
+</div>
+
+<!-- ═══════════ PAGE 2 ═══════════ -->
+
+<div class="page-break"></div>
+
+<h2 style="margin-top:0"><span class="icon">&#x1F50D;</span> Honest corrections from the 93% report</h2>
+
+<p style="font-size:12px;color:#555;line-height:1.7;margin-bottom:18px">
+  The 93% report counted features as "Done" if the code was written. This update adds context
+  on what "Done" actually means for each area — some features have caveats your boss should know.
+</p>
+
+<div class="caveat caveat-warn">
+  <h4>&#x2601; "Cloud" features are local files, not cloud</h4>
+  <p>Fleet management, cloud collaboration, cloud backup, and digital twin all save to JSON files on disk. The code is real (OT merge, checksums, multi-tenant logic), but there is no cloud server. These features:</p>
+  <ul>
+    <li>Don't sync between computers</li>
+    <li>Don't support remote collaboration</li>
+    <li>Don't provide automatic backup</li>
+  </ul>
+  <p style="margin-top:6px"><strong>Fix:</strong> Build a real cloud server with database. Weeks of work — separate project.</p>
+</div>
+
+<div class="caveat caveat-warn">
+  <h4>&#x1F916; "AI" choreography is algorithms, not machine learning</h4>
+  <p>The AI panel generates fountain patterns using rule-based algorithms (cascade, burst, wave, pulse, ripple). It works well and produces creative results, but there is no LLM, no neural network, no external AI service. The learning engine rates patterns from user feedback — smart, but not "AI" in the modern sense.</p>
+  <p style="margin-top:6px"><strong>Impact:</strong> Feature works — just be careful calling it "AI" in client-facing materials.</p>
+</div>
+
+<div class="caveat caveat-warn">
+  <h4>&#x1F50C; Only I-CAN proven on real hardware (1 of 5 protocols)</h4>
+  <p>The September 8 fountain run is real — 2,503 events through a real I-CAN gateway. But:</p>
+  <ul>
+    <li><strong>Siemens S7</strong> — tested against FakeS7Server only, never a real S7-1200</li>
+    <li><strong>Modbus TCP</strong> — tested against pymodbus in loopback only</li>
+    <li><strong>Allen-Bradley</strong> — reads work, writes fail against cpppo simulator</li>
+    <li><strong>OPC UA</strong> — driver exists but asyncua not in production requirements</li>
+  </ul>
+  <p style="margin-top:6px"><strong>Risk:</strong> Real PLCs could reveal timing or connection issues simulators don't show.</p>
+</div>
+
+<div class="caveat caveat-info">
+  <h4>&#x1F4BE; All data is local JSON files (no database)</h4>
+  <p>Shows, patterns, schedules, academy progress, fleet data, diagnostics — all stored as JSON files on the user's machine. Fine for single-user desktop, but means no automatic backup, no sharing between machines, no multi-user access.</p>
+</div>
+
+<div class="caveat caveat-info">
+  <h4>&#x1F3AF; 3D preview is visual, not calibrated</h4>
+  <p>The Three.js preview renders beautifully (GPU particles, PBR surfaces, water physics). But jet heights and pump responses are not calibrated to real-world measurements. It's a design visualization, not a physical simulation.</p>
+</div>
+
+<div class="bottom">
+  <h3>Updated bottom line</h3>
+  <p><strong>The 93% was based on code written.</strong> The honest number is <strong>76% production-ready</strong> when you account for what's actually been validated on real hardware and what the feature names really mean. The core product is strong — real physics, real safety, real I-CAN control. The gap is between what the product <em>claims</em> (cloud, AI, multi-PLC) and what it <em>delivers</em> today. Before any client deployment: <strong>3-5 days of PLC testing and site commissioning.</strong></p>
+</div>
+
+<div class="meta">
+  AquaFlow Studio v1.2.21 &middot; October 9, 2026 &middot; Code integration audit
+</div>
+
+</body>
+</html>

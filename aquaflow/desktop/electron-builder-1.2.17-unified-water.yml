@@ -1,0 +1,6 @@
+extends: ./electron-builder.yml
+
+# This release upgrades the unified project and 3D water UI only. Keep the exact
+# pre-1.2.16 engine that is already proven with this PC's TIA V17/PLCSIM setup.
+directories:
+  output: dist-1.2.17-unified-water-r2

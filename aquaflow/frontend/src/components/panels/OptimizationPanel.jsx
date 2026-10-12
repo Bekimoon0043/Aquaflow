@@ -3,8 +3,10 @@
 // Analyses a design and shows energy, water and performance optimisation
 // recommendations with quantified savings. Consumes /api/optimize/analyze; pre-filled
 // with a sample design the user can edit.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { apiPost } from "../../utils/apiClient";
+import useEngineeringStore from "../../store/engineeringStore";
+import { classifyFixtureType } from "../../hooks/fixtureTypeMap";
 
 const box = { background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6 };
 const CAT_COLOR = { energy: "#f59e0b", water: "#38bdf8", performance: "#22c55e" };
@@ -26,7 +28,31 @@ const SAMPLE = {
 };
 
 export default function OptimizationPanel() {
-  const [text, setText] = useState(JSON.stringify(SAMPLE, null, 2));
+  const fixtures = useEngineeringStore((state) => state.fixtures);
+  const params = useEngineeringStore((state) => state.params);
+  const hydraulics = useEngineeringStore((state) => state.hydraulicSummary);
+  const projectInput = useMemo(() => {
+    const pumps = fixtures.filter((fixture) => String(fixture.type || "").toLowerCase().includes("pump")).map((fixture) => ({
+      id: fixture.id, power_w: Number(fixture.engineering?.powerKw || fixture.powerKw || 0) * 1000,
+      speed: 1, required_flow_fraction: 0.75, hours_per_day: 8,
+    }));
+    const lights = fixtures.filter((fixture) => classifyFixtureType(fixture.type) === "light").map((fixture) => ({
+      id: fixture.id, power_w: Number(fixture.engineering?.wattage || fixture.wattage || 0),
+      type: String(fixture.type || "led").toLowerCase().includes("led") ? "led" : "fixture", hours_per_day: 6,
+    }));
+    const jets = fixtures.filter((fixture) => classifyFixtureType(fixture.type) === "nozzle").map((fixture) => ({
+      id: fixture.id, impact: 1, flow_lps: Number(fixture.spec?.flow_lpm || fixture.engineering?.flowLpm || 0) / 60,
+      height_m: Number(fixture.spec?.jet_height_m || fixture.engineering?.jetHeightM || 0),
+    }));
+    return {
+      pumps, lights, jets,
+      pool: { surface_area_m2: Number(params?.width || 0) * Number(params?.length || 0), water_temp_c: 26 },
+      recirculation: true, weather: { wind_speed: 0 }, operating_hours_per_day: 8,
+      tariff: { energy_rate: 0.2, water_rate: 0.002, currency: "USD" },
+      engineering_summary: hydraulics,
+    };
+  }, [fixtures, params, hydraulics]);
+  const [text, setText] = useState(() => JSON.stringify(fixtures.length ? projectInput : SAMPLE, null, 2));
   const [res, setRes] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -64,6 +90,10 @@ export default function OptimizationPanel() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ width: 300, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", padding: 10 }}>
           <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>DESIGN (edit + analyse)</div>
+          <button onClick={() => setText(JSON.stringify(projectInput, null, 2))} disabled={!fixtures.length}
+            style={{ ...box, color: "var(--text-primary)", padding: 6, marginBottom: 6, cursor: fixtures.length ? "pointer" : "default" }}>
+            Use current Engineering Design ({fixtures.length} fixtures)
+          </button>
           <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false}
             style={{ ...box, flex: 1, fontFamily: "monospace", fontSize: 10, padding: 8,
               color: "var(--text-primary)", resize: "none" }} />

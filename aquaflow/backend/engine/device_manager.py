@@ -3,6 +3,7 @@ AquaFlow Device Manager
 Handles device discovery, health monitoring, and command routing
 """
 import asyncio
+import os
 import time
 import logging
 from typing import Optional
@@ -63,20 +64,28 @@ class DeviceManager:
         self._monitor_task: Optional[asyncio.Task] = None
 
     async def start(self):
-        # Load seed devices
-        for device in SEED_DEVICES:
-            device.last_seen = time.time()
-            self._devices[device.id] = device
+        # Demonstration devices are opt-in. Production must never report fictional
+        # controllers as online or attach invented health percentages to them.
+        if os.getenv("AQUAFLOW_DEMO_DEVICES", "").strip().lower() in {"1", "true", "yes", "on"}:
+            for seed in SEED_DEVICES:
+                device = Device(**asdict(seed))
+                device.last_seen = time.time()
+                self._devices[device.id] = device
 
         self._monitor_task = asyncio.create_task(self._health_monitor())
-        logger.info(f"Device manager started with {len(self._devices)} devices")
+        logger.info("Device manager started with %d configured devices", len(self._devices))
 
     async def stop(self):
         if self._monitor_task:
             self._monitor_task.cancel()
 
     async def _health_monitor(self):
-        """Periodic health checks — would ping real devices"""
+        """Maintain timestamps for explicitly enabled demo devices only.
+
+        Real controller health is owned by the protocol-specific Siemens, I-CAN,
+        DMX/Art-Net/sACN and Modbus paths.  This registry must never turn a
+        configured placeholder into an apparently healthy controller.
+        """
         while True:
             try:
                 await asyncio.sleep(self.HEALTH_CHECK_INTERVAL)
@@ -110,12 +119,23 @@ class DeviceManager:
             return {"success": False, "error": "Device not found"}
         if device.status == DeviceStatus.OFFLINE:
             return {"success": False, "error": "Device offline"}
-        logger.info(f"Command → {device.label}: {command}")
-        # In production: route to protocol bus
-        return {"success": True, "device_id": device_id, "command": command}
+        logger.warning(
+            "Refused generic command for %s: no verified runtime protocol route",
+            device.label,
+        )
+        return {
+            "success": False,
+            "error": (
+                "No verified runtime route is configured for this registry entry. "
+                "Use the commissioned Siemens, I-CAN, DMX/Art-Net/sACN or Modbus workflow."
+            ),
+            "device_id": device_id,
+        }
 
     async def scan_network(self, subnet: str = "192.168.1") -> list[dict]:
-        """Discover devices on the network (stub — would use protocol-specific discovery)"""
-        logger.info(f"Scanning network {subnet}.0/24")
-        await asyncio.sleep(1)  # Simulated scan delay
-        return self.get_all_devices()  # Return known devices for now
+        """Use the real network scanner; never return the in-memory registry as discovery."""
+        from engine.network_scanner import scanner
+        target = subnet if "/" in subnet else f"{subnet}.0/24"
+        logger.info("Scanning network %s", target)
+        discovered = await scanner.quick_scan(target)
+        return [item.to_dict() for item in discovered]

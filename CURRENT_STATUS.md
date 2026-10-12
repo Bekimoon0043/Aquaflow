@@ -1,5 +1,284 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-09 (later): Siemens device model + setup wizard — installed as 1.2.21**
+
+- **New screens.** Devices → PLC opens on **Siemens Setup**, a 7-step wizard: Design →
+  Hardware → Wiring → Export to TIA → Connect → Test → Run show. Siemens terms such as
+  PUT/GET, DB, rack/slot and watchdog show a plain-language explanation.
+  - **I/O Map** tab: device → PLC tag → address → module/channel → live value, a Test
+    button per device, a printable wiring sheet, and TIA tag-table export/import.
+  - The old long page is still available as **Advanced Site**.
+  - The Engineering inspector shows each item's real Siemens tags. The free-text field is
+    renamed "PLC note".
+- **Device model** (`backend/engine/siemens_devices.py`): the site is built from the
+  Engineering design, without replacing the layout.
+  - A nozzle uses its linked valve, else the nearest placed valve, else gets its own valve.
+  - Each valve is fed by its nearest pump unless the operator chooses another.
+  - Unsupported items (fog, flame, etc.) are listed with a reason.
+  - Tag convention: `P01_Speed`, `P01_Run`, `V03_Open`, `L02_Red`, `SAFE_EStopOK`.
+  - `sync-design` keeps existing wiring and reports any change to the program signature.
+- **Hardware catalog.** Classic S7-1200 G1 CPUs, signal boards and signal modules, with order
+  numbers and the TIA default addresses.
+  - Addresses are assigned automatically.
+  - When something doesn't fit, AquaFlow names the part to add (e.g. 1212C → SB 1232 AQ1)
+    and produces a parts list.
+  - G2 / V1.x firmware is refused.
+- **TIA tag tables.** Export as .xlsx for TIA import; the TIA package now also contains the
+  tag table and `WIRING-SCHEDULE.csv`.
+  - Import reads a TIA tag export and recognises roles from the naming convention or from
+    names/comments (pump speed/run/fault, valve, light, safety).
+  - Each guess shows a confidence and a reason. Nothing is applied until the operator
+    confirms it.
+- **Show translation.** Compile now accepts Show Programmer clips on nozzles:
+  - nozzle clips become valve windows, with minimum on/off times enforced;
+  - a pump without its own clips follows its outlets at its show speed;
+  - a plain-language report says what changed.
+- **Acceptance runner.** One button runs: verify → pulse each valve (with its pump) and each
+  light → 1.6 s communication silence (PLC must trip with watchdog fault 2, then recover
+  on a fresh OFF) → all OFF.
+  - Results are stored per site in `siemens_acceptance.json`.
+  - A PLCSIM pass proves the program, mapping and communication, not the wiring.
+- **Quick fixes:**
+  - S7 tag-profile polling no longer crashes (`PLCTag` had no `access` / `profile_id`
+    fields).
+  - Generic tag writes are refused for read-only tags or without the safety permit.
+    Writing 0 is always allowed.
+  - Monitor shows no fake demo values.
+  - Tag Browser asks for confirmation before a write.
+  - Garbled characters in SiemensSitePanel fixed.
+- **Engine switch.** The installer now ships `resources/engine-1.2.21`, replacing the pinned
+  pre-1.2.16 engine, which stays in `resources/` for rollback. Checked first:
+  - every saved site keeps its signature (`0x6A3198F3` and `0x4794E8BA` unchanged);
+  - the packaged Siemens smoke test passes;
+  - the packaged engine passes the acceptance run over real S7comm.
+- **Validation:**
+  - Backend: Siemens/PLC suite **175 passed**, including 13 new device-model tests and an
+    acceptance test against a Python twin of the generated PLC function block.
+  - Frontend: **644 passed (63 files)**; production build green.
+  - Browser e2e through the wizard against a stand-in PLCSIM passed with zero page errors.
+  - Not yet tested: real PLCSIM / TIA, and a real S7-1200.
+- **Also fixed in 1.2.20:** a Show Programming black screen caused by `e.currentTarget`
+  being read inside a setState updater. A `PanelErrorBoundary` now wraps the workspace.
+- **1.2.22 follow-up (operator report: "PLCSIM doesn't connect; preview asks to compile").**
+  - **Diagnosis:** NetToPLCsim (listening on 192.168.43.41:102) answers the network handshake
+    (COTP connect confirm) but closes as soon as the S7 setup is forwarded. AquaFlow's own
+    client and an independent snap7 client fail the same way, so the NetToPLCsim → PLCSIM link
+    is down; AquaFlow's S7 client code has not changed since the working version. The training
+    site had also been saved with DB102; its proven signature 0x4794E8BA requires DB100.
+  - **Compiled shows.** Saving any setting still clears the compiled show (deliberate safety
+    rule), but the clips are kept as `previous_show_clips` and there is a one-click
+    "Recompile previous show".
+  - **Connect step:** offers "Use this PC's address" from the network adapters, warns when the
+    saved IP is not on this PC and when the DB is not 100, and explains raw S7 errors in plain
+    language (`explainS7Error`).
+  - **Validation:** 647 frontend tests; Siemens backend suites green; packaged 1.2.22 smoke
+    PASS; acceptance PASS over S7 at 192.168.43.41.
+- **1.2.23 (operator: "playback says AquaFlow-only, DB100 will not change").**
+  - **Cause:** the start happened while the site was still in internal-preview mode, where
+    Verify always passes. Meanwhile the real PLCSIM Verify was failing on the NetToPLCsim
+    hang-up. After NetToPLCsim was restarted, a read-only check shows DB100 = `AF03 0002`.
+  - **PLCSIM is now the default test PLC.** The Connect step preselects it with this PC's
+    address. Internal preview is renamed "AquaFlow animation only (no PLC; TIA does not
+    change)", and the Run step offers a "Switch to the PLCSIM test PLC" button.
+  - **Live PLC monitor:** `GET /{sid}/plc-live` → `SiemensRuntime.peek()`. A read-only DB read
+    when idle; while a show runs it returns the play loop's last frame. The UI watch table shows
+    heartbeat, Ready/Running, watchdog, permits, command/ack and per-device command vs PLC
+    feedback.
+  - **Validation:** browser e2e against the stand-in PLCSIM showed "PLCSIM playback started" and
+    the monitor reading "Main pump RUNNING 30% / Centre valve OPEN". Frontend 648 passed;
+    Siemens backend suites green; packaged smoke PASS.
+- **1.2.24: Show Programming → PLC in one click.** The operator confirmed AquaFlow now drives
+  real PLCSIM (TIA shows DB100 changing).
+  - **Play on PLC:** the Show Studio Compile tab has a "Play on Siemens PLC" section
+    (`studio/StudioPlcPanel.jsx`). It uses the project's site and a confirmation tick, and
+    "▶ Play this show on PLCSIM" runs compile (with translation) → verify → master safety
+    arm → site arm → start, stopping at the first failure with a plain explanation. It also
+    has "■ Stop PLC".
+  - **Follow mode:** while the PLC plays, the playhead, 2D plan and 3D preview follow the PLC's
+    show time. The transport bar shows "PLC ▶ n.ns". The live DB monitor sits in the same tab.
+  - **Clearer compile error:** compiling a timeline from a different design now says so
+    plainly instead of "Provide between 1 and 20000 clips".
+  - **Validation:**
+    - browser e2e: 3 timeline clips → "Compiled 4 PLC commands; 2 nozzle clips became valve
+      commands; Main pump runs at 30%". The monitor showed Centre valve OPEN and Ring valve
+      CLOSED at 2 s (its jet starts at 3 s), and Stop acknowledged OFF;
+    - frontend 651 passed; Siemens backend suites green; packaged smoke PASS; installed 1.2.24.
+- **Training show:** wrote `Desktop/AquaFlow-PLCSIM-Training-Fountain-60s-Show.aqua`, 96 clips
+  in 7 sections at 120 BPM.
+  - It respects pump ≤ 40 % and valve 500 ms on/off, and a jet is always open while the pump
+    runs.
+  - Compiled against the real site; played on the stand-in PLCSIM; the operator confirmed it on
+    real PLCSIM.
+- **1.2.25: easier timeline editing** (frontend only; engine unchanged).
+  - **Rows:** fixture clips show one row per device channel by default ("Main Pump · Speed",
+    "Center Jet A Valve · Open", …) in Engineering order.
+  - **Live limit check:** `studio/plcLimits.js` checks every resolved clip against the selected
+    site, mirroring backend translate + compile:
+    - errors: overlapping light clips, more than 30 min;
+    - warnings: valve shorter than min-on, gap shorter than min-off, pump above its ceiling,
+      pump commanded while all its jets are closed;
+    - info: clips the PLC skips.
+  - **Display:** clips get amber/red edges with tooltips, the inspector shows the explanation,
+    and the arrangement strip has a "⚠ N PLC warnings / ✓ PLC limits OK" button whose list jumps
+    to the clip.
+  - **Bug fixed while testing:** older sites have no `nozzle_ids`, so nozzle clips (e.g. a
+    pattern on the Training Fountain's "center jets" group) were silently skipped by Play on
+    PLC. Engineering `linkedValveId` now maps them onto their valve (`clipsForPlc`).
+  - **Validation:** 657 frontend tests and production build green. Browser e2e with the 60 s show
+    gave "✓ PLC limits OK"; shortening Jet A to 0.2 s gave "⚠ 3 PLC warnings" (min-on, plus the
+    pump running dry for 3.5 s and 4 s).
+- **1.2.26: groups by tick box** (frontend only). Show Explorer items have tick boxes (no
+  Ctrl/Shift needed), and group rows have a tick-all box. A "N ticked · Clear" bar and the
+  footer "Create group from N ticked" make the group, which gets its own timeline row at once.
+  Group rows have a ＋ button (pattern at the playhead), double-click adds a pattern at that
+  time, and an empty group row shows a hint. Browser e2e on the 60 s Training show: tick 2
+  nozzles → "Both jets" → ＋ → Traveling wave → PLC limits OK → Play on PLCSIM compiled 91
+  commands. 657 frontend tests, build green.
+- **1.2.27: audit fixes (plan items 1, 2, 3, 4 and 6)**, installed.
+  - **Safety:** Calibration "START SIM" used to POST all-OK safety inputs every second, and
+    "CLEAR ALL FAULTS" forced every input including `estop_chain_closed` to true.
+    - The simulation is now display-only, which a test checks.
+    - Clearing restores only the inputs the panel itself injected, after a confirmation.
+    - The panel lists the open design's nozzles.
+    - Browser check: 0 POSTs during simulation.
+  - **Edit commands:** the Engineering Designer and global Timeline acted on Edit → Delete while
+    hidden; they are now gated to their own active panel.
+  - **G2 protection:** `siemens_hardware.classify_s7_1200`. G1 is `-x40`, G2 is `-x50` (its
+    FW V4.1 looks like G1), F is `-1xF40`. Identify CPU reports the generation. The hardware
+    picker and glossary give a "no G2 substitution" warning and the G1 end-of-sale dates
+    (announced 1 Nov 2026, orderable until 1 Oct 2027).
+  - **Fixed gate bug:** the G1 CPU 1214C (`214-1AG40`) was rejected.
+  - **Equipment library (596 items):**
+    - all flagged `generic` with a "verify with supplier datasheet" note;
+    - physics consistent: jet height ≤ 0.9·head with η per type, orifice flow, pumps 50–65 %
+      wire-to-water;
+    - duplicate labels fixed; `plcChannel` defaults removed;
+    - realistic DMX footprints; currents include motor efficiency;
+    - totals, BOM and DMX patch now count generated pumps and lights;
+    - unknown types no longer silently copy Straight Jet DN15;
+    - Show Programming resolves library categories (RGB lights get R/G/B; the dosing pump is
+      not a pump);
+    - the hydraulic solve uses connection DN, not the orifice, as pipe size and only takes
+      water nozzles;
+    - validator: 28/28.
+  - **Menus:** Cut/Copy/Paste/Select All via edit-command with a "not available in X" notice.
+    New Preferences modal (grid, snap, timeline zoom, analytics) and About modal (versions,
+    backend, license). Import/Export Show use real .aqua files. AI menu gains "AI Assistant
+    (learned patterns)". The AI/Music Show Builder opens the AI tab. The dead Dry-Run Preview
+    toggle is replaced with a hint.
+  - **Validation:** frontend 713 tests in 70 files; Siemens backend suites green; full UI crawl
+    (61 menu entries, 416 tabs) with no crashes, exceptions or failed API calls; targeted
+    browser checks all pass; engine 1.2.27 smoke PASS.
+  - **Open:**
+    - item 5, real supplier catalogs, needs the brand list;
+    - item 7, S7-1500/ET 200SP on S7comm;
+    - item 8, OPC UA transport for G2/S7-1500;
+    - LOGO! via Modbus (optional).
+- **2026-10-10: 1.2.28 S7-1500 / ET 200SP and 1.2.29 stable license fingerprint**, both
+  installed.
+- **S7-1500 / ET 200SP (plan item 7)** run on the unchanged DB100 v2 contract (PUT/GET,
+  non-optimized DB, rack 0 / slot 1, OB200 cyclic, all valid on S7-1500).
+  - **Catalog:** the order numbers below were checked against Siemens Mall and distributor
+    listings on 2026-10-10.
+    - CPUs: 1511-1 PN `6ES7 511-1AL03-0AB0`, 1513-1 PN `513-1AM03`, 1511C-1 PN `511-1CL03`
+      (16 DI / 16 DQ / 5 AI / 2 AQ), 1512C-1 PN `512-1CM03`, ET 200SP 1510SP-1 PN `510-1DK03`.
+    - S7-1500 modules: DI16 `521-1BH10`, DQ16 `522-1BH10`, AI8 `531-7KF00`, AQ4 `532-5HD00`.
+    - ET 200SP modules: DI8/16 `131-6BF01/6BH01`, DQ8/16 `132-6BF01/6BH01`, AQ2 HS `135-6HB00`.
+    - Not added, numbers unverified: 1512SP and 1515-2.
+  - **Addressing:** TIA sequential addressing from 0 in slot order. Compact CPUs keep their
+    built-in analog at 0 and digital at bytes 10 (in) / 4 (out).
+  - **Rules:** firmware V2.8–V4.x; the family must match between CPU and modules; no signal
+    boards.
+  - **Recognition:** `classify_s7_1200` recognises S7-1500, ET 200SP CPU, F/TF and R/H;
+    `supported_s7_identifier` is used by readiness.
+  - **Picker:** CPUs grouped by family, family-specific modules and firmware, an "Add all
+    suggested parts" button, and an automatic preview refresh.
+  - **Validation:** tests include a full acceptance run against the FB twin with a 1511C
+    configuration. **Not yet proven on PLCSIM Advanced or a real S7-1500.**
+- **License fingerprint bug (found while testing):** the installed app reported `INVALID_HW` on
+  the licensed PC.
+  - **Cause:** v1 fingerprint = sha256(uuid.getnode() MAC | CPU | board | host), and getnode
+    picks whichever adapter comes first. A USB adapter present on 10/09 gave 142ca354; the
+    Wi-Fi adapter gives c3c9454f.
+  - **Fix:** new `license/fingerprint.py`, with a PowerShell CIM fallback for wmic.
+    - **v2** stable ID = sha256("aquaflow-fp-v2|CPU|board|host"), no MAC. This is what
+      `/api/license/fingerprint`, `get_fingerprint.py` and the License Manager now issue.
+    - **`validate_for_this_machine`** also accepts legacy v1 licenses for any present adapter
+      MAC. Explicit remote validation with a fingerprint still uses only that fingerprint.
+    - **License Manager** (rebuilt) treats every fingerprint of this PC as "this PC".
+  - **Tests:** `test_license_fingerprint_stability.py`; existing license/installer suites green.
+  - **Real-machine check:** packaged engine v2 id `e5631edf…`; current license VALID.
+  - **Doc:** LICENSE-ADMIN.md has a note on the change.
+- Guide: `aquaflow/docs/SIEMENS-SETUP-WIZARD.md`. The License Manager desktop tool was built
+  outside this repo on purpose.
+
+**2026-10-09: Show Programming full-screen workspace — implemented in frontend**
+
+- Added the dedicated Show Studio shell with Engineering inventory, searchable and
+  virtualized groups/items, 2D plan, matrix, embedded 3D water preview, and timeline.
+  The standard Device/Inspector panels no longer constrain this workspace.
+- Added persistent ordered/nested groups, Engineering-linked membership, frozen
+  selections, reusable presets, recipe pattern editing, mute/solo/lock inheritance,
+  background resolution to existing runtime clips, and missing-item/group diagnostics.
+- Added custom level envelopes, tempo-map beat snapping, timeline marquee/multiple
+  selection, batch movement, copy/paste, duplicate and delete as undoable transactions.
+- Preview works without music. Music can be relinked with an arrangement waveform.
+  Existing array/music tools, full video-render handoff, and Siemens controls remain
+  accessible. AI proposals are scoped to a group and applied as one undo transaction.
+- Existing clip-only programs migrate without changing clip values. Save/Open retains
+  groups, recipes, presets, markers, layout, and resolved clips in the `.aqua` document.
+- Validation: full frontend suite **629 passed (61 files)**, including 17 new
+  recipe/group/curve/tempo/batch-edit tests. Production Vite build passed.
+  Final browser acceptance passed with zero page errors (selection, playback, save,
+  reopen, undo/redo, scoped AI approval, curves, batch timeline edits, and embedded 3D).
+  Browser checks use 320 synthetic fixtures and a mock AI response; no PLC was run.
+- Guide: `aquaflow/docs/SHOW-STUDIO-GUIDE.md`. Remaining advanced roadmap features are
+  identified there. This update is built locally, not yet packaged or installed.
+
+**2026-10-09: Engineering Designer ↔ editable 3D viewport synchronization — implemented**
+
+- The existing 3D scene graph now follows live Engineering changes without recreating
+  the viewport. Switching workspaces or editing the pool, fixtures, or venue content
+  preserves the camera, valid selections, hierarchy/inspector subscriptions, and gizmos.
+- Added the inverse world-to-engineering coordinate contract. Moving a fixture in the
+  centered 3D pool now saves the correct plan coordinate instead of accumulating the
+  pool-center offset on repeated saves.
+- Persisted group IDs remain stable, explicit ungrouping remains ungrouped, and textured
+  site-model hierarchy, visibility, and lock state round-trip in the unified project.
+- Engineering refreshes are applied as one atomic scene-graph transaction, preventing
+  intermediate partial graphs from being published back to Engineering. Renderer cache
+  invalidation now includes fixture height, visibility, tilt, rotation, color, intensity,
+  radius, zone, and grouping.
+- Validation: frontend **603 passed (59 files)**; focused sync suite **80 passed**;
+  production Vite build green. Existing Three.js/mediabunny chunk-size warnings remain
+  advisory. This increment is built in the workspace and is not yet packaged/installed.
+
+**2026-10-08: Unified AquaFlow project core + Water Realism V2 — implemented**
+
+- Desktop update packaged and installed as **1.2.18**. Fixed a packaged-Electron
+  startup crash where debug logging to a closed parent console raised `EPIPE` in the
+  main process. Normal Desktop-shortcut launch stays running and `/api/health` reports
+  API/runtime healthy. The installer deliberately pins the known-working pre-1.2.16
+  Siemens/PLCSIM engine (SHA-256 `F234DC567927EE47E63BA13DDC7060E752AEB9FDBE0CA836E02B4E5B15B1F682`).
+- Migrated the 20-second Siemens training fountain into one AquaFlow 1.1 `.aqua`
+  project: 6 fixtures, 14 clips, 7 generated tracks, 4 cues, DB100, site revision 2
+  and signature `0x4794E8BA`. A verified byte-identical copy is on the Desktop.
+- Added one versioned `.aqua` project document for engineering geometry, show data,
+  programmer/timeline state, 3D render settings and Siemens-site selection. Opening,
+  saving and autosaving now restore those workspaces as one project instead of relying
+  on panel-local browser state. Legacy `.aqua` files remain importable.
+- The Programmer workspace now restores clips, cues, beat markers, timeline position,
+  zoom and selection. Audio binary data is intentionally excluded; a safe file
+  reference is retained in the project document.
+- Added a coupled, damped height-field simulation to the 3D water surface. Real jet
+  impacts feed the wave solver; basin masks, boundary reflection, damping and impact
+  response are available in the Render sidebar and persist with the project.
+- Water height and finite-difference normals are sampled in the existing shader so
+  disturbances affect surface shape, foam, reflections and refraction rather than
+  appearing as an isolated overlay.
+- Validation: frontend **597 passed (59 files)**; production Vite build green. Existing
+  chunk-size warnings for Three.js and mediabunny remain advisory.
+
 **2026-09-24 (later): PLC integration libraries bundled — snap7, asyncua, pycomm3 (1.2.5)**
 
 - The PLC panel's "Required Libraries" block used to tell the operator to

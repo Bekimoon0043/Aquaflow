@@ -161,7 +161,7 @@ export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launch
     }
 
     case "geyser": {
-      const speed = 9.0 + ix * 13.0;
+      const speed = spd(8.0 + ix * 7.0);
       return [
         emitter({ mode: EMIT_MODE.CONE, ox, oz, dx: wx * 0.015, dy: 1, dz: wz * 0.015,
                   speed, speedJitter: 0.24, spread: 0.35 * ix, spawnRadius: 0.12,
@@ -292,8 +292,8 @@ export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launch
       const animX = Math.sin(elapsed * 1.5 + ox * 0.5) * 0.5 + 0.5;
       const animZ = Math.cos(elapsed * 1.1 + oz * 0.6) * 0.5 + 0.5;
       const sweep = type === "motion_1d" ? 30 : type === "motion_2d" ? 25 : 35;
-      const tiltX = (cfg.tiltX || 0) + animX * sweep;
-      const tiltZ = type === "motion_1d" ? 0 : (cfg.tiltZ || 0) + animZ * sweep;
+      const tiltX = cfg.motionOverride ? cfg.motionOverride.pan : (cfg.tiltX || 0) + animX * sweep;
+      const tiltZ = type === "motion_1d" ? 0 : cfg.motionOverride ? cfg.motionOverride.tilt : (cfg.tiltZ || 0) + animZ * sweep;
       const speed = spd(type === "motion_3d" ? 6.0 + ix * 7.5 : 5.5 + ix * 7.0);
       const [dx, dy, dz] = tilted(tiltX, tiltZ);
       return [emitter({

@@ -169,6 +169,17 @@ describe("shortcuts", () => {
     expect(matchShortcut(null)).toBeNull();
   });
 
+  it("supports conventional undo and both common redo shortcuts", () => {
+    expect(matchShortcut({ key: "z", ctrlKey: true })).toBe("edit:undo");
+    expect(matchShortcut({ key: "z", ctrlKey: true, shiftKey: true })).toBe("edit:redo");
+    expect(matchShortcut({ key: "y", ctrlKey: true })).toBe("edit:redo");
+  });
+
+  it("supports conventional group and ungroup shortcuts", () => {
+    expect(matchShortcut({ key: "g", ctrlKey: true })).toBe("edit:group");
+    expect(matchShortcut({ key: "g", ctrlKey: true, shiftKey: true })).toBe("edit:ungroup");
+  });
+
   it("exposes a renderable shortcut list with labels", () => {
     expect(SHORTCUTS.length).toBeGreaterThan(4);
     for (const s of SHORTCUTS) {

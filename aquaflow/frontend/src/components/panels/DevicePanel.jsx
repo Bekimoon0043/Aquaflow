@@ -1,32 +1,93 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useShowStore } from "../../store/showStore";
-import { API_BASE_URL } from "../../config";
-
-const API = `${API_BASE_URL}/devices`;
+import useEngineeringStore from "../../store/engineeringStore";
+import { mergeDevicePanelEntries } from "../../utils/projectDevicePanel";
+import { apiGet } from "../../utils/apiClient";
 
 const TYPE_ICONS = {
   pump: "〰", valve: "⊠", lighting: "✦", flame: "🔥",
-  fog: "≈", laser: "✸", sensor: "◉", audio: "♫",
+  fog: "≈", laser: "✸", sensor: "◉", audio: "♫", nozzle: "💧", equipment: "⚙",
 };
 
-const GROUPS = ["pump", "valve", "lighting", "flame", "fog", "laser", "sensor"];
+const GROUPS = ["nozzle", "pump", "valve", "lighting", "flame", "fog", "laser", "sensor", "equipment"];
 
 export default function DevicePanel({ width }) {
   const {
     devices,
     selectedDeviceId,
     selectDevice,
-    updateDevicesFromServer,
-    addDevice,
     addServerLog,
+    setActivePanel,
   } = useShowStore();
+  const fixtures = useEngineeringStore((state) => state.fixtures);
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState({});
   const [scanActive, setScanActive] = useState(false);
+  const [controllerEntries, setControllerEntries] = useState([]);
 
-  const filtered = devices.filter((d) =>
-    d.label.toLowerCase().includes(search.toLowerCase()) ||
-    d.protocol.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    let cancelled = false;
+    let timer;
+    const refresh = async () => {
+      const controllers = [];
+      try {
+        const siteResult = await apiGet("/siemens-sites");
+        const sites = Array.isArray(siteResult?.sites) ? siteResult.sites : [];
+        const statuses = await Promise.all(sites.map(async (site) => {
+          try { return await apiGet(`/siemens-sites/${site.id}/status`); }
+          catch { return null; }
+        }));
+        sites.forEach((site, index) => {
+          const status = statuses[index] || {};
+          const fresh = status.telemetry_fresh === true;
+          const verified = status.hardware_verified === true;
+          controllers.push({
+            id: `controller:siemens:${site.id}`,
+            label: site.name || "Siemens S7 controller",
+            type: "equipment",
+            protocol: "s7comm",
+            ip: site.plc?.ip || null,
+            status: verified && fresh ? "online" : (status.verified ? "warn" : "offline"),
+            health: null,
+            source: "controller",
+            detail: status.quality || "Runtime contract not verified",
+          });
+        });
+      } catch {
+        // The sidebar remains usable while the backend starts or is unavailable.
+      }
+      try {
+        const status = await apiGet("/ican/status");
+        if (status?.gateway_ip) {
+          controllers.push({
+            id: "controller:ican:gateway",
+            label: "I-CAN / NETCAN gateway",
+            type: "equipment",
+            protocol: "ican",
+            ip: status.gateway_ip,
+            status: status.verified ? "online" : (status.state === "connected" ? "warn" : "offline"),
+            health: null,
+            source: "controller",
+            detail: status.verified ? "Gateway response verified" : (status.last_error || status.state),
+          });
+        }
+      } catch {
+        // No configured I-CAN gateway is a normal project state.
+      }
+      if (!cancelled) setControllerEntries(controllers);
+      if (!cancelled) timer = window.setTimeout(refresh, 5000);
+    };
+    refresh();
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, []);
+
+  const entries = useMemo(
+    () => mergeDevicePanelEntries([...devices, ...controllerEntries], fixtures),
+    [devices, controllerEntries, fixtures],
+  );
+  const filtered = entries.filter((d) =>
+    String(d.label || "").toLowerCase().includes(search.toLowerCase()) ||
+    String(d.protocol || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const grouped = GROUPS.reduce((acc, g) => {
@@ -34,57 +95,22 @@ export default function DevicePanel({ width }) {
     return acc;
   }, {});
 
-  const onlineCount = devices.filter((d) => d.status === "online").length;
+  const runtimeDevices = entries.filter((d) => d.source !== "engineering");
+  const onlineCount = runtimeDevices.filter((d) => d.status === "online").length;
 
-  const handleScan = async () => {
+  const handleScan = () => {
     setScanActive(true);
-    addServerLog({ level: "info", msg: "Quick network scan requested from device panel" });
-    try {
-      const res = await fetch(`${API}/scan?subnet=${encodeURIComponent("192.168.1.0/24")}&quick=true`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || data.message || "Scan failed");
-      }
-      if (data.devices?.length) {
-        updateDevicesFromServer(data.devices.map((d) => ({
-          id: d.id || `scan-${d.ip || "unknown"}-${d.port || 0}`,
-          label: d.label || `${d.device_type || d.type || "device"} ${d.ip || ""}`.trim(),
-          type: d.device_type || d.type || "unknown",
-          protocol: d.protocol || "unknown",
-          ip: d.ip || null,
-          port: d.port || null,
-          status: d.status || "online",
-          health: d.health ?? 85,
-        })));
-      }
-      addServerLog({ level: "info", msg: `Quick scan complete: ${data.found || 0} device(s) found` });
-    } catch (error) {
-      addServerLog({ level: "error", msg: `Device panel scan failed: ${error.message}` });
-    } finally {
+    addServerLog({ level: "info", msg: "Opening adapter-aware controller discovery" });
+    window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "devices" } }));
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("aquaflow:open-device-tab", { detail: { tab: "controllers" } }));
       setScanActive(false);
-    }
+    }, 0);
   };
 
   const handleAdd = () => {
-    const label = window.prompt("Device label", "New Device");
-    if (!label) return;
-    const type = (window.prompt("Device type (pump, valve, lighting, flame, fog, laser, sensor)", "lighting") || "lighting").trim().toLowerCase();
-    const protocol = (window.prompt("Protocol (dmx, artnet, sacn, modbus, mqtt)", "dmx") || "dmx").trim().toLowerCase();
-    const ip = (window.prompt("IP address (optional)", "") || "").trim() || null;
-    const portText = (window.prompt("Port (optional)", "") || "").trim();
-    addDevice({
-      id: `local-${Date.now()}`,
-      label,
-      type,
-      protocol,
-      ip,
-      port: portText ? Number(portText) : null,
-      status: "offline",
-      health: 0,
-    });
-    addServerLog({ level: "info", msg: `Added local device placeholder: ${label}` });
+    setActivePanel("geometry");
+    addServerLog({ level: "info", msg: "Opened Engineering Design to add a real project fixture" });
   };
 
   return (
@@ -97,7 +123,7 @@ export default function DevicePanel({ width }) {
           color: "var(--green)", background: "rgba(16,185,129,0.1)",
           border: "1px solid rgba(16,185,129,0.2)", padding: "1px 5px", borderRadius: 3,
         }}>
-          {onlineCount}/{devices.length}
+          {onlineCount}/{runtimeDevices.length} live
         </span>
       </div>
 
@@ -118,10 +144,15 @@ export default function DevicePanel({ width }) {
         >
           {scanActive ? "Scanning..." : "⟳ Scan Network"}
         </button>
-        <button className="btn" style={{ padding: "4px 6px", fontSize: 10 }} onClick={handleAdd}>+ Add</button>
+        <button className="btn" style={{ padding: "4px 6px", fontSize: 10 }} onClick={handleAdd}>+ Fixture</button>
       </div>
 
       <div className="panel-body">
+        {!entries.length && (
+          <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 10, lineHeight: 1.55 }}>
+            No project fixtures or verified runtime devices yet. Draw the fountain in Engineering Design, or use Scan Network to identify a controller.
+          </div>
+        )}
         {GROUPS.map((group) => {
           const groupDevices = grouped[group];
           if (!groupDevices.length) return null;
@@ -171,19 +202,10 @@ export default function DevicePanel({ width }) {
         background: "var(--bg-surface)", flexShrink: 0,
       }}>
         <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
-          NETWORK STATUS
+          PROJECT + RUNTIME STATUS
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          {[
-            { label: "DMX", color: "var(--accent)" },
-            { label: "Art-Net", color: "var(--purple)" },
-            { label: "Modbus", color: "var(--orange)" },
-          ].map((p) => (
-            <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", background: p.color }} />
-              <span style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{p.label}</span>
-            </div>
-          ))}
+        <div style={{ fontSize: 9, color: "var(--text-muted)", lineHeight: 1.5 }}>
+          {fixtures.length} designed fixtures · {onlineCount} verified online · {runtimeDevices.length - onlineCount} not online/verified
         </div>
       </div>
     </div>
@@ -191,7 +213,9 @@ export default function DevicePanel({ width }) {
 }
 
 function DeviceRow({ device, selected, onSelect }) {
-  const statusColor = device.status === "online" ? "var(--green)" : device.status === "warn" ? "var(--amber)" : "var(--red)";
+  const isDesigned = device.status === "designed";
+  const statusColor = device.status === "online" ? "var(--green)" : device.status === "warn" ? "var(--amber)" : isDesigned ? "var(--accent)" : "var(--red)";
+  const healthKnown = Number.isFinite(device.health);
   const healthBarColor = device.health > 80 ? "var(--green)" : device.health > 50 ? "var(--amber)" : "var(--red)";
 
   return (
@@ -217,7 +241,7 @@ function DeviceRow({ device, selected, onSelect }) {
           {device.label}
         </span>
         <span className={`badge ${device.protocol}`} style={{ fontSize: 8 }}>
-          {device.protocol.toUpperCase()}
+          {String(device.protocol || "unmapped").toUpperCase()}
         </span>
       </div>
 
@@ -227,13 +251,16 @@ function DeviceRow({ device, selected, onSelect }) {
             {device.ip}
           </span>
         )}
-        <div style={{ flex: 1, height: 2, background: "var(--border)", borderRadius: 1, overflow: "hidden" }}>
+        {healthKnown && <div style={{ flex: 1, height: 2, background: "var(--border)", borderRadius: 1, overflow: "hidden" }}>
           <div style={{ width: `${device.health}%`, height: "100%", background: healthBarColor, borderRadius: 1 }} />
-        </div>
+        </div>}
         <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
-          {device.health}%
+          {isDesigned ? "DESIGN" : healthKnown ? `${device.health}%` : String(device.status || "unverified").toUpperCase()}
         </span>
       </div>
+      {device.detail && <div title={device.detail} style={{ marginTop: 2, fontSize: 8, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {device.detail}
+      </div>}
     </div>
   );
 }

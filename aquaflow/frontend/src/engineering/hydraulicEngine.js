@@ -24,6 +24,8 @@
  * no physics in it.
  */
 
+import { getFixtureRatings } from "../data/fixtureLibrary.js";
+
 /**
  * Sum the nameplate specs of the placed fixtures. NON-HYDRAULIC: this counts
  * installed capacity and control I/O, it does not solve anything.
@@ -45,35 +47,38 @@ export function calculateEquipmentTotals(fixtures = []) {
   fixtures.forEach(f => {
     const eng = f.engineering || {};
     const type = f.type || "";
+    // Ratings fall back to the normalized `electrical` block (instance, then
+    // library) and convert flowM3Hr/flowLph, so generated items count too.
+    const ratings = getFixtureRatings(f);
 
-    if (type.startsWith("nozzle")) {
-      totalNozzleFlowLpm += Number(eng.flowLpm || 0);
-    }
-
-    if (
+    const isProcessFlow =
       type.startsWith("filter") ||
       type.startsWith("uv") ||
       type.startsWith("dosing") ||
       type.startsWith("nozzle_fog") ||
-      type.startsWith("nozzle_mist")
-    ) {
-      totalProcessFlowLpm += Number(eng.flowLpm || 0);
-      totalProcessFlowLpm += Number(eng.flowM3Hr || 0) * 1000 / 60;
+      type.startsWith("nozzle_mist");
+
+    // Mist/fog nozzles run on their own high-pressure circuit: count them once,
+    // as process flow, not again as display-nozzle flow.
+    if (type.startsWith("nozzle") && !isProcessFlow) {
+      totalNozzleFlowLpm += ratings.flowLpm;
+    }
+
+    if (isProcessFlow) {
+      totalProcessFlowLpm += ratings.flowLpm;
     }
 
     if (type.startsWith("pump")) {
-      totalPumpCapacityM3Hr += Number(eng.flowM3Hr || 0);
-      totalPumpPowerKw += Number(eng.powerKw || 0);
+      totalPumpCapacityM3Hr += ratings.flowM3Hr;
+      totalPumpPowerKw += ratings.powerKw;
     }
 
-    totalWatts += Number(eng.wattage || 0);
-    totalWatts += Number(eng.powerKw || 0) * 1000;
-    totalWatts += Number(eng.outputPowerW || 0);
+    totalWatts += ratings.powerW;
 
     totalAirFlowLpm += Number(eng.airFlowLpm || 0);
     totalFuelFlow += Number(eng.gasFlow || 0);
 
-    totalDmxChannels += Number(eng.dmxChannels || 0);
+    totalDmxChannels += ratings.dmxChannels;
 
     totalDigitalInputs += Number(eng.digitalInputs || 0);
     totalDigitalOutputs += Number(eng.digitalOutputs || 0);

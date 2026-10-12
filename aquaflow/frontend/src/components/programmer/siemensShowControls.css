@@ -1,0 +1,33 @@
+.siemens-runtime { padding: 16px; background: #0d1a1d; color: #dce9e5; border: 1px solid #31504c; border-radius: 10px; font-size: 12px; margin: 12px 0; }
+.siemens-runtime__heading, .siemens-runtime__state, .siemens-link__details { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.siemens-runtime__heading { justify-content: space-between; margin-bottom: 12px; }
+.siemens-runtime__heading > div { display: flex; flex-direction: column; gap: 3px; }
+.siemens-runtime__heading strong { font-size: 16px; color: #e8dfc8; }
+.siemens-runtime__heading span { color: #9fb7aa; }
+.siemens-runtime__mode { border: 1px solid #876d30; border-radius: 20px; padding: 4px 9px; color: #e2c980 !important; letter-spacing: .05em; font-size: 10px; }
+.siemens-runtime__mode--physical { border-color: #2c9a72; color: #94e9ca !important; }
+.siemens-link { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(180px, 1fr); gap: 14px; align-items: center; padding: 12px; background: #091417; border: 1px solid #29433d; border-radius: 8px; }
+.siemens-link__path { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.siemens-link__node { padding: 7px 9px; border-radius: 6px; background: #172c2b; border: 1px solid #376159; font-weight: 600; white-space: nowrap; }
+.siemens-link__wire { position: relative; flex: 1; height: 2px; min-width: 30px; background: #45645c; overflow: hidden; }
+.siemens-link__packet { display: none; position: absolute; top: -3px; left: 0; width: 8px; height: 8px; border-radius: 50%; background: #4fe2b1; box-shadow: 0 0 10px #4fe2b1; }
+.siemens-link--active .siemens-link__packet { display: block; animation: siemens-packet 1.4s linear infinite alternate; }
+.siemens-link--active .siemens-link__wire { background: #2d966f; }
+.siemens-link--fault { border-color: #b84f55; }
+.siemens-link__details { gap: 4px 12px; }
+.siemens-link__details strong { color: #e7ddbe; width: 100%; }
+.siemens-link--active .siemens-link__details strong { color: #8be4bf; }
+.siemens-link--fault .siemens-link__details strong { color: #ff9ca1; }
+.siemens-link__details span { color: #a5b7b1; font-size: 11px; }
+.siemens-runtime__state { margin: 11px 0; }
+.siemens-runtime__state span { border-radius: 4px; background: #192b2c; padding: 4px 7px; }
+.siemens-runtime__state .siemens-runtime__error { color: #ff9ca1; }
+.siemens-runtime__actions { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0; }
+.siemens-runtime__stop { background: #8c2933 !important; color: white !important; border-color: #b84f55 !important; }
+.siemens-runtime__confirmation { display: flex; align-items: start; gap: 7px; margin: 12px 0; color: #e6d3a1; }
+.siemens-runtime__more { border-top: 1px solid #29433d; margin-top: 11px; padding-top: 10px; }
+.siemens-runtime__more summary { color: #a7d9ca; cursor: pointer; font-weight: 600; }
+.siemens-runtime__more small { display: block; margin-top: 5px; color: #9fb7aa; }
+@keyframes siemens-packet { from { left: 0; } to { left: calc(100% - 8px); } }
+@media (max-width: 800px) { .siemens-link { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .siemens-link--active .siemens-link__packet { animation: none; left: 50%; } }

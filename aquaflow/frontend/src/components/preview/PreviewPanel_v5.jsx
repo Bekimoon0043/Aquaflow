@@ -12,10 +12,22 @@ import { FountainScene, ENVIRONMENTS, CAMERA_MODES, RENDER_QUALITY } from "./Fou
 import { useEngineeringSync } from "../../hooks/useEngineeringSync";
 import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
+import useProjectStore from "../../store/projectStore";
+import { useICANPreviewStore } from "../../store/icanPreviewStore";
+import { evaluateICANPreview } from "../../utils/icanPatternPreview";
+import ICANPreviewControls from "./ICANPreviewControls";
+// AF-3D-VID-001 - baked (frame-exact) video render.
+import { planBake, etaSeconds } from "../../video/bakedTimeline";
+import { createBakeSampler } from "../../video/bakeSignalSampler";
 // AQ-S3-013 — the 3D view as an editing workspace, not just a render.
 import { SceneEditor } from "./editor/sceneEditor";
 import { SceneGraph } from "./editor/sceneGraph";
-import { importDesign, graphToNozzles, graphToLights } from "./editor/fixtureBridge";
+import { defaultVenueModels } from "./modelLibrary";
+import {
+  importDesign, importEngineeringFixtures, importSiteModels, graphToNozzles, graphToLights,
+  graphToEngineeringFixtures, graphToSiteModels, reconcileEngineeringGraph,
+} from "./editor/fixtureBridge";
+import { poolCenter } from "../../engineering/geometryContract";
 import {
   EditorToolbar, LibraryPalette, SceneTree, Inspector, ShortcutHint, useLibraryDrop,
 } from "./editor/ui/workspaceUI";
@@ -64,21 +76,48 @@ export default function PreviewPanel() {
   const sceneRef     = useRef(null);
   const containerRef = useRef(null);
 
-  // View state
-  const [env,      setEnv]      = useState("night");
-  const [cam,      setCam]      = useState("orbit");
-  const [quality,  setQuality]  = useState("medium");
-  const [pattern,  setPattern]  = useState("none");
-  const [lightCol, setLightCol] = useState("#0066ff");
-  const [windX,    setWindX]    = useState(0);
-  const [windZ,    setWindZ]    = useState(0);
-  const [reviewMode, setReviewMode] = useState(true);
-  const [reviewOverlays, setReviewOverlays] = useState(true);
-  const [showPerf, setShowPerf] = useState(true);
+  // View state belongs to the unified AquaFlow project, not to this component.
+  // Changing workspaces or reopening the .aqua file now restores the same view,
+  // quality, environment and export settings the designer was using.
+  const renderSettings = useProjectStore((state) => state.render);
+  const updateRender = useProjectStore((state) => state.updateRender);
+  const setRenderField = (key) => (value) => {
+    const current = useProjectStore.getState().render[key];
+    updateRender({ [key]: typeof value === "function" ? value(current) : value });
+  };
+  const env = renderSettings.environment;
+  const cam = renderSettings.cameraMode;
+  const quality = renderSettings.quality;
+  const pattern = renderSettings.pattern;
+  const lightCol = renderSettings.lightColor;
+  const windX = renderSettings.windX;
+  const windZ = renderSettings.windZ;
+  const waveResponse = renderSettings.waveResponse;
+  const waveDamping = renderSettings.waveDamping;
+  const waveBoundaryDamping = renderSettings.waveBoundaryDamping;
+  const reviewMode = renderSettings.reviewMode;
+  const reviewOverlays = renderSettings.reviewOverlays;
+  const showPerf = renderSettings.showPerformance;
+  const setEnv = setRenderField("environment");
+  const setCam = setRenderField("cameraMode");
+  const setQuality = setRenderField("quality");
+  const setPattern = setRenderField("pattern");
+  const setLightCol = setRenderField("lightColor");
+  const setWindX = setRenderField("windX");
+  const setWindZ = setRenderField("windZ");
+  const setWaveResponse = setRenderField("waveResponse");
+  const setWaveDamping = setRenderField("waveDamping");
+  const setWaveBoundaryDamping = setRenderField("waveBoundaryDamping");
+  const setReviewMode = setRenderField("reviewMode");
+  const setReviewOverlays = setRenderField("reviewOverlays");
+  const setShowPerf = setRenderField("showPerformance");
   const [perfStats, setPerfStats] = useState(null);
+  const sidebarOpen = renderSettings.sidebarOpen;
+  const setSidebarOpen = setRenderField("sidebarOpen");
 
   // Panel visibility
-  const [tab, setTab] = useState("render"); // render | design | signals | info
+  const tab = renderSettings.sidebarTab;
+  const setTab = setRenderField("sidebarTab"); // render | design | signals | info
 
   // Sidebar width is draggable and shared with the shell's persisted layout, so the
   // preview remembers it the same way every other panel does.
@@ -104,7 +143,12 @@ export default function PreviewPanel() {
 
   // ── 3D editing workspace (AQ-S3-013) ──────────────────────────────────────
   const editorRef = useRef(null);
-  const [editMode, setEditMode] = useState(false);
+  // Direct manipulation is the primary viewport mode: click an object immediately,
+  // then W/E (or the toolbar) moves/rotates it. Review mode remains one click away.
+  const editMode = renderSettings.editMode;
+  const setEditMode = setRenderField("editMode");
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [engineeringSaveState, setEngineeringSaveState] = useState("Synced");
   // Bumped once the editor exists, so the workspace panels mount after it rather than
   // rendering against a null ref on the first pass.
   const [editorReady, setEditorReady] = useState(0);
@@ -121,8 +165,21 @@ export default function PreviewPanel() {
   const lastDryRunRef = useRef(null);
 
   // 4K Video Export (AQ-S3-007)
-  const [exportRes, setExportRes] = useState("1080p");
-  const [exportFps, setExportFps] = useState(60);
+  const exportRes = renderSettings.exportResolution;
+  const setExportRes = setRenderField("exportResolution");
+  const exportFps = renderSettings.exportFps;
+  const setExportFps = setRenderField("exportFps");
+  // Baked render: the scene is stepped on a virtual clock and every frame is encoded
+  // with an exact timestamp, so the file is smooth regardless of GPU speed.
+  const bakeStart = renderSettings.bakeStart;
+  const setBakeStart = setRenderField("bakeStart");
+  const bakeDuration = renderSettings.bakeDuration;   // 0 = whole show
+  const setBakeDuration = setRenderField("bakeDuration");
+  const bakeAudio = renderSettings.bakeAudio;
+  const setBakeAudio = setRenderField("bakeAudio");
+  const [bake, setBake] = useState(null);              // { frame, frames, phase, eta } | null
+  const [bakeMsg, setBakeMsg] = useState("");
+  const bakeAbortRef = useRef(null);
 
   // VR Walkthrough (AQ-S3-006)
   const [vrSupported, setVrSupported] = useState(false);
@@ -166,9 +223,15 @@ export default function PreviewPanel() {
   }, [useDryRunPreview]);
 
   // Engineering store
-  const projectName  = useEngineeringStore(s => s.projectName);
-  const fixtureCount = useEngineeringStore(s => s.fixtures.length);
-  const hydraulics   = useEngineeringStore(s => s.hydraulicSummary);
+  const projectName = useEngineeringStore(s => s.projectName);
+  const engineeringFixtures = useEngineeringStore(s => s.fixtures);
+  const fixtureCount = engineeringFixtures.length;
+  const siteWaterCount = engineeringFixtures.filter(fixture =>
+    ["running-fountain", "foam", "peacock"].includes(fixture.engineering?.siteFunction)
+      && String(fixture.type || "").startsWith("nozzle_")
+  ).length;
+  const sitePumpCount = engineeringFixtures.filter(fixture => fixture.type === "pump").length;
+  const hydraulics = useEngineeringStore(s => s.hydraulicSummary);
   const poolType     = useEngineeringStore(s => s.poolType);
   const params       = useEngineeringStore(s => s.params);
   const timelineTracks = useShowStore(s => s.timelineTracks);
@@ -177,11 +240,15 @@ const playbackState = useShowStore(s => s.playbackState);
 const manualPatterns = useShowStore(s => s.manualPatterns);
 const manualPatternMeta = useShowStore(s => s.manualPatternMeta);
 const manualPriority = useShowStore(s => s.manualPriority);
+const sitePreview = useICANPreviewStore();
 
 // ─── NEW: Use dry-run session if enabled ──────────────────────────────────
 let engineSignals;
 
-if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
+if (sitePreview.active && sitePreview.plan) {
+  engineSignals = evaluateICANPreview(sitePreview.plan, sitePreview.position, engineeringFixtures,
+    sitePreview.playback === "stopped");
+} else if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
   // Use dry-run preview session instead of timeline
   const channelState = dryRunState.evaluateAllChannels(playhead);
   
@@ -255,6 +322,11 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
       environment: env, quality, cameraMode: cam, lightColor: lightCol,
     });
     scene.init();
+    scene.setWaterSimulation?.({
+      response: waveResponse,
+      damping: waveDamping,
+      boundaryDamping: waveBoundaryDamping,
+    });
     scene.setReviewOverlays?.(reviewOverlays);
     scene.fitCameraToDesign?.();
     sceneRef.current = scene;
@@ -266,12 +338,42 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     const graph = new SceneGraph();
     try {
       const eng = useEngineeringStore.getState?.();
-      importDesign(graph, {
+      const center = poolCenter(eng?.geometry, eng?.params, eng?.poolType);
+      if (eng?.fixtures?.length) importEngineeringFixtures(graph, eng.fixtures, { center });
+      else importDesign(graph, {
         nozzles: eng?.design?.nozzles || eng?.nozzles || scene.getNozzles?.() || [],
         lights: eng?.design?.lights || eng?.lights || [],
       });
     } catch {
       // A malformed store must not stop the workspace opening; it just starts empty.
+    }
+    const modelLayoutKey = `aquaflow:venue-models:v2:${projectName}`;
+    const legacyModelLayoutKey = `aquaflow:venue-models:v1:${projectName}`;
+    let modelSpecs;
+    modelSpecs = Array.isArray(useEngineeringStore.getState().siteModels)
+      && useEngineeringStore.getState().siteModels.length
+      ? useEngineeringStore.getState().siteModels
+      : null;
+    if (!modelSpecs) {
+      try { modelSpecs = JSON.parse(localStorage.getItem(modelLayoutKey)); } catch { modelSpecs = null; }
+    }
+    const venueDefaults = defaultVenueModels({
+      poolType, radius: params?.radius, width: params?.width, length: params?.length,
+    }, quality);
+    if (!Array.isArray(modelSpecs)) {
+      // Preserve already-arranged people/buildings from v1, but migrate the scene to
+      // real editable tree models once. Subsequent user deletions stay deleted in v2.
+      let legacySpecs;
+      try { legacySpecs = JSON.parse(localStorage.getItem(legacyModelLayoutKey)); } catch { legacySpecs = null; }
+      modelSpecs = Array.isArray(legacySpecs)
+        ? [...legacySpecs, ...venueDefaults.filter(spec => spec.id.startsWith("venue-tree-"))]
+        : venueDefaults;
+    }
+    importSiteModels(graph, modelSpecs);
+    // Venue defaults and migrated v1 layouts become project-owned immediately. This
+    // prevents the first Engineering edit from treating them as stale local-only data.
+    if (!useEngineeringStore.getState().siteModels?.length && modelSpecs?.length) {
+      useEngineeringStore.getState().updateEngineering({ siteModels: graphToSiteModels(graph) });
     }
     const editor = new SceneEditor({
       THREE: scene.THREE, scene: scene.scene, camera: scene.camera,
@@ -294,10 +396,66 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     // straight into the renderer so the viewport always shows the real model.
     const offEditor = editor.subscribe((reason) => {
       if (reason === "structure" || reason === "transform" || reason === "transform-live"
-        || reason === "props" || reason === "visibility") {
+        || reason === "props" || reason === "visibility" || reason === "history") {
         scene.setNozzlesFromEngineering(graphToNozzles(graph));
         scene.setEngineeringLights?.(graphToLights(graph));
       }
+    });
+    let publishTimer = null;
+    let publishingToEngineering = false;
+    const publishGraphToEngineering = () => {
+      const store = useEngineeringStore.getState();
+      const center = poolCenter(store.geometry, store.params, store.poolType);
+      publishingToEngineering = true;
+      try {
+        store.updateEngineering({
+          fixtures: graphToEngineeringFixtures(graph, store.fixtures, { center }),
+          siteModels: graphToSiteModels(graph),
+        });
+      } finally {
+        publishingToEngineering = false;
+      }
+      setEngineeringSaveState("Synced");
+    };
+    const offModels = graph.subscribe((reason) => {
+      if (!["add", "remove", "transform", "visibility", "reparent", "group", "ungroup",
+        "props", "rename", "lock", "history"].includes(reason)) return;
+      scene.syncModelGraph(graph);
+      setEngineeringSaveState("Unsaved");
+      clearTimeout(publishTimer);
+      publishTimer = setTimeout(publishGraphToEngineering, reason === "transform" ? 60 : 0);
+      try {
+        const saved = graphToSiteModels(graph);
+        localStorage.setItem(modelLayoutKey, JSON.stringify(saved));
+      } catch (error) { console.warn("[PreviewPanel] Could not save model layout", error); }
+    });
+
+    // Engineering is the project source of truth. Keep this existing SceneGraph
+    // instance in sync rather than recreating the viewport (which would lose camera,
+    // selection and editor subscriptions whenever a designer changes workspace).
+    const offEngineering = useEngineeringStore.subscribe((next, previous) => {
+      if (publishingToEngineering) return;
+      const graphDataChanged = next.fixtures !== previous.fixtures
+        || next.siteModels !== previous.siteModels
+        || next.geometry !== previous.geometry
+        || next.params !== previous.params
+        || next.poolType !== previous.poolType
+        || next.loadRevision !== previous.loadRevision;
+      if (!graphDataChanged) return;
+
+      clearTimeout(publishTimer);
+      const center = poolCenter(next.geometry, next.params, next.poolType);
+      reconcileEngineeringGraph(graph, {
+        fixtures: next.fixtures,
+        siteModels: next.siteModels,
+        center,
+      });
+      editor.clearHistory();
+      editor.syncProxies();
+      scene.setNozzlesFromEngineering(graphToNozzles(graph));
+      scene.setEngineeringLights?.(graphToLights(graph));
+      scene.syncModelGraph(graph);
+      setEngineeringSaveState("Synced from Engineering");
     });
 
     // VR Walkthrough (AQ-S3-006): probe headset availability for the toolbar.
@@ -318,12 +476,15 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     return () => {
       ro.disconnect();
       offEditor();
+      offModels();
+      offEngineering();
+      clearTimeout(publishTimer);
       editor.dispose();
       editorRef.current = null;
       scene.dispose();
       sceneRef.current = null;
     };
-  }, [quality]);
+  }, [quality, projectName]);
 
   // Entering edit mode hands the viewport's pointer and camera to the editor.
   useEffect(() => {
@@ -335,6 +496,13 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
   useEffect(() => { sceneRef.current?.setCameraMode(cam); }, [cam]);
   useEffect(() => { sceneRef.current?.setLightColor(lightCol); }, [lightCol]);
   useEffect(() => { sceneRef.current?.setWind(windX, windZ); }, [windX, windZ]);
+  useEffect(() => {
+    sceneRef.current?.setWaterSimulation?.({
+      response: waveResponse,
+      damping: waveDamping,
+      boundaryDamping: waveBoundaryDamping,
+    });
+  }, [waveResponse, waveDamping, waveBoundaryDamping]);
   useEffect(() => { sceneRef.current?.setReviewOverlays?.(reviewOverlays); }, [reviewOverlays]);
 
   // Poll the renderer's own counters while the HUD is up. 4 Hz: the scene already
@@ -352,23 +520,85 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
 
   // When Pattern Designer has manual priority, Runtime Signal Selector controls the scene.
   // Do not also run FountainScene's internal pattern engine.
-  if (manualPriority) {
+  if (manualPriority || sitePreview.active) {
     sceneRef.current.stopPattern();
     return;
   }
 
   if (pattern === "none") sceneRef.current.stopPattern();
   else sceneRef.current.playPattern(pattern, 0.88);
-}, [pattern, manualPriority]);
+}, [pattern, manualPriority, sitePreview.active, quality]);
   useEffect(() => {
   if (!sceneRef.current) return;
-  sceneRef.current.setSignals(engineSignals);
-}, [engineSignals]);
+  sceneRef.current.setSignals({ ...engineSignals,
+    fixtureIntensities: sitePreview.active ? engineSignals.fixtureIntensities : null,
+    fixtureLightStates: sitePreview.active ? engineSignals.fixtureLightStates || null : null,
+    fixtureMotion: sitePreview.active ? engineSignals.fixtureMotion || null : null });
+}, [engineSignals, quality]);
 
   const screenshot = () => {
     const url = canvasRef.current?.toDataURL("image/png");
     if (url) { const a=document.createElement("a"); a.href=url; a.download=`aquaflow-${Date.now()}.png`; a.click(); }
   };
+
+  const renderSmoothVideo = async () => {
+    const scene = sceneRef.current;
+    if (!scene || bake) return;
+    if (recording) { scene.stopRecording(); setRecording(false); }
+    setBakeMsg("");
+    const site = useICANPreviewStore.getState();
+    const show = useShowStore.getState();
+    const sampler = createBakeSampler({
+      sitePreview: site,
+      fixtures: useEngineeringStore.getState().fixtures,
+      timeline: {
+        timelineTracks: show.timelineTracks, manualPatterns: show.manualPatterns,
+        manualPatternMeta: show.manualPatternMeta, manualPriority: show.manualPriority,
+        manualSignals: signals,
+        mode: show.manualPriority ? "manualPattern" : pattern === "none" ? "timeline" : "manual",
+        showDuration: show.currentShow?.duration,
+      },
+    });
+    const total = sampler.defaultDurationS || 10;
+    const startS = Math.min(Math.max(0, Number(bakeStart) || 0), Math.max(0, total - 0.1));
+    const durationS = Number(bakeDuration) > 0 ? Number(bakeDuration) : Math.max(0.1, total - startS);
+    const plan = planBake({ resolution: exportRes, fps: exportFps, startS, durationS });
+    const audio = bakeAudio && site.active && site.audioFile
+      ? { file: site.audioFile, loopS: site.plan?.passMs ? site.plan.passMs / 1000 : 0 } : null;
+
+    const abort = { aborted: false };
+    bakeAbortRef.current = abort;
+    setBake({ frame: 0, frames: plan.frames, phase: "prepare", eta: null });
+    // Freeze the live preview clock so nothing else advances while baking.
+    if (site.active && site.playback === "playing") site.pause();
+    let encoder = null;
+    try {
+      const { openBakedEncoder } = await import("../../video/bakedEncoder");
+      encoder = await openBakedEncoder(canvasRef.current, plan, { audio });
+      await scene.bakeVideo({
+        plan, encoder, abort,
+        sampleSignals: sampler.sample,
+        onProgress: (p) => setBake({ ...p, eta: etaSeconds(p.frame, p.frames, p.elapsedMs || 0) }),
+      });
+      setBake(b => ({ ...(b || {}), phase: "finalize" }));
+      const { blob, ext, codec } = await encoder.finish();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aquaflow-${plan.width}x${plan.height}-${plan.fps}fps-${Date.now()}.${ext}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      setBakeMsg(`Saved ${plan.frames} frames · ${codec.video.toUpperCase()}${encoder.hasAudio ? " + audio" : ""} · ${(blob.size / 1e6).toFixed(1)} MB`);
+    } catch (e) {
+      await encoder?.cancel?.();
+      setBakeMsg(e?.name === "AbortError" ? "Render cancelled." : `Render failed: ${e?.message || e}`);
+    } finally {
+      bakeAbortRef.current = null;
+      setBake(null);
+    }
+  };
+  const cancelBake = () => { if (bakeAbortRef.current) bakeAbortRef.current.aborted = true; };
+  useEffect(() => () => cancelBake(), []);
 
   const toggleRecord = () => {
     if (!recording) {
@@ -384,6 +614,18 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
   // Library drag-and-drop into the viewport. Declared here so the container element
   // below can carry the handlers; a no-op until edit mode is on.
   const libraryDrop = useLibraryDrop(editorRef.current);
+  const saveViewportToEngineering = useCallback(() => {
+    const graph = editorRef.current?.graph;
+    if (!graph) return;
+    const store = useEngineeringStore.getState();
+    const center = poolCenter(store.geometry, store.params, store.poolType);
+    store.updateEngineering({
+      fixtures: graphToEngineeringFixtures(graph, store.fixtures, { center }),
+      siteModels: graphToSiteModels(graph),
+    });
+    setEngineeringSaveState("Saved to Engineering");
+    setTimeout(() => setEngineeringSaveState("Synced"), 1800);
+  }, []);
 
   // ── Styles ──────────────────────────────────────────────────────────────────
   const btnSm = (active, color="#00aaff") => ({
@@ -401,20 +643,65 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
     <div ref={containerRef}
       onDragOver={libraryDrop.onDragOver}
       onDrop={libraryDrop.onDrop}
-      style={{ position:"relative", width:"100%", height:"100%", background:"#020610", overflow:"hidden", display:"flex" }}>
+      style={{ position:"relative", width:"100%", height:"100%", background:"#030806", overflow:"hidden", display:"flex" }}>
 
       {/* ── 3D Canvas ── */}
-      <canvas ref={canvasRef} style={{ flex:1, display:"block", minWidth:0 }} />
+      <canvas ref={canvasRef} aria-label="Interactive 3D fountain viewport" style={{ flex:1, display:"block", minWidth:0 }} />
+
+      {/* Compact DCC-style header: mode and scene state remain visible while the
+          viewport keeps almost all available screen area. */}
+      <div style={{
+        position:"absolute", top:10, left:12, zIndex:21, display:"flex", alignItems:"center", gap:5,
+        padding:"5px 6px", borderRadius:6, background:"rgba(5,8,7,0.88)",
+        border:"1px solid rgba(26,107,58,0.38)", boxShadow:"0 10px 28px rgba(0,0,0,0.28)",
+        backdropFilter:"blur(8px)", fontFamily:"var(--font-mono)",
+      }}>
+        <button onClick={() => setEditMode(v => !v)} title={editMode ? "Return to review mode" : "Edit objects in the viewport"} style={{
+          ...btnSm(editMode, "#c9a227"), minWidth:76, padding:"4px 8px", color:editMode?"#e8d5a0":"#9aaa96",
+        }}>{editMode ? "EDIT MODE" : "OBJECT MODE"}</button>
+        <button onClick={() => { setEditMode(true); setAddMenuOpen(v => !v); }}
+          aria-expanded={addMenuOpen} title="Add fixtures and 3D models"
+          style={{ ...btnSm(addMenuOpen, "#3ddc84"), padding:"4px 9px", color:addMenuOpen?"#9fffc1":"#9aaa96", fontWeight:800 }}>
+          ＋ ADD
+        </button>
+        <span style={{ width:1, height:16, background:"rgba(26,107,58,0.35)" }} />
+        <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} title="Frame all objects" style={{ ...btnSm(false), padding:"4px 7px", color:"#9aaa96" }}>Frame All</button>
+        <span style={{ color:"#607264", fontSize:9, padding:"0 4px" }}>{CAMS.find(item => item.key === cam)?.label || cam}</span>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 6px", borderRadius:9,
+          background:sitePreview.active?"rgba(16,185,129,0.14)":"rgba(201,162,39,0.10)",
+          color:sitePreview.active?"#34d399":"#c9a227", fontSize:9 }}>
+          <span style={{ width:5, height:5, borderRadius:"50%", background:"currentColor" }} />
+          {sitePreview.active ? "SIMULATION" : String(engineSignals?.source || "preview").toUpperCase()}
+        </span>
+        <button onClick={() => setSidebarOpen(v => !v)} title={sidebarOpen ? "Hide properties sidebar" : "Show properties sidebar"}
+          aria-expanded={sidebarOpen} style={{ ...btnSm(sidebarOpen), padding:"4px 7px", color:sidebarOpen?"#58c7ff":"#607264" }}>
+          {sidebarOpen ? "Hide Inspector" : "Show Inspector"}
+        </button>
+      </div>
+
+      {addMenuOpen && editMode && editorRef.current && <div style={{
+        position:"absolute", top:54, left:12, zIndex:30, width:360, maxWidth:"calc(100% - 24px)",
+        maxHeight:"min(520px, calc(100% - 76px))", overflowY:"auto", padding:10,
+        borderRadius:7, background:"rgba(3,8,18,0.96)", border:"1px solid rgba(61,220,132,0.38)",
+        boxShadow:"0 18px 50px rgba(0,0,0,0.55)", backdropFilter:"blur(10px)",
+      }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
+          <strong style={{ color:"#cfe0f0", fontSize:11, letterSpacing:".06em" }}>ADD TO SCENE</strong>
+          <button onClick={() => setAddMenuOpen(false)} style={{ ...btnSm(false), padding:"2px 6px" }}>✕</button>
+        </div>
+        <LibraryPalette editor={editorRef.current} compact />
+      </div>}
 
       {/* ── Editing workspace chrome ── */}
       {editMode && editorRef.current && (
         <EditorToolbar editor={editorRef.current} scene={sceneRef.current}
+          onSave={saveViewportToEngineering} saveLabel={engineeringSaveState}
           onExitEditor={() => { sceneRef.current?.setQuadView?.(false); setEditMode(false); }} />
       )}
 
       {reviewMode && (
         <div style={{
-          position:"absolute", top:12, left:12, zIndex:14, pointerEvents:"none",
+          position:"absolute", top:54, left:12, zIndex:14, pointerEvents:"none",
           minWidth:190, padding:"10px 12px", borderRadius:6,
           background:"rgba(4,10,16,0.76)", border:"1px solid rgba(215,185,87,0.34)",
           boxShadow:"0 12px 34px rgba(0,0,0,0.34)", backdropFilter:"blur(6px)",
@@ -428,6 +715,8 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, fontFamily:"monospace", fontSize:10 }}>
             <div style={{ color:"#8ea4b8" }}>Fixtures <span style={{ color:"#58c7ff" }}>{fixtureCount}</span></div>
             <div style={{ color:"#8ea4b8" }}>Pool <span style={{ color:"#58c7ff" }}>{poolDesc}</span></div>
+            {siteWaterCount > 0 && <div style={{ color:"#8ea4b8" }}>Water outlets <span style={{ color:"#3ddc84" }}>{siteWaterCount}</span></div>}
+            {sitePumpCount > 0 && <div style={{ color:"#8ea4b8" }}>Pumps <span style={{ color:"#ffcc55" }}>{sitePumpCount}</span></div>}
             <div style={{ color:"#8ea4b8" }}>Signal <span style={{ color:"#58c7ff" }}>{engineSignals?.source || "manual"}</span></div>
             <div style={{ color:"#8ea4b8" }}>Flow <span style={{ color:"#58c7ff" }}>{(hydraulics?.totalFlowM3Hr||0).toFixed(1)} m3/h</span></div>
           </div>
@@ -441,7 +730,7 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
           this overlay every frame would itself cost frames. */}
       {showPerf && perfStats && (
         <div style={{
-          position:"absolute", top:12, right:12, zIndex:15, pointerEvents:"none",
+          position:"absolute", top:12, right:(sidebarOpen ? layout.previewSidebar : 0) + 20, zIndex:15, pointerEvents:"none",
           minWidth:168, padding:"8px 10px", borderRadius:6, fontFamily:"monospace",
           background:"rgba(4,10,16,0.82)", border:"1px solid rgba(88,199,255,0.28)",
           backdropFilter:"blur(6px)",
@@ -506,7 +795,7 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
       )}
 
       {/* ── Right sidebar (drag its left edge to resize) ── */}
-      <ResizeHandle
+      {sidebarOpen && <ResizeHandle
         axis="x"
         title="Drag to resize the preview sidebar · double-click to reset"
         onStart={() => beginDrag("previewSidebar")}
@@ -515,22 +804,23 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
         onResize={(d) => resize("previewSidebar", d, {
           invert: true, containerPx: containerRef.current?.clientWidth || 0,
         })}
-      />
-      <div style={{ width:layout.previewSidebar, flexShrink:0, background:"#030812", borderLeft:"1px solid #0a2030", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      />}
+      {sidebarOpen && <div style={{ width:layout.previewSidebar, flexShrink:0, background:"linear-gradient(180deg,#0c1410 0%,#080e0a 100%)", borderLeft:"1px solid rgba(26,107,58,0.25)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"-12px 0 30px rgba(0,0,0,0.18)" }}>
 
         {/* Tabs */}
         <div style={{ display:"flex", borderBottom:"1px solid #0a2030" }}>
-          {[["render","◈ Render"],["design","✥ Design"],["signals","⚡ Live"],["info","⬡ Eng"]].map(([key,label])=>(
+          {[["render","◈ Render"],["design","✥ Design"],["signals","▥ Live"],["info","◇ Eng"]].map(([key,label])=>(
             <button key={key} onClick={()=>setTab(key)} style={{
               flex:1, padding:"6px 0", background:"transparent", border:"none",
-              borderBottom: tab===key ? "2px solid #00aaff" : "2px solid transparent",
-              color: tab===key ? "#00aaff" : "#334455",
+              borderBottom: tab===key ? "2px solid #c9a227" : "2px solid transparent",
+              color: tab===key ? "#d4ac3a" : "#607264",
               fontSize:9, cursor:"pointer", fontFamily:"monospace",
             }}>{label}</button>
           ))}
         </div>
 
-        <div style={{ flex:1, overflowY:"auto", padding:"8px 10px" }}>
+        <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"8px 10px" }}>
+          <ICANPreviewControls />
 
           {/* ── DESIGN TAB — the 3D editing workspace ── */}
           {tab==="design" && (<>
@@ -614,6 +904,22 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
                 <button key={q} onClick={()=>setQuality(q)} style={{ ...btnSm(quality===q), flex:1, textAlign:"center", textTransform:"capitalize" }}>{q}</button>
               ))}
             </div>
+
+            <div style={sectionLabel}>Water Interaction</div>
+            {[
+              ["Impact response", waveResponse, setWaveResponse, 0, 2, 0.05, value => `${value.toFixed(2)}×`],
+              ["Surface damping", waveDamping, setWaveDamping, 0.94, 0.999, 0.001, value => value.toFixed(3)],
+              ["Edge reflection", waveBoundaryDamping, setWaveBoundaryDamping, 0.5, 1, 0.01, value => `${Math.round(value * 100)}%`],
+            ].map(([label, value, setter, min, max, step, format]) => (
+              <label key={label} style={{ display:"block", marginBottom:6 }}>
+                <span style={{ display:"flex", justifyContent:"space-between", color:"#71869a", fontSize:9 }}>
+                  <span>{label}</span><span style={{ color:"#58c7ff" }}>{format(value)}</span>
+                </span>
+                <input type="range" min={min} max={max} step={step} value={value}
+                  onChange={event => setter(Number(event.target.value))}
+                  style={{ width:"100%", accentColor:"#21b6d7" }} />
+              </label>
+            ))}
 
             <div style={sectionLabel}>Light Color</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:3, marginBottom:6 }}>
@@ -758,6 +1064,8 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
               ["Pool type", poolType||"—",     "#00ccaa"],
               ["Dimensions", poolDesc,          "#00ccaa"],
               ["Fixtures",   `${fixtureCount}`, "#00aaff"],
+              ...(siteWaterCount > 0 ? [["Site outlets", `${siteWaterCount}`, "#3ddc84"]] : []),
+              ...(sitePumpCount > 0 ? [["Site pumps", `${sitePumpCount}`, "#ffcc55"]] : []),
               ["Flow",  `${(hydraulics?.totalFlowM3Hr||0).toFixed(2)} m³/h`, "#ffcc00"],
               ["Pipe",  `DN${hydraulics?.recommendedPipeMm||50}`,            "#ff8800"],
               ["Pump",  `${(hydraulics?.recommendedPumpKw||0).toFixed(2)} kW`,"#ff8800"],
@@ -778,26 +1086,13 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
         </div>
 
         {/* Bottom actions */}
-        <div style={{ borderTop:"1px solid #0a2030", padding:"6px 8px", display:"flex", flexDirection:"column", gap:4 }}>
-          {/* ─── DRY-RUN PREVIEW TOGGLE ─── */}
-          <button 
-            onClick={() => {
-              if (!useDryRunPreview && !dryRunState) {
-                alert("No dry-run session active.\n\nClick 'Dry-Run Preview' in Show Programmer first.");
-              }
-              setUseDryRunPreview(!useDryRunPreview);
-            }} 
-            style={{ 
-              ...btnSm(useDryRunPreview, "#00ff88"), 
-              color: useDryRunPreview ? "#00ff88" : (dryRunState ? "#8899aa" : "#334455"),
-              textAlign: "center",
-              border: `1px solid ${useDryRunPreview ? "#00ff88" : (dryRunState ? "#445566" : "#334455")}`,
-            }}
-            title={useDryRunPreview ? "Using compiled show preview" : "Use timeline signals"}
-          >
-            {useDryRunPreview ? "🎬 Live Compile Preview" : (dryRunState ? "📋 Use Compiled Preview" : "⛔ No Preview Session")}
-          </button>
-          
+        <div style={{ flexShrink:0, borderTop:"1px solid #0a2030", padding:"6px 8px", display:"flex", flexDirection:"column", gap:4 }}>
+          {/* The old "Dry-Run Preview" toggle was removed: its session producer lived in the
+              retired ShowProgrammerPanel, so it could never receive data. */}
+          {!sitePreview.active && <div style={{ color:"#557788", fontSize:9, lineHeight:1.5, textAlign:"center" }}>
+            To preview a programmed show, use Show Programming → Play preview / Play on PLC.
+          </div>}
+
           <button onClick={screenshot} style={{ ...btnSm(false,"#00ff88"), color:"#00ff88", textAlign:"center" }}>
             📷 Screenshot PNG
           </button>
@@ -818,11 +1113,46 @@ if (useDryRunPreview && dryRunState && dryRunState.evaluateAllChannels) {
               </select>
             </div>
           )}
-          <button onClick={toggleRecord} style={{ ...btnSm(recording,"#ff4444"), color:recording?"#ff4444":"#ff8866", textAlign:"center" }}>
+          <div style={{ border:"1px solid #1d4d3a", borderRadius:4, padding:6, display:"flex", flexDirection:"column", gap:4 }}>
+            <div style={{ color:"#3ddc84", fontSize:9, fontFamily:"monospace", letterSpacing:"0.06em" }}>SMOOTH VIDEO (BAKED)</div>
+            {!bake && (
+              <div style={{ display:"flex", gap:3, fontSize:10, color:"#8ea4b8", alignItems:"center" }}>
+                <span>from</span>
+                <input type="number" min={0} step={0.5} value={bakeStart} onChange={e=>setBakeStart(e.target.value)}
+                  title="Start time (s)" style={{ width:44, fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }} />
+                <span>len</span>
+                <input type="number" min={0} step={1} value={bakeDuration} onChange={e=>setBakeDuration(e.target.value)}
+                  title="Length in seconds (0 = to end of show)" style={{ width:44, fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }} />
+                <label title="Include the site preview music" style={{ display:"flex", alignItems:"center", gap:2 }}>
+                  <input type="checkbox" checked={bakeAudio} onChange={e=>setBakeAudio(e.target.checked)} />♪
+                </label>
+              </div>
+            )}
+            {bake ? (
+              <>
+                <div style={{ height:6, background:"#0b1220", borderRadius:3, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${bake.frames ? (100 * bake.frame / bake.frames) : 0}%`, background:"#3ddc84" }} />
+                </div>
+                <div style={{ fontSize:10, color:"#bce2d9", fontFamily:"monospace" }}>
+                  {bake.phase === "warmup" ? "Warming up water…" : bake.phase === "finalize" ? "Writing file…" : bake.phase === "prepare" ? "Preparing encoder…"
+                    : `Frame ${bake.frame}/${bake.frames}${bake.eta != null ? ` · ~${Math.ceil(bake.eta)}s left` : ""}`}
+                </div>
+                <button onClick={cancelBake} style={{ ...btnSm(true,"#ff4444"), color:"#ff6666", textAlign:"center" }}>Cancel render</button>
+              </>
+            ) : (
+              <button onClick={renderSmoothVideo} disabled={recording}
+                title="Renders every frame at exact show time, then encodes. Smooth at any resolution; takes longer than real time on slow GPUs."
+                style={{ ...btnSm(false,"#3ddc84"), color:"#3ddc84", textAlign:"center" }}>
+                ▶ Render smooth {exportRes==="4k"?"4K":exportRes} · {exportFps}fps
+              </button>
+            )}
+            {bakeMsg && <div style={{ fontSize:9, color: bakeMsg.startsWith("Render failed") ? "#ff8866" : "#8ea4b8" }}>{bakeMsg}</div>}
+          </div>
+          <button onClick={toggleRecord} disabled={!!bake} title="Live screen capture (real time - may stutter on heavy scenes)" style={{ ...btnSm(recording,"#ff4444"), color:recording?"#ff4444":"#ff8866", textAlign:"center" }}>
             {recording ? "⏹ Stop & Save" : `⏺ Record ${exportRes==="4k"?"4K":exportRes} · ${exportFps}fps`}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* ── Camera mode indicator ── */}
       <div style={{ position:"absolute", bottom:8, left:8, background:"rgba(0,0,0,0.7)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#334455", fontFamily:"monospace", pointerEvents:"none" }}>

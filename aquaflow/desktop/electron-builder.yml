@@ -19,6 +19,7 @@ files:
   - menu.js
   - updater.js
   - ui-server.js
+  - cad-native.js
   - splash.html
   - "assets/**/*"           # icon.png, shield.png, splash.png (runtime), *.ico
   - "web/**/*"
@@ -32,7 +33,11 @@ asarUnpack:
   - "web/**"
 
 extraResources:
-  - from: resources/engine
+  # 1.2.29 engine (S7-1500/ET 200SP, stable v2 license fingerprint + legacy per-adapter acceptance): Siemens device model, hardware catalog, TIA tag tables and acceptance
+  # runner. Checked before switching: packaged smoke test PASS, acceptance over S7 against
+  # the FB twin PASS, and every saved site keeps its program signature (0x6A3198F3 and
+  # 0x4794E8BA unchanged). The pre-1.2.16 engine stays in resources/ for rollback.
+  - from: resources/engine-1.2.29
     to: engine
     filter: ["**/*"]
   # Bundled license secret (+ update URL). resolveConfig() reads this from

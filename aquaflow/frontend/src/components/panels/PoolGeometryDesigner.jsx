@@ -8,6 +8,7 @@
  * - Export geometry as JSON for hydraulic solver
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import useProjectStore from "../../store/projectStore";
 import { generatePipework } from "../../engineering/pipeworkEngine";
 import { calculateHydraulics } from "../../engineering/hydraulicEngine";
 
@@ -29,7 +30,9 @@ import { usePipeDrawing, PIPE_COLORS } from "../../engineering/usePipeDrawing";
 import { getSymbolForType, drawSymbol } from "../../engineering/fixtureSymbols";
 import PipePropertiesPanel from "./PipePropertiesPanel";
 import FixtureLibraryBrowser, { fixtureMatchesTool } from "./FixtureLibraryBrowser";
-import { apiPost } from "../../utils/apiClient";
+import CADImportDialog from "./CADImportDialog";
+import { exportCadDxf } from "../../engineering/cadExchange";
+import { apiGet, apiPost } from "../../utils/apiClient";
 import {
   geometryForPoolType,
   synchronizePoolGeometry,
@@ -46,7 +49,20 @@ import {
   canUndoEngineering,
   canRedoEngineering,
 } from "../../engineering/engineeringHistory";
-import { DEFAULT_DEPTH_ZONES } from "../../engineering/engineeringProject";
+import { DEFAULT_DEPTH_ZONES, parseEngineeringProjectFile } from "../../engineering/engineeringProject";
+import {
+  LAND_SURFACE_TYPES,
+  dedupeSurfacePoints,
+  moveSurface,
+  normalizeSiteSurfaces,
+  pointInSurface,
+  surfaceMetrics,
+  updateSurfaceVertex,
+} from "../../engineering/siteSurfaces";
+import {
+  createICANSiteEngineeringProject,
+  ICAN_SITE_PROJECT_NAME,
+} from "../../data/icanSiteEngineeringProject";
 import {
   FIXTURE_LIBRARY,
   getDefaultEngineering
@@ -56,6 +72,7 @@ import {
 // `fixture.groupId || resolveFixtureGroup(type)`, so the groupId we STORE here must
 // come from that same resolver — not a divergent inline copy.
 import { resolveFixtureGroup } from "../../hooks/fixtureTypeMap";
+import SiemensFixtureLink from "./siemens/SiemensFixtureLink";
 
 const POOL_TYPES = [
   { key:"rectangular", label:"Rectangular",  icon:"▭" },
@@ -234,6 +251,7 @@ const TOOLS = [
   { key:"rectangle", label:"Rectangle", icon:"▭" },
   { key:"circle", label:"Circle", icon:"○" },
   { key:"polyline", label:"Polyline", icon:"⌁" },
+  { key:"land", label:"Land", icon:"▰" },
 { key:"pipe", label:"Pipe", icon:"═" },
   { key:"nozzle", label:"Nozzle", icon:"⬆" },
   { key:"light", label:"Light", icon:"★" },
@@ -246,6 +264,7 @@ const TOOLS = [
 const DEFAULT_LAYERS = [
   { key:"pool_outline", label:"POOL OUTLINE", color:"#00aaff", visible:true, locked:false },
   { key:"water_surface", label:"WATER SURFACE", color:"#0077b6", visible:true, locked:false },
+  { key:"landscape", label:"LANDSCAPE / LAND", color:"#65a30d", visible:true, locked:false },
   { key:"nozzles", label:"NOZZLES", color:"#00ffcc", visible:true, locked:false },
   { key:"lights", label:"LIGHTS", color:"#ffcc00", visible:true, locked:false },
 { key:"equipment", label:"EQUIPMENT", color:"#22c55e", visible:true, locked:false },
@@ -253,6 +272,11 @@ const DEFAULT_LAYERS = [
   { key:"annotations", label:"ANNOTATIONS", color:"#ffcc00", visible:true, locked:false },
   { key:"pipework", label:"PIPEWORK", color:"#8b5cf6", visible:true, locked:false },
 ];
+
+const mergeEngineeringLayers = (layers = []) => DEFAULT_LAYERS.map((fallback) => ({
+  ...fallback,
+  ...(layers.find((layer) => layer.key === fallback.key) || {}),
+}));
 
 
 // Engineering defaults now come from frontend/src/data/fixtureLibrary.js
@@ -349,11 +373,17 @@ function generatePoolShape(type, params) {
 export default function PoolGeometryDesigner() {
   const canvasRef = useRef(null);
   const canvasHostRef = useRef(null);
+  const projectFileInputRef = useRef(null);
   const projectLoadRevision = useEngineeringStore((state) => state.loadRevision);
+  const projectId = useEngineeringStore((state) => state.projectId);
+  const [showCADImport, setShowCADImport] = useState(false);
+  const [cadExportBusy, setCadExportBusy] = useState(false);
+  const [fitAfterCADImport, setFitAfterCADImport] = useState(false);
   const [tool, setTool] = useState("select");
   const [poolType, setPoolType] = useState(() => useEngineeringStore.getState().poolType || "rectangular");
   const [params, setParams] = useState(() => useEngineeringStore.getState().params || { width:12, length:8, radius:6, depth:0.8 });
   const [fixtures, setFixtures] = useState(() => useEngineeringStore.getState().fixtures || []);
+  const [siteSurfaces, setSiteSurfaces] = useState(() => normalizeSiteSurfaces(useEngineeringStore.getState().siteSurfaces));
 const hydraulicSummary = useMemo(() => calculateHydraulics(fixtures), [fixtures]);
 
 const [geometry, setGeometry] = useState(() => {
@@ -366,6 +396,8 @@ const pipework = useMemo(() => generatePipework(fixtures, geometry), [fixtures, 
 const baseBomItems = useMemo(() => generateBOM(fixtures), [fixtures]);
 
   const [selectedFixture, setSelectedFixture] = useState(null);
+  const [selectedSurfaceId, setSelectedSurfaceId] = useState(null);
+  const [selectedSurfaceVertex, setSelectedSurfaceVertex] = useState(null);
   const [selectedObject, setSelectedObject] = useState(null);
   const [fixtureType, setFixtureType] = useState("nozzle_geyser");
   const [depthZone, setDepthZone] = useState("medium");
@@ -386,20 +418,27 @@ const bomItems = [
   const [projectName, setProjectName] = useState(() => useEngineeringStore.getState().projectName || "New Pool Project");
   const [saved, setSaved] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
+  const [showSavedProjects, setShowSavedProjects] = useState(false);
+  const [savedProjects, setSavedProjects] = useState([]);
+  const [selectedSavedProjectId, setSelectedSavedProjectId] = useState("");
+  const [savedProjectsLoading, setSavedProjectsLoading] = useState(false);
   const [isSpaceDown, setIsSpaceDown] = useState(false);
   const [cursorWorld, setCursorWorld] = useState({ x:0, y:0 });
   const [isDraggingGeometry, setIsDraggingGeometry] = useState(false);
+  const [isDraggingSurface, setIsDraggingSurface] = useState(false);
   const [lastDragWorld, setLastDragWorld] = useState(null);
   const [drawStart, setDrawStart] = useState(null);
   const [drawPreview, setDrawPreview] = useState(null);
   const [polylinePoints, setPolylinePoints] = useState([]);
+  const [landDrawPoints, setLandDrawPoints] = useState([]);
+  const [landSurfaceType, setLandSurfaceType] = useState("grass");
   const [activeGrip, setActiveGrip] = useState(null);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [gridStep, setGridStep] = useState(0.5);
   const [showDimensions, setShowDimensions] = useState(true);
   const [layers, setLayers] = useState(() => {
     const savedLayers = useEngineeringStore.getState().layers;
-    return savedLayers?.length ? savedLayers : DEFAULT_LAYERS;
+    return mergeEngineeringLayers(savedLayers);
   });
   const [depthZones, setDepthZones] = useState(() => {
     const saved = useEngineeringStore.getState().depthZones;
@@ -529,11 +568,11 @@ const activePipeForPanel =
   null;
 
   const engineeringSnapshot = useMemo(() => ({
-    projectName, geometry, poolType, params, fixtures, manualPipes, layers,
+    projectId, projectName, geometry, poolType, params, fixtures, siteSurfaces, manualPipes, layers,
     measurements, depthZones, solvedHydraulics,
     arraySettings: { arrayMode, arrayCount, arrayRows, arrayCols, arrayInset },
   }), [
-    projectName, geometry, poolType, params, fixtures, manualPipes, layers,
+    projectId, projectName, geometry, poolType, params, fixtures, siteSurfaces, manualPipes, layers,
     measurements, depthZones, solvedHydraulics, arrayMode, arrayCount, arrayRows, arrayCols, arrayInset,
   ]);
   const historyRef = useRef(null);
@@ -554,13 +593,15 @@ const activePipeForPanel =
   }, [engineeringSnapshot, flushHistory]);
 
   const restoreEngineeringSnapshot = useCallback((snapshot) => {
+    useEngineeringStore.getState().updateEngineering({ projectId: snapshot.projectId ?? null });
     setProjectName(snapshot.projectName);
     setGeometry(snapshot.geometry);
     setPoolType(snapshot.poolType);
     setParams(snapshot.params);
     setFixtures(snapshot.fixtures);
+    setSiteSurfaces(normalizeSiteSurfaces(snapshot.siteSurfaces));
     replacePipes(snapshot.manualPipes || []);
-    setLayers(snapshot.layers || DEFAULT_LAYERS);
+    setLayers(mergeEngineeringLayers(snapshot.layers));
     setMeasurements(snapshot.measurements || []);
     setDepthZones(snapshot.depthZones || DEFAULT_DEPTH_ZONES);
     setSolvedHydraulics(snapshot.solvedHydraulics || null);
@@ -571,6 +612,8 @@ const activePipeForPanel =
     setArrayCols(arrays.arrayCols || 5);
     setArrayInset(arrays.arrayInset ?? 1);
     setSelectedFixture(null);
+    setSelectedSurfaceId(null);
+    setSelectedSurfaceVertex(null);
     setSelectedObject(null);
   }, [replacePipes]);
 
@@ -604,13 +647,15 @@ const activePipeForPanel =
     const store = useEngineeringStore.getState();
     const loadedGeometry = store.geometry || geometryForPoolType(store.poolType, store.params);
     const loadedSnapshot = {
+      projectId: store.projectId,
       projectName: store.projectName,
       geometry: loadedGeometry,
       poolType: store.poolType,
       params: store.params,
       fixtures: store.fixtures || [],
+      siteSurfaces: store.siteSurfaces || [],
       manualPipes: store.manualPipes || store.pipes || [],
-      layers: store.layers?.length ? store.layers : DEFAULT_LAYERS,
+      layers: mergeEngineeringLayers(store.layers),
       measurements: store.measurements || [],
       depthZones: store.depthZones?.length ? store.depthZones : DEFAULT_DEPTH_ZONES,
       solvedHydraulics: store.solvedHydraulics || null,
@@ -672,6 +717,7 @@ const activePipeForPanel =
   poolType,
   params,
   fixtures,
+  siteSurfaces,
   manualPipes,
   layers,
   measurements,
@@ -732,6 +778,65 @@ const activePipeForPanel =
     // World to canvas
     const wx = (x) => pan.x + x * zoom;
     const wy = (y) => pan.y + y * zoom;
+
+    // Site/land surfaces are engineering geometry: draw them below the pool so the
+    // basin remains legible while grass, paving and planting areas can be edited.
+    if (isLayerVisible("landscape")) {
+      siteSurfaces.forEach((surface) => {
+        if (surface.visible === false || surface.points.length < 3) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(wx(surface.points[0].x), wy(surface.points[0].y));
+        surface.points.slice(1).forEach((point) => ctx.lineTo(wx(point.x), wy(point.y)));
+        ctx.closePath();
+        ctx.globalAlpha = 0.44;
+        ctx.fillStyle = surface.color || "#4f8a3c";
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = selectedSurfaceId === surface.id ? "#ffcc00" : (surface.color || "#65a30d");
+        ctx.lineWidth = selectedSurfaceId === surface.id ? 2.5 : 1.5;
+        if (selectedSurfaceId === surface.id) ctx.setLineDash([7, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const centroid = surface.points.reduce((sum, point) => ({ x:sum.x + point.x, y:sum.y + point.y }), { x:0, y:0 });
+        centroid.x /= surface.points.length;
+        centroid.y /= surface.points.length;
+        ctx.fillStyle = "#e8f6df";
+        ctx.font = "9px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(surface.label, wx(centroid.x), wy(centroid.y));
+
+        if (selectedSurfaceId === surface.id && tool === "select") {
+          surface.points.forEach((point, index) => {
+            const x = wx(point.x), y = wy(point.y);
+            ctx.fillStyle = selectedSurfaceVertex === index ? "#ffcc00" : "#8ee36d";
+            ctx.strokeStyle = "#10210c";
+            ctx.fillRect(x - 5, y - 5, 10, 10);
+            ctx.strokeRect(x - 5, y - 5, 10, 10);
+          });
+        }
+        ctx.restore();
+      });
+    }
+
+    if (landDrawPoints.length) {
+      const preset = LAND_SURFACE_TYPES.find((entry) => entry.key === landSurfaceType) || LAND_SURFACE_TYPES[0];
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(wx(landDrawPoints[0].x), wy(landDrawPoints[0].y));
+      landDrawPoints.slice(1).forEach((point) => ctx.lineTo(wx(point.x), wy(point.y)));
+      if (drawPreview) ctx.lineTo(wx(drawPreview.x), wy(drawPreview.y));
+      ctx.strokeStyle = preset.color;
+      ctx.fillStyle = `${preset.color}33`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      landDrawPoints.forEach((point) => {
+        ctx.fillRect(wx(point.x) - 4, wy(point.y) - 4, 8, 8);
+      });
+      ctx.restore();
+    }
 
     // Draw pool geometry
     if(geometry && (isLayerVisible("pool_outline") || isLayerVisible("water_surface"))) {
@@ -845,6 +950,29 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
             ctx.strokeRect(sx-5, sy-5, 10, 10);
           });
         }
+      }
+
+      if (selectedObject === "pool" && tool === "select" && (geometry.type === "circle" || geometry.type === "ellipse")) {
+        const handles = geometry.type === "circle"
+          ? [
+              { x:geometry.center.x + geometry.radius, y:geometry.center.y },
+              { x:geometry.center.x - geometry.radius, y:geometry.center.y },
+              { x:geometry.center.x, y:geometry.center.y + geometry.radius },
+              { x:geometry.center.x, y:geometry.center.y - geometry.radius },
+            ]
+          : [
+              { x:geometry.center.x + geometry.rx, y:geometry.center.y },
+              { x:geometry.center.x - geometry.rx, y:geometry.center.y },
+              { x:geometry.center.x, y:geometry.center.y + geometry.ry },
+              { x:geometry.center.x, y:geometry.center.y - geometry.ry },
+            ];
+        handles.forEach((point, index) => {
+          const x = wx(point.x), y = wy(point.y);
+          ctx.fillStyle = activeGrip?.index === index ? "#ffcc00" : "#00aaff";
+          ctx.strokeStyle = "#001520";
+          ctx.fillRect(x - 5, y - 5, 10, 10);
+          ctx.strokeRect(x - 5, y - 5, 10, 10);
+        });
       }
 
       // CAD-style dimension annotations
@@ -1155,6 +1283,11 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
   geometry,
   fixtures,
   selectedFixture,
+  siteSurfaces,
+  selectedSurfaceId,
+  selectedSurfaceVertex,
+  landDrawPoints,
+  landSurfaceType,
   freeformPoints,
   measurements,
   zoom,
@@ -1189,35 +1322,25 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
   };
 
   const getGeometryBounds = useCallback(() => {
-    if(!geometry) return null;
-    if(geometry.type === "circle") {
-      return {
-        minX: geometry.center.x - geometry.radius,
-        maxX: geometry.center.x + geometry.radius,
-        minY: geometry.center.y - geometry.radius,
-        maxY: geometry.center.y + geometry.radius,
-      };
+    const points = siteSurfaces.flatMap((surface) => surface.points || []);
+    if(geometry?.type === "circle") {
+      points.push(
+        { x:geometry.center.x - geometry.radius, y:geometry.center.y - geometry.radius },
+        { x:geometry.center.x + geometry.radius, y:geometry.center.y + geometry.radius },
+      );
+    } else if(geometry?.type === "ellipse") {
+      points.push(
+        { x:geometry.center.x - geometry.rx, y:geometry.center.y - geometry.ry },
+        { x:geometry.center.x + geometry.rx, y:geometry.center.y + geometry.ry },
+      );
+    } else if(geometry?.points?.length) {
+      points.push(...geometry.points);
     }
-    if(geometry.type === "ellipse") {
-      return {
-        minX: geometry.center.x - geometry.rx,
-        maxX: geometry.center.x + geometry.rx,
-        minY: geometry.center.y - geometry.ry,
-        maxY: geometry.center.y + geometry.ry,
-      };
-    }
-    if(geometry.points?.length) {
-      const xs = geometry.points.map(p=>p.x);
-      const ys = geometry.points.map(p=>p.y);
-      return {
-        minX: Math.min(...xs),
-        maxX: Math.max(...xs),
-        minY: Math.min(...ys),
-        maxY: Math.max(...ys),
-      };
-    }
-    return null;
-  }, [geometry]);
+    if (!points.length) return null;
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    return { minX:Math.min(...xs), maxX:Math.max(...xs), minY:Math.min(...ys), maxY:Math.max(...ys) };
+  }, [geometry, siteSurfaces]);
 
   const resetView = useCallback(() => {
     setZoom(30);
@@ -1264,6 +1387,99 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
     });
   }, [getGeometryBounds, resetView, canvasViewport]);
 
+  const deleteSelectedFixture = useCallback(() => {
+    if (selectedFixture === null) return false;
+    pushUndo();
+    setFixtures((current) => current.filter((_, index) => index !== selectedFixture));
+    setSelectedFixture(null);
+    setSelectedSurfaceId(null);
+    setSelectedSurfaceVertex(null);
+    setSelectedObject(null);
+    setSaveStatus("Selected engineering item deleted · Ctrl+Z to undo.");
+    return true;
+  }, [pushUndo, selectedFixture]);
+
+  const duplicateSelectedFixture = useCallback(() => {
+    if (selectedFixture === null || !fixtures[selectedFixture]) return false;
+    pushUndo();
+    const source = fixtures[selectedFixture];
+    const nextIndex = fixtures.length;
+    setFixtures((current) => [...current, {
+      ...source,
+      id: Date.now(),
+      label: `${source.label || "Fixture"} Copy`,
+      x: Number((Number(source.x || 0) + 0.5).toFixed(3)),
+      y: Number((Number(source.y || 0) + 0.5).toFixed(3)),
+      engineering: { ...(source.engineering || {}) },
+    }]);
+    setSelectedFixture(nextIndex);
+    setSelectedObject("fixture");
+    setSaveStatus("Fixture duplicated · drag it to position or edit exact coordinates.");
+    return true;
+  }, [fixtures, pushUndo, selectedFixture]);
+
+  const deleteSelectedSurface = useCallback(() => {
+    if (!selectedSurfaceId) return false;
+    pushUndo();
+    setSiteSurfaces((current) => current.filter((surface) => surface.id !== selectedSurfaceId));
+    setSelectedSurfaceId(null);
+    setSelectedSurfaceVertex(null);
+    setSelectedObject(null);
+    setSaveStatus("Selected land surface deleted · Ctrl+Z to undo.");
+    return true;
+  }, [pushUndo, selectedSurfaceId]);
+
+  const duplicateSelectedSurface = useCallback(() => {
+    const source = siteSurfaces.find((surface) => surface.id === selectedSurfaceId);
+    if (!source) return false;
+    pushUndo();
+    const id = `surface-${Date.now()}`;
+    setSiteSurfaces((current) => [...current, {
+      ...source,
+      id,
+      label: `${source.label} Copy`,
+      points: source.points.map((point) => ({ x:point.x + 0.5, y:point.y + 0.5 })),
+    }]);
+    setSelectedSurfaceId(id);
+    setSelectedSurfaceVertex(null);
+    setSelectedObject("surface");
+    setSaveStatus("Land surface duplicated · drag it or edit its vertices.");
+    return true;
+  }, [pushUndo, selectedSurfaceId, siteSurfaces]);
+
+  useEffect(() => {
+    const onEditCommand = (event) => {
+      // The designer stays mounted (hidden) after you leave it: only act while it is on screen,
+      // so Edit → Delete in another workspace never deletes a hidden selection here.
+      if (useProjectStore.getState().workspace?.activePanel !== "geometry") return;
+      if (["delete", "deselect"].includes(event.detail?.command)) event.detail.handled = true;
+      if (event.detail?.command === "delete") {
+        if (selectedNode) removeNode(selectedNode.pipeId, selectedNode.nodeIndex);
+        else if (selectedSegment) deleteSelectedSegment();
+        else if (selectedPipeId) deleteSelectedPipe();
+        else if (selectedSurfaceId) deleteSelectedSurface();
+        else deleteSelectedFixture();
+      }
+      if (event.detail?.command === "deselect") {
+        setSelectedFixture(null);
+        setSelectedObject(null);
+        setSelectedSurfaceId(null);
+        setSelectedSurfaceVertex(null);
+        setSelectedPipeId(null);
+        setSelectedNode(null);
+        setSelectedSegment(null);
+      }
+    };
+    window.addEventListener("aquaflow:edit-command", onEditCommand);
+    return () => window.removeEventListener("aquaflow:edit-command", onEditCommand);
+  }, [deleteSelectedFixture, deleteSelectedPipe, deleteSelectedSegment, deleteSelectedSurface, removeNode, selectedNode, selectedPipeId, selectedSegment, selectedSurfaceId, setSelectedNode, setSelectedPipeId, setSelectedSegment]);
+
+  useEffect(() => {
+    if (!fitAfterCADImport) return;
+    fitView();
+    setFitAfterCADImport(false);
+  }, [fitAfterCADImport, fitView]);
+
   // CAD-style keyboard navigation
     useEffect(() => {
     const onKeyDown = (e) => {
@@ -1276,7 +1492,15 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
       }
       if(e.key?.toLowerCase() === "f") fitView();
       if(e.key?.toLowerCase() === "h") resetView();
+      if((e.ctrlKey || e.metaKey) && e.key?.toLowerCase() === "d" && (selectedFixture !== null || selectedSurfaceId)) {
+        e.preventDefault();
+        if (selectedSurfaceId) duplicateSelectedSurface();
+        else duplicateSelectedFixture();
+        return;
+      }
       if(e.key === "Delete" || e.key === "Backspace") {
+  const hasSelection = Boolean(selectedNode || selectedSegment || selectedPipeId || selectedFixture !== null || selectedSurfaceId);
+  if (!hasSelection) return;
   e.preventDefault();
 
   if (selectedNode) {
@@ -1293,6 +1517,13 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
     deleteSelectedPipe();
     return;
   }
+
+  if (selectedSurfaceId) {
+    deleteSelectedSurface();
+    return;
+  }
+
+  deleteSelectedFixture();
 }
 
 if(e.key === "Escape") {
@@ -1302,6 +1533,7 @@ if(e.key === "Escape") {
   setDrawStart(null);
   setDrawPreview(null);
   setPolylinePoints([]);
+  setLandDrawPoints([]);
   setDepthDrawPoints([]);
   setDepthZoneError("");
   cancelPipeDrawing();
@@ -1309,6 +1541,7 @@ if(e.key === "Escape") {
 setSelectedPipeId(null);
 setSelectedNode(null);
 setSelectedSegment(null);
+setSelectedSurfaceVertex(null);
 }
     };
 
@@ -1332,9 +1565,15 @@ setSelectedSegment(null);
   selectedNode,
   selectedSegment,
   selectedPipeId,
+  selectedFixture,
+  selectedSurfaceId,
   removeNode,
   deleteSelectedSegment,
   deleteSelectedPipe,
+  deleteSelectedFixture,
+  duplicateSelectedFixture,
+  deleteSelectedSurface,
+  duplicateSelectedSurface,
   cancelPipeDrawing,
   setSelectedPipeId,
   setSelectedNode,
@@ -1351,8 +1590,28 @@ setSelectedSegment(null);
   };
 
   const getGripHit = (pt) => {
-    if(!geometry?.points?.length) return null;
     const threshold = Math.max(0.15, 8 / zoom);
+    if (geometry?.type === "circle") {
+      const handles = [
+        { x:geometry.center.x + geometry.radius, y:geometry.center.y },
+        { x:geometry.center.x - geometry.radius, y:geometry.center.y },
+        { x:geometry.center.x, y:geometry.center.y + geometry.radius },
+        { x:geometry.center.x, y:geometry.center.y - geometry.radius },
+      ];
+      const index = handles.findIndex((handle) => Math.hypot(handle.x - pt.x, handle.y - pt.y) <= threshold);
+      return index >= 0 ? { type:"radius", index } : null;
+    }
+    if (geometry?.type === "ellipse") {
+      const handles = [
+        { x:geometry.center.x + geometry.rx, y:geometry.center.y },
+        { x:geometry.center.x - geometry.rx, y:geometry.center.y },
+        { x:geometry.center.x, y:geometry.center.y + geometry.ry },
+        { x:geometry.center.x, y:geometry.center.y - geometry.ry },
+      ];
+      const index = handles.findIndex((handle) => Math.hypot(handle.x - pt.x, handle.y - pt.y) <= threshold);
+      return index >= 0 ? { type:index < 2 ? "ellipse-x" : "ellipse-y", index } : null;
+    }
+    if(!geometry?.points?.length) return null;
     for(let i=0; i<geometry.points.length; i++) {
       const p = geometry.points[i];
       const d = Math.sqrt((p.x-pt.x)**2 + (p.y-pt.y)**2);
@@ -1361,10 +1620,52 @@ setSelectedSegment(null);
     return null;
   };
 
+  const getSurfaceVertexHit = (pt) => {
+    if (!selectedSurfaceId) return null;
+    const surface = siteSurfaces.find((entry) => entry.id === selectedSurfaceId);
+    if (!surface) return null;
+    const threshold = Math.max(0.15, 8 / zoom);
+    for (let index = 0; index < surface.points.length; index += 1) {
+      const point = surface.points[index];
+      if (Math.hypot(point.x - pt.x, point.y - pt.y) <= threshold) return index;
+    }
+    return null;
+  };
+
   const updateRectangleFromGrip = (grip, pt) => {
-    if(!geometry?.points?.length || grip?.type !== "vertex") return;
     const snapped = snapPoint(pt);
+    if (geometry?.type === "circle" && grip?.type === "radius") {
+      const radius = Math.max(0.1, Math.hypot(snapped.x - geometry.center.x, snapped.y - geometry.center.y));
+      setGeometry((previous) => ({ ...previous, radius }));
+      setParams((previous) => ({ ...previous, radius:Number(radius.toFixed(3)) }));
+      return;
+    }
+    if (geometry?.type === "ellipse" && (grip?.type === "ellipse-x" || grip?.type === "ellipse-y")) {
+      if (grip.type === "ellipse-x") {
+        const rx = Math.max(0.1, Math.abs(snapped.x - geometry.center.x));
+        setGeometry((previous) => ({ ...previous, rx }));
+        setParams((previous) => ({ ...previous, width:Number((rx * 2).toFixed(3)) }));
+      } else {
+        const ry = Math.max(0.1, Math.abs(snapped.y - geometry.center.y));
+        setGeometry((previous) => ({ ...previous, ry }));
+        setParams((previous) => ({ ...previous, length:Number((ry * 2).toFixed(3)) }));
+      }
+      return;
+    }
+    if(!geometry?.points?.length || grip?.type !== "vertex") return;
     const pts = geometry.points;
+    if (poolType !== "rectangular" || pts.length !== 4) {
+      const nextPoints = pts.map((point, index) => index === grip.index ? snapped : point);
+      const xs = nextPoints.map((point) => point.x);
+      const ys = nextPoints.map((point) => point.y);
+      setGeometry((previous) => ({ ...previous, points:nextPoints }));
+      setParams((previous) => ({
+        ...previous,
+        width: Number(Math.max(0.1, Math.max(...xs) - Math.min(...xs)).toFixed(3)),
+        length: Number(Math.max(0.1, Math.max(...ys) - Math.min(...ys)).toFixed(3)),
+      }));
+      return;
+    }
     const oppositeIndex = (grip.index + 2) % 4;
     const opposite = pts[oppositeIndex];
 
@@ -1508,6 +1809,12 @@ if (tool === "select") {
       return;
     }
 if (tool === "pipe") { onPipeClick(world); return; }
+    if (tool === "land") {
+      if (isLayerLocked("landscape")) return;
+      setLandDrawPoints((points) => [...points, world]);
+      setDrawPreview(world);
+      return;
+    }
     if (tool === "depth") {
       if (!pointInGeometry(world, geometry)) {
         setDepthZoneError("Depth-zone points must be inside the pool.");
@@ -1582,6 +1889,8 @@ if (tool === "pipe") { onPipeClick(world); return; }
 
       if(hit >= 0) {
         setSelectedFixture(hit);
+        setSelectedSurfaceId(null);
+        setSelectedSurfaceVertex(null);
         setSelectedObject("fixture");
         setActiveGrip(null);
         setIsDraggingGeometry(false);
@@ -1593,13 +1902,28 @@ if (tool === "pipe") { onPipeClick(world); return; }
       if(grip) {
         setActiveGrip(grip);
         setSelectedFixture(null);
+        setSelectedSurfaceId(null);
+        setSelectedSurfaceVertex(null);
         setSelectedObject("pool");
         return;
+      }
+
+      if (!isLayerLocked("landscape")) {
+        const surfaceVertex = getSurfaceVertexHit(rawWorld);
+        if (surfaceVertex !== null) {
+          setSelectedSurfaceVertex(surfaceVertex);
+          setSelectedFixture(null);
+          setSelectedObject("surface");
+          setIsDraggingSurface(false);
+          return;
+        }
       }
 
       if(isLayerLocked("pool_outline") && isPointInsideGeometry(world)) return;
 
       setSelectedFixture(null);
+      setSelectedSurfaceId(null);
+      setSelectedSurfaceVertex(null);
       setSelectedObject(null);
 
       // If no fixture is selected, allow dragging the full pool geometry
@@ -1607,6 +1931,17 @@ if (tool === "pipe") { onPipeClick(world); return; }
         setSelectedObject("pool");
         setIsDraggingGeometry(true);
         setLastDragWorld(world);
+        return;
+      }
+
+      if (!isLayerLocked("landscape")) {
+        const surfaceHit = [...siteSurfaces].reverse().find((surface) => surface.visible !== false && pointInSurface(rawWorld, surface));
+        if (surfaceHit) {
+          setSelectedSurfaceId(surfaceHit.id);
+          setSelectedObject("surface");
+          setIsDraggingSurface(true);
+          setLastDragWorld(world);
+        }
       }
     } else if(
   tool === "nozzle" ||
@@ -1655,6 +1990,9 @@ setFixtures(prev => [...prev, {
       if(hit >= 0) {
         setFixtures(prev => prev.filter((_,i) => i !== hit));
         setSelectedFixture(null);
+      } else {
+        const surfaceHit = [...siteSurfaces].reverse().find((surface) => pointInSurface(world, surface));
+        if (surfaceHit) setSiteSurfaces((current) => current.filter((surface) => surface.id !== surfaceHit.id));
       }
     }
   };
@@ -1686,9 +2024,17 @@ setFixtures(prev => [...prev, {
       setDrawPreview(world);
     }
     if (tool === "depth" && depthDrawPoints.length) setDrawPreview(world);
+    if (tool === "land" && landDrawPoints.length) setDrawPreview(world);
     if(tool === "polyline") {
       if(isLayerLocked("pool_outline")) return;
       setDrawPreview(world);
+    }
+
+    if (tool === "select" && selectedSurfaceId && selectedSurfaceVertex !== null && e.buttons === 1) {
+      setSiteSurfaces((current) => current.map((surface) => (
+        surface.id === selectedSurfaceId ? updateSurfaceVertex(surface, selectedSurfaceVertex, world) : surface
+      )));
+      return;
     }
 
     if(activeGrip) {
@@ -1704,6 +2050,16 @@ setFixtures(prev => [...prev, {
       return;
     }
 
+    if (isDraggingSurface && selectedSurfaceId && lastDragWorld) {
+      const dx = world.x - lastDragWorld.x;
+      const dy = world.y - lastDragWorld.y;
+      setSiteSurfaces((current) => current.map((surface) => (
+        surface.id === selectedSurfaceId ? moveSurface(surface, dx, dy) : surface
+      )));
+      setLastDragWorld(world);
+      return;
+    }
+
     if(tool === "select" && e.buttons === 1 && selectedFixture !== null) {
       setFixtures(prev => prev.map((f,i) => i===selectedFixture ? {...f, x:Math.round(world.x*10)/10, y:Math.round(world.y*10)/10} : f));
     }
@@ -1712,6 +2068,7 @@ setFixtures(prev => [...prev, {
   const onCanvasMouseUp = () => {
     setIsPanning(false);
     setIsDraggingGeometry(false);
+    setIsDraggingSurface(false);
     setLastDragWorld(null);
     setActiveGrip(null);
   };
@@ -1746,7 +2103,8 @@ setFixtures(prev => [...prev, {
 
   const finishPolyline = () => {
     if(polylinePoints.length >= 3) {
-      setGeometry({ points: polylinePoints, closed:true });
+      pushUndo();
+      setGeometry({ type:"freeform", points: polylinePoints, closed:true });
       setPoolType("freeform");
       setFreeformPoints([]);
     }
@@ -1755,10 +2113,37 @@ setFixtures(prev => [...prev, {
     setDrawPreview(null);
   };
 
+  const finishLandSurface = () => {
+    const points = dedupeSurfacePoints(landDrawPoints);
+    if (points.length < 3) return false;
+    pushUndo();
+    const preset = LAND_SURFACE_TYPES.find((entry) => entry.key === landSurfaceType) || LAND_SURFACE_TYPES[0];
+    const sameTypeCount = siteSurfaces.filter((surface) => surface.type === preset.key).length;
+    const id = `surface-${Date.now()}`;
+    setSiteSurfaces((current) => [...current, {
+      id,
+      label: `${preset.label} Area ${sameTypeCount + 1}`,
+      type: preset.key,
+      color: preset.color,
+      elevation: 0.02,
+      visible: true,
+      points,
+    }]);
+    setSelectedSurfaceId(id);
+    setSelectedSurfaceVertex(null);
+    setSelectedObject("surface");
+    setLandDrawPoints([]);
+    setDrawPreview(null);
+    setTool("select");
+    setSaveStatus(`${preset.label} surface created · select it to move or edit vertices.`);
+    return true;
+  };
+
   const cancelDrawing = () => {
     setDrawStart(null);
     setDrawPreview(null);
     setPolylinePoints([]);
+    setLandDrawPoints([]);
     setMeasureStart(null);
     cancelDepthZone();
   };
@@ -1767,6 +2152,7 @@ setFixtures(prev => [...prev, {
 
 
   const buildProjectPayload = () => ({
+    id: projectId,
     format:"AquaFlowPoolGeometry",
     version:"0.11A",
     name: projectName,
@@ -1774,6 +2160,8 @@ setFixtures(prev => [...prev, {
     params,
     geometry,
    fixtures,
+   site_models: useEngineeringStore.getState().siteModels || [],
+   site_surfaces: siteSurfaces,
    manualPipes,
    measurements,
    layers,
@@ -1914,95 +2302,57 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
     "text/csv"
   );
 };
-  const dxfHeader = () => [
-    "0","SECTION","2","HEADER",
-    "9","$INSUNITS","70","6",
-    "0","ENDSEC",
-    "0","SECTION","2","TABLES",
-    "0","TABLE","2","LAYER","70","8",
-    "0","LAYER","2","POOL_OUTLINE","70","0","62","4","6","CONTINUOUS",
-    "0","LAYER","2","NOZZLES","70","0","62","3","6","CONTINUOUS",
-    "0","LAYER","2","LIGHTS","70","0","62","2","6","CONTINUOUS",
-"0","LAYER","2","EQUIPMENT","70","0","62","3","6","CONTINUOUS",
-    "0","LAYER","2","ANNOTATIONS","70","0","62","6","6","CONTINUOUS",
-    "0","ENDTAB",
-    "0","ENDSEC",
-    "0","SECTION","2","ENTITIES"
-  ];
-
-  const dxfFooter = () => ["0","ENDSEC","0","EOF"];
-
-  const dxfLine = (x1,y1,x2,y2,layer="POOL_OUTLINE") => [
-    "0","LINE","8",layer,
-    "10",String(x1),"20",String(y1),"30","0",
-    "11",String(x2),"21",String(y2),"31","0"
-  ];
-
-  const dxfCircle = (x,y,r,layer="NOZZLES") => [
-    "0","CIRCLE","8",layer,
-    "10",String(x),"20",String(y),"30","0",
-    "40",String(r)
-  ];
-
-  const dxfText = (x,y,size,value,layer="ANNOTATIONS") => [
-    "0","TEXT","8",layer,
-    "10",String(x),"20",String(y),"30","0",
-    "40",String(size),
-    "1",String(value),
-    "50","0"
-  ];
-
   const exportProjectDXF = () => {
-    const out = [...dxfHeader()];
-
-    if(geometry) {
-      if(geometry.type === "circle") {
-        out.push(...dxfCircle(geometry.center.x, -geometry.center.y, geometry.radius, "POOL_OUTLINE"));
-      } else if(geometry.type === "ellipse") {
-        const steps = 72;
-        for(let i=0;i<steps;i++) {
-          const a1 = (i/steps)*Math.PI*2;
-          const a2 = ((i+1)/steps)*Math.PI*2;
-          const x1 = geometry.center.x + Math.cos(a1)*geometry.rx;
-          const y1 = -(geometry.center.y + Math.sin(a1)*geometry.ry);
-          const x2 = geometry.center.x + Math.cos(a2)*geometry.rx;
-          const y2 = -(geometry.center.y + Math.sin(a2)*geometry.ry);
-          out.push(...dxfLine(x1,y1,x2,y2,"POOL_OUTLINE"));
-        }
-      } else if(geometry.points?.length) {
-        for(let i=0;i<geometry.points.length;i++) {
-          const p1 = geometry.points[i];
-          const p2 = geometry.points[(i+1) % geometry.points.length];
-          if(i === geometry.points.length-1 && !geometry.closed) break;
-          out.push(...dxfLine(p1.x, -p1.y, p2.x, -p2.y, "POOL_OUTLINE"));
-        }
-      }
+    try {
+      const dxf = exportCadDxf(buildProjectPayload());
+      downloadTextFile(`${safeFileName(projectName)}.dxf`, dxf, "application/dxf");
+    } catch (error) {
+      setExportStatus(`CAD export failed: ${error.message}`);
     }
+  };
 
-    fixtures.forEach((f, idx) => {
-  const layer =
-    f.type?.startsWith("light") || f.type?.startsWith("laser")
-      ? "LIGHTS"
-      : f.type?.startsWith("nozzle")
-      ? "NOZZLES"
-      : "EQUIPMENT";
-      out.push(...dxfCircle(f.x, -f.y, 0.12, layer));
-      out.push(...dxfText(f.x + 0.18, -f.y + 0.18, 0.18, f.label || `${f.type}-${idx+1}`, layer));
-    });
+  const exportProjectDWG = async () => {
+    if (cadExportBusy) return;
+    setCadExportBusy(true);
+    setExportStatus("Creating AutoCAD DWG… Choose where to save the drawing.");
+    try {
+      if (!window.aquaflow?.exportDWG) throw new Error("Native DWG export needs the updated AquaFlow desktop app. Close and reopen it after installing the update.");
+      const result = await window.aquaflow.exportDWG({name:projectName,dxf:exportCadDxf(buildProjectPayload())});
+      if (result?.canceled) setExportStatus("DWG export canceled.");
+      else if (!result?.ok) throw new Error(result?.error || "The CAD engine could not create the DWG.");
+      else setExportStatus(`DWG saved: ${result.path} (${result.engine}; AutoCAD 2022 compatible).`);
+    } catch (error) { setExportStatus(`DWG export failed: ${error.message}`); }
+    finally { setCadExportBusy(false); }
+  };
 
-    measurements.forEach((m) => {
-      out.push(...dxfLine(m.x1, -m.y1, m.x2, -m.y2, "ANNOTATIONS"));
-      const dist = Math.sqrt((m.x2-m.x1)**2 + (m.y2-m.y1)**2);
-      out.push(...dxfText((m.x1+m.x2)/2, -((m.y1+m.y2)/2), 0.2, `${dist.toFixed(2)}m`, "ANNOTATIONS"));
-    });
-
-    const meta = getGeometryMeta();
-    if(meta) {
-      out.push(...dxfText(meta.x, -(meta.y + meta.length + 0.6), 0.25, `${projectName}`, "ANNOTATIONS"));
-    }
-
-    out.push(...dxfFooter());
-    downloadTextFile(`${safeFileName(projectName)}.dxf`, out.join("\n"), "application/dxf");
+  const applyCADDesign = (project, report) => {
+    flushHistory(engineeringSnapshot);
+    const next = {
+      ...engineeringSnapshot,
+      projectId: project.id ?? null,
+      projectName: project.name,
+      geometry: project.geometry,
+      poolType: project.pool_type,
+      params: project.params,
+      fixtures: project.fixtures,
+      siteSurfaces: project.site_surfaces || project.siteSurfaces || [],
+      manualPipes: project.manualPipes || [],
+      layers: mergeEngineeringLayers(project.layers),
+      measurements: project.measurements || [],
+      depthZones: project.depth_zones || [],
+      solvedHydraulics: null,
+    };
+    cancelPipeDrawing();
+    setSelectedPipeId(null);
+    setSelectedNode(null);
+    setSelectedSegment(null);
+    restoreEngineeringSnapshot(next);
+    historyRef.current = commitEngineeringHistory(historyRef.current, next);
+    setHistoryVersion(version => version + 1);
+    setShowCADImport(false);
+    setFitAfterCADImport(true);
+    setSaved(false);
+    setSaveStatus(`Imported ${report.fileName}: ${report.imported} CAD fixtures, ${report.mode === "update" ? report.matched : 0} matched control records. Review the design, then SAVE PROJECT. Undo is available.`);
   };
 
   const saveProject = async () => {
@@ -2345,6 +2695,14 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
   };
 
   const sf = selectedFixture !== null ? fixtures[selectedFixture] : null;
+  const selectedSurface = siteSurfaces.find((surface) => surface.id === selectedSurfaceId) || null;
+  const selectedSurfaceMetrics = selectedSurface ? surfaceMetrics(selectedSurface.points) : null;
+  const updateSelectedSurface = (patch) => {
+    if (!selectedSurfaceId) return;
+    setSiteSurfaces((current) => current.map((surface) => (
+      surface.id === selectedSurfaceId ? { ...surface, ...patch } : surface
+    )));
+  };
   const ft = sf ? FIXTURE_TYPES.find(t => t.key === sf.type) : null;
   const sfEngineering = sf ? { ...getDefaultEngineering(sf.type), ...(sf.engineering || {}) } : null;
   const geometryMeta = getGeometryMeta();
@@ -2362,6 +2720,16 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
     setPoolType(nextType);
     setGeometry(nextGeometry);
     setSelectedObject("pool");
+  };
+
+  const startCustomPoolDrawing = () => {
+    pushUndo();
+    cancelDrawing();
+    setPoolType("freeform");
+    setTool("polyline");
+    setSelectedFixture(null);
+    setSelectedObject("pool");
+    setSaveStatus("CUSTOM POOL: click each boundary point, then double-click or choose Close Polyline.");
   };
 
   const setNumericParam = (key, value, min, max) => {
@@ -2393,10 +2761,76 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
 
   const safeDepthZones = depthZones.map((zone) => ({ ...zone, key: zone.zone || zone.key || zone.id }));
 
+  const loadICANSiteDesign = () => {
+    useEngineeringStore.getState().loadProject(createICANSiteEngineeringProject());
+    setSaveStatus("Loaded confirmed 100-outlet site layout; dimensions remain provisional");
+  };
+
+  const chooseProjectFile = () => {
+    const input = projectFileInputRef.current;
+    if (!input) return;
+    // Clearing first makes choosing the same file twice fire onChange again.
+    input.value = "";
+    input.click();
+  };
+
+  const openProjectFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setSaveStatus(`Opening ${file.name}…`);
+    try {
+      const project = parseEngineeringProjectFile(await file.text());
+      useEngineeringStore.getState().loadProject(project);
+      setShowSavedProjects(false);
+      setFitAfterCADImport(true);
+      setSaveStatus(`Opened ${file.name} · ${project.fixtures.length} fixtures`);
+    } catch (error) {
+      setSaveStatus(`Open failed: ${error.message}`);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const toggleSavedProjectBrowser = async () => {
+    if (showSavedProjects) {
+      setShowSavedProjects(false);
+      return;
+    }
+    setSavedProjectsLoading(true);
+    try {
+      const result = await apiGet("/geometry/projects");
+      const projects = Array.isArray(result?.projects) ? result.projects : [];
+      setSavedProjects(projects);
+      setSelectedSavedProjectId(projects[0]?.id || "");
+      setShowSavedProjects(true);
+      setSaveStatus(projects.length ? `${projects.length} saved engineering projects found` : "No saved engineering projects found");
+    } catch (error) {
+      setSaveStatus(`Load list failed: ${error.message}`);
+    } finally {
+      setSavedProjectsLoading(false);
+    }
+  };
+
+  const openSavedProject = async () => {
+    if (!selectedSavedProjectId) return;
+    setSavedProjectsLoading(true);
+    try {
+      const project = await apiGet(`/geometry/projects/${encodeURIComponent(selectedSavedProjectId)}`);
+      useEngineeringStore.getState().loadProject(project);
+      setShowSavedProjects(false);
+      setSaveStatus(`Opened ${project.name || selectedSavedProjectId}`);
+    } catch (error) {
+      setSaveStatus(`Open failed: ${error.message}`);
+    } finally {
+      setSavedProjectsLoading(false);
+    }
+  };
+
   return (
     <div style={{ display:"flex", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px", overflow:"hidden" }}>
 
       {/* Left toolbar */}
+      {showCADImport && <CADImportDialog currentProject={buildProjectPayload()} onApply={applyCADDesign} onClose={() => setShowCADImport(false)} />}
       <div style={{ width:220, flexShrink:0, borderRight:"1px solid #0a2030", display:"flex", flexDirection:"column", overflow:"auto" }}>
 
         {/* Header */}
@@ -2404,6 +2838,45 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
           <div style={{ color:"#00ccaa", fontWeight:"bold", fontSize:12, marginBottom:4 }}>⬡ POOL GEOMETRY</div>
           <input value={projectName} onChange={e=>setProjectName(e.target.value)}
             style={{ width:"100%", padding:"3px 6px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
+          <button onClick={loadICANSiteDesign} style={{
+            width:"100%", marginTop:5, padding:"5px 6px", cursor:"pointer",
+            background:"rgba(0,170,255,.09)", color:"#58c7ff", border:"1px solid #1a5a78",
+            borderRadius:3, fontSize:9, fontFamily:"monospace", textAlign:"left",
+          }}>LOAD 4KILO SITE DESIGN</button>
+          <input
+            ref={projectFileInputRef}
+            type="file"
+            accept=".aquaflow.json,.aqua,.json,application/json"
+            onChange={openProjectFile}
+            aria-label="Open AquaFlow engineering project file"
+            style={{ display:"none" }}
+          />
+          <button onClick={chooseProjectFile} style={{
+            width:"100%", marginTop:5, padding:"6px 6px", cursor:"pointer",
+            background:"rgba(0,170,255,.10)", color:"#9bdcff", border:"1px solid #2479a3",
+            borderRadius:3, fontSize:9, fontFamily:"monospace", textAlign:"left", fontWeight:700,
+          }}>OPEN PROJECT FILE…</button>
+          <button onClick={toggleSavedProjectBrowser} disabled={savedProjectsLoading} style={{
+            width:"100%", marginTop:5, padding:"5px 6px", cursor:savedProjectsLoading?"wait":"pointer",
+            background:"rgba(34,197,94,.08)", color:"#86efac", border:"1px solid #166534",
+            borderRadius:3, fontSize:9, fontFamily:"monospace", textAlign:"left",
+          }}>{savedProjectsLoading ? "LOADING PROJECT LIBRARY…" : showSavedProjects ? "CLOSE PROJECT LIBRARY" : "OPEN PROJECT LIBRARY…"}</button>
+          {showSavedProjects && <div style={{ marginTop:5, padding:5, background:"#06121c", border:"1px solid #16415a", borderRadius:4 }}>
+            <select value={selectedSavedProjectId} onChange={event=>setSelectedSavedProjectId(event.target.value)} style={{
+              width:"100%", padding:"5px", background:"#041018", color:"#cce8ff", border:"1px solid #1a4055", borderRadius:3, fontSize:9, fontFamily:"monospace",
+            }}>
+              {savedProjects.map(project => <option key={project.id} value={project.id}>
+                {project.name} · {project.fixture_count} fixtures
+              </option>)}
+            </select>
+            <button onClick={openSavedProject} disabled={!selectedSavedProjectId || savedProjectsLoading} style={{
+              width:"100%", marginTop:5, padding:"5px", cursor:selectedSavedProjectId?"pointer":"not-allowed",
+              background:"#07351e", color:"#86efac", border:"1px solid #22c55e", borderRadius:3, fontSize:9, fontFamily:"monospace",
+            }}>OPEN SELECTED PROJECT</button>
+          </div>}
+          {(projectName === ICAN_SITE_PROJECT_NAME || projectName.startsWith("4KILO Site Fountain")) && <div style={{
+            marginTop:5, color:"#ffcc55", fontSize:8, lineHeight:1.4,
+          }}>100 water outlets / 7 pumps. Layout confirmed; dimensions and hydraulics require site survey.</div>}
         </div>
 
         {/* Pool type */}
@@ -2429,6 +2902,15 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
                   : "none",
               }}>{poolType===t.key ? "●" : t.icon} {t.label}</button>
             ))}
+          </div>
+          <button type="button" onClick={startCustomPoolDrawing} style={{
+            width:"100%", marginTop:6, padding:"7px 8px", cursor:"crosshair",
+            background:tool==="polyline"?"linear-gradient(135deg,#00533f,#073020)":"#08253a",
+            color:tool==="polyline"?"#a7ffe8":"#7dd3fc", border:`1px solid ${tool==="polyline"?"#00d6a3":"#1674a8"}`,
+            borderRadius:4, fontFamily:"monospace", fontSize:10, fontWeight:800, textAlign:"left",
+          }}>✎ DRAW CUSTOM POOL</button>
+          <div style={{ color:"#6f8595", fontSize:8, lineHeight:1.5, marginTop:4 }}>
+            Draw any outline: click corners in the plan, then double-click to close it.
           </div>
         </div>
 
@@ -2582,6 +3064,29 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
               <button onClick={cancelDrawing} style={{ width:"100%", marginTop:4, padding:"3px", background:"#1a0808", color:"#ff8888", border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontSize:9 }}>
                 Cancel Drawing
               </button>
+            </div>
+          )}
+          {tool === "land" && (
+            <div style={{ marginTop:6, padding:6, background:"#050d14", border:"1px solid #25451d", borderRadius:4 }}>
+              <div style={{ color:"#a7e38c", fontSize:9, fontWeight:"bold", marginBottom:5 }}>LAND SURFACE</div>
+              <select value={landSurfaceType} onChange={(event) => setLandSurfaceType(event.target.value)}
+                aria-label="Land surface material"
+                style={{ width:"100%", padding:4, background:"#06121c", color:"#e8f6df", border:"1px solid #37612b", borderRadius:3, fontSize:9, marginBottom:5 }}>
+                {LAND_SURFACE_TYPES.map((surface) => <option key={surface.key} value={surface.key}>{surface.label}</option>)}
+              </select>
+              <div style={{ color:"#91ad84", fontSize:8, lineHeight:1.5, marginBottom:5 }}>
+                Click the land boundary points. Double-click or choose Close Surface to finish.
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+                <button type="button" onClick={finishLandSurface} disabled={landDrawPoints.length < 3}
+                  style={{ padding:4, background:landDrawPoints.length >= 3?"#163719":"#081018", color:landDrawPoints.length >= 3?"#b8f59e":"#334455", border:"1px solid #37612b", borderRadius:3, fontSize:8, cursor:"pointer" }}>
+                  CLOSE ({landDrawPoints.length})
+                </button>
+                <button type="button" onClick={cancelDrawing}
+                  style={{ padding:4, background:"#1a0808", color:"#ff9999", border:"1px solid #552222", borderRadius:3, fontSize:8, cursor:"pointer" }}>
+                  CANCEL
+                </button>
+              </div>
             </div>
           )}
           {(tool==="rectangle" || tool==="circle") && drawStart && (
@@ -2751,6 +3256,49 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
           </div>
         )}
 
+        {selectedObject === "surface" && selectedSurface && (
+          <div style={{ padding:"8px 10px", borderBottom:"1px solid #25451d", background:"#07110a" }}>
+            <div style={{ color:"#a7e38c", fontSize:9, marginBottom:6, fontWeight:"bold" }}>
+              ▰ SELECTED LAND SURFACE
+            </div>
+            <div style={{ color:"#91ad84", fontSize:8, marginBottom:2 }}>Name</div>
+            <input value={selectedSurface.label} onChange={(event) => updateSelectedSurface({ label:event.target.value })}
+              style={{ width:"100%", padding:"3px 5px", marginBottom:5, background:"#06121c", color:"#e8f6df", border:"1px solid #37612b", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 56px", gap:5, marginBottom:5 }}>
+              <div>
+                <div style={{ color:"#91ad84", fontSize:8, marginBottom:2 }}>Material</div>
+                <select value={selectedSurface.type} onChange={(event) => {
+                  const preset = LAND_SURFACE_TYPES.find((entry) => entry.key === event.target.value);
+                  updateSelectedSurface({ type:event.target.value, color:preset?.color || selectedSurface.color });
+                }} style={{ width:"100%", padding:3, background:"#06121c", color:"#e8f6df", border:"1px solid #37612b", borderRadius:3, fontSize:9 }}>
+                  {LAND_SURFACE_TYPES.map((surface) => <option key={surface.key} value={surface.key}>{surface.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ color:"#91ad84", fontSize:8, marginBottom:2 }}>Color</div>
+                <input aria-label="Land surface color" type="color" value={selectedSurface.color}
+                  onChange={(event) => updateSelectedSurface({ color:event.target.value })}
+                  style={{ width:"100%", height:23, padding:1, background:"#06121c", border:"1px solid #37612b", borderRadius:3 }} />
+              </div>
+            </div>
+            <div style={{ color:"#91ad84", fontSize:8, marginBottom:2 }}>Elevation above deck (m)</div>
+            <input type="number" min="-0.01" max="2" step="0.01" value={selectedSurface.elevation}
+              onChange={(event) => updateSelectedSurface({ elevation:Number(event.target.value || 0) })}
+              style={{ width:"100%", padding:"3px 5px", marginBottom:6, background:"#06121c", color:"#b8f59e", border:"1px solid #37612b", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, marginBottom:6 }}>
+              <div style={{ padding:4, background:"#0b1b0e", color:"#b8f59e", fontSize:8 }}>AREA<br/><b>{selectedSurfaceMetrics.area.toFixed(2)} m²</b></div>
+              <div style={{ padding:4, background:"#0b1b0e", color:"#b8f59e", fontSize:8 }}>PERIMETER<br/><b>{selectedSurfaceMetrics.perimeter.toFixed(2)} m</b></div>
+            </div>
+            <div style={{ color:"#91ad84", fontSize:8, lineHeight:1.5, marginBottom:6 }}>
+              Drag inside to move · drag square grips to reshape · Ctrl+D duplicates.
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+              <button onClick={duplicateSelectedSurface} style={{ padding:4, background:"#0b2512", color:"#b8f59e", border:"1px solid #37612b", borderRadius:3, cursor:"pointer", fontSize:8 }}>DUPLICATE</button>
+              <button onClick={deleteSelectedSurface} style={{ padding:4, background:"#1a0808", color:"#ff8888", border:"1px solid #552222", borderRadius:3, cursor:"pointer", fontSize:8 }}>DELETE</button>
+            </div>
+          </div>
+        )}
+
         {/* Selected fixture properties */}
         {sf && ft && (
           <div style={{ padding:"8px 10px", borderBottom:"1px solid #0a2030" }}>
@@ -2796,7 +3344,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
 
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5 }}>
                       <div>
-                        <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }}>PLC Channel</div>
+                        <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }} title="Free-text note. Real Siemens addresses are assigned in Devices → PLC → Siemens Setup and shown below.">PLC note</div>
                         <input value={sfEngineering.plcChannel || ""}
                           onChange={e=>updateFixtureEngineering("plcChannel", e.target.value)}
                           style={{ width:"100%", padding:"3px 5px", background:"#06121c", color:"#ffcc00", border:"1px solid #0a3040", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
@@ -2808,6 +3356,7 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
                           style={{ width:"100%", padding:"3px 5px", background:"#06121c", color:"#ffcc00", border:"1px solid #0a3040", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
                       </div>
                     </div>
+                    <SiemensFixtureLink fixtureId={fixtures[selectedFixture]?.id} />
                   </>
                 )}
 
@@ -3324,9 +3873,9 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
                  {safeDepthZones.map(z=><option key={z.key} value={z.key}>{z.label} ({z.depth}m)</option>)}
               </select>
             </div>
-            <button onClick={()=>{ setFixtures(prev=>prev.filter((_,i)=>i!==selectedFixture)); setSelectedFixture(null); }}
+            <button title="Delete selected fixture · Delete / Backspace" onClick={deleteSelectedFixture}
               style={{ width:"100%", padding:"4px", background:"#1a0808", color:"#ff4444", border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontSize:9 }}>
-              ✕ Delete fixture
+              ✕ Delete fixture&nbsp;&nbsp;<span style={{ opacity:0.65 }}>DEL</span>
             </button>
           </div>
         )}
@@ -3345,6 +3894,27 @@ onInsertNodeAtPoint={insertNodeAtPoint}
 onRemoveNode={removeNode}
   />
 )}
+        <div style={{ padding:"8px 10px", borderBottom:"1px solid #0a2030" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+            <span style={{ color:"#91ad84", fontSize:9 }}>SITE SURFACES</span>
+            <button onClick={() => { setTool("land"); cancelDrawing(); }} style={{ padding:"2px 6px", background:"#0b2512", color:"#b8f59e", border:"1px solid #37612b", borderRadius:3, cursor:"pointer", fontSize:8 }}>+ DRAW</button>
+          </div>
+          {siteSurfaces.length === 0 && <div style={{ color:"#4e6650", fontSize:8 }}>No land areas yet. Draw grass, paving, soil, rock, or sand.</div>}
+          {siteSurfaces.map((surface) => (
+            <button key={surface.id} onClick={() => {
+              setSelectedSurfaceId(surface.id);
+              setSelectedSurfaceVertex(null);
+              setSelectedFixture(null);
+              setSelectedObject("surface");
+              setTool("select");
+            }} style={{ width:"100%", display:"grid", gridTemplateColumns:"12px 1fr auto", alignItems:"center", gap:5, padding:"4px 5px", marginBottom:3, background:selectedSurfaceId === surface.id?"#17341b":"#06121c", color:selectedSurfaceId === surface.id?"#d7ffc7":"#91ad84", border:`1px solid ${selectedSurfaceId === surface.id?"#5a913f":"#17351d"}`, borderRadius:3, cursor:"pointer", fontSize:8, textAlign:"left" }}>
+              <span style={{ width:9, height:9, borderRadius:2, background:surface.color }} />
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{surface.label}</span>
+              <span>{surface.points.length} pts</span>
+            </button>
+          ))}
+        </div>
+
         {/* Layers */}
         <div style={{ padding:"8px 10px", borderBottom:"1px solid #0a2030" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
@@ -3505,11 +4075,18 @@ onRemoveNode={removeNode}
               EXPORT DXF
             </button>
           </div>
+          <button onClick={exportProjectDWG} disabled={cadExportBusy} style={{ width:"100%", padding:"8px", marginBottom:6, background:"#003052", color:"#65d8ff", border:"1px solid #00aaff88", borderRadius:3, cursor:cadExportBusy ? "wait" : "pointer", fontSize:10, fontFamily:"monospace" }}>
+            {cadExportBusy ? "CREATING DWG…" : "EXPORT AUTOCAD DWG"}
+          </button>
+          <button onClick={() => setShowCADImport(true)} style={{ width:"100%", padding:"7px", marginBottom:6, background:"#001530", color:"#65d8ff", border:"1px solid #00aaff66", borderRadius:3, cursor:"pointer", fontSize:10, fontFamily:"monospace" }}>
+            IMPORT AUTOCAD DWG / DXF
+          </button>
+          <div style={{ color:"#91adc0", fontSize:9, lineHeight:1.5, marginBottom:7 }}>Native DWG uses installed AutoCAD 2018+ or ODA File Converter. DXF exchange is also available.</div>
           {exportStatus && (
             <div style={{ color:"#00ccaa", fontSize:9, marginBottom:5 }}>{exportStatus}</div>
           )}
           {saveStatus && (
-            <div role="status" style={{ color:saveStatus.startsWith("Save failed")?"#ff8888":"#7fffd4", fontSize:9, marginBottom:5 }}>{saveStatus}</div>
+            <div role="status" style={{ color:/^(Save|Open) failed/.test(saveStatus)?"#ff8888":"#7fffd4", fontSize:9, marginBottom:5 }}>{saveStatus}</div>
           )}
 
           <button onClick={saveProject} style={{ width:"100%", padding:"6px", background:"#003520", color:"#00ff88", border:"1px solid #00aa4444", borderRadius:4, cursor:"pointer", fontSize:10, fontFamily:"monospace" }}>
@@ -3553,27 +4130,27 @@ onRemoveNode={removeNode}
                   padding: "5px 8px",
                   borderRadius: 6,
                   background:
-                    drawStart || polylinePoints.length > 0 || pipeSystem.drawing
+                    drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing
                       ? "rgba(113,63,18,0.92)"
                       : "rgba(2,8,16,0.88)",
                   border:
-                    drawStart || polylinePoints.length > 0 || pipeSystem.drawing
+                    drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing
                       ? "1px solid rgba(245,158,11,0.75)"
                       : "1px solid rgba(148,163,184,0.28)",
                   color:
-                    drawStart || polylinePoints.length > 0 || pipeSystem.drawing
+                    drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing
                       ? "#fbbf24"
                       : "#94a3b8",
                   fontSize: 10,
                   fontFamily: "monospace",
                   fontWeight: 800,
                   boxShadow:
-                    drawStart || polylinePoints.length > 0 || pipeSystem.drawing
+                    drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing
                       ? "0 0 12px rgba(245,158,11,0.22)"
                       : "none",
                 }}
               >
-                DRAW: {drawStart || polylinePoints.length > 0 || pipeSystem.drawing ? "ACTIVE" : "IDLE"}
+                DRAW: {drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing ? "ACTIVE" : "IDLE"}
               </div>
             </div>
         <canvas
@@ -3585,7 +4162,7 @@ onContextMenu={onCanvasContextMenu}
           style={{
             width:"100%",
             height:"100%",
-            cursor: isPanning || isDraggingGeometry ? "grabbing" : isSpaceDown ? "grab" : tool==="select" ? "default" : "crosshair",
+            cursor: isPanning || isDraggingGeometry || isDraggingSurface ? "grabbing" : isSpaceDown ? "grab" : tool==="select" ? "default" : "crosshair",
             display:"block"
           }}
           onMouseDown={onCanvasMouseDown}
@@ -3604,6 +4181,16 @@ onContextMenu={onCanvasContextMenu}
 
   if (tool === "depth") {
     finishDepthZone();
+    return;
+  }
+
+  if (tool === "polyline") {
+    finishPolyline();
+    return;
+  }
+
+  if (tool === "land") {
+    finishLandSurface();
     return;
   }
 
@@ -3713,7 +4300,7 @@ onContextMenu={onCanvasContextMenu}
 
         {/* Info overlay */}
         <div style={{ position:"absolute", bottom:8, left:8, background:"rgba(0,0,0,0.7)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#334455" }}>
-          {tool==="select" && "Drag blue corner grips to stretch · Drag pool body to move · SNAP controls precision · Wheel zoom · Space/Middle/Right drag pans"}
+          {tool==="select" && "Drag grips to stretch · Drag pool to move · Del deletes selection · Ctrl+D duplicates fixture · F fits · H resets · Space/Middle/Right pans"}
           {tool==="nozzle" && "Click on pool to place nozzle"}
           {tool==="light"  && "Click on pool to place light fixture"}
           {tool==="rectangle" && !drawStart && "Rectangle: click first corner"}
@@ -3721,12 +4308,13 @@ onContextMenu={onCanvasContextMenu}
           {tool==="circle" && !drawStart && "Circle: click center point"}
           {tool==="circle" && drawStart && "Circle: click radius point to finish"}
           {tool==="polyline" && "Polyline: click points · Close Polyline to finish"}
+          {tool==="land" && "Land: choose a material · click boundary points · double-click to close"}
           {tool==="measure"&& "Click two points to measure distance"}
           {tool==="delete" && "Click a fixture to delete it"}
           {tool==="depth"  && "Click to set depth zone"}
         </div>
 
-        {drawPreview && (drawStart || polylinePoints.length > 0) && (
+        {drawPreview && (drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0) && (
           <div style={{ position:"absolute", top:40, right:8, background:"rgba(0,0,0,0.75)", border:"1px solid #0a3040", borderRadius:4, padding:"6px 8px", fontSize:10, color:"#00ccaa", fontFamily:"monospace" }}>
             {tool==="rectangle" && drawStart && <>
               W {Math.abs(drawPreview.x-drawStart.x).toFixed(3)} m<br/>
@@ -3740,12 +4328,16 @@ onContextMenu={onCanvasContextMenu}
               POINTS {polylinePoints.length}<br/>
               X {drawPreview.x.toFixed(3)} · Y {drawPreview.y.toFixed(3)}
             </>}
+            {tool==="land" && <>
+              {(LAND_SURFACE_TYPES.find((entry) => entry.key === landSurfaceType)?.label || "Land").toUpperCase()} · {landDrawPoints.length} PTS<br/>
+              X {drawPreview.x.toFixed(3)} · Y {drawPreview.y.toFixed(3)}
+            </>}
           </div>
         )}
 
         {/* CAD coordinate readout */}
         <div style={{ position:"absolute", bottom:8, right:8, background:"rgba(0,0,0,0.72)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#7ab", fontFamily:"monospace" }}>
-          TOOL {tool.toUpperCase()}&nbsp;&nbsp; X {cursorWorld.x.toFixed(3)} m&nbsp;&nbsp; Y {cursorWorld.y.toFixed(3)} m&nbsp;&nbsp; ZOOM {Math.round(zoom)} px/m&nbsp;&nbsp; SNAP {snapToGrid ? gridStep + "m" : "OFF"}&nbsp;&nbsp; DRAW {drawStart || polylinePoints.length > 0 || pipeSystem.drawing ? "ACTIVE" : "IDLE"}&nbsp;&nbsp; LAYERS {layers.filter(l=>l.visible).length}/{layers.length}&nbsp;&nbsp; SELECTED {selectedObject === "fixture" && sf ? sf.label : selectedObject === "pool" ? "POOL" : "NONE"}
+          TOOL {tool.toUpperCase()}&nbsp;&nbsp; X {cursorWorld.x.toFixed(3)} m&nbsp;&nbsp; Y {cursorWorld.y.toFixed(3)} m&nbsp;&nbsp; ZOOM {Math.round(zoom)} px/m&nbsp;&nbsp; SNAP {snapToGrid ? gridStep + "m" : "OFF"}&nbsp;&nbsp; DRAW {drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing ? "ACTIVE" : "IDLE"}&nbsp;&nbsp; LAYERS {layers.filter(l=>l.visible).length}/{layers.length}&nbsp;&nbsp; SELECTED {selectedObject === "fixture" && sf ? sf.label : selectedObject === "surface" && selectedSurface ? selectedSurface.label : selectedObject === "pool" ? "POOL" : "NONE"}
         </div>
       </div>
     </div>

@@ -8,6 +8,16 @@ const MOODS = ["energetic", "calm", "dramatic", "cinematic", "playful"];
 const MOOD_ICONS = { energetic:"⚡", calm:"〰", dramatic:"🎭", cinematic:"🎬", playful:"✦" };
 const TRACK_COLORS = { pump:"#00d4ff", valve:"#8b5cf6", lighting:"#f59e0b", flame:"#ef4444", fog:"#6b7280", laser:"#f97316" };
 
+async function requestAI(path, body) {
+  const response = await fetch(`${API}${path}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  let data = null;
+  try { data = await response.json(); } catch { /* handled below */ }
+  if (!response.ok) throw new Error(data?.detail || data?.message || `AI service failed (${response.status})`);
+  return data;
+}
+
 export default function AIPanel() {
   const [tab, setTab] = useState("generate");
   const { currentShow, timelineTracks, addServerLog, applyPatternToTrack, loadShow } = useShowStore();
@@ -423,14 +433,9 @@ function GenerateTab({ show, onGenerate }) {
   const generate = async () => {
     setLoading(true); setError(null); setResult(null);
     try {
-      const res = await fetch(`${API}/generate`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ prompt, mood, duration:parseFloat(duration), bpm:parseFloat(bpm), include_flame:includeFlame, include_laser:includeLaser }),
-      });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      setResult(await res.json());
+      setResult(await requestAI("/generate", { prompt, mood, duration:parseFloat(duration), bpm:parseFloat(bpm), include_flame:includeFlame, include_laser:includeLaser }));
     } catch(e) {
-      setResult(generateOffline(prompt, mood, parseFloat(bpm), parseFloat(duration)));
+      setError(e.message);
     } finally { setLoading(false); }
   };
 
@@ -515,17 +520,17 @@ function PatternTab({ bpm, onApply }) {
   const [duration, setDuration]     = useState(32);
   const [loading, setLoading]       = useState(false);
   const [result, setResult]         = useState(null);
+  const [error, setError]           = useState(null);
   const DEVICE_TYPES = ["pump","valve","lighting","flame","fog"];
   const PATTERNS     = ["cascade","burst","wave","pulse","random"];
   const PATTERN_DESC = { cascade:"Gradually building clips", burst:"Short sharp bursts on beats", wave:"Sine wave intensity variation", pulse:"Rapid on/off pulses", random:"Randomized timing" };
 
   const generate = async () => {
-    setLoading(true);
+    setLoading(true); setError(null); setResult(null);
     try {
-      const res = await fetch(`${API}/generate-pattern`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ device_type:deviceType, pattern, intensity, duration:parseFloat(duration), bpm }) });
-      setResult(await res.json());
-    } catch {
-      setResult(generatePatternOffline(deviceType, pattern, intensity, parseFloat(duration), bpm));
+      setResult(await requestAI("/generate-pattern", { device_type:deviceType, pattern, intensity, duration:parseFloat(duration), bpm }));
+    } catch(e) {
+      setError(e.message);
     } finally { setLoading(false); }
   };
 
@@ -559,6 +564,7 @@ function PatternTab({ bpm, onApply }) {
       <button className="btn primary" onClick={generate} disabled={loading} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"7px" }}>
         {loading ? "⟳ Generating..." : "✦ Generate Pattern"}
       </button>
+      {error && <div style={{ marginTop:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
       {result && (
         <div style={{ marginTop:10, padding:"10px 12px", background:"rgba(0,212,255,0.05)", border:"1px solid var(--border-accent)", borderRadius:"var(--radius-md)" }}>
           <div style={{ fontSize:11, color:"var(--text-primary)", marginBottom:4 }}>{result.clip_count} clips generated · {result.pattern} pattern</div>
@@ -575,14 +581,14 @@ function PatternTab({ bpm, onApply }) {
 function EnhanceTab({ tracks, bpm }) {
   const [loading, setLoading]     = useState(false);
   const [suggestions, setSuggestions] = useState(null);
+  const [error, setError] = useState(null);
 
   const enhance = async () => {
-    setLoading(true);
+    setLoading(true); setError(null); setSuggestions(null);
     try {
-      const res = await fetch(`${API}/enhance`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ tracks, bpm }) });
-      setSuggestions((await res.json()).suggestions);
-    } catch {
-      setSuggestions(["Add flame bursts at chorus sections for dramatic effect","Add atmospheric fog during intro and outro sections","Increase pump intensity peaks for more visual impact","Enable energy optimization to reduce idle consumption by ~15%","Consider 1/8 note valve patterns for tight beat sync"]);
+      setSuggestions((await requestAI("/enhance", { tracks, bpm })).suggestions);
+    } catch(e) {
+      setError(e.message);
     } finally { setLoading(false); }
   };
 
@@ -598,6 +604,7 @@ function EnhanceTab({ tracks, bpm }) {
       <button className="btn primary" onClick={enhance} disabled={loading} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"7px", marginBottom:12 }}>
         {loading ? "⟳ Analyzing..." : "🔍 Analyze Show"}
       </button>
+      {error && <div style={{ marginBottom:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
       {suggestions && (
         <div>
           <SectionLabel>Suggestions ({suggestions.length})</SectionLabel>
@@ -617,14 +624,14 @@ function EnhanceTab({ tracks, bpm }) {
 function OptimizeTab({ tracks, bpm }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult]   = useState(null);
+  const [error, setError]     = useState(null);
 
   const optimize = async () => {
-    setLoading(true);
+    setLoading(true); setError(null); setResult(null);
     try {
-      const res = await fetch(`${API}/optimize-energy`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ tracks, bpm }) });
-      setResult(await res.json());
-    } catch {
-      setResult({ estimated_savings:"18%", optimizations:[{ track:"Master Pump Array", action:"Reduce 3 idle clips from 30% to 15%", savings_pct:8 }], recommendations:["Use VFD speed ramping instead of instant on/off for pumps","Stagger jet start times to reduce peak current draw"] });
+      setResult(await requestAI("/optimize-energy", { tracks, bpm }));
+    } catch(e) {
+      setError(e.message);
     } finally { setLoading(false); }
   };
 
@@ -636,6 +643,7 @@ function OptimizeTab({ tracks, bpm }) {
       <button className="btn primary" onClick={optimize} disabled={loading} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"7px", marginBottom:12 }}>
         {loading ? "⟳ Optimizing..." : "⚡ Optimize Energy"}
       </button>
+      {error && <div style={{ marginBottom:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
       {result && (
         <div>
           <div style={{ padding:"10px 12px", background:"rgba(16,185,129,0.06)", border:"1px solid rgba(16,185,129,0.2)", borderRadius:"var(--radius-md)", marginBottom:10 }}>
@@ -684,24 +692,4 @@ function Toggle({ label, value, onChange }) {
       <span style={{ fontSize:10, color:value?"var(--text-primary)":"var(--text-muted)" }}>{label}</span>
     </div>
   );
-}
-function generateOffline(prompt, mood, bpm, duration) {
-  const sections = [
-    { label:"Intro",  start:0,              end:duration*0.1, energy:0.3 },
-    { label:"Verse",  start:duration*0.1,   end:duration*0.4, energy:0.6 },
-    { label:"Chorus", start:duration*0.4,   end:duration*0.7, energy:1.0 },
-    { label:"Finale", start:duration*0.7,   end:duration,     energy:0.8 },
-  ];
-  const tracks = [
-    { id:"off-pump",  label:"Pump Array",   type:"pump",     color:"#00d4ff", deviceId:"pump-01",  clips:sections.map((s,i)=>({ id:`op-${i}`, start:Math.round(s.start), end:Math.round(s.end), intensity:Math.round(s.energy*100), label:s.label })) },
-    { id:"off-light", label:"RGB Lighting", type:"lighting", color:"#f59e0b", deviceId:"light-01", clips:sections.map((s,i)=>({ id:`ol-${i}`, start:Math.round(s.start), end:Math.round(s.end), intensity:Math.round(s.energy*100), label:s.label })) },
-  ];
-  return { show:{ name:`AI Show (${mood})`, bpm, duration, notes:`Generated offline at ${bpm} BPM, ${mood} mood.` }, tracks, analysis:{ beat_count:Math.round(bpm*duration/60), sections:sections.length, key:"A minor", mood } };
-}
-function generatePatternOffline(deviceType, pattern, intensity, duration, bpm) {
-  const beat = 60.0/bpm;
-  const clips = []; let t=0, id=0;
-  const step = pattern==="burst"?beat*4:pattern==="pulse"?beat*0.5:beat*2;
-  while (t < duration) { clips.push({ id:`pat-${id++}`, start:Math.round(t*100)/100, end:Math.round((t+step*0.85)*100)/100, intensity, label:pattern.charAt(0).toUpperCase()+pattern.slice(1) }); t+=step; }
-  return { device_type:deviceType, pattern, clips, clip_count:clips.length, bpm, duration };
 }

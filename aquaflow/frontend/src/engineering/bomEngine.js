@@ -1,3 +1,5 @@
+import { getFixtureRatings } from "../data/fixtureLibrary.js";
+
 export function generateBOM(fixtures = []) {
   const items = {};
 
@@ -5,6 +7,9 @@ export function generateBOM(fixtures = []) {
     const key = f.type || "unknown";
     const label = f.label || key;
     const eng = f.engineering || {};
+    // Falls back to the normalized `electrical` block and converts flow units,
+    // so generated library items no longer count as 0 W / 0 kW / 0 DMX.
+    const ratings = getFixtureRatings(f);
 
     let category = "Equipment";
 
@@ -94,17 +99,18 @@ export function generateBOM(fixtures = []) {
 
     items[key].quantity += 1;
 
-    items[key].totalFlowLpm += Number(eng.flowLpm || 0);
-    items[key].totalFlowM3Hr += Number(eng.flowM3Hr || 0);
+    items[key].totalFlowLpm += ratings.flowLpm;
+    items[key].totalFlowM3Hr += ratings.flowM3Hr;
 
-    items[key].totalWattage += Number(eng.wattage || 0);
-    items[key].totalPowerKw += Number(eng.powerKw || 0);
+    // Same load in two units (W and kW columns) — not two loads.
+    items[key].totalWattage += ratings.powerW;
+    items[key].totalPowerKw += ratings.powerKw;
 
     items[key].totalAirFlowLpm += Number(eng.airFlowLpm || 0);
 
     items[key].totalFuelFlow += Number(eng.gasFlow || 0);
 
-    items[key].totalDmxChannels += Number(eng.dmxChannels || 0);
+    items[key].totalDmxChannels += ratings.dmxChannels;
 
     items[key].totalDigitalInputs += Number(eng.digitalInputs || 0);
     items[key].totalDigitalOutputs += Number(eng.digitalOutputs || 0);

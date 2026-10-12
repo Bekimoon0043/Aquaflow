@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import useProjectStore from "../../store/projectStore";
 import { useShowStore } from "../../store/showStore";
+import { useICANPreviewStore } from "../../store/icanPreviewStore";
 import { useWS } from "../../hooks/WebSocketContext";
 import AudioWaveformTrack from "./AudioWaveformTrack";
+import { buildSimulationTracks } from "./simulationTimeline";
 
 const TRACK_H = 50;
 const HEADER_W = 200;
@@ -37,6 +40,7 @@ export default function Timeline({ height }) {
     selectedClipId,
     selectedClipIds,
     selectedTrackId,
+    setPlayback,
     setPlayhead,
      audioData,
      setAudioData,
@@ -49,7 +53,6 @@ export default function Timeline({ height }) {
     duplicateTimelineClip,
     duplicateSelectedTimelineClips,
     quantizeTimeline,
-    autoGenerateTimeline,
     healTimelineOverlaps,
     toggleTrackMute,
     toggleTrackSolo,
@@ -69,6 +72,7 @@ export default function Timeline({ height }) {
   } = useShowStore();
 
   const { send } = useWS();
+  const sitePreview = useICANPreviewStore();
   const containerRef = useRef(null);
   const dragStateRef = useRef(null);
   const marqueeStateRef = useRef(null);
@@ -79,7 +83,16 @@ export default function Timeline({ height }) {
   const [marqueeRect, setMarqueeRect] = useState(null);
 
   const totalDuration = Math.max(30, Number(currentShow?.duration || 180));
-  const canvasWidth = Math.max(1200, totalDuration * timelineZoom);
+  const simulationActive = Boolean(sitePreview.active && sitePreview.plan);
+  const activeDuration = simulationActive
+    ? Math.max(0.1, Number(sitePreview.plan.duration) || 0.1)
+    : totalDuration;
+  const activePlayhead = simulationActive ? sitePreview.position : playhead;
+  const activePlayback = simulationActive ? sitePreview.playback : playbackState;
+  const displayZoom = simulationActive ? clamp(1100 / activeDuration, 6, 160) : timelineZoom;
+  const canvasWidth = Math.max(1200, activeDuration * displayZoom);
+  const simulationTracks = useMemo(() => buildSimulationTracks(sitePreview.plan), [sitePreview.plan]);
+  const displayedTracks = simulationActive ? simulationTracks : timelineTracks;
   const serverAuthoritative = connectionState === "connected";
   const snapStep = useMemo(() => getBeatStep(currentShow, 0.25), [currentShow]);
   const minDuration = Math.max(0.1, snapStep);
@@ -138,7 +151,7 @@ export default function Timeline({ height }) {
 
   useEffect(() => {
     if (containerRef.current) {
-      const ph = playhead * timelineZoom;
+      const ph = activePlayhead * displayZoom;
       const visW = containerRef.current.clientWidth - HEADER_W;
       if (ph - scrollRef.current.left > visW * 0.75) {
         const nextScroll = Math.max(0, ph - visW * 0.25);
@@ -147,7 +160,54 @@ export default function Timeline({ height }) {
         setScrollX(nextScroll);
       }
     }
-  }, [playhead, timelineZoom]);
+  }, [activePlayhead, displayZoom]);
+
+  const playOrPause = () => {
+    if (simulationActive) {
+      if (sitePreview.playback === "playing") sitePreview.pause();
+      else sitePreview.play();
+      return;
+    }
+    const next = playbackState === "playing" ? "paused" : "playing";
+    setPlayback(next);
+    if (serverAuthoritative) send({ type: "playback", action: next === "playing" ? "play" : "pause" });
+  };
+
+  const stopPlayback = () => {
+    if (simulationActive) { sitePreview.stop(); return; }
+    setPlayback("stopped");
+    setPlayhead(0);
+    if (serverAuthoritative) send({ type: "playback", action: "stop" });
+  };
+
+  const seekActive = (value) => {
+    const next = clamp(Number(value) || 0, 0, activeDuration);
+    if (simulationActive) { sitePreview.seek(next); return; }
+    setPlayhead(next);
+    if (serverAuthoritative) send({ type: "playback", action: "seek", position: next });
+  };
+
+  const seekAndPlay = useCallback((value) => {
+    const next = clamp(Number(value) || 0, 0, activeDuration);
+    if (simulationActive) {
+      sitePreview.seek(next);
+      sitePreview.play();
+      return;
+    }
+    setPlayhead(next);
+    setPlayback("playing");
+    if (serverAuthoritative) {
+      send({ type: "playback", action: "seek", position: next });
+      send({ type: "playback", action: "play" });
+    }
+  }, [activeDuration, send, serverAuthoritative, setPlayback, setPlayhead, simulationActive, sitePreview]);
+
+  const timeFromClientX = useCallback((clientX) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return 0;
+    const x = clientX - rect.left + scrollRef.current.left;
+    return clamp(x / displayZoom, 0, activeDuration);
+  }, [activeDuration, displayZoom]);
 
   const snapTime = useCallback((value) => {
     if (!snapToGrid) return roundTime(Math.max(0, value));
@@ -211,20 +271,13 @@ export default function Timeline({ height }) {
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      const tag = document.activeElement?.tagName?.toLowerCase();
-      if (["input", "textarea", "select"].includes(tag)) return;
+      if (event.target?.closest?.("input, textarea, select, [contenteditable='true']")) return;
+      if (event.defaultPrevented) return;
 
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+      if (event.code === "Space") {
         event.preventDefault();
-        undo();
-        addServerLog({ level: "info", msg: "Undo executed from timeline keyboard shortcut" });
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"))) {
-        event.preventDefault();
-        redo();
-        addServerLog({ level: "info", msg: "Redo executed from timeline keyboard shortcut" });
+        if (event.shiftKey) stopPlayback();
+        else playOrPause();
         return;
       }
 
@@ -259,12 +312,12 @@ export default function Timeline({ height }) {
     addServerLog,
     duplicateSelectedTimelineClips,
     duplicateTimelineClip,
-    redo,
     removeSelectedTimelineClips,
     removeTimelineClip,
     selectedClipCount,
     selectedClipInfo,
-    undo,
+    playOrPause,
+    stopPlayback,
   ]);
 
   const startClipDrag = (event, trackId, clip, mode) => {
@@ -379,13 +432,12 @@ export default function Timeline({ height }) {
   };
 
   const onRulerClick = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left + scrollRef.current.left;
-    const t = Math.max(0, Math.min(totalDuration, x / timelineZoom));
-    setPlayhead(t);
-    if (serverAuthoritative) {
-      send({ type: "playback", action: "seek", position: t });
-    }
+    seekAndPlay(timeFromClientX(event.clientX));
+  };
+
+  const onEmptyTrackClick = (event, trackId) => {
+    selectTrack(trackId);
+    seekAndPlay(timeFromClientX(event.clientX));
   };
 
   const addTrackThenClip = () => {
@@ -432,6 +484,17 @@ export default function Timeline({ height }) {
     }
   };
 
+  useEffect(() => {
+    const onEditCommand = (event) => {
+      // This timeline is hidden under Show Programming and the Engineering Designer.
+      if (["show_programmer", "geometry"].includes(useProjectStore.getState().workspace?.activePanel)) return;
+      if (event.detail?.command === "delete") { handleDelete(); event.detail.handled = true; }
+      if (event.detail?.command === "deselect") { setSelectedClips(null, []); event.detail.handled = true; }
+    };
+    window.addEventListener("aquaflow:edit-command", onEditCommand);
+    return () => window.removeEventListener("aquaflow:edit-command", onEditCommand);
+  }, [selectedClipCount, selectedClipInfo, setSelectedClips]);
+
   const formatTime = (sec) => {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
@@ -439,11 +502,11 @@ export default function Timeline({ height }) {
   };
 
   const ticks = [];
-  const tickInterval = timelineZoom >= 8 ? 5 : timelineZoom >= 4 ? 10 : 20;
-  for (let t = 0; t <= totalDuration; t += tickInterval) ticks.push(t);
+  const tickInterval = displayZoom >= 80 ? 1 : displayZoom >= 24 ? 5 : displayZoom >= 8 ? 10 : 20;
+  for (let t = 0; t <= activeDuration; t += tickInterval) ticks.push(t);
   const microTicks = [];
   const microInterval = tickInterval / 5;
-  for (let t = 0; t <= totalDuration; t += microInterval) {
+  for (let t = 0; t <= activeDuration; t += microInterval) {
     if (t % tickInterval !== 0) microTicks.push(t);
   }
 
@@ -467,7 +530,11 @@ export default function Timeline({ height }) {
         flexShrink: 0,
       }}>
         <span style={{ fontFamily: "var(--font-display)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
-          Timeline
+          {simulationActive ? "Simulation Timeline" : "Timeline"}
+        </span>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"2px 7px", borderRadius:10, background: simulationActive ? "rgba(16,185,129,0.12)" : "rgba(201,162,39,0.08)", color: simulationActive ? "var(--green)" : "var(--text-accent)", fontSize:9, fontFamily:"var(--font-mono)" }}>
+          <span style={{ width:5, height:5, borderRadius:"50%", background:"currentColor", boxShadow:"0 0 6px currentColor" }} />
+          {simulationActive ? "DESIGN SIM · NO OUTPUT" : "SHOW PROGRAM"}
         </span>
         <span style={{ fontSize: 9, color: serverAuthoritative ? "var(--green)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {serverAuthoritative ? "SERVER AUTHORITY" : "LOCAL PREVIEW"}
@@ -479,9 +546,20 @@ export default function Timeline({ height }) {
           {visibleSoloCount > 0 ? `${visibleSoloCount} SOLO` : "ALL TRACKS ACTIVE"}
         </span>
         <span style={{ fontSize: 9, color: selectedClipCount > 0 ? "var(--text-accent)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-          {selectedClipCount > 0 ? `${selectedClipCount} SELECTED` : "NO CLIP SELECTION"}
+          {simulationActive ? `${displayedTracks.length} VISUAL LANES` : selectedClipCount > 0 ? `${selectedClipCount} SELECTED` : "NO CLIP SELECTION"}
         </span>
         <div style={{ flex: 1 }} />
+        {simulationActive && <><div style={{ display:"flex", alignItems:"center", gap:2, padding:"2px 4px", border:"1px solid var(--border-mid)", borderRadius:5, background:"var(--bg-void)" }}>
+          <button className="btn icon-btn" title="Go to start" onClick={() => seekActive(0)} style={{ padding:"2px 6px", fontSize:10 }}>⏮</button>
+          <button className="btn icon-btn" title="Back 5 seconds" onClick={() => seekActive(activePlayhead - 5)} style={{ padding:"2px 6px", fontSize:10 }}>−5</button>
+          <button className="btn icon-btn primary" title={`${activePlayback === "playing" ? "Pause" : "Play"} · Space`} onClick={playOrPause} style={{ padding:"2px 8px", fontSize:11 }}>{activePlayback === "playing" ? "Ⅱ" : "▶"}</button>
+          <button className="btn icon-btn" title="Stop · Shift+Space" onClick={stopPlayback} style={{ padding:"2px 6px", fontSize:10 }}>■</button>
+          <button className="btn icon-btn" title="Forward 5 seconds" onClick={() => seekActive(activePlayhead + 5)} style={{ padding:"2px 6px", fontSize:10 }}>+5</button>
+        </div>
+        <span style={{ minWidth:94, textAlign:"center", color: activePlayback === "playing" ? "var(--green)" : "var(--text-secondary)", fontFamily:"var(--font-mono)", fontSize:10 }}>
+          {formatTime(activePlayhead)} / {formatTime(activeDuration)}
+        </span></>}
+        {!simulationActive && <>
         <button className="btn" disabled={!canUndo} onClick={() => { undo(); addServerLog({ level: "info", msg: "Undo executed from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 10, opacity: canUndo ? 1 : 0.5 }}>↶ Undo</button>
         <button className="btn" disabled={!canRedo} onClick={() => { redo(); addServerLog({ level: "info", msg: "Redo executed from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 10, opacity: canRedo ? 1 : 0.5 }}>↷ Redo</button>
         <button className="btn" onClick={() => { healTimelineOverlaps(); addServerLog({ level: "info", msg: "Timeline overlap healing executed" }); }} style={{ padding: "2px 8px", fontSize: 10 }}>Heal</button>
@@ -498,7 +576,13 @@ export default function Timeline({ height }) {
         <button className="btn" disabled={!selectedClipCount} onClick={handleDuplicate} style={{ padding: "2px 8px", fontSize: 10, opacity: selectedClipCount ? 1 : 0.5 }}>{selectedClipCount > 1 ? "Duplicate Sel" : "Duplicate"}</button>
         <button className="btn danger" disabled={!selectedClipCount} onClick={handleDelete} style={{ padding: "2px 8px", fontSize: 10, opacity: selectedClipCount ? 1 : 0.5 }}>{selectedClipCount > 1 ? "Delete Sel" : "Delete"}</button>
         <button className="btn" onClick={() => { quantizeTimeline(); addServerLog({ level: "info", msg: "Timeline quantized from toolbar" }); }} style={{ padding: "2px 8px", fontSize: 10 }}>Quantize</button>
-        <button className="btn primary" onClick={() => { autoGenerateTimeline(); addServerLog({ level: "info", msg: "AI timeline generation executed" }); }} style={{ padding: "2px 8px", fontSize: 10 }}>✨ AI Generate</button>
+        <button className="btn primary" onClick={() => {
+          window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "show_programmer" } }));
+          window.setTimeout(() => window.dispatchEvent(new CustomEvent("aquaflow:open-show-ai")), 0);
+          addServerLog({ level: "info", msg: "Opened the fixture-aware AI / Music Show Builder" });
+        }} style={{ padding: "2px 8px", fontSize: 10 }}>✨ AI Show Builder</button>
+        </>}
+        {simulationActive && <button className="btn" onClick={sitePreview.close} style={{ padding:"2px 8px", fontSize:10 }}>Exit simulation</button>}
       </div>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -507,23 +591,24 @@ export default function Timeline({ height }) {
             TRACKS
           </div>
           <div style={{ flex: 1, overflowY: "hidden" }}>
-<AudioWaveformTrack
+{!simulationActive && <AudioWaveformTrack
   audioData={audioData}
   timelineZoom={timelineZoom}
   playhead={playhead}
   scrollLeft={scrollX}
   trackLabelWidth={HEADER_W}
   onRemove={() => setAudioData(null)}
-/>            
-{timelineTracks.map((track, trackIndex) => (
+/>}
+{displayedTracks.map((track, trackIndex) => (
               <TrackHeader
                 key={track.id}
                 track={track}
                 index={trackIndex}
-                selected={track.id === selectedTrack?.id}
+                selected={!simulationActive && track.id === selectedTrack?.id}
+                readOnly={simulationActive}
                 canMoveUp={trackIndex > 0}
-                canMoveDown={trackIndex < timelineTracks.length - 1}
-                onSelect={() => selectTrack(track.id)}
+                canMoveDown={trackIndex < displayedTracks.length - 1}
+                onSelect={() => { if (!simulationActive) selectTrack(track.id); }}
                 onAddClip={() => createTimelineClip(track.id, playhead)}
                 onToggleMute={() => toggleTrackMute(track.id)}
                 onToggleSolo={() => toggleTrackSolo(track.id)}
@@ -545,33 +630,34 @@ export default function Timeline({ height }) {
           }}
         >
           <div style={{ width: canvasWidth, position: "relative" }}>
-            <div style={{ height: RULER_H, background: "var(--bg-surface)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 20, cursor: "pointer", overflow: "hidden" }} onClick={onRulerClick}>
+            <div title="Click to seek and play" style={{ height: RULER_H, background: "var(--bg-surface)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 20, cursor: "pointer", overflow: "hidden" }} onClick={onRulerClick}>
               <svg width={canvasWidth} height={RULER_H}>
                 {microTicks.map((t) => (
-                  <line key={t} x1={t * timelineZoom} y1={RULER_H - 6} x2={t * timelineZoom} y2={RULER_H} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
+                  <line key={t} x1={t * displayZoom} y1={RULER_H - 6} x2={t * displayZoom} y2={RULER_H} stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
                 ))}
                 {ticks.map((t) => (
                   <g key={t}>
-                    <line x1={t * timelineZoom} y1={0} x2={t * timelineZoom} y2={RULER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
-                    <text x={t * timelineZoom + 3} y={14} fontSize={9} fontFamily="var(--font-mono)" fill="rgba(255,255,255,0.4)">{formatTime(t)}</text>
+                    <line x1={t * displayZoom} y1={0} x2={t * displayZoom} y2={RULER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
+                    <text x={t * displayZoom + 3} y={14} fontSize={9} fontFamily="var(--font-mono)" fill="rgba(255,255,255,0.4)">{formatTime(t)}</text>
                   </g>
                 ))}
-                <line x1={playhead * timelineZoom} y1={0} x2={playhead * timelineZoom} y2={RULER_H} stroke="#00d4ff" strokeWidth="1.5" />
-                <polygon points={`${playhead * timelineZoom - 5},0 ${playhead * timelineZoom + 5},0 ${playhead * timelineZoom},8`} fill="#00d4ff" />
+                <line x1={activePlayhead * displayZoom} y1={0} x2={activePlayhead * displayZoom} y2={RULER_H} stroke={simulationActive ? "#34d399" : "#c9a227"} strokeWidth="1.5" />
+                <polygon points={`${activePlayhead * displayZoom - 5},0 ${activePlayhead * displayZoom + 5},0 ${activePlayhead * displayZoom},8`} fill={simulationActive ? "#34d399" : "#c9a227"} />
               </svg>
             </div>
 
-            {timelineTracks.map((track, trackIndex) => (
+            {displayedTracks.map((track, trackIndex) => (
               <TrackRow
                 key={track.id}
                 track={track}
                 trackIndex={trackIndex}
-                timelineZoom={timelineZoom}
+                timelineZoom={displayZoom}
                 canvasWidth={canvasWidth}
-                selectedTrackId={selectedTrack?.id}
-                selectedClipSet={selectedClipSet}
-                onSelectTrack={() => selectTrack(track.id)}
-                onSelectClip={(event, clipId) => handleClipSelection(event, track.id, clipId)}
+                selectedTrackId={simulationActive ? null : selectedTrack?.id}
+                selectedClipSet={simulationActive ? new Set() : selectedClipSet}
+                readOnly={simulationActive}
+                onSelectTrack={(event) => onEmptyTrackClick(event, track.id)}
+                onSelectClip={(event, clipId) => { if (!simulationActive) handleClipSelection(event, track.id, clipId); }}
                 onAddClip={(event) => addClipAtCursor(track.id, event)}
                 onMoveClip={startClipDrag}
                 onStartMarquee={startMarqueeSelection}
@@ -596,12 +682,12 @@ export default function Timeline({ height }) {
               position: "absolute",
               top: RULER_H,
               bottom: 0,
-              left: playhead * timelineZoom,
+              left: activePlayhead * displayZoom,
               width: 1,
-              background: "#00d4ff",
+              background: simulationActive ? "#34d399" : "#c9a227",
               pointerEvents: "none",
               zIndex: 15,
-              boxShadow: "0 0 6px rgba(0,212,255,0.6)",
+              boxShadow: simulationActive ? "0 0 6px rgba(52,211,153,0.65)" : "0 0 6px rgba(201,162,39,0.65)",
             }} />
           </div>
         </div>
@@ -620,6 +706,12 @@ export default function Timeline({ height }) {
         fontFamily: "var(--font-mono)",
         flexShrink: 0,
       }}>
+        {simulationActive ? <>
+          <span style={{ color:"var(--green)" }}>{sitePreview.plan.name}</span>
+          <span>{displayedTracks.length} VISUAL LANES</span>
+          <span>{activePlayback.toUpperCase()}</span>
+          <span>Click the ruler or an empty lane to seek & play · Space play/pause · Shift+Space stop · preview never sends hardware output</span>
+        </> : <>
         <span>{selectedTrack ? `TRACK ${selectedTrack.label}` : "NO TRACK SELECTED"}</span>
         {selectedClipCount > 1 ? (
           <>
@@ -634,14 +726,14 @@ export default function Timeline({ height }) {
             <span>INT {selectedClipInfo.clip.intensity}%</span>
           </>
         ) : (
-          <span>Double-click a row to create a clip · Ctrl/Cmd-click clips to multi-select · Shift-drag empty timeline to marquee select · Use arrows on tracks to reorder</span>
-        )}
+          <span>Click ruler/empty lane to seek & play · Space play/pause · Del delete · Ctrl+D duplicate · Shift-drag marquee</span>
+        )}</>}
       </div>
     </div>
   );
 }
 
-function TrackHeader({ track, index, selected, canMoveUp, canMoveDown, onSelect, onAddClip, onToggleMute, onToggleSolo, onMoveUp, onMoveDown }) {
+function TrackHeader({ track, index, selected, readOnly = false, canMoveUp, canMoveDown, onSelect, onAddClip, onToggleMute, onToggleSolo, onMoveUp, onMoveDown }) {
   return (
     <div onClick={onSelect} style={{
       height: TRACK_H,
@@ -663,27 +755,27 @@ function TrackHeader({ track, index, selected, canMoveUp, canMoveDown, onSelect,
           </span>
         </div>
       </div>
-      <div style={{ display: "flex", gap: 3 }} onClick={(event) => event.stopPropagation()}>
+      {!readOnly && <div style={{ display: "flex", gap: 3 }} onClick={(event) => event.stopPropagation()}>
         <button className="btn icon-btn" onClick={onMoveUp} disabled={!canMoveUp} style={{ padding: "2px 4px", fontSize: 9, color: canMoveUp ? "var(--text-secondary)" : "var(--text-muted)", opacity: canMoveUp ? 1 : 0.35 }} data-tip="Move Up">↑</button>
         <button className="btn icon-btn" onClick={onMoveDown} disabled={!canMoveDown} style={{ padding: "2px 4px", fontSize: 9, color: canMoveDown ? "var(--text-secondary)" : "var(--text-muted)", opacity: canMoveDown ? 1 : 0.35 }} data-tip="Move Down">↓</button>
         <button className="btn icon-btn" onClick={onAddClip} style={{ padding: "2px 4px", fontSize: 9, color: "var(--text-secondary)" }} data-tip="Add Clip">+</button>
         <button className="btn icon-btn" onClick={onToggleMute} style={{ padding: "2px 4px", fontSize: 9, color: track.muted ? "var(--red)" : "var(--text-muted)" }} data-tip="Mute">M</button>
         <button className="btn icon-btn" onClick={onToggleSolo} style={{ padding: "2px 4px", fontSize: 9, color: track.solo ? "var(--amber)" : "var(--text-muted)" }} data-tip="Solo">S</button>
-      </div>
+      </div>}
     </div>
   );
 }
 
-function TrackRow({ track, trackIndex, timelineZoom, selectedTrackId, selectedClipSet, onSelectTrack, onSelectClip, onAddClip, onMoveClip, onStartMarquee, canvasWidth }) {
+function TrackRow({ track, trackIndex, timelineZoom, selectedTrackId, selectedClipSet, readOnly = false, onSelectTrack, onSelectClip, onAddClip, onMoveClip, onStartMarquee, canvasWidth }) {
   const gridStep = timelineZoom * 4;
   const backgroundColor = selectedTrackId === track.id ? "rgba(201,162,39,0.03)" : "var(--bg-base)";
 
   return (
     <div
-      onClick={onSelectTrack}
-      onDoubleClick={onAddClip}
+      onClick={(event) => onSelectTrack(event)}
+      onDoubleClick={readOnly ? undefined : onAddClip}
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget && event.shiftKey) onStartMarquee(event, track.id);
+        if (!readOnly && event.target === event.currentTarget && event.shiftKey) onStartMarquee(event, track.id);
       }}
       style={{
         height: TRACK_H,
@@ -707,15 +799,16 @@ function TrackRow({ track, trackIndex, timelineZoom, selectedTrackId, selectedCl
           selected={selectedClipSet.has(clip.id)}
           muted={track.muted}
           solo={track.solo}
+          readOnly={readOnly}
           onSelect={(event) => onSelectClip(event, clip.id)}
-          onDragStart={(event, mode) => onMoveClip(event, track.id, clip, mode)}
+          onDragStart={(event, mode) => { if (!readOnly) onMoveClip(event, track.id, clip, mode); }}
         />
       ))}
     </div>
   );
 }
 
-function Clip({ clip, color, timelineZoom, selected, muted, solo, onSelect, onDragStart }) {
+function Clip({ clip, color, timelineZoom, selected, muted, solo, readOnly = false, onSelect, onDragStart }) {
   const left = clip.start * timelineZoom;
   const width = Math.max(8, (clip.end - clip.start) * timelineZoom);
   const intHeight = Math.round((clip.intensity / 100) * (TRACK_H - 10));
@@ -736,7 +829,7 @@ function Clip({ clip, color, timelineZoom, selected, muted, solo, onSelect, onDr
         width,
         height: TRACK_H - 10,
         borderRadius: 4,
-        cursor: "grab",
+        cursor: readOnly ? "default" : "grab",
         background: muted ? "rgba(239,68,68,0.08)" : `${color}22`,
         border: `1px solid ${borderColor}`,
         overflow: "hidden",
@@ -750,8 +843,8 @@ function Clip({ clip, color, timelineZoom, selected, muted, solo, onSelect, onDr
           {clip.label}
         </span>
       )}
-      <div onPointerDown={(event) => { if (event.button !== 0) return; onDragStart(event, "resize-start"); }} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", background: selected ? `${color}44` : "transparent" }} />
-      <div onPointerDown={(event) => { if (event.button !== 0) return; onDragStart(event, "resize-end"); }} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", background: selected ? `${color}44` : "transparent" }} />
+      {!readOnly && <><div onPointerDown={(event) => { if (event.button !== 0) return; onDragStart(event, "resize-start"); }} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", background: selected ? `${color}44` : "transparent" }} />
+      <div onPointerDown={(event) => { if (event.button !== 0) return; onDragStart(event, "resize-end"); }} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", background: selected ? `${color}44` : "transparent" }} /></>}
     </div>
   );
 }

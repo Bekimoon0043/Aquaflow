@@ -8,6 +8,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("aquaflow", {
   shell: "electron",
+  getCadCapabilities() { return ipcRenderer.invoke("cad:capabilities"); },
+  exportDWG(request) { return ipcRenderer.invoke("cad:export-dwg",request); },
+  importDWG(bytes) { return ipcRenderer.invoke("cad:import-dwg",bytes); },
 
   // The main process emits 'open-show' with an absolute .aquashow path when the user
   // uses File > Open Show or double-clicks a .aquashow file (AF-PKG-006). The frontend

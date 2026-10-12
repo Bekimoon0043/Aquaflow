@@ -4,6 +4,7 @@
 // construction package for the chosen concept. Consumes /api/generative.
 import { useState } from "react";
 import { apiPost, apiUrl } from "../../utils/apiClient";
+import useEngineeringStore from "../../store/engineeringStore";
 
 const box = { background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6 };
 const field = { background: "var(--bg-panel)", color: "var(--text-primary)",
@@ -11,6 +12,7 @@ const field = { background: "var(--bg-panel)", color: "var(--text-primary)",
 const STYLES = ["grand", "romantic", "modern", "playful", "dramatic"];
 
 export default function GenerativeDesignerPanel() {
+  const loadProject = useEngineeringStore((state) => state.loadProject);
   const [brief, setBrief] = useState({ venue: "Grand Plaza", area_m2: 300, budget_usd: 400000,
     style: "grand", theme: "Desert Dawn", depth_m: 1.4 });
   const [concepts, setConcepts] = useState([]);
@@ -50,6 +52,31 @@ export default function GenerativeDesignerPanel() {
   };
 
   const money = (n) => "$" + Number(n || 0).toLocaleString();
+
+  const openInEngineering = () => {
+    if (!selected) return;
+    const pool = selected.pool || {};
+    const width = Number(pool.length_m || 12);
+    const length = Number(pool.width_m || 8);
+    const depth = Number(pool.depth_m || 0.8);
+    loadProject({
+      format: "AquaFlowPoolGeometry",
+      version: "0.11A",
+      id: `generated-${selected.id}`,
+      name: selected.name,
+      pool_type: "rectangular",
+      params: { width, length, depth, radius: Math.min(width, length) / 2 },
+      geometry: { type: "polygon", closed: true, points: [
+        { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: length }, { x: 0, y: length },
+      ] },
+      fixtures: (selected.fixtures || []).map((fixture) => ({
+        ...fixture, rotation: Number(fixture.rotation || 0),
+        groupId: fixture.groupId || undefined,
+      })),
+      layers: [], measurements: [], depth_zones: [], bom: [], manualPipes: [], pipes: [],
+    });
+    window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "geometry" } }));
+  };
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-panel)" }}>
@@ -144,6 +171,11 @@ export default function GenerativeDesignerPanel() {
                 </div>
               </div>
               <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>DELIVERABLE PACKAGES</div>
+              <button onClick={openInEngineering} style={{ width: "100%", marginBottom: 6,
+                background: "rgba(0,212,255,0.08)", border: "1px solid var(--accent)", borderRadius: 6,
+                color: "var(--text-accent)", fontSize: 11, padding: "8px 0", cursor: "pointer" }}>
+                Open in Engineering Design
+              </button>
               <button onClick={() => download("engineering")} style={{ width: "100%", marginBottom: 6,
                 background: "transparent", border: "1px solid var(--border)", borderRadius: 6,
                 color: "var(--text-primary)", fontSize: 11, padding: "8px 0", cursor: "pointer" }}>

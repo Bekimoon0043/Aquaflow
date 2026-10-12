@@ -5,16 +5,19 @@
  */
 
 import { normalizeEngineeringProject } from "../engineering/engineeringProject.js";
+import useProjectStore, { normalizeUnifiedProject } from "../store/projectStore.js";
 
-export const AQUA_VERSION = "1.0";
+export const AQUA_VERSION = "1.1";
 
 /**
  * Serialize current store state into a .aqua file object
  */
-export function serializeShow(state, engineeringProject = null) {
+export function serializeShow(state, engineeringProject = null, projectDocument = null) {
   const engineering = normalizeEngineeringProject(
     engineeringProject || state.engineeringProject || state.engineering || {}
   );
+  const unifiedProject = projectDocument
+    || useProjectStore.getState().getProjectDocument(state.currentShow?.name);
   return {
     aquaflow: AQUA_VERSION,
     savedAt: new Date().toISOString(),
@@ -56,6 +59,22 @@ export function serializeShow(state, engineeringProject = null) {
     // .aqua envelope makes Save/Open/Auto-save atomic: choreography can never be loaded
     // without the geometry and fixture registry it was authored against.
     engineering,
+    // v1.1 keeps the original top-level fields for older AquaFlow builds while adding
+    // a versioned document for workspace-wide state. One .aqua file now restores the
+    // Engineering, 3D, Show Programmer and Siemens context together.
+    project: unifiedProject.metadata,
+    workspace: unifiedProject.workspace,
+    render: unifiedProject.render,
+    programmer: unifiedProject.programmer,
+    integrations: unifiedProject.integrations,
+    automation: {
+      audioData: state.audioData ?? null,
+      manualPatterns: state.manualPatterns ?? null,
+      manualPatternMeta: state.manualPatternMeta ?? null,
+      manualPriority: Boolean(state.manualPriority),
+      manualPatternConfig: state.manualPatternConfig || null,
+      generatedTracks: state.generatedTracks || [],
+    },
     ui: {
       timelineZoom: state.timelineZoom,
       showGrid: state.showGrid,
@@ -69,6 +88,14 @@ export function serializeShow(state, engineeringProject = null) {
  */
 export function deserializeShow(data) {
   if (!data.aquaflow) throw new Error("Not a valid .aqua file");
+
+  const projectDocument = normalizeUnifiedProject({
+    metadata: data.project,
+    workspace: data.workspace,
+    render: data.render,
+    programmer: data.programmer,
+    integrations: data.integrations,
+  }, data.show?.name || "Untitled Show");
 
   return {
     currentShow: {
@@ -88,6 +115,15 @@ export function deserializeShow(data) {
       last_seen: d.last_seen || null,
     })),
     engineeringProject: normalizeEngineeringProject(data.engineering || data.engineeringProject || {}),
+    projectDocument,
+    audioData: data.automation?.audioData ?? null,
+    manualPatterns: data.automation?.manualPatterns ?? null,
+    manualPatternMeta: data.automation?.manualPatternMeta ?? null,
+    manualPriority: Boolean(data.automation?.manualPriority),
+    manualPatternConfig: data.automation?.manualPatternConfig || undefined,
+    generatedTracks: Array.isArray(data.automation?.generatedTracks)
+      ? data.automation.generatedTracks
+      : [],
     timelineZoom: data.ui?.timelineZoom || 4,
     showGrid: data.ui?.showGrid ?? true,
     snapToGrid: data.ui?.snapToGrid ?? true,
@@ -97,8 +133,8 @@ export function deserializeShow(data) {
 /**
  * Download a .aqua file to the user's computer
  */
-export function downloadShowFile(state, engineeringProject = null) {
-  const data = serializeShow(state, engineeringProject);
+export function downloadShowFile(state, engineeringProject = null, projectDocument = null) {
+  const data = serializeShow(state, engineeringProject, projectDocument);
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -162,9 +198,9 @@ export function getRecentShows() {
 /**
  * Auto-save to localStorage
  */
-export function autoSave(state, engineeringProject = null) {
+export function autoSave(state, engineeringProject = null, projectDocument = null) {
   try {
-    const data = serializeShow(state, engineeringProject);
+    const data = serializeShow(state, engineeringProject, projectDocument);
     localStorage.setItem("aquaflow_autosave", JSON.stringify(data));
     localStorage.setItem("aquaflow_autosave_ts", new Date().toISOString());
   } catch (e) {

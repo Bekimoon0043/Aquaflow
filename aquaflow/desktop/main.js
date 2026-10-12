@@ -6,7 +6,7 @@
 // crashes. A single-instance lock keeps one process group (also needed for .aquashow in
 // AF-PKG-006).
 
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, session, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -17,12 +17,39 @@ const { resolveConfig } = require("./app-config");
 const { buildMenu, setCheckForUpdatesHook } = require("./menu");
 const { initAutoUpdate, checkForUpdates } = require("./updater");
 const { startUiServer } = require("./ui-server");
+const { registerCadIpc } = require("./cad-native");
 
 const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
 
 // Debug logging to stdout (visible in a terminal-launched run). DevTools also auto-open unless
 // AQUAFLOW_DEVTOOLS=0. Set AQUAFLOW_DEVTOOLS=0 to suppress for a clean production run.
-const dbg = (...a) => process.stdout.write(`[aquaflow] ${a.join(" ")}\n`);
+// Packaged GUI launches do not own a durable console. Windows can leave stdout
+// attached to a short-lived parent pipe (for example an installer or diagnostic
+// launcher); writing after that parent exits raises EPIPE in Electron's main process.
+// Debug output must never be allowed to terminate the desktop application.
+let stdoutBroken = false;
+if (process.stdout && typeof process.stdout.on === "function") {
+  process.stdout.on("error", (err) => {
+    if (err && (err.code === "EPIPE" || err.code === "ERR_STREAM_DESTROYED")) {
+      stdoutBroken = true;
+      return;
+    }
+    // A diagnostic stream failure is non-fatal in a GUI application.
+    stdoutBroken = true;
+  });
+}
+const dbg = (...a) => {
+  if (stdoutBroken || !process.stdout || !process.stdout.writable) return;
+  try {
+    process.stdout.write(`[aquaflow] ${a.join(" ")}\n`);
+  } catch (err) {
+    if (err && (err.code === "EPIPE" || err.code === "ERR_STREAM_DESTROYED")) {
+      stdoutBroken = true;
+      return;
+    }
+    stdoutBroken = true;
+  }
+};
 const DEVTOOLS = process.env.AQUAFLOW_DEVTOOLS !== "0";
 
 // LuxuryCon brand.
@@ -243,8 +270,41 @@ function registerLicenseIpc() {
 }
 
 // ── Boot sequence ───────────────────────────────────────────────────────────────
+// Reliable file downloads. Every "export" surface in the UI (Export TIA package, 3D
+// export, save show, pattern/section export) hands the browser a blob: URL via an
+// anchor click. With NO will-download handler, packaged Electron leaves that download
+// as an orphaned .tmp in the Downloads folder and the button appears to do nothing —
+// this is exactly the "click Export, no response" symptom. Save straight to the user's
+// Downloads folder under the suggested name (de-duplicated) and reveal it, so every
+// export gives an unmistakable, dialog-independent response.
+function installDownloadHandler() {
+  session.defaultSession.on("will-download", (_event, item) => {
+    try {
+      const downloads = app.getPath("downloads");
+      const suggested = item.getFilename() || "aquaflow-download";
+      const ext = path.extname(suggested);
+      const stem = path.basename(suggested, ext);
+      let target = path.join(downloads, suggested);
+      for (let n = 1; fs.existsSync(target); n++) target = path.join(downloads, `${stem} (${n})${ext}`);
+      item.setSavePath(target);
+      item.once("done", (_e, state) => {
+        if (state === "completed") {
+          dbg(`download saved → ${target}`);
+          try { shell.showItemInFolder(target); } catch { /* ignore */ }
+        } else {
+          dbg(`download did not complete (${state}): ${suggested}`);
+        }
+      });
+    } catch (e) {
+      dbg(`will-download handler error: ${e && e.message}`);
+    }
+  });
+}
+
 async function boot() {
   registerLicenseIpc();
+  registerCadIpc({ipcMain,dialog,getMainWindow});
+  installDownloadHandler();
   // AF-PKG-006 — capture a .aquashow passed on the initial launch command line.
   pendingOpenPath = showPathFromArgv(process.argv.slice(1));
   createSplash();

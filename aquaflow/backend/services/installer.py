@@ -264,11 +264,10 @@ def activate_license(license_data: dict, fingerprint: Optional[str] = None) -> d
     and, if valid (or in grace), cache it as the current license.
     """
     from license.license_engine import (
-        validate_license, generate_hardware_fingerprint, save_license_cache,
+        validate_license, validate_for_this_machine, save_license_cache,
         set_current_license, LicenseStatus,
     )
-    fp = fingerprint or generate_hardware_fingerprint()
-    result = validate_license(license_data, fp)
+    result = validate_license(license_data, fingerprint) if fingerprint else validate_for_this_machine(license_data)
     activated = result.get("status") in (LicenseStatus.VALID, LicenseStatus.GRACE_PERIOD)
     if activated:
         try:

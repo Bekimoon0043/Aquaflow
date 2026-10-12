@@ -77,72 +77,32 @@ EDITION_FEATURES = {
 
 # ─── hardware fingerprint ─────────────────────────────────────────────────────
 
+from license import fingerprint as _fp
+
+
 def _get_mac_address() -> str:
-    try:
-        mac = uuid.getnode()
-        if (mac >> 40) % 2:
-            return "00:00:00:00:00:00"
-        return ":".join(f"{(mac >> (8*i)) & 0xff:02x}" for i in reversed(range(6)))
-    except Exception:
-        return "00:00:00:00:00:00"
+    return _fp.getnode_mac()
 
 
 def _get_cpu_id() -> str:
-    try:
-        if platform.system() == "Windows":
-            result = subprocess.check_output(
-                "wmic cpu get ProcessorId", shell=True,
-                encoding="utf-8", stderr=subprocess.DEVNULL,
-            )
-            lines = [l.strip() for l in result.strip().splitlines() if l.strip()]
-            return lines[-1] if lines else "UNKNOWN"
-        elif platform.system() == "Linux":
-            with open("/proc/cpuinfo") as f:
-                for line in f:
-                    if "Serial" in line or "Hardware" in line:
-                        return line.split(":")[1].strip()
-        elif platform.system() == "Darwin":
-            result = subprocess.check_output(
-                ["ioreg", "-l"], encoding="utf-8", stderr=subprocess.DEVNULL,
-            )
-            for line in result.splitlines():
-                if "IOPlatformSerialNumber" in line:
-                    return line.split('"')[-2]
-    except Exception:
-        pass
-    return platform.processor() or "UNKNOWN_CPU"
+    return _fp.cpu_id()
 
 
 def _get_motherboard_id() -> str:
-    try:
-        if platform.system() == "Windows":
-            result = subprocess.check_output(
-                "wmic baseboard get SerialNumber", shell=True,
-                encoding="utf-8", stderr=subprocess.DEVNULL,
-            )
-            lines = [l.strip() for l in result.strip().splitlines() if l.strip()]
-            return lines[-1] if lines else "UNKNOWN"
-        elif platform.system() == "Linux":
-            result = subprocess.check_output(
-                ["cat", "/sys/class/dmi/id/board_serial"],
-                encoding="utf-8", stderr=subprocess.DEVNULL,
-            )
-            return result.strip()
-    except Exception:
-        pass
-    return "UNKNOWN_MB"
+    return _fp.board_serial()
 
 
 def generate_hardware_fingerprint() -> str:
     """
-    Generate a stable hardware fingerprint.
-    Returns a 64-char hex string unique to this machine.
+    The stable machine ID (v2): CPU id, board serial and host name — no network adapter,
+    so plugging in a USB/VPN adapter no longer changes it. Shown on the Activation screen.
     """
-    mac = _get_mac_address()
-    cpu = _get_cpu_id()
-    mb  = _get_motherboard_id()
-    raw = f"{mac}|{cpu}|{mb}|{platform.node()}"
-    return hashlib.sha256(raw.encode()).hexdigest()
+    return _fp.stable_fingerprint()
+
+
+def machine_fingerprints() -> set:
+    """Every fingerprint this machine answers to: v2 plus the legacy v1 one for each adapter."""
+    return _fp.machine_fingerprints()
 
 
 # ─── signing ──────────────────────────────────────────────────────────────────
@@ -232,9 +192,11 @@ class LicenseStatus:
     ERROR        = "ERROR"
 
 
-def validate_license(license_data: dict, current_fingerprint: str) -> dict:
+def validate_license(license_data: dict, current_fingerprint: str, alternatives=None) -> dict:
     """
-    Validate a license against this machine.
+    Validate a license against a machine fingerprint.
+    `alternatives` lists other fingerprints the SAME machine answers to (legacy v1 per
+    network adapter); pass machine_fingerprints() only when validating for this machine.
     Returns a result dict with status, features, and messages.
     """
     # 1. Signature
@@ -245,7 +207,8 @@ def validate_license(license_data: dict, current_fingerprint: str) -> dict:
         )
 
     # 2. Hardware fingerprint
-    if license_data.get("hardware_fingerprint") != current_fingerprint:
+    accepted = {current_fingerprint, *(alternatives or ())}
+    if license_data.get("hardware_fingerprint") not in accepted:
         return _fail(
             LicenseStatus.INVALID_HW,
             "This AquaFlow Studio beta license is not valid for this computer."
@@ -276,6 +239,11 @@ def validate_license(license_data: dict, current_fingerprint: str) -> dict:
         "days_remaining": days_remaining,
         "message":       f"License valid — {days_remaining} days remaining",
     }
+
+
+def validate_for_this_machine(license_data: dict) -> dict:
+    """Validate a license for the machine AquaFlow is running on (v2 or any legacy v1 fingerprint)."""
+    return validate_license(license_data, generate_hardware_fingerprint(), machine_fingerprints())
 
 
 def _fail(status: str, message: str) -> dict:

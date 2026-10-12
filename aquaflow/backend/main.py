@@ -27,6 +27,10 @@ for _stream in (sys.stdout, sys.stderr):
 
 from api.routes import shows, devices, ai_engine, protocols, audio, plc, scheduler as scheduler_routes, runtime
 from api.routes.ican_routes import router as ican_router
+from api.routes.siemens_sites import router as siemens_sites_router, siemens_runtime
+from engine.runtime_authority import runtime_authority
+
+runtime_authority.register(siemens_sites=siemens_runtime)
 from api.routes.ai_learning_routes import router as ai_learning_router
 from api.routes.phase6_routes import phase6_router
 from api.routes.phase7_routes import phase7_router
@@ -265,6 +269,7 @@ async def lifespan(app: FastAPI):
     # every driven group, then release the exclusive local UDP port.
     from api.routes.ican_routes import shutdown_ican
     await shutdown_ican()
+    await siemens_runtime.close()
     await safety.stop()
     await transport.stop_loop()
     await show_engine.stop()
@@ -420,6 +425,7 @@ app.include_router(ai_learning_router,      prefix="/api/ai",        tags=["AI-L
 app.include_router(protocols.router,        prefix="/api/protocols", tags=["Protocols"])
 app.include_router(audio.router,            prefix="/api/audio",     tags=["Audio"])
 app.include_router(plc.router,              prefix="/api/plc",       tags=["PLC"])
+app.include_router(siemens_sites_router, prefix="/api/siemens-sites", tags=["Siemens Sites"])
 from api.routes.field_io_routes import router as field_io_router  # AF-IO-007
 app.include_router(field_io_router,         prefix="/api/field-io",  tags=["FieldIO"])
 from api.routes.controllers import router as controllers_router  # AF-CAT-001

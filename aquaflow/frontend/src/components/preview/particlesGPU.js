@@ -47,6 +47,7 @@
  */
 
 import { billboardFrag } from "./particlesBillboard";
+import { emitterOpacityScale } from './waterOptics';
 
 /** Rows of the emitter parameter texture. Must match EMIT_ROWS in the shaders. */
 const EMIT_ROWS = 6;
@@ -301,7 +302,7 @@ void main(){
   // order of magnitude more droplets through the same volume — at the old opacity a
   // jet integrates to solid white and loses its shape entirely. Smaller, fainter,
   // far more numerous droplets is also simply what water is.
-  vColor    = vec4(e3.rgb, uAlpha);
+  vColor    = vec4(e3.rgb, uAlpha * emitTexel(emitIdx, 5.0).z);
   vLife     = lifeFrac;
   vWorldPos = pl.xyz;
   vSeed     = seed;
@@ -486,6 +487,7 @@ export class GPUParticleField {
   setLayout(ranges, key) {
     if (key === this._layoutKey) return;
     this._layoutKey = key;
+    this._ranges = ranges;
     const meta = this.metaData;
     meta.fill(0);
     for (let e = 0; e < ranges.length; e++) {
@@ -519,7 +521,7 @@ export class GPUParticleField {
       put(2, i, e.spread, e.speedJitter, e.spawnRadius, Math.max(0, Math.min(1, e.density)));
       put(3, i, e.color[0], e.color[1], e.color[2], e.life);
       put(4, i, e.scale, e.scaleJitter, e.stretch, e.p1);
-      put(5, i, e.p2, 0, 0, 0);
+      put(5, i, e.p2, 0, emitterOpacityScale(e, this._ranges?.[i]?.count || 0), 0);
     }
     for (let i = n; i < W; i++) {
       // Density 0 parks any particle still assigned to a removed emitter.

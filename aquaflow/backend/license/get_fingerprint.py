@@ -78,14 +78,13 @@ def _get_motherboard_id() -> str:
 
 def get_fingerprint() -> str:
     """
-    Generate hardware fingerprint from MAC + CPU + motherboard.
+    Stable machine ID from CPU id + board serial + host name (v2).
     Does NOT require any environment variables or secrets.
     """
-    mac = _get_mac_address()
-    cpu = _get_cpu_id()
-    mb  = _get_motherboard_id()
-    raw = f"{mac}|{cpu}|{mb}|{platform.node()}"
-    return hashlib.sha256(raw.encode()).hexdigest()
+    # v2 stable machine ID (no network adapter) — identical to the Activation screen value.
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from license.fingerprint import stable_fingerprint
+    return stable_fingerprint()
 
 
 if __name__ == "__main__":

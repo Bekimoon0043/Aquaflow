@@ -350,18 +350,10 @@ const INITIAL_TIMELINE_TRACKS = [
   }),
 ];
 
-const INITIAL_DEVICES = [
-  { id: "pump-01", label: "Master Pump Array", type: "pump", protocol: "modbus", ip: "192.168.1.10", port: 502, status: "online", health: 98 },
-  { id: "pump-02", label: "Side Pumps", type: "pump", protocol: "modbus", ip: "192.168.1.11", port: 502, status: "online", health: 96 },
-  { id: "valve-01", label: "Solenoid Bank A", type: "valve", protocol: "artnet", ip: "192.168.1.20", port: 6454, status: "online", health: 100 },
-  { id: "valve-02", label: "Solenoid Bank B", type: "valve", protocol: "artnet", ip: "192.168.1.21", port: 6454, status: "online", health: 100 },
-  { id: "light-01", label: "RGB Ring Lights", type: "lighting", protocol: "dmx", ip: null, port: null, status: "online", health: 92 },
-  { id: "light-02", label: "Spotlights", type: "lighting", protocol: "sacn", ip: "192.168.1.30", port: 5568, status: "online", health: 88 },
-  { id: "flame-01", label: "Flame System", type: "flame", protocol: "modbus", ip: "192.168.1.40", port: 502, status: "offline", health: 0 },
-  { id: "fog-01", label: "Fog Machines", type: "fog", protocol: "dmx", ip: null, port: null, status: "warn", health: 65 },
-  { id: "laser-01", label: "Laser Array", type: "laser", protocol: "ilda", ip: "192.168.1.50", port: 7770, status: "offline", health: 0 },
-  { id: "sensor-01", label: "Pressure Sensor", type: "sensor", protocol: "mqtt", ip: "192.168.1.60", port: 1883, status: "online", health: 100 },
-];
+// Runtime devices are populated only by a saved project, verified discovery, or the
+// backend. Previous releases seeded ten fictional devices and displayed invented health
+// values as live hardware, which made the sidebar operationally misleading.
+const INITIAL_DEVICES = [];
 
 function findTrack(state, trackId) {
   return state.timelineTracks.find((track) => track.id === trackId);
@@ -553,6 +545,42 @@ generatedTracks: [], // Stores tracks generated from engineering fixtures
           status: "ready",
         });
         s.selectedNodeId = nodeId;
+        s.selectedDeviceId = null;
+        s.selectedClipId = null;
+        s.selectedClipIds = [];
+        s.selectedTrackId = null;
+        s.isDirty = true;
+      }),
+
+    removeNode: (nodeId) =>
+      set((s) => {
+        if (!nodeId || !s.nodes.some((node) => node.id === nodeId)) return;
+        pushUndoSnapshot(s);
+        s.nodes = s.nodes.filter((node) => node.id !== nodeId);
+        s.connections = s.connections.filter((connection) => connection.from !== nodeId && connection.to !== nodeId);
+        if (s.selectedNodeId === nodeId) s.selectedNodeId = null;
+        s.isDirty = true;
+      }),
+
+    duplicateNode: (nodeId) =>
+      set((s) => {
+        const source = s.nodes.find((node) => node.id === nodeId);
+        if (!source) return;
+        pushUndoSnapshot(s);
+        const duplicateId = nanoid();
+        s.nodes.push({
+          ...source,
+          id: duplicateId,
+          label: `${source.label} Copy`,
+          x: Number(source.x || 0) + 28,
+          y: Number(source.y || 0) + 28,
+          ports: {
+            in: [...(source.ports?.in || [])],
+            out: [...(source.ports?.out || [])],
+          },
+          params: { ...(source.params || {}) },
+        });
+        s.selectedNodeId = duplicateId;
         s.selectedDeviceId = null;
         s.selectedClipId = null;
         s.selectedClipIds = [];
@@ -986,7 +1014,16 @@ generatedTracks: [], // Stores tracks generated from engineering fixtures
         if (newState.nodes) s.nodes = newState.nodes;
         if (newState.connections) s.connections = newState.connections;
         if (newState.timelineTracks) s.timelineTracks = newState.timelineTracks.map((track) => normalizeTrack(track));
-       if (newState.audioData !== undefined) s.audioData = newState.audioData;
+        if (newState.audioData !== undefined) s.audioData = newState.audioData;
+        if (newState.manualPatterns !== undefined) s.manualPatterns = newState.manualPatterns;
+        if (newState.manualPatternMeta !== undefined) s.manualPatternMeta = newState.manualPatternMeta;
+        if (newState.manualPriority !== undefined) s.manualPriority = Boolean(newState.manualPriority);
+        if (newState.manualPatternConfig !== undefined) {
+          s.manualPatternConfig = newState.manualPatternConfig || s.manualPatternConfig;
+        }
+        if (newState.generatedTracks !== undefined) {
+          s.generatedTracks = Array.isArray(newState.generatedTracks) ? newState.generatedTracks : [];
+        }
         if (newState.devices) s.devices = newState.devices;
         if (newState.timelineZoom !== undefined) s.timelineZoom = newState.timelineZoom;
         if (newState.showGrid !== undefined) s.showGrid = newState.showGrid;

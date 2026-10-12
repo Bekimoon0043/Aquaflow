@@ -21,6 +21,8 @@
  * Pure + deterministic: same fixture in → same patch out. No store reads, no side effects.
  */
 
+import { getFixtureLibraryEntry } from "../data/fixtureLibrary.js";
+
 // ── Canonical constants ──────────────────────────────────────────────────────
 // DMX512 carries exactly 512 slots (channels) per universe.
 export const DMX_CHANNELS_PER_UNIVERSE = 512;
@@ -61,8 +63,14 @@ export function readPatch(fixture) {
   const startChannel = firstNum(
     f.channel, f.dmxChannel, f.dmxAddress, dmx.channel, eng.dmxChannel, eng.channel
   );
+  // Footprint falls back to the normalized `electrical` block (instance, then the
+  // library entry for its type): generated library fixtures keep their DMX
+  // footprint there, not in `engineering`, and used to read as "unknown".
+  const libElectrical = getFixtureLibraryEntry(f.type)?.electrical || {};
+  const elecCount = firstNum(f.electrical?.dmxChannels, libElectrical.dmxChannels);
   const channelCount = firstNum(
-    f.dmxChannels, f.channelCount, dmx.channels, eng.dmxChannels, eng.channels
+    f.dmxChannels, f.channelCount, dmx.channels, eng.dmxChannels, eng.channels,
+    elecCount > 0 ? elecCount : null
   );
 
   const endChannel =

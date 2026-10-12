@@ -26,6 +26,9 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
           if (id.includes('/three/') || id.includes('\\three\\')) return 'three'
+          // AF-3D-VID-001: the video muxer is only needed when a render starts; its own
+          // chunk keeps it out of startup (it imports nothing from other vendors).
+          if (id.includes('/mediabunny/') || id.includes('\\mediabunny\\')) return 'mediabunny'
           return 'vendor'
         },
       },

@@ -20,6 +20,7 @@
 
 import { TransformGizmo } from "./transformGizmo";
 import { SceneGraph, NODE_TYPES } from "./sceneGraph";
+import { SceneHistory } from "./sceneHistory";
 import {
   TOOLS, DEFAULT_TOOL, readModifiers, matchShortcut, shouldDuplicate, GRID_SNAP_M,
 } from "./editorSnapping";
@@ -60,6 +61,10 @@ export class SceneEditor {
     this.proxies = new Map();   // nodeId -> Mesh
     this.hoveredId = null;
     this._listeners = new Set();
+    this.history = new SceneHistory(this.graph, {
+      limit: 100,
+      onChange: () => this._emit("history-state"),
+    });
 
     // Camera navigation state.
     this.focus = new THREE.Vector3(0, 1.2, 0);
@@ -221,11 +226,21 @@ export class SceneEditor {
   }
 
   /** Topmost editable node under the pointer, or null. */
-  _pickNode() {
+  _pickNode(includeModels = false) {
     const meshes = [...this.proxies.values()].filter(m => m.visible);
-    const hits = this.raycaster.intersectObjects(meshes, false);
+    // Detailed imported meshes are raycast only on click, not on every hover
+    // frame, so a crowd of textured people does not slow camera navigation.
+    const models = includeModels ? (this._viewportSource?.pickableModels?.() || []) : [];
+    const hits = this.raycaster.intersectObjects([...meshes, ...models], true);
     for (const h of hits) {
-      const id = h.object.userData.nodeId;
+      // Fountain hardware is instanced for performance. An InstancedMesh has one
+      // Object3D but the raycast tells us exactly which physical fixture was hit.
+      const instanceId = Number.isInteger(h.instanceId) ? h.instanceId : null;
+      const instancedNodeId = instanceId === null ? null : h.object?.userData?.nodeIds?.[instanceId];
+      if (instancedNodeId && !this.graph.isLocked(instancedNodeId)) return instancedNodeId;
+      let object = h.object;
+      while (object && !object.userData.nodeId) object = object.parent;
+      const id = object?.userData.nodeId;
       if (id && !this.graph.isLocked(id)) return id;
     }
     return null;
@@ -265,6 +280,7 @@ export class SceneEditor {
         const center = this.graph.selectionCenter();
         if (center && this.gizmo.beginDrag(handle, this.raycaster, center)) {
           this._pendingDuplicate = shouldDuplicate(mods);
+          this._dragCheckpointed = false;
           this._dragStart = this.graph.selected().map(id => ({
             id, pos: { ...this.graph.get(id).transform.position },
             rot: { ...this.graph.get(id).transform.rotation },
@@ -274,7 +290,7 @@ export class SceneEditor {
         }
       }
 
-      const id = this._pickNode();
+      const id = this._pickNode(true);
       if (id) {
         this.graph.select([id], { additive: mods.snap || mods.duplicate });
         // Clicking an object also makes it the navigation pivot, as Depence does.
@@ -329,6 +345,7 @@ export class SceneEditor {
         this.gizmo.endDrag();
         this._pendingDuplicate = false;
         this._dragStart = null;
+        this._dragCheckpointed = false;
         if (this._dragMoved) this._emit("transform");
       }
     };
@@ -364,6 +381,12 @@ export class SceneEditor {
   _applyDrag(res) {
     const ids = this.graph.selected();
     if (ids.length === 0) return;
+
+    // One drag = one undo step, no matter how many pointermove events it produces.
+    if (!this._dragCheckpointed) {
+      this.history.checkpoint(this._pendingDuplicate ? "Duplicate and move" : "Transform objects");
+      this._dragCheckpointed = true;
+    }
 
     // CTRL+drag duplicates: swap the selection for fresh copies once, at the first
     // movement, then carry on dragging those.
@@ -478,6 +501,10 @@ export class SceneEditor {
       case "tool:select": this.setTool(TOOLS.SELECT); break;
       case "edit:duplicate": this.duplicateSelection(); break;
       case "edit:delete": this.deleteSelection(); break;
+      case "edit:undo": this.undo(); break;
+      case "edit:redo": this.redo(); break;
+      case "edit:group": this.groupSelection(); break;
+      case "edit:ungroup": this.ungroupSelection(); break;
       case "select:all": this.selectAll(); break;
       case "view:focus": this.focusSelection(); break;
       default: return false;
@@ -488,6 +515,7 @@ export class SceneEditor {
   duplicateSelection() {
     const ids = this.graph.selected();
     if (!ids.length) return [];
+    this.history.checkpoint("Duplicate objects");
     // Offset by one grid step so the copy is visibly separate rather than hidden
     // exactly behind the original.
     const copies = ids.map(id => this.graph.duplicate(id, { x: GRID_SNAP_M * 3, z: GRID_SNAP_M * 3 }))
@@ -500,6 +528,8 @@ export class SceneEditor {
 
   deleteSelection() {
     const ids = this.graph.selected().filter(id => !this.graph.isLocked(id));
+    if (!ids.length) return 0;
+    this.history.checkpoint("Delete objects");
     for (const id of ids) this.graph.remove(id);
     this.graph.clearSelection();
     this.syncProxies();
@@ -515,9 +545,28 @@ export class SceneEditor {
   }
 
   groupSelection(name = "Group") {
-    const g = this.graph.group(this.graph.selected(), name);
+    const selected = this.graph.selected();
+    if (!selected.length) return null;
+    this.history.checkpoint("Group objects");
+    const g = this.graph.group(selected, name);
     if (g) { this.graph.select([g.id]); this.syncProxies(); this._emit("structure"); }
     return g;
+  }
+
+  ungroupSelection() {
+    const groups = this.graph.selected()
+      .map(id => this.graph.get(id))
+      .filter(node => node?.type === NODE_TYPES.GROUP);
+    if (!groups.length) return 0;
+    const children = groups.flatMap(group => [...group.childIds]);
+    this.history.checkpoint("Ungroup objects");
+    this.graph.transaction(() => {
+      for (const group of groups) this.graph.ungroup(group.id);
+      this.graph.select(children.filter(id => this.graph.get(id)));
+    }, "ungroup");
+    this.syncProxies();
+    this._emit("structure");
+    return groups.length;
   }
 
   /**
@@ -528,6 +577,7 @@ export class SceneEditor {
     this._setPointer({ clientX, clientY });
     const p = this.groundPoint(0);
     if (!p) return null;
+    this.history.checkpoint(`Add ${spec?.name || "object"}`);
     const node = this.graph.add({
       ...spec,
       position: { x: p.x, y: spec?.position?.y ?? 0, z: p.z },
@@ -537,6 +587,57 @@ export class SceneEditor {
     this._emit("structure");
     return node;
   }
+
+  setNodeTransform(id, patch) {
+    this.history.checkpoint("Edit transform", { coalesceKey: `transform:${id}` });
+    const changed = this.graph.setTransform(id, patch);
+    if (changed) { this.syncProxies(); this._emit("transform"); }
+    return changed;
+  }
+
+  setNodeVisible(id, visible) {
+    this.history.checkpoint(visible ? "Show object" : "Hide object");
+    const changed = this.graph.setVisible(id, visible);
+    if (changed) { this.syncProxies(); this._emit("visibility"); }
+    return changed;
+  }
+
+  setNodeLocked(id, locked) {
+    this.history.checkpoint(locked ? "Lock object" : "Unlock object");
+    const changed = this.graph.setLocked(id, locked);
+    if (changed) { this._updateGizmo(); this._emit("lock"); }
+    return changed;
+  }
+
+  setNodeName(id, name) {
+    this.history.checkpoint("Rename object", { coalesceKey: `rename:${id}` });
+    const changed = this.graph.setName(id, name);
+    if (changed) this._emit("rename");
+    return changed;
+  }
+
+  setNodeProps(id, patch, propertyKey = "properties") {
+    this.history.checkpoint("Edit properties", { coalesceKey: `props:${id}:${propertyKey}` });
+    const changed = this.graph.setProps(id, patch);
+    if (changed) this._emit("props");
+    return changed;
+  }
+
+  undo() {
+    if (!this.history.undo()) return false;
+    this.syncProxies();
+    this._emit("history");
+    return true;
+  }
+
+  redo() {
+    if (!this.history.redo()) return false;
+    this.syncProxies();
+    this._emit("history");
+    return true;
+  }
+
+  clearHistory() { this.history.clear(); }
 
   dispose() {
     const c = this.canvas;

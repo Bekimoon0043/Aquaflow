@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, Any
 from plc.plc_engine import (
     plc_manager, PLCConnection, PLCType, PLCTag, TagType, DEFAULT_TAGS,
-    PLC_SUPPORT, PLC_TIER_MEANING, REAL_PLC_TYPES,
+    PLC_SUPPORT, PLC_TIER_MEANING, REAL_PLC_TYPES, PLCWriteRefused,
 )
 from plc.s7_profiles import get_profile, list_profiles, profile_tags, profile_summary
 
@@ -155,8 +155,13 @@ async def get_tags(plc_id: str):
 
 @router.post("/{plc_id}/tags/{tag_id}/write")
 async def write_tag(plc_id: str, tag_id: str, req: TagWriteRequest):
-    """Write a value to a PLC tag"""
-    success = await plc_manager.write_tag(plc_id, tag_id, req.value)
+    """Write a value to a PLC tag. Read-only (profile "read") tags are refused
+    (400); a non-zero write needs the safety permit + pump_enable (403). Writing
+    0 / False is the stop direction and is never gated."""
+    try:
+        success = await plc_manager.write_tag(plc_id, tag_id, req.value)
+    except PLCWriteRefused as e:
+        raise HTTPException(e.status, e.reason)
     return {"plc_id": plc_id, "tag_id": tag_id, "value": req.value, "success": success}
 
 

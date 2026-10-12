@@ -16,15 +16,18 @@ import { apiPost } from "../utils/apiClient";
 import { buildHydraulicPreviewPayload } from "../engineering/hydraulicAdapter";
 import { geometryMetrics } from "../engineering/poolGeometry";
 import { selectEngineeringPipes } from "../engineering/engineeringProject";
+import { toPreviewSiteSurfaces } from "../engineering/siteSurfaces";
 
 export function useEngineeringSync(sceneRef) {
   const lastKeyRef   = useRef(null);
+  const lastSceneRef = useRef(null);
   const syncTimerRef = useRef(null);
 
   const geometry    = useEngineeringStore(s => s.geometry);
   const params      = useEngineeringStore(s => s.params);
   const poolType    = useEngineeringStore(s => s.poolType);
   const fixtures    = useEngineeringStore(s => s.fixtures);
+  const siteSurfaces = useEngineeringStore(s => s.siteSurfaces);
   const manualPipes = useEngineeringStore(s => selectEngineeringPipes(s));
   const layers      = useEngineeringStore(s => s.layers);
   const lastUpdated = useEngineeringStore(s => s.lastUpdated);
@@ -34,11 +37,21 @@ export function useEngineeringSync(sceneRef) {
     if (!scene) return;
 
     const key = JSON.stringify({ geometry, params, poolType,
-      fx: fixtures.map(f=>({id:f.id,type:f.type,x:f.x,y:f.y,r:f.rotation,e:f.engineering})),
+      // Include every renderer-visible fixture field. Previously, changing height,
+      // visibility, tilt or light appearance could be ignored because the cache key
+      // only watched plan position and Y rotation.
+      fx: fixtures.map(f=>({
+        id:f.id, type:f.type, x:f.x, y:f.y, z:f.z,
+        r:f.rotation, ry:f.rotationY, tx:f.tiltX, tz:f.tiltZ,
+        v:f.visible, c:f.color, i:f.intensity, radius:f.radius,
+        zone:f.zone, groupId:f.groupId, e:f.engineering,
+      })),
+      surfaces: siteSurfaces,
       lv: layers.map(l=>({k:l.key,v:l.visible}))
     });
-    if (key === lastKeyRef.current) return;
+    if (key === lastKeyRef.current && scene === lastSceneRef.current) return;
     lastKeyRef.current = key;
+    lastSceneRef.current = scene;
 
     // 1. Pool geometry
     const poolConfig = geometryToPoolConfig(geometry, params, poolType);
@@ -124,6 +137,11 @@ if (shouldCenterFor3D) {
   lightConfigs.forEach(l => { const w = centerToWorld(l, center); l.x = w.x; l.z = w.z; });
 }
 
+const landscapeVisible = visibleLayers.has("landscape");
+scene.setSiteSurfaces?.(
+  landscapeVisible ? toPreviewSiteSurfaces(siteSurfaces, center || { cx: 0, cy: 0 }) : []
+);
+
     // 4. Push to scene
     if (scene.setNozzlesFromEngineering) {
       scene.setNozzlesFromEngineering(nozzleConfigs);
@@ -171,7 +189,7 @@ if (scene.setNozzlePhysics && nozzleConfigs.length) {
     })
     .catch(() => { scene.setNozzlePhysics(null); });
 }
-  }, [geometry, params, poolType, fixtures, manualPipes, layers]);
+  }, [geometry, params, poolType, fixtures, siteSurfaces, manualPipes, layers]);
 
   useEffect(() => {
     if (!lastUpdated) return;
@@ -186,7 +204,7 @@ if (scene.setNozzlePhysics && nozzleConfigs.length) {
   });
 
   return {
-    hasData: !!geometry || fixtures.length > 0,
+    hasData: !!geometry || fixtures.length > 0 || siteSurfaces.length > 0,
     fixtureCount: fixtures.length,
     poolType,
   };

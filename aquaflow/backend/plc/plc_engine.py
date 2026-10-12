@@ -10,7 +10,7 @@ Supports:
 import asyncio
 import struct
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Optional, Any
 from enum import Enum
 
@@ -83,6 +83,63 @@ class PLCTag:
     mapped_param: str = ""      # parameter name
     current_value: Any = None
     last_updated: float = 0.0
+    # Profile tags (plc/s7_profiles.py) carry these. access: "read" = read-only
+    # (never written), "write" / "readwrite" = writable. profile_id = source profile.
+    access: str = "readwrite"
+    profile_id: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PLCTag":
+        """Build from a stored tag dict, ignoring keys PLCTag doesn't know (UI or
+        profile extras) so one unexpected key can't break polling or writes."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+    @property
+    def read_only(self) -> bool:
+        return is_read_only_access(self.access)
+
+
+READ_ONLY_ACCESS = {"read", "readonly", "read_only", "ro"}
+
+
+def is_read_only_access(access: Any) -> bool:
+    return str(access or "").strip().lower() in READ_ONLY_ACCESS
+
+
+def is_stop_value(value: Any) -> bool:
+    """0 / False / "0" / "false" / "off" — the fail-safe direction, never gated."""
+    if isinstance(value, bool):
+        return value is False
+    if isinstance(value, (int, float)):
+        return value == 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"0", "0.0", "false", "off"}
+    return False
+
+
+class PLCWriteRefused(Exception):
+    """A tag write refused by the gate. status: 400 (read-only tag) or 403 (safety)."""
+
+    def __init__(self, status: int, reason: str):
+        super().__init__(reason)
+        self.status = status
+        self.reason = reason
+
+
+def _safety_write_gate() -> Optional[str]:
+    """None = permitted; otherwise the refusal reason. Mirrors VFDCommander._gate:
+    a non-zero write needs permit AND pump_enable; fail closed if unreadable."""
+    try:
+        from safety.safety_kernel import get_safety_kernel
+        st = get_safety_kernel().get_status()
+    except Exception:
+        return "safety kernel unreadable — refusing (fail closed)"
+    if not st.get("permit"):
+        return "safety permit not granted"
+    if not st.get("pump_enable"):
+        return "pump_enable not granted"
+    return None
 
 
 @dataclass
@@ -801,7 +858,17 @@ class PLCManager:
         if not driver or not config: return False
         tag = next((t for t in config.tags if t["id"] == tag_id), None)
         if not tag: return False
-        tag_obj = PLCTag(**tag)
+        tag_obj = PLCTag.from_dict(tag)
+        if tag_obj.read_only:
+            raise PLCWriteRefused(
+                400, f"tag '{tag_id}' ({tag_obj.address}) is read-only — "
+                     f"AquaFlow never writes PLC status/feedback fields")
+        if not is_stop_value(value):
+            reason = _safety_write_gate()
+            if reason:
+                raise PLCWriteRefused(
+                    403, f"write to '{tag_id}' ({tag_obj.address}) refused: {reason}. "
+                         f"Writing 0/False (stop) is always allowed.")
         return await driver.write_tag(tag_obj, value)
 
     async def write_device_output(self, plc_id: str, device_id: str, param: str, value: float):
@@ -812,7 +879,7 @@ class PLCManager:
 
         for tag_data in config.tags:
             if tag_data.get("mapped_device") == device_id and tag_data.get("mapped_param") == param:
-                tag = PLCTag(**tag_data)
+                tag = PLCTag.from_dict(tag_data)
                 await driver.write_tag(tag, value)
 
     async def _poll_loop(self, plc_id: str):
@@ -823,7 +890,7 @@ class PLCManager:
 
         while self._running and plc_id in self._drivers:
             try:
-                tags = [PLCTag(**t) for t in config.tags]
+                tags = [PLCTag.from_dict(t) for t in config.tags]
                 if tags:
                     values = await driver.read_all_tags(tags)
                     for tag_id, value in values.items():

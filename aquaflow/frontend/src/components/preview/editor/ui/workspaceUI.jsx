@@ -11,10 +11,11 @@
  * showing the same graph rather than three drifting copies.
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { NODE_TYPES } from "../sceneGraph";
 import { FIXTURE_PALETTE, paletteSpec } from "../fixtureBridge";
 import { TOOLS, SHORTCUTS } from "../editorSnapping";
+import { BUILTIN_MODELS, importGlb, listImportedModels } from "../../modelLibrary";
 
 const MONO = "monospace";
 const C = {
@@ -54,11 +55,13 @@ function useEditorTick(editor) {
 }
 
 // ── Toolbar ─────────────────────────────────────────────────────────────────
-export function EditorToolbar({ editor, onExitEditor, scene }) {
+export function EditorToolbar({ editor, onExitEditor, onSave, saveLabel = "Save", scene }) {
   useEditorTick(editor);
   const [quad, setQuad] = useState(false);
   if (!editor) return null;
   const sel = editor.graph.selected();
+  const history = editor.history.state();
+  const canUngroup = sel.some(id => editor.graph.get(id)?.type === NODE_TYPES.GROUP);
 
   const Tool = ({ id, glyph, title }) => (
     <button title={title} onClick={() => editor.setTool(id)} style={btn(editor.tool === id)}>{glyph}</button>
@@ -66,7 +69,7 @@ export function EditorToolbar({ editor, onExitEditor, scene }) {
 
   return (
     <div style={{
-      position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 22,
+      position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", zIndex: 22,
       display: "flex", gap: 4, alignItems: "center", padding: "6px 8px", borderRadius: 6,
       background: "rgba(3,8,18,0.88)", border: `1px solid ${C.line}`, backdropFilter: "blur(6px)",
     }}>
@@ -75,16 +78,24 @@ export function EditorToolbar({ editor, onExitEditor, scene }) {
       <Tool id={TOOLS.ROTATE} glyph="⟳" title="Rotate (E)" />
       <span style={{ width: 1, height: 16, background: C.line, margin: "0 3px" }} />
       <button title="Focus selection (F)" onClick={() => editor.focusSelection()} style={btn(false)}>◎</button>
+      <button title={history.undoLabel ? `Undo ${history.undoLabel} (Ctrl+Z)` : "Nothing to undo"}
+        disabled={!history.canUndo} onClick={() => editor.undo()} style={btn(false)}>↶</button>
+      <button title={history.redoLabel ? `Redo ${history.redoLabel} (Ctrl+Y)` : "Nothing to redo"}
+        disabled={!history.canRedo} onClick={() => editor.redo()} style={btn(false)}>↷</button>
       <button title="Duplicate (Ctrl+D)" disabled={!sel.length}
         onClick={() => editor.duplicateSelection()} style={btn(false)}>⧉</button>
-      <button title="Group selection" disabled={sel.length < 2}
+      <button title="Group selection (Ctrl+G)" disabled={sel.length < 2}
         onClick={() => editor.groupSelection()} style={btn(false)}>⊞</button>
+      <button title="Ungroup selection (Ctrl+Shift+G)" disabled={!canUngroup}
+        onClick={() => editor.ungroupSelection()} style={btn(false)}>⊟</button>
       <button title="Delete (Del)" disabled={!sel.length}
         onClick={() => editor.deleteSelection()} style={btn(false, "#ff5c6c")}>🗑</button>
       <span style={{ width: 1, height: 16, background: C.line, margin: "0 3px" }} />
       <button title="Quad view — perspective + top / front / side"
         onClick={() => { const on = !quad; setQuad(on); scene?.setQuadView?.(on); }}
         style={btn(quad)}>⊞⊞</button>
+      {onSave && <button title="Commit viewport layout to Engineering Design"
+        onClick={onSave} style={btn(false, "#3ddc84")}>✓ {saveLabel}</button>}
       <span style={{ width: 1, height: 16, background: C.line, margin: "0 3px" }} />
       <span style={{ color: C.dim, fontSize: 9, fontFamily: MONO }}>
         {sel.length ? `${sel.length} selected` : "nothing selected"}
@@ -100,8 +111,14 @@ export function EditorToolbar({ editor, onExitEditor, scene }) {
 }
 
 // ── Library ─────────────────────────────────────────────────────────────────
-export function LibraryPalette({ editor }) {
+export function LibraryPalette({ editor, compact = false }) {
   const [dragKey, setDragKey] = useState(null);
+  const [imported, setImported] = useState([]);
+  const [importMessage, setImportMessage] = useState("");
+  const [category, setCategory] = useState("Nozzles");
+  const fileRef = useRef(null);
+
+  useEffect(() => { listImportedModels().then(setImported).catch(error => setImportMessage(error.message)); }, []);
 
   // Drag from the palette, drop into the 3D view — the way fixtures get into a scene
   // in Depence. The drop lands where the pointer meets the ground plane.
@@ -117,6 +134,18 @@ export function LibraryPalette({ editor }) {
     (acc[g] = acc[g] || []).push(f);
     return acc;
   }, {});
+  const models = [...BUILTIN_MODELS, ...imported];
+  const categories = ["Nozzles", "Lighting", "Hydraulics", "People", "Landscaping", "Buildings", "Imported"];
+  const addFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const asset = await importGlb(file);
+      setImported(list => [...list, asset]);
+      setImportMessage(`${asset.name} is ready. Drag it into the 3D view.`);
+    } catch (error) { setImportMessage(error?.message || "Could not import model."); }
+  };
 
   return (
     <div>
@@ -124,7 +153,11 @@ export function LibraryPalette({ editor }) {
       <div style={{ color: C.dim, fontSize: 9, fontFamily: MONO, marginBottom: 6 }}>
         Drag into the 3D view
       </div>
-      {Object.entries(grouped).map(([group, items]) => (
+      <div style={{ display:"flex", gap:3, flexWrap:"wrap", paddingBottom:5, marginBottom:5 }}>
+        {categories.map(name => <button key={name} onClick={() => setCategory(name)}
+          style={{ ...btn(category === name), padding:"3px 6px", whiteSpace:"nowrap" }}>{name}</button>)}
+      </div>
+      {Object.entries(grouped).filter(([group]) => group === category).map(([group, items]) => (
         <div key={group} style={{ marginBottom: 8 }}>
           <div style={{ color: C.text, fontSize: 9, fontFamily: MONO, marginBottom: 3 }}>{group}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
@@ -144,6 +177,37 @@ export function LibraryPalette({ editor }) {
           </div>
         </div>
       ))}
+      {!["Nozzles", "Lighting", "Hydraulics"].includes(category) && <div style={{ marginTop: compact ? 2 : 10, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
+        <div style={label}>3D Models · {category}</div>
+        <div style={{ color: C.dim, fontSize: 9, fontFamily: MONO, marginBottom: 5 }}>
+          Drag a person, tree or building into the view. Select it to move, rotate or resize.
+        </div>
+        {[category].map(group => {
+          const items = models.filter(asset => asset.category === group);
+          if (!items.length) return null;
+          return <div key={group} style={{ marginBottom: 7 }}>
+            <div style={{ color: C.text, fontSize: 9, fontFamily: MONO, marginBottom: 3 }}>{group}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
+              {items.map(asset => <div key={asset.id} draggable
+                onDragStart={event => {
+                  setDragKey(asset.id);
+                  event.dataTransfer.setData("text/aquaflow-model", asset.id);
+                  event.dataTransfer.effectAllowed = "copy";
+                }}
+                onDragEnd={() => setDragKey(null)}
+                title={`Drag ${asset.name} into the 3D view`}
+                style={{ ...btn(dragKey === asset.id), cursor: "grab", textAlign: "center", padding: "4px 2px" }}>
+                {asset.name}
+              </div>)}
+            </div>
+          </div>;
+        })}
+        <input ref={fileRef} type="file" accept=".glb,model/gltf-binary" onChange={addFile} style={{ display: "none" }} />
+        <button onClick={() => fileRef.current?.click()} style={btn(false)} title="Import a self-contained glTF Binary file exported from Blender">
+          Import Blender GLB…
+        </button>
+        {importMessage && <div role="status" style={{ color: C.text, fontSize: 9, marginTop: 5 }}>{importMessage}</div>}
+      </div>}
     </div>
   );
 }
@@ -208,8 +272,7 @@ export function SceneTree({ editor }) {
               <span title={visible ? "Hide" : "Show"}
                 onClick={(e) => {
                   e.stopPropagation();
-                  graph.setVisible(node.id, !node.visible);
-                  editor.syncProxies();
+                  editor.setNodeVisible(node.id, !node.visible);
                 }}
                 style={{ opacity: visible ? 0.85 : 0.35, padding: "0 2px" }}>👁</span>
             </div>
@@ -238,9 +301,7 @@ export function Inspector({ editor }) {
 
   const commit = useCallback((patch) => {
     if (!single) return;
-    graph.setTransform(single.id, patch);
-    editor.syncProxies();
-    editor._emit("transform");
+    editor.setNodeTransform(single.id, patch);
   }, [single, graph, editor]);
 
   if (!editor) return null;
@@ -309,7 +370,7 @@ export function Inspector({ editor }) {
       <div style={label}>Transformation</div>
       <input
         value={single.name}
-        onChange={e => { single.name = e.target.value; editor._emit("rename"); }}
+        onChange={e => editor.setNodeName(single.id, e.target.value)}
         style={{
           width: "100%", boxSizing: "border-box", marginBottom: 6, padding: "3px 6px",
           background: "#010409", border: `1px solid ${C.line}`, borderRadius: 3,
@@ -342,9 +403,9 @@ export function Inspector({ editor }) {
       )}
 
       <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-        <button onClick={() => { graph.setVisible(single.id, !single.visible); editor.syncProxies(); }}
+        <button onClick={() => editor.setNodeVisible(single.id, !single.visible)}
           style={{ ...btn(false), flex: 1 }}>{single.visible ? "Hide" : "Show"}</button>
-        <button onClick={() => { single.locked = !single.locked; editor._emit("lock"); editor._updateGizmo(); }}
+        <button onClick={() => editor.setNodeLocked(single.id, !single.locked)}
           style={{ ...btn(single.locked, "#ffaa33"), flex: 1 }}>{single.locked ? "Locked" : "Lock"}</button>
       </div>
 
@@ -355,7 +416,7 @@ export function Inspector({ editor }) {
 
 /** Type-specific properties, below the shared transform block. */
 function FixtureProps({ editor, node }) {
-  const set = (k, v) => { node.props[k] = v; editor._emit("props"); };
+  const set = (k, v) => editor.setNodeProps(node.id, { [k]: v }, k);
 
   if (node.type === NODE_TYPES.NOZZLE) {
     const types = FIXTURE_PALETTE.filter(f => f.type === NODE_TYPES.NOZZLE);
@@ -429,7 +490,7 @@ function RowHint({ k, d }) {
 export function useLibraryDrop(editor) {
   const onDragOver = useCallback((e) => {
     if (!editor?.enabled) return;
-    if (e.dataTransfer.types.includes("text/aquaflow-fixture")) {
+    if (e.dataTransfer.types.includes("text/aquaflow-fixture") || e.dataTransfer.types.includes("text/aquaflow-model")) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
     }
@@ -437,6 +498,15 @@ export function useLibraryDrop(editor) {
 
   const onDrop = useCallback((e) => {
     if (!editor?.enabled) return;
+    const modelId = e.dataTransfer.getData("text/aquaflow-model");
+    if (modelId) {
+      e.preventDefault();
+      const model = BUILTIN_MODELS.find(asset => asset.id === modelId);
+      editor.dropAt(e.clientX, e.clientY, {
+        type: NODE_TYPES.MODEL, name: model?.name || "Imported 3D model", props: { assetId: modelId },
+      });
+      return;
+    }
     const key = e.dataTransfer.getData("text/aquaflow-fixture");
     if (!key) return;
     e.preventDefault();

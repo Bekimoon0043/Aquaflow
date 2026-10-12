@@ -3,6 +3,24 @@
 
 export const DEFAULT_DEVICE_GROUPS = [
   {
+    id: "running_fountain_jets",
+    name: "Site Running Fountain (76)",
+    type: "water",
+    matchNozzleTypes: ["nozzle_running"],
+  },
+  {
+    id: "foam_jets",
+    name: "Site Foam Left + Right (16)",
+    type: "water",
+    matchNozzleTypes: ["nozzle_foam_dn40"],
+  },
+  {
+    id: "peacock_jets",
+    name: "Site Peacock Center (8)",
+    type: "water",
+    matchNozzleTypes: ["nozzle_fan_medium"],
+  },
+  {
     id: "center_jets",
     name: "Center Jets",
     type: "water",

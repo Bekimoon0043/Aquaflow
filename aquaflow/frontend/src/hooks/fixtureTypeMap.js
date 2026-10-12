@@ -219,6 +219,10 @@ export function fixturesToNozzleConfigs(fixtures) {
   fixtures.forEach(f => {
     const map = resolveFixtureType(f.type);
 
+    // Plant equipment has no particle emitter. Keep it in the engineering
+    // model and show tracks without drawing a fictitious water nozzle.
+    if (classifyFixtureType(f.type) === "equipment") return;
+
     const { x: planX, z: planZ } = fixturePlanCoords(f);
 
     if (map.isLight) {
@@ -285,6 +289,10 @@ export function geometryToPoolConfig(geometry, params, poolType) {
 export function resolveFixtureGroup(typeString) {
   const k = String(typeString || "").trim().toLowerCase();
   if (!k) return null;
+
+  if (k.includes("running")) return "running_fountain_jets";
+  if (k.includes("foam")) return "foam_jets";
+  if (k.includes("peacock")) return "peacock_jets";
 
   const EQUIP_PREFIXES = [
     "pump_", "valve_", "filter_", "fuel_", "air_compressor", "air_tank",

@@ -1,5 +1,8 @@
 # TIA Portal walkthrough — programming the 1215C for AquaFlow
 
+> This covers the older generic DB1 profile. For a Siemens Site runtime, export the site TIA package and follow `../SIEMENS-RUNTIME-COMMISSIONING.md`.
+
+
 You + Claude, pair-programming: you click, Claude guides. The two source files in
 this folder are the ENTIRE program — you will not write a line of code, only
 import, wire addresses, and download. Paste a screenshot into the chat any time

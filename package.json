@@ -1,0 +1,13 @@
+{
+  "name": "aquaflow-studio-desktop",
+  "productName": "AquaFlow Studio",
+  "version": "1.2.16",
+  "description": "AquaFlow Studio â€” LuxuryCon fountain design, engineering, programming & operation platform (desktop shell)",
+  "author": "LuxuryCon",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}

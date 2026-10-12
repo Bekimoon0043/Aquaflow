@@ -1,0 +1,39 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aquaflow-web-pkg",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8792", "--directory", "E:\\Burook platform development\\Luxurycon\\aquaflow-phase1-stabilization-clean\\aquaflow\\desktop\\dist\\win-unpacked\\resources\\app.asar.unpacked\\web"],
+      "port": 8792,
+      "autoPort": false
+    },
+    {
+      "name": "aquaflow-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8791", "--directory", "E:\\Burook platform development\\Luxurycon\\aquaflow-phase1-stabilization-clean\\aquaflow\\desktop\\web"],
+      "port": 8791,
+      "autoPort": false
+    },
+    {
+      "name": "aquaflow-dev",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d \"E:\\Burook platform development\\Luxurycon\\aquaflow-phase1-stabilization-clean\\aquaflow\\frontend\" && npx vite --host"],
+      "port": 5173
+    },
+    {
+      "name": "luxhub",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8790", "--directory", "E:\\Burook platform development\\Luxurycon\\LuxuryCon-AI-Hub"],
+      "port": 8790,
+      "autoPort": false
+    },
+    {
+      "name": "luxweb",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8793", "--directory", "E:\\Burook platform development\\Luxurycon\\luxurycon-platform\\apps\\web\\out"],
+      "port": 8793,
+      "autoPort": false
+    }
+  ]
+}

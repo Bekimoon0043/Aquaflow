@@ -16,6 +16,7 @@ import NozzleMap from "./NozzleMap";
 import { DEFAULT_DEVICE_GROUPS } from "../../utils/deviceGroupSelector";
 import { resolveFixtureGroup, fixturePlanCoords } from "../../hooks/fixtureTypeMap";
 import ICANSiteDesignStudio from "./ICANSiteDesignStudio";
+import { useICANPreviewStore } from "../../store/icanPreviewStore";
 
 const API        = `${API_BASE_URL}/devices`;
 const PATTERN_API = API_BASE_URL; // base for /api/patterns, /api/dmx-map, etc.
@@ -133,7 +134,13 @@ export default function PatternDesignerPanel() {
      const [lightColor, setLightColor]       = useState(() => useShowStore.getState().manualPatternConfig?.lightColor || "#ffffff");
 
   // ── state (new — Phase 15) ─────────────────────────────────────────────────
-  const [activeTab, setActiveTab]         = useState(0);
+  const [activeTab, setActiveTab]         = useState(() => {
+    const preview = useICANPreviewStore.getState();
+    return preview.siteEditorRequested || preview.active ? 4 : 0;
+  });
+  useEffect(() => {
+    if (useICANPreviewStore.getState().siteEditorRequested) useICANPreviewStore.setState({ siteEditorRequested: false });
+  }, []);
 
   // Save / load
   const [savedPatterns, setSavedPatterns] = useState([]);

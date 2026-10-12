@@ -10,6 +10,8 @@
  * Frontend-only. No fetch. No WebSocket. No DMX. No Art-Net. No Modbus. No relay. No hardware activation.
  */
 
+import { getFixtureLibraryEntry } from "../data/fixtureLibrary.js";
+
 // ============================================================
 // ENGINEERING METADATA CONSTANTS
 // ============================================================
@@ -1311,6 +1313,110 @@ export function normalizeFixtureType(type = "") {
     .replace(/-/g, "_");
 }
 
+// ============================================================
+// LIBRARY-CATEGORY RESOLUTION
+// ============================================================
+// Most fixture-library keys (e.g. "light_uw_rgb_18w", "nozzle_straight_jet_dn25",
+// "water_treatment_chlorine_dosing_pump") have no exact entry above. Blind
+// substring matching used to send them to "generic" (enable-only tracks) or to
+// the WRONG family ("dosing_chlorine_pump" → pump, "pump_high_pressure_mist_*" →
+// fog). For library keys we therefore resolve from the library entry's own
+// category/family: substring matches are only accepted inside the families that
+// category allows, and otherwise a category template is used.
+// (fixtureLibrary.js imports nothing from this module, so there is no cycle.)
+
+const WATER_PREVIEW = /^water_/;
+
+const NOZZLE_TEMPLATE = Object.freeze({
+  runtimeType: "pump", category: "pump", deviceType: "nozzle",
+  group: "center_jets", protocol: "virtual", latencyMs: 15,
+  channels: ["intensity", "enable", "pump_speed"],
+  engineering: {},
+  previewCategory: "water_jet",
+});
+
+const GENERIC_EQUIPMENT_TEMPLATE = Object.freeze({
+  runtimeType: "equipment", category: "generic", deviceType: "equipment",
+  group: "engineering_equipment", protocol: "virtual", latencyMs: 0,
+  channels: ["enable", "intensity"],
+  engineering: {},
+  previewCategory: "equipment_box",
+});
+
+function lightTemplate(entry, key) {
+  const text = `${key} ${entry.label || ""} ${entry.engineering?.colorMode || ""}`.toLowerCase();
+  if (/moving_head|moving head/.test(text) && FIXTURE_TYPE_MAP.light_moving_head) {
+    return FIXTURE_TYPE_MAP.light_moving_head;
+  }
+  if (/rgbw/.test(text)) return FIXTURE_TYPE_MAP.light_rgbw;
+  if (/rgb/.test(text)) return FIXTURE_TYPE_MAP.light_rgb;
+  // Single-colour (white) fixture: one dimmer channel.
+  return { ...FIXTURE_TYPE_MAP.light_rgb, deviceType: "light_white", channels: ["intensity"] };
+}
+
+function motionTemplate(entry, key) {
+  const text = `${key} ${entry.family || ""} ${entry.label || ""}`.toLowerCase();
+  const axes = Number(entry.engineering?.axisCount) || 0;
+  if (axes >= 3 || /3d/.test(text)) return FIXTURE_TYPE_MAP.motion_3d;
+  if (axes === 2 || /2d|pan[-_ /]?tilt/.test(text)) return FIXTURE_TYPE_MAP.motion_2d;
+  return FIXTURE_TYPE_MAP.motion_1d;
+}
+
+/** Substring match restricted to map entries accepted by `accept(info)`. */
+function fuzzyWithin(key, accept) {
+  for (const [mapKey, info] of Object.entries(FIXTURE_TYPE_MAP)) {
+    if (!accept(info)) continue;
+    if (key.includes(mapKey) || mapKey.includes(key)) return info;
+  }
+  return null;
+}
+
+const isWaterJetInfo = (info) => info.category === "pump" && WATER_PREVIEW.test(info.previewCategory || "");
+const isGenericInfo = (info) => info.category === "generic";
+
+function resolveFromLibrary(key, entry) {
+  const category = entry.category;
+  const family = `${entry.family || ""} ${entry.engineering?.group || ""}`.toLowerCase();
+
+  switch (category) {
+    case "Nozzles":
+      // Mist / fog heads → fog density; every other nozzle is a water jet
+      // driven by a level/pump-speed track like the existing nozzle types.
+      if (/mist|fog/.test(family) || /mist|fog/.test(key)) return FIXTURE_TYPE_MAP.mist;
+      return fuzzyWithin(key, isWaterJetInfo) || NOZZLE_TEMPLATE;
+    case "Lights":
+      return lightTemplate(entry, key);
+    case "Pumps":
+      // Including the high-pressure mist pump: it is a pump, not a fog emitter.
+      return FIXTURE_TYPE_MAP.pump;
+    case "Valves":
+      return fuzzyWithin(key, (info) => info.category === "solenoid") || FIXTURE_TYPE_MAP.solenoid;
+    case "Flame":
+      // Fuel tanks / manifolds are supply equipment, not triggerable burners.
+      if (/fuel/.test(family) || /^fuel_/.test(key)) return GENERIC_EQUIPMENT_TEMPLATE;
+      return fuzzyWithin(key, (info) => info.category === "fire") || FIXTURE_TYPE_MAP.flame;
+    case "Fog":
+      return fuzzyWithin(key, (info) => info.category === "fog") || FIXTURE_TYPE_MAP.fog;
+    case "Laser":
+      return FIXTURE_TYPE_MAP.laser;
+    case "Motion Systems":
+      return motionTemplate(entry, key);
+    case "Sensors":
+      // Read-only instrumentation (a "wind sensor" is not the wind FX fan).
+      return FIXTURE_TYPE_MAP.sensor || GENERIC_EQUIPMENT_TEMPLATE;
+    case "Water Treatment":
+    case "Filtration":
+      // Dosing pumps, filters, UV: generic process equipment — never "pump".
+      return fuzzyWithin(key, isGenericInfo) || GENERIC_EQUIPMENT_TEMPLATE;
+    case "Controls":
+      // A VFD drives pump speed; everything else is generic control gear.
+      if (/vfd|inverter/.test(key) && FIXTURE_TYPE_MAP.vfd) return FIXTURE_TYPE_MAP.vfd;
+      return fuzzyWithin(key, isGenericInfo) || GENERIC_EQUIPMENT_TEMPLATE;
+    default:
+      return fuzzyWithin(key, isGenericInfo) || GENERIC_EQUIPMENT_TEMPLATE;
+  }
+}
+
 export function getFixtureInfo(type = "") {
   const key = normalizeFixtureType(type);
 
@@ -1323,6 +1429,11 @@ export function getFixtureInfo(type = "") {
     if (FIXTURE_TYPE_MAP[withoutPrefix]) {
       return FIXTURE_TYPE_MAP[withoutPrefix];
     }
+  }
+
+  const libraryEntry = getFixtureLibraryEntry(key) || getFixtureLibraryEntry(String(type || "").trim());
+  if (libraryEntry) {
+    return resolveFromLibrary(key, libraryEntry);
   }
 
   for (const [mapKey, info] of Object.entries(FIXTURE_TYPE_MAP)) {

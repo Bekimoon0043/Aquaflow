@@ -14,16 +14,18 @@ const CURATED_FIXTURES = [
     key:"nozzle_straight_dn15",
     category:"Nozzles",
     family:"Vertical Jets",
-    label:"Straight Jet DN15",
+    label:"Straight Jet DN15 Ø7mm",
     color:"#00aaff",
     icon:"↑",
     engineering:{
-      flowLpm:45,
-      pressureBar:1.0,
-      jetHeightM:2.0,
-      nozzleDiaMm:12,
+      heightEfficiency:0.8,
+      dischargeCoeff:0.93,
+      kFactor:30.374,
+      flowLpm:30.37,
+      pressureBar:1,
+      jetHeightM:8.16,
+      nozzleDiaMm:7,
       sprayAngleDeg:90,
-      plcChannel:"Q0.1",
       group:"Straight Jet",
       connectionSize:"DN15",
       material:"SS304"
@@ -33,16 +35,18 @@ const CURATED_FIXTURES = [
     key:"nozzle_straight_dn25",
     category:"Nozzles",
     family:"Vertical Jets",
-    label:"Straight Jet DN25",
+    label:"Straight Jet DN25 Ø11mm",
     color:"#00aaff",
     icon:"↑",
     engineering:{
-      flowLpm:80,
+      heightEfficiency:0.8,
+      dischargeCoeff:0.93,
+      kFactor:75.006,
+      flowLpm:82.16,
       pressureBar:1.2,
-      jetHeightM:3.0,
-      nozzleDiaMm:16,
+      jetHeightM:9.79,
+      nozzleDiaMm:11,
       sprayAngleDeg:90,
-      plcChannel:"Q0.2",
       group:"Straight Jet",
       connectionSize:"DN25",
       material:"SS304"
@@ -52,16 +56,18 @@ const CURATED_FIXTURES = [
     key:"nozzle_straight_dn40",
     category:"Nozzles",
     family:"Vertical Jets",
-    label:"Straight Jet DN40",
+    label:"Straight Jet DN40 Ø17mm",
     color:"#0099ff",
     icon:"↑",
     engineering:{
-      flowLpm:160,
+      heightEfficiency:0.8,
+      dischargeCoeff:0.93,
+      kFactor:179.146,
+      flowLpm:219.41,
       pressureBar:1.5,
-      jetHeightM:5.0,
-      nozzleDiaMm:25,
+      jetHeightM:12.24,
+      nozzleDiaMm:17,
       sprayAngleDeg:90,
-      plcChannel:"Q0.3",
       group:"Straight Jet",
       connectionSize:"DN40",
       material:"SS304"
@@ -75,12 +81,14 @@ const CURATED_FIXTURES = [
     color:"#00aaff",
     icon:"⬆",
     engineering:{
-      flowLpm:150,
-      pressureBar:1.5,
-      jetHeightM:5.0,
+      heightEfficiency:0.65,
+      dischargeCoeff:0.7,
+      kFactor:291.612,
+      flowLpm:260.83,
+      pressureBar:0.8,
+      jetHeightM:5.3,
       nozzleDiaMm:25,
       sprayAngleDeg:90,
-      plcChannel:"Q0.4",
       group:"Geyser",
       connectionSize:"DN40",
       material:"SS304"
@@ -90,18 +98,20 @@ const CURATED_FIXTURES = [
     key:"nozzle_foam_dn40",
     category:"Nozzles",
     family:"Vertical Jets",
-    label:"Foam Jet DN40",
+    label:"Foam Jet DN40 Ø27mm",
     color:"#72d6ff",
     icon:"♨",
     engineering:{
-      flowLpm:220,
-      pressureBar:1.0,
-      jetHeightM:2.5,
-      nozzleDiaMm:40,
+      heightEfficiency:0.65,
+      dischargeCoeff:0.7,
+      kFactor:340.136,
+      flowLpm:215.12,
+      pressureBar:0.4,
+      jetHeightM:2.65,
+      nozzleDiaMm:27,
       sprayAngleDeg:90,
-      plcChannel:"Q0.5",
       group:"Foam Jet",
-      connectionSize:"DN50",
+      connectionSize:"DN40",
       material:"SS304"
     }
   },
@@ -116,12 +126,14 @@ const CURATED_FIXTURES = [
     color:"#00ffcc",
     icon:"→",
     engineering:{
-      flowLpm:45,
-      pressureBar:1.8,
-      jetHeightM:2.5,
+      heightEfficiency:0.85,
+      dischargeCoeff:0.95,
+      kFactor:91.183,
+      flowLpm:49.94,
+      pressureBar:0.3,
+      jetHeightM:2.6,
       nozzleDiaMm:12,
       sprayAngleDeg:15,
-      plcChannel:"Q0.6",
       group:"Laminar",
       connectionSize:"DN25",
       material:"SS304"
@@ -135,12 +147,14 @@ const CURATED_FIXTURES = [
     color:"#00ffcc",
     icon:"⇢",
     engineering:{
-      flowLpm:55,
-      pressureBar:2.0,
-      jetHeightM:3.0,
-      nozzleDiaMm:15,
+      heightEfficiency:0.85,
+      dischargeCoeff:0.95,
+      kFactor:107.013,
+      flowLpm:63.31,
+      pressureBar:0.35,
+      jetHeightM:3.03,
+      nozzleDiaMm:13,
       sprayAngleDeg:10,
-      plcChannel:"Q0.7",
       group:"Laser Laminar",
       connectionSize:"DN25",
       material:"SS304"
@@ -154,12 +168,14 @@ const CURATED_FIXTURES = [
     color:"#00ffee",
     icon:"↷",
     engineering:{
-      flowLpm:65,
-      pressureBar:2.2,
-      jetHeightM:4.0,
-      nozzleDiaMm:18,
+      heightEfficiency:0.8,
+      dischargeCoeff:0.95,
+      kFactor:91.183,
+      flowLpm:64.48,
+      pressureBar:0.5,
+      jetHeightM:4.08,
+      nozzleDiaMm:12,
       sprayAngleDeg:12,
-      plcChannel:"Q1.0",
       group:"Jumping Jet",
       connectionSize:"DN25",
       material:"SS304"
@@ -177,12 +193,14 @@ const CURATED_FIXTURES = [
     color:"#33ccff",
     icon:"◠",
     engineering:{
-      flowLpm:60,
-      pressureBar:1.2,
-      jetHeightM:2.0,
-      nozzleDiaMm:20,
+      heightEfficiency:0.5,
+      dischargeCoeff:0.8,
+      kFactor:90.116,
+      flowLpm:56.99,
+      pressureBar:0.4,
+      jetHeightM:2.04,
+      nozzleDiaMm:13,
       sprayAngleDeg:45,
-      plcChannel:"Q1.1",
       group:"Fan Jet",
       connectionSize:"DN25",
       material:"SS304"
@@ -196,12 +214,14 @@ const CURATED_FIXTURES = [
     color:"#33ccff",
     icon:"◠",
     engineering:{
-      flowLpm:110,
-      pressureBar:1.5,
-      jetHeightM:3.5,
-      nozzleDiaMm:25,
+      heightEfficiency:0.5,
+      dischargeCoeff:0.8,
+      kFactor:136.508,
+      flowLpm:114.21,
+      pressureBar:0.7,
+      jetHeightM:3.57,
+      nozzleDiaMm:16,
       sprayAngleDeg:60,
-      plcChannel:"Q1.2",
       group:"Fan Jet",
       connectionSize:"DN32",
       material:"SS304"
@@ -215,12 +235,14 @@ const CURATED_FIXTURES = [
     color:"#33ccff",
     icon:"◠",
     engineering:{
-      flowLpm:180,
-      pressureBar:2.0,
-      jetHeightM:5.0,
-      nozzleDiaMm:40,
+      heightEfficiency:0.5,
+      dischargeCoeff:0.8,
+      kFactor:172.767,
+      flowLpm:172.77,
+      pressureBar:1,
+      jetHeightM:5.1,
+      nozzleDiaMm:18,
       sprayAngleDeg:75,
-      plcChannel:"Q1.3",
       group:"Fan Jet",
       connectionSize:"DN40",
       material:"SS304"
@@ -238,12 +260,14 @@ const CURATED_FIXTURES = [
     color:"#55ccff",
     icon:"⌒",
     engineering:{
-      flowLpm:40,
-      pressureBar:1.5,
-      jetHeightM:2.5,
-      nozzleDiaMm:12,
+      heightEfficiency:0.6,
+      dischargeCoeff:0.9,
+      kFactor:59.989,
+      flowLpm:37.94,
+      pressureBar:0.4,
+      jetHeightM:2.45,
+      nozzleDiaMm:10,
       sprayAngleDeg:25,
-      plcChannel:"Q1.4",
       group:"Arch",
       connectionSize:"DN20",
       material:"SS304"
@@ -257,12 +281,14 @@ const CURATED_FIXTURES = [
     color:"#55ccff",
     icon:"⌒",
     engineering:{
-      flowLpm:90,
-      pressureBar:2.0,
-      jetHeightM:4.0,
-      nozzleDiaMm:20,
+      heightEfficiency:0.6,
+      dischargeCoeff:0.9,
+      kFactor:117.578,
+      flowLpm:94.79,
+      pressureBar:0.65,
+      jetHeightM:3.98,
+      nozzleDiaMm:14,
       sprayAngleDeg:30,
-      plcChannel:"Q1.5",
       group:"Arch",
       connectionSize:"DN25",
       material:"SS304"
@@ -276,12 +302,14 @@ const CURATED_FIXTURES = [
     color:"#55ccff",
     icon:"⌒",
     engineering:{
-      flowLpm:160,
-      pressureBar:2.5,
-      jetHeightM:6.0,
-      nozzleDiaMm:32,
+      heightEfficiency:0.6,
+      dischargeCoeff:0.9,
+      kFactor:153.571,
+      flowLpm:153.57,
+      pressureBar:1,
+      jetHeightM:6.12,
+      nozzleDiaMm:16,
       sprayAngleDeg:35,
-      plcChannel:"Q1.6",
       group:"Arch",
       connectionSize:"DN40",
       material:"SS304"
@@ -298,12 +326,15 @@ const CURATED_FIXTURES = [
     color:"#b0ffff",
     icon:"◌",
     engineering:{
-      flowLpm:35,
-      pressureBar:6.0,
+      heightBasis:"cloud",
+      orificeCount:24,
+      dischargeCoeff:0.7,
+      kFactor:2.799,
+      flowLpm:6.86,
+      pressureBar:6,
       jetHeightM:0.5,
-      nozzleDiaMm:0.2,
+      nozzleDiaMm:0.5,
       sprayAngleDeg:360,
-      plcChannel:"Q2.0",
       group:"Mist",
       connectionSize:"DN15",
       material:"SS316"
@@ -317,12 +348,15 @@ const CURATED_FIXTURES = [
     color:"#d8ffff",
     icon:"☁",
     engineering:{
-      flowLpm:25,
+      heightBasis:"cloud",
+      orificeCount:24,
+      dischargeCoeff:0.7,
+      kFactor:0.252,
+      flowLpm:2.11,
       pressureBar:70,
       jetHeightM:1,
       nozzleDiaMm:0.15,
       sprayAngleDeg:360,
-      plcChannel:"Q2.1",
       group:"Fog",
       connectionSize:"DN10",
       material:"SS316"
@@ -336,12 +370,14 @@ const CURATED_FIXTURES = [
     color:"#88ddff",
     icon:"▤",
     engineering:{
-      flowLpm:1200,
-      pressureBar:1.2,
-      jetHeightM:15,
-      nozzleDiaMm:100,
+      heightEfficiency:0.5,
+      dischargeCoeff:0.8,
+      kFactor:691.07,
+      flowLpm:1196.97,
+      pressureBar:3,
+      jetHeightM:15.3,
+      nozzleDiaMm:36,
       sprayAngleDeg:90,
-      plcChannel:"Q2.2",
       group:"Water Screen",
       connectionSize:"DN150",
       material:"SS304"
@@ -355,12 +391,15 @@ const CURATED_FIXTURES = [
     color:"#5599ff",
     icon:"≋↓",
     engineering:{
-      flowLpm:120,
-      pressureBar:0.5,
-      jetHeightM:3.0,
-      nozzleDiaMm:50,
+      fallHeightM:3,
+      heightBasis:"fall",
+      dischargeCoeff:0.62,
+      kFactor:371.93,
+      flowLpm:117.61,
+      pressureBar:0.1,
+      jetHeightM:3,
+      nozzleDiaMm:30,
       sprayAngleDeg:120,
-      plcChannel:"Q0.6",
       group:"Cascade",
       connectionSize:"DN50",
       material:"SS316"
@@ -374,12 +413,15 @@ const CURATED_FIXTURES = [
     color:"#4488ff",
     icon:"≋≋",
     engineering:{
-      flowLpm:250,
-      pressureBar:0.8,
-      jetHeightM:5.0,
-      nozzleDiaMm:100,
+      fallHeightM:5,
+      heightBasis:"fall",
+      dischargeCoeff:0.62,
+      kFactor:661.209,
+      flowLpm:256.09,
+      pressureBar:0.15,
+      jetHeightM:5,
+      nozzleDiaMm:40,
       sprayAngleDeg:180,
-      plcChannel:"Q0.7",
       group:"Cascade",
       connectionSize:"DN100",
       material:"SS316"
@@ -393,12 +435,14 @@ const CURATED_FIXTURES = [
     color:"#ff8800",
     icon:"▲",
     engineering:{
-      flowLpm:350,
-      pressureBar:2.5,
-      jetHeightM:8,
-      nozzleDiaMm:50,
+      heightEfficiency:0.6,
+      dischargeCoeff:0.7,
+      kFactor:315.407,
+      flowLpm:359.62,
+      pressureBar:1.3,
+      jetHeightM:7.95,
+      nozzleDiaMm:26,
       sprayAngleDeg:90,
-      plcChannel:"Q2.3",
       group:"Volcano",
       connectionSize:"DN65",
       material:"SS304"
@@ -416,9 +460,10 @@ const CURATED_FIXTURES = [
     color:"#ffffaa",
     icon:"★",
     engineering:{
+      dmxChannels:1,
+      colorMode:"White",
       wattage:18,
       voltage:24,
-      currentA:0.8,
       beamAngleDeg:30,
       dmxUniverse:1,
       dmxAddress:1
@@ -432,9 +477,10 @@ const CURATED_FIXTURES = [
     color:"#ffcc00",
     icon:"★",
     engineering:{
+      dmxChannels:3,
+      colorMode:"RGB",
       wattage:18,
       voltage:24,
-      currentA:0.8,
       beamAngleDeg:30,
       dmxUniverse:1,
       dmxAddress:10
@@ -448,9 +494,10 @@ const CURATED_FIXTURES = [
     color:"#ffcc00",
     icon:"★",
     engineering:{
+      dmxChannels:3,
+      colorMode:"RGB",
       wattage:36,
       voltage:24,
-      currentA:1.5,
       beamAngleDeg:30,
       dmxUniverse:1,
       dmxAddress:20
@@ -464,9 +511,10 @@ const CURATED_FIXTURES = [
     color:"#ffcc00",
     icon:"★",
     engineering:{
+      dmxChannels:3,
+      colorMode:"RGB",
       wattage:54,
       voltage:24,
-      currentA:2.2,
       beamAngleDeg:15,
       dmxUniverse:1,
       dmxAddress:40
@@ -484,9 +532,10 @@ const CURATED_FIXTURES = [
     color:"#ffee88",
     icon:"✦",
     engineering:{
+      dmxChannels:1,
+      colorMode:"White",
       wattage:50,
       voltage:220,
-      currentA:0.25,
       beamAngleDeg:10,
       dmxUniverse:2,
       dmxAddress:1
@@ -500,9 +549,10 @@ const CURATED_FIXTURES = [
     color:"#ffee88",
     icon:"✦",
     engineering:{
+      dmxChannels:1,
+      colorMode:"White",
       wattage:100,
       voltage:220,
-      currentA:0.5,
       beamAngleDeg:8,
       dmxUniverse:2,
       dmxAddress:20
@@ -519,9 +569,10 @@ const CURATED_FIXTURES = [
     color:"#ff99ff",
     icon:"✺",
     engineering:{
+      dmxChannels:14,
+      colorMode:"RGBW",
       wattage:150,
       voltage:220,
-      currentA:0.8,
       beamAngleDeg:12,
       dmxUniverse:2,
       dmxAddress:40
@@ -535,9 +586,10 @@ const CURATED_FIXTURES = [
     color:"#ff66ff",
     icon:"✺",
     engineering:{
+      dmxChannels:16,
+      colorMode:"RGBW",
       wattage:350,
       voltage:220,
-      currentA:1.8,
       beamAngleDeg:8,
       dmxUniverse:2,
       dmxAddress:80
@@ -547,13 +599,14 @@ const CURATED_FIXTURES = [
     key:"laser_rgb_5w",
     category:"Laser",
     family:"Laser Effects",
-    label:"RGB Laser 5W",
+    label:"RGB Laser 5W (220 V)",
     color:"#ff00ff",
     icon:"◆",
     engineering:{
+      controlProtocol:"ILDA/DMX (interlocked)",
+      dmxChannels:8,
       wattage:80,
       voltage:220,
-      currentA:0.4,
       beamAngleDeg:3,
       dmxUniverse:3,
       dmxAddress:1
@@ -567,9 +620,10 @@ const CURATED_FIXTURES = [
     color:"#ff00cc",
     icon:"◆",
     engineering:{
+      controlProtocol:"ILDA/DMX (interlocked)",
+      dmxChannels:8,
       wattage:300,
       voltage:220,
-      currentA:1.4,
       beamAngleDeg:2,
       dmxUniverse:3,
       dmxAddress:30
@@ -588,7 +642,6 @@ const CURATED_FIXTURES = [
       gasType:"LPG",
       gasFlow:1.2,
       safetyZoneM:3,
-      plcChannel:"Q3.0",
       group:"Flame"
     }
   },
@@ -605,7 +658,6 @@ const CURATED_FIXTURES = [
       gasType:"LPG",
       gasFlow:2.5,
       safetyZoneM:5,
-      plcChannel:"Q3.1",
       group:"Flame Burst"
     }
   },
@@ -619,7 +671,6 @@ const CURATED_FIXTURES = [
     engineering:{
       pressureBar:6,
       airFlowLpm:800,
-      plcChannel:"Q3.2",
       group:"Air Burst"
     }
   },
@@ -631,9 +682,10 @@ const CURATED_FIXTURES = [
     color:"#ccccff",
     icon:"☁",
     engineering:{
+      controlProtocol:"DMX/Relay",
+      dmxChannels:2,
       wattage:1500,
       voltage:220,
-      currentA:6.8,
       waterLpm:0.3,
       dmxUniverse:4,
       dmxAddress:1,
@@ -652,16 +704,17 @@ const CURATED_FIXTURES = [
     color:"#22c55e",
     icon:"Ⓟ",
     engineering:{
+      pressureBar:1.177,
+      flowLpm:366.67,
       powerKw:1.5,
       voltage:220,
       phase:"1P",
-      flowM3Hr:18,
+      flowM3Hr:22,
       headM:12,
       connectionSize:"DN50",
       protection:"IP68",
       material:"SS304",
       controlType:"VFD/Relay",
-      plcChannel:"Q4.0",
       group:"Pump"
     },
     visual3d:{ type:"pump", scale:0.8 }
@@ -674,6 +727,8 @@ const CURATED_FIXTURES = [
     color:"#22c55e",
     icon:"Ⓟ",
     engineering:{
+      pressureBar:1.765,
+      flowLpm:583.33,
       powerKw:3,
       voltage:380,
       phase:"3P",
@@ -683,7 +738,6 @@ const CURATED_FIXTURES = [
       protection:"IP68",
       material:"SS304",
       controlType:"VFD/Relay",
-      plcChannel:"Q4.1",
       group:"Pump"
     },
     visual3d:{ type:"pump", scale:1.0 }
@@ -696,6 +750,8 @@ const CURATED_FIXTURES = [
     color:"#22c55e",
     icon:"Ⓟ",
     engineering:{
+      pressureBar:2.157,
+      flowLpm:1000,
       powerKw:5.5,
       voltage:380,
       phase:"3P",
@@ -705,7 +761,6 @@ const CURATED_FIXTURES = [
       protection:"IP68",
       material:"SS304",
       controlType:"VFD",
-      plcChannel:"Q4.2",
       group:"Pump"
     },
     visual3d:{ type:"pump", scale:1.2 }
@@ -718,16 +773,17 @@ const CURATED_FIXTURES = [
     color:"#16a34a",
     icon:"Ⓟ",
     engineering:{
+      pressureBar:2.55,
+      flowLpm:1083.33,
       powerKw:7.5,
       voltage:380,
       phase:"3P",
-      flowM3Hr:90,
-      headM:28,
+      flowM3Hr:65,
+      headM:26,
       connectionSize:"DN100",
       installation:"Dry/Plant Room",
       material:"Cast Iron/SS Impeller",
       controlType:"VFD",
-      plcChannel:"Q4.3",
       group:"Pump"
     },
     visual3d:{ type:"pump", scale:1.4 }
@@ -740,16 +796,17 @@ const CURATED_FIXTURES = [
     color:"#16a34a",
     icon:"Ⓟ",
     engineering:{
+      pressureBar:2.942,
+      flowLpm:2000,
       powerKw:15,
       voltage:380,
       phase:"3P",
-      flowM3Hr:160,
-      headM:35,
+      flowM3Hr:120,
+      headM:30,
       connectionSize:"DN150",
       installation:"Dry/Plant Room",
       material:"Cast Iron/SS Impeller",
       controlType:"VFD",
-      plcChannel:"Q4.4",
       group:"Pump"
     },
     visual3d:{ type:"pump", scale:1.7 }
@@ -762,16 +819,17 @@ const CURATED_FIXTURES = [
     color:"#67e8f9",
     icon:"Ⓟ",
     engineering:{
+      headM:713.8,
+      flowM3Hr:0.66,
       powerKw:2.2,
       voltage:220,
       phase:"1P",
-      flowLpm:8,
+      flowLpm:11,
       pressureBar:70,
       connectionSize:"DN10",
       installation:"Plant Room",
       material:"Brass/SS",
       controlType:"Relay",
-      plcChannel:"Q4.5",
       group:"Mist Pump"
     },
     visual3d:{ type:"pump", scale:0.9 }
@@ -792,10 +850,9 @@ const CURATED_FIXTURES = [
       voltage:24,
       signalType:"Digital Output",
       connectionSize:"DN15",
-      pressureBar:10,
+      pressureRatingBar:10,
       material:"Brass/SS",
       normalState:"NC",
-      plcChannel:"Q5.0",
       group:"Solenoid Valve"
     },
     visual3d:{ type:"valve", scale:0.5 }
@@ -812,10 +869,9 @@ const CURATED_FIXTURES = [
       voltage:24,
       signalType:"Digital Output",
       connectionSize:"DN25",
-      pressureBar:10,
+      pressureRatingBar:10,
       material:"Brass/SS",
       normalState:"NC",
-      plcChannel:"Q5.1",
       group:"Solenoid Valve"
     },
     visual3d:{ type:"valve", scale:0.65 }
@@ -832,10 +888,9 @@ const CURATED_FIXTURES = [
       voltage:24,
       signalType:"Digital Output",
       connectionSize:"DN40",
-      pressureBar:10,
+      pressureRatingBar:10,
       material:"Brass/SS",
       normalState:"NC",
-      plcChannel:"Q5.2",
       group:"Solenoid Valve"
     },
     visual3d:{ type:"valve", scale:0.85 }
@@ -852,10 +907,9 @@ const CURATED_FIXTURES = [
       voltage:24,
       signalType:"0-10V / Open-Close",
       connectionSize:"DN100",
-      pressureBar:16,
+      pressureRatingBar:16,
       material:"Ductile Iron/SS Disc",
       normalState:"Last Position",
-      plcChannel:"AO1.0",
       group:"Motorized Valve"
     },
     visual3d:{ type:"valve", scale:1.2 }
@@ -864,13 +918,13 @@ const CURATED_FIXTURES = [
     key:"valve_check_dn50",
     category:"Valves",
     family:"Check Valves",
-    label:"Check Valve DN50",
+    label:"Check Valve DN50 PN16",
     color:"#fb923c",
     icon:"▷",
     engineering:{
       valveType:"Check Valve",
       connectionSize:"DN50",
-      pressureBar:16,
+      pressureRatingBar:16,
       material:"SS304/Brass",
       group:"Non Return Valve"
     },
@@ -886,7 +940,7 @@ const CURATED_FIXTURES = [
     engineering:{
       valveType:"Ball Valve",
       connectionSize:"DN80",
-      pressureBar:16,
+      pressureRatingBar:16,
       material:"SS304",
       group:"Isolation Valve"
     },
@@ -906,7 +960,7 @@ const CURATED_FIXTURES = [
       voltage:24,
       totalChannels:8,
       material:"SS304",
-      pressureBar:10,
+      pressureRatingBar:10,
       group:"Valve Manifold"
     },
     visual3d:{ type:"manifold", scale:1.2 }
@@ -994,7 +1048,6 @@ const CURATED_FIXTURES = [
     engineering:{
       wattage:72,
       voltage:24,
-      currentA:3,
       beamAngleDeg:25,
       colorMode:"RGBW",
       dmxChannels:4,
@@ -1016,7 +1069,6 @@ const CURATED_FIXTURES = [
     engineering:{
       wattage:24,
       voltage:24,
-      currentA:1,
       colorMode:"RGB",
       dmxChannels:3,
       dmxUniverse:1,
@@ -1036,7 +1088,6 @@ const CURATED_FIXTURES = [
     engineering:{
       wattage:36,
       voltage:24,
-      currentA:1.5,
       lengthM:1,
       colorMode:"RGBW",
       dmxChannels:4,
@@ -1055,10 +1106,11 @@ const CURATED_FIXTURES = [
     key:"air_compressor_2_2kw",
     category:"Air Systems",
     family:"Compressors",
-    label:"Air Compressor 2.2kW",
+    label:"Air Compressor 2.2kW (1-phase)",
     color:"#94a3b8",
     icon:"◎",
     engineering:{
+      phase:"1P",
       powerKw:2.2,
       voltage:220,
       pressureBar:8,
@@ -1077,6 +1129,7 @@ const CURATED_FIXTURES = [
     color:"#94a3b8",
     icon:"◎",
     engineering:{
+      phase:"3P",
       powerKw:7.5,
       voltage:380,
       pressureBar:10,
@@ -1156,7 +1209,6 @@ const CURATED_FIXTURES = [
       voltage:24,
       signalType:"Digital Input/Alarm",
       alarmOutput:true,
-      plcChannel:"I2.0",
       group:"Safety Sensor"
     },
     visual3d:{ type:"sensor", scale:0.4 }
@@ -1172,7 +1224,6 @@ const CURATED_FIXTURES = [
       voltage:24,
       signalType:"Safety Input",
       resetType:"Manual",
-      plcChannel:"I2.1",
       group:"Emergency Stop"
     },
     visual3d:{ type:"button", scale:0.3 }
@@ -1278,7 +1329,6 @@ const CURATED_FIXTURES = [
       sensorType:"Level Sensor",
       signalType:"Digital/Analog Input",
       voltage:24,
-      plcChannel:"I1.0",
       group:"Water Level Sensor"
     },
     visual3d:{ type:"sensor", scale:0.35 }
@@ -1295,7 +1345,6 @@ const CURATED_FIXTURES = [
       rangeBar:"0-10",
       signalType:"4-20mA",
       voltage:24,
-      plcChannel:"AI1.0",
       group:"Pressure Sensor"
     },
     visual3d:{ type:"sensor", scale:0.35 }
@@ -1313,7 +1362,6 @@ const CURATED_FIXTURES = [
       signalType:"Pulse/4-20mA",
       flowRangeM3Hr:"5-60",
       voltage:24,
-      plcChannel:"AI1.1",
       group:"Flow Meter"
     },
     visual3d:{ type:"sensor", scale:0.5 }
@@ -1395,11 +1443,44 @@ const CURATED_FIXTURES = [
 
 // ── Merge curated + generated fixtures, guaranteeing every entry carries both a
 // hydraulic and an electrical metadata block (AQ-S2-011) ──────────────────────
-function computeAmps(powerW, voltageV, phase, pf = 0.9) {
+// Induction motors (pumps, compressors, blowers, VFD-driven loads) run at a
+// lower power factor and draw their rated SHAFT power at <100 % efficiency;
+// lights and electronics keep pf 0.9 / eff 1.0.
+const MOTOR_PF = 0.85;
+const MOTOR_EFF = 0.88;
+const DEFAULT_PF = 0.9;
+
+// Every library item is a generic template until a real manufacturer/model is
+// attached — none are yet, so all of them are flagged.
+export const GENERIC_DATA_SOURCE = "AquaFlow generic template — verify with the supplier datasheet";
+
+function computeAmps(powerW, voltageV, phase, pf = DEFAULT_PF, eff = 1) {
   if (powerW <= 0 || voltageV <= 0) return 0;
-  if (phase === 3) return Math.round((powerW / (Math.sqrt(3) * voltageV * pf)) * 1000) / 1000;
-  if (phase === 1) return Math.round((powerW / (voltageV * pf)) * 1000) / 1000;
+  if (phase === 3) return Math.round((powerW / (Math.sqrt(3) * voltageV * pf * eff)) * 1000) / 1000;
+  if (phase === 1) return Math.round((powerW / (voltageV * pf * eff)) * 1000) / 1000;
   return Math.round((powerW / voltageV) * 1000) / 1000; // DC
+}
+
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** "3P" / "3-phase" / "three phase" / 3 → 3; "1P" / "1-phase" / "single" / 1 → 1; else null. */
+export function parsePhase(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "number") return value === 3 ? 3 : value === 1 ? 1 : value === 0 ? 0 : null;
+  const s = String(value).trim().toLowerCase();
+  if (/^(3|3p|3ph|3~)$|^3[\s-]*phase|three/.test(s)) return 3;
+  if (/^(1|1p|1ph|1~)$|^1[\s-]*phase|single/.test(s)) return 1;
+  if (/^(0|dc)$/.test(s)) return 0;
+  return null;
+}
+
+function isMotorLoad(f) {
+  if (f.category === "Pumps") return true;
+  return /compressor|blower|vfd|\bpump\b|_pump|pump_/i.test(`${f.key || ""} ${f.label || ""}`)
+    && !/dosing|motion_nozzle/i.test(f.key || "");
 }
 
 function deriveElectrical(f) {
@@ -1408,25 +1489,46 @@ function deriveElectrical(f) {
   const e = f.engineering || {};
   const isLight = f.category === "Lights";
   const isPassiveWater = ["Nozzles"].includes(f.category);
-  const voltageV = (e.voltage ?? e.voltageV ?? 0) || (isLight || isPassiveWater ? 24 : 0);
-  const powerW = e.wattage ?? e.powerW ?? 0;
-  const phase = e.phase ?? (voltageV >= 400 ? 3 : voltageV ? 1 : 0);
-  return {
+  const voltageV = num(e.voltage ?? e.voltageV ?? e.inputVoltage ?? e.solenoidVoltage)
+    || (isLight || isPassiveWater ? 24 : 0);
+  const powerKw = num(e.powerKw);
+  const powerW = num(e.wattage) ?? num(e.powerW) ?? (powerKw !== null ? powerKw * 1000 : null)
+    ?? num(e.outputPowerW)
+    // A nozzle's electrical interface is its 24 V solenoid coil (matches the generated nozzles).
+    ?? (isPassiveWater ? 12 : 0);
+  let phase = parsePhase(e.phase);
+  if (phase === null) phase = voltageV >= 380 ? 3 : voltageV >= 100 ? 1 : 0;
+  if (voltageV >= 380 && phase === 1) phase = 3; // never a 400 V single-phase load
+  if (voltageV > 0 && voltageV < 100) phase = 0; // 12/24/48 V supplies are DC
+  const motor = isMotorLoad(f);
+  const pf = motor ? MOTOR_PF : DEFAULT_PF;
+  const eff = motor ? MOTOR_EFF : 1;
+  const electrical = {
     voltageV,
     powerW,
-    currentA: e.currentA ?? computeAmps(powerW, voltageV, phase),
+    currentA: num(e.currentA) ?? computeAmps(powerW, voltageV, phase, pf, eff),
     phase,
     controlProtocol: e.controlProtocol
       || (isLight ? "DMX/Art-Net" : isPassiveWater ? "Modbus/Relay (solenoid valve)" : "Modbus"),
-    dmxChannels: e.dmxChannels ?? (isLight ? 4 : 0),
+    dmxChannels: num(e.dmxChannels) ?? (isLight ? (/rgbw/i.test(f.key) ? 4 : /rgb/i.test(f.key) ? 3 : 1) : 0),
     ipRating: e.ipRating || "IP68",
   };
+  if (motor) {
+    electrical.powerFactor = pf;
+    electrical.efficiency = eff;
+  }
+  return electrical;
 }
 
 function normalizeFixture(f) {
+  const engineering = { ...(f.engineering || {}) };
+  if (!engineering.dataSource) engineering.dataSource = GENERIC_DATA_SOURCE;
   return {
     ...f,
-    engineering: f.engineering || {},
+    // No library entry carries a real manufacturer/model yet → all are generic.
+    source: f.source || (f.manufacturer && f.model ? "datasheet" : "generic"),
+    generic: f.generic ?? !(f.manufacturer && f.model),
+    engineering,
     electrical: f.electrical || deriveElectrical(f),
   };
 }
@@ -1436,17 +1538,96 @@ export const FIXTURE_LIBRARY = [
   ...EXPANDED_FIXTURES.map(normalizeFixture),
 ];
 
+const FIXTURE_BY_KEY = new Map(FIXTURE_LIBRARY.map(f => [f.key, f]));
+
 export const FIXTURE_CATEGORIES =
   [...new Set(FIXTURE_LIBRARY.map(f => f.category))];
 
 export const FIXTURE_FAMILIES =
   [...new Set(FIXTURE_LIBRARY.map(f => f.family))];
 
+/**
+ * Neutral stand-in for a type key the library does not know. It deliberately
+ * carries NO engineering defaults, NO electrical load and NO plcChannel, so an
+ * unknown fixture can never silently inherit another product's data (it used to
+ * fall back to FIXTURE_LIBRARY[0] — Straight Jet DN15 on Q0.1).
+ */
+export const UNKNOWN_FIXTURE_KEY = "unknown";
+function unknownFixtureType(requestedKey) {
+  return {
+    key: UNKNOWN_FIXTURE_KEY,
+    requestedKey: requestedKey ?? null,
+    category: "Unknown",
+    family: "Unknown",
+    label: "Unknown / generic equipment",
+    color: "#94a3b8",
+    icon: "?",
+    source: "generic",
+    generic: true,
+    unknown: true,
+    engineering: {},
+    electrical: {
+      voltageV: 0, powerW: 0, currentA: 0, phase: 0,
+      controlProtocol: "", dmxChannels: 0, ipRating: "",
+    },
+  };
+}
+
+/** The library entry for `key`, or null when the key is not in the library. */
+export const getFixtureLibraryEntry = (key) => FIXTURE_BY_KEY.get(key) || null;
+
+/** The library entry for `key`, or a neutral "Unknown" entry (never another product). */
 export const getFixtureType = (key) =>
-  FIXTURE_LIBRARY.find(f => f.key === key) || FIXTURE_LIBRARY[0];
+  FIXTURE_BY_KEY.get(key) || unknownFixtureType(key);
 
 export const getDefaultEngineering = (key) =>
   ({ ...(getFixtureType(key).engineering || {}) });
+
+function firstNumber(...values) {
+  for (const v of values) {
+    if (v === undefined || v === null || v === "") continue;
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/**
+ * Nameplate ratings of a placed fixture, for totals / BOM / DMX footprint.
+ *
+ * Placed instances only carry a copy of `engineering`, and generated library
+ * items keep their power and DMX footprint in the normalized `electrical` block,
+ * so reading `engineering.wattage` / `powerKw` / `dmxChannels` alone counted
+ * them as 0 W / 0 DMX. Values the instance's own `engineering` sets always win
+ * (they may have been edited); otherwise fall back to the instance's
+ * `electrical` block, then the library entry's.
+ *
+ * @returns {{ flowLpm:number, flowM3Hr:number, powerW:number, powerKw:number, dmxChannels:number }}
+ */
+export function getFixtureRatings(fixture = {}) {
+  const eng = fixture?.engineering || {};
+  const lib = getFixtureLibraryEntry(fixture?.type ?? fixture?.key);
+  const elec = fixture?.electrical || lib?.electrical || {};
+
+  let flowLpm = firstNumber(eng.flowLpm);
+  const flowM3HrOwn = firstNumber(eng.flowM3Hr);
+  if (flowLpm === null && flowM3HrOwn !== null) flowLpm = flowM3HrOwn / 0.06;
+  if (flowLpm === null) {
+    const lph = firstNumber(eng.flowLph);
+    flowLpm = lph !== null ? lph / 60 : 0;
+  }
+  const flowM3Hr = flowM3HrOwn ?? flowLpm * 0.06;
+
+  const kw = firstNumber(eng.powerKw);
+  const powerW = firstNumber(eng.wattage, eng.powerW)
+    ?? (kw !== null ? kw * 1000 : null)
+    ?? firstNumber(eng.outputPowerW, elec.powerW)
+    ?? 0;
+
+  const dmxChannels = firstNumber(eng.dmxChannels, elec.dmxChannels) ?? 0;
+
+  return { flowLpm, flowM3Hr, powerW, powerKw: powerW / 1000, dmxChannels };
+}
 
 export const fixtureLibraryStats = {
   total: FIXTURE_LIBRARY.length,

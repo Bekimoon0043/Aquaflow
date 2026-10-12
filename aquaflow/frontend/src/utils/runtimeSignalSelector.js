@@ -42,6 +42,13 @@ const TYPE_ALIASES = {
   nozzle: "pump",
   nozzles: "pump",
 
+  running_fountain_jets: "running_fountain_jets",
+  running_fountain: "running_fountain_jets",
+  foam_jets: "foam_jets",
+  foam: "foam_jets",
+  peacock_jets: "peacock_jets",
+  peacock: "peacock_jets",
+
   valve: "valve",
   valves: "valve",
   solenoid: "valve",
@@ -339,6 +346,9 @@ export function deriveRuntimeSignals({
     }
 
     signals.pump = Math.max(
+      signals.groups.running_fountain_jets || 0,
+      signals.groups.foam_jets || 0,
+      signals.groups.peacock_jets || 0,
       signals.groups.center_jets || 0,
       signals.groups.arch_jets || 0,
       signals.groups.mist_jets || 0,
@@ -535,4 +545,4 @@ signals.motion_3d = Math.max(signals.motion_3d || 0, signals.groups.motion_3d_je
     playbackState: playbackState || "stopped",
     activeClips,
   };
-}	
+}

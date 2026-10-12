@@ -55,6 +55,20 @@ prints `AQUAFLOW_MACHINE_FINGERPRINT=3f9c…(64 hex)…a1`.
 
 Either way you get one 64-character Machine ID for that computer.
 
+> **Machine ID format, changed in 1.2.29.** Since 1.2.29 the Machine ID is the stable
+> **v2** ID: a hash of the CPU id, board serial and computer name.
+>
+> **Why it changed:** before 1.2.29 the ID also included the MAC address of whichever
+> network adapter Python found first. It changed when a USB/VPN/Hyper-V adapter was plugged
+> in, unplugged or re-ordered, and the license then showed `INVALID_HW` on the right computer.
+>
+> **Licenses issued before 1.2.29 (v1) keep working.** AquaFlow accepts a v1 license if it
+> matches *any* network adapter the computer currently has. It fails only if the license was
+> issued while a now-removed adapter happened to be first. If that happens, re-issue the
+> license for the new v2 Machine ID shown on the Activation screen.
+>
+> **Renaming the computer changes the v2 ID**, because the computer name is part of it.
+
 ### Step 2 — generate the license (on YOUR admin PC, one command)
 
 With `AQUAFLOW_LICENSE_SECRET` set (Section 0), run **one command** — paste the fingerprint in:

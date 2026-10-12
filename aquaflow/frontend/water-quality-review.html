@@ -1,0 +1,40 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>AquaFlow water quality review</title>
+<style>body{margin:0;background:#101820;color:white;font:14px system-ui}canvas{width:100vw;height:calc(100vh - 48px);display:block}nav{height:48px;display:flex;gap:12px;align-items:center;padding:0 16px}button{padding:7px 16px}#status{margin-left:auto}#result{display:none;color:#8ff}video{position:fixed;right:14px;top:14px;width:320px;border:1px solid #5ef;background:#000}</style></head>
+<body><canvas id="view"></canvas><nav><button id="day">Daylight</button><button id="night">Night lighting</button><button id="render">Render 6-second 1080p video</button><a id="result" download>Download rendered video</a><span id="status">Loading renderer…</span></nav>
+<script type="module">
+import { FountainScene } from './src/components/preview/FountainScene_v6.js';
+import { planBake } from './src/video/bakedTimeline.js';
+import { openBakedEncoder } from './src/video/bakedEncoder.js';
+import { defaultVenueModels } from './src/components/preview/modelLibrary.js';
+import { SceneGraph } from './src/components/preview/editor/sceneGraph.js';
+const canvas=document.querySelector('#view'), status=document.querySelector('#status');
+const scene=new FountainScene(canvas,{quality:'high',environment:'day',poolGeometry:{poolType:'circular',params:{radius:10,width:20,length:20}}});
+scene.init();
+const nozzles=[];
+for(let ring=0;ring<5;ring++)for(let j=0;j<12;j++){
+ const a=ring*Math.PI*2/5,b=j*Math.PI*2/12;
+ nozzles.push({id:`r${ring}-${j}`,type:'jet_1d',x:4.3*Math.sin(a)+1.2*Math.cos(b),z:4.3*Math.cos(a)+1.2*Math.sin(b),groupId:`ring${ring}`});
+}
+nozzles.push({id:'hero',type:'jet_3d',x:0,z:0});
+scene.setNozzlesFromEngineering(nozzles);
+scene.setReviewOverlays(false);
+scene.setEnvironment('day');
+const graph=new SceneGraph();
+defaultVenueModels({poolType:'circular',radius:10},'medium').forEach(model=>graph.add(model));
+await scene.syncModelGraph(graph);
+scene.orbitAuto=false; scene.orbitAngle=0.15;scene.orbitRadius=29;scene.orbitHeight=16;
+let night=false;
+function sample(t){return {pump:1,valve:1,lighting:night?0.9:0,lightingColor:night?{r:0.12,g:1,b:0.32,w:0}:{r:1,g:1,b:1,w:0},fixtureIntensities:Object.fromEntries(nozzles.map((n)=>[n.id,n.id==='hero'?1:0.56+0.4*(0.5+0.5*Math.sin(t*1.2+Number(n.id[1])*1.25))]))};}
+setInterval(()=>{if(!scene.isBaking())scene.setSignals(sample(performance.now()/1000));},33);
+document.querySelector('#day').onclick=()=>{night=false;scene.setEnvironment('day');};
+document.querySelector('#night').onclick=()=>{night=true;scene.setEnvironment('night');};
+document.querySelector('#render').onclick=async()=>{
+ const button=document.querySelector('#render');button.disabled=true;let encoder;
+ try{const plan=planBake({resolution:'1080p',fps:30,durationS:6});encoder=await openBakedEncoder(canvas,plan);await scene.bakeVideo({plan,sampleSignals:sample,encoder,onProgress:p=>status.textContent=`${p.phase}: ${p.frame}/${p.frames}`});const result=await encoder.finish();const url=URL.createObjectURL(result.blob);const a=document.querySelector('#result');a.href=url;a.download=`AquaFlow-water-quality.${result.ext}`;a.style.display='inline';const preview=document.createElement('video');preview.src=url;preview.controls=true;preview.muted=true;preview.currentTime=2;document.body.append(preview);window.__renderResult={bytes:result.blob.size,type:result.blob.type,ext:result.ext};status.textContent=`Video rendered · ${(result.blob.size/1048576).toFixed(1)} MB`;}
+ catch(e){await encoder?.cancel?.();status.textContent=e.message;}
+ finally{button.disabled=false;}
+};
+window.addEventListener('resize',()=>scene.resize(canvas.clientWidth,canvas.clientHeight));
+status.textContent='Live AquaFlow renderer • five crowns + central jet';
+</script></body></html>

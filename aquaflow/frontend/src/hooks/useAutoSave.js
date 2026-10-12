@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useShowStore } from "../store/showStore";
 import useEngineeringStore from "../store/engineeringStore";
+import useProjectStore from "../store/projectStore";
 import { autoSave } from "../utils/showFile";
 
 const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
@@ -14,14 +15,25 @@ export function useAutoSave() {
   const [lastSaved, setLastSaved] = useState(null);
   const timerRef = useRef(null);
   const lastEngineeringSavedRef = useRef(null);
+  const lastProjectSignatureRef = useRef(null);
 
   useEffect(() => {
     const doSave = () => {
       const state = useShowStore.getState();
       const engineering = useEngineeringStore.getState();
-      if (!state.isDirty && engineering.lastUpdated === lastEngineeringSavedRef.current) return;
-      autoSave(state, engineering.getProjectPayload());
+      const project = useProjectStore.getState();
+      const projectDocument = project.getProjectDocument(state.currentShow?.name);
+      const projectSignature = JSON.stringify(projectDocument);
+      if (!state.isDirty
+        && engineering.lastUpdated === lastEngineeringSavedRef.current
+        && projectSignature === lastProjectSignatureRef.current) return;
+      autoSave(
+        state,
+        engineering.getProjectPayload(),
+        projectDocument,
+      );
       lastEngineeringSavedRef.current = engineering.lastUpdated;
+      lastProjectSignatureRef.current = projectSignature;
       setLastSaved(new Date());
     };
 

@@ -154,11 +154,16 @@ export function shouldDuplicate(mods) {
  * from the same source that dispatches them.
  */
 export const SHORTCUTS = [
+  { key: "z", ctrl: true, shift: true, command: "edit:redo", label: "Ctrl+Shift+Z", desc: "Redo last edit" },
+  { key: "y", ctrl: true, command: "edit:redo", label: "Ctrl+Y", desc: "Redo last edit" },
+  { key: "z", ctrl: true, shift: false, command: "edit:undo", label: "Ctrl+Z", desc: "Undo last edit" },
   { key: "Escape", command: "tool:move", label: "Esc", desc: "Exit tool, back to Move" },
   { key: "w", command: "tool:move", label: "W", desc: "Move tool" },
   { key: "e", command: "tool:rotate", label: "E", desc: "Rotate tool" },
   { key: "q", command: "tool:select", label: "Q", desc: "Select tool" },
   { key: "d", ctrl: true, command: "edit:duplicate", label: "Ctrl+D", desc: "Duplicate selection" },
+  { key: "g", ctrl: true, shift: true, command: "edit:ungroup", label: "Ctrl+Shift+G", desc: "Ungroup selection" },
+  { key: "g", ctrl: true, shift: false, command: "edit:group", label: "Ctrl+G", desc: "Group selection" },
   { key: "Delete", command: "edit:delete", label: "Del", desc: "Delete selection" },
   { key: "a", ctrl: true, command: "select:all", label: "Ctrl+A", desc: "Select all" },
   { key: "f", command: "view:focus", label: "F", desc: "Focus selection" },
@@ -169,10 +174,12 @@ export const SHORTCUTS = [
 export function matchShortcut(e) {
   if (!e || !e.key) return null;
   const ctrl = !!(e.ctrlKey || e.metaKey);
+  const shift = !!e.shiftKey;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   for (const s of SHORTCUTS) {
     if (s.key !== key) continue;
     if (!!s.ctrl !== ctrl) continue;
+    if (s.shift !== undefined && !!s.shift !== shift) continue;
     return s.command;
   }
   return null;

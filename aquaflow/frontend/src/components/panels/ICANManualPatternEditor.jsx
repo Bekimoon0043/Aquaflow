@@ -1,6 +1,9 @@
 /** Operator-authored, server-timed patterns for the real I-CAN fountain. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost, apiUrl } from "../../utils/apiClient";
+import { useICANPreviewStore } from "../../store/icanPreviewStore";
+import useEngineeringStore from "../../store/engineeringStore";
+import ICANPreviewControls from "../preview/ICANPreviewControls";
 
 const GROUPS = [1, 2, 9, 17, 25];
 const CONFIRM = "RUN MANUAL PATTERN";
@@ -63,10 +66,10 @@ export default function ICANManualPatternEditor({
 }) {
   const [layout, setLayout] = useState(null);
   const [saved, setSaved] = useState([]);
-  const [draft, setDraft] = useState(newDraft);
+  const [draft, setDraft] = useState(() => hydratePattern(useICANPreviewStore.getState().editorDraft || newDraft()));
   const [activeStep, setActiveStep] = useState(0);
   const [activeGroup, setActiveGroup] = useState(1);
-  const [repeat, setRepeat] = useState(1);
+  const [repeat, setRepeat] = useState(() => useICANPreviewStore.getState().editorRepeat);
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState("");
   const audioRef = useRef(null);
@@ -111,6 +114,19 @@ export default function ICANManualPatternEditor({
   }, [status?.running]);
 
   useEffect(() => { onPatternChange?.(draft); }, [draft, onPatternChange]);
+  useEffect(() => { useICANPreviewStore.getState().rememberDraft(draft, repeat); }, [draft, repeat]);
+
+  const previewPattern = () => {
+    try {
+      const fixtures = useEngineeringStore.getState().fixtures;
+      if (!fixtures.some(fixture => fixture.engineering?.icanGroup != null)) {
+        throw new Error("Open the corrected 4KILO engineering project before previewing this pattern.");
+      }
+      useICANPreviewStore.getState().load(draft, Number(repeat), audioFile);
+      window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "preview" } }));
+      say?.("Pattern ready in 3D simulation; no hardware commands sent.", "ok");
+    } catch (error) { say?.(`Preview failed — ${error.message}`, "err"); }
+  };
 
   const totalMs = useMemo(
     () => draft.steps.reduce((sum, step) => sum + Number(step.duration_ms || 0), 0) * repeat,
@@ -274,13 +290,13 @@ export default function ICANManualPatternEditor({
           ))}
         </div>
         <div style={{ color: C.warn, fontSize: 9, marginTop: 6, lineHeight: 1.45 }}>
-          Address presets below are capture-derived candidates. The ninth front output, six pump addresses,
-          pump ordering and group 17 functions still require physical commissioning.
+          The physical model contains all 100 water outlets. Hardware authoring currently exposes the first 64
+          capture-mapped running valves; running valves 65-76 and Peacock frequency limits require commissioning.
         </div>
         <div style={{ color: C.dim, fontSize: 9, marginTop: 5, lineHeight: 1.45 }}>
           Cabinet photos confirm the I-CAN NETCAN converter, Music Fountain Control System,
           solid-state load relays and separate multi-pole power circuits. Their labels do not reveal
-          the I-CAN address translation. Group 17 is therefore locked to
+          every I-CAN address translation. Group 17 is therefore locked to
           all-off or its captured support state so a possible pump/contactor circuit cannot be patterned arbitrarily.
         </div>
       </div>
@@ -374,6 +390,11 @@ export default function ICANManualPatternEditor({
         </div>
       )}
 
+      <div style={{ marginBottom: 8 }}>
+        <button style={button(true, C.ok)} onClick={previewPattern}>PREVIEW THIS PATTERN IN 3D</button>
+        <div style={{ fontSize: 9, color: C.dim, marginTop: 4 }}>Preview uses the current engineering layout and Repeat value. Gateway connection and output arm are not required.</div>
+      </div>
+      <ICANPreviewControls />
       <div style={{ padding: 8, border: `1px solid ${status?.running ? C.ok : C.line}`, borderRadius: 4 }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <label style={{ fontSize: 9 }}>Repeat</label>

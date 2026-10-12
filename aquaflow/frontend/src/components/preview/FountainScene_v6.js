@@ -43,6 +43,14 @@
  */
 
 import * as THREE from "three";
+import {
+  centeredPoolPoints,
+  deckWithOpening,
+  polygonWaterGeometry,
+  poolPerimeterSegments,
+  poolPolygonBounds,
+  poolShapeGeometry,
+} from './basinGeometry';
 // Photorealistic Rendering Engine (AQ-S3-004) — single source of truth for the
 // environment presets and gravity used by the water physics below.
 import { ENVIRONMENTS as RE_ENVIRONMENTS, GRAVITY as RE_GRAVITY } from "../../rendering";
@@ -54,6 +62,7 @@ import {
 } from "../../walkthrough";
 // 4K Video Export Engine (AQ-S3-007) — export config + A/V sync.
 import { buildExportConfig as VE_buildExportConfig, combineStreams as VE_combineStreams } from "../../video/videoExport";
+import { frameShowTime as VB_frameShowTime, frameTimestamp as VB_frameTimestamp, prerollShowTime as VB_prerollShowTime } from "../../video/bakedTimeline";
 // AQ-S3-010 — cinematic post-processing chain. A fountain is emissive water, light and
 // flame against a night sky: bloom is what makes it read as *light* rather than bright
 // pixels, so the composer is the single biggest visual win available here.
@@ -65,10 +74,11 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 // AQ-S2-002 Phase 2 — solver-driven jet physics (pure, unit-tested, single definition).
-import { launchSpeed as JP_launchSpeed, normalizePhysics as JP_normalizePhysics } from "./jetPhysics";
+import { launchSpeed as JP_launchSpeed, jetHeightFor as JP_jetHeightFor, normalizePhysics as JP_normalizePhysics } from "./jetPhysics";
 // AQ-S3-012 — a real mirror image in the pool, and a record of where the water lands.
 import { WaterReflectionProbe } from "./waterReflection";
 import { SplashMap, insidePool as SM_insidePool, litresPerImpact as SM_litresPerImpact } from "./splashMap";
+import { WaterHeightField } from "./waterHeightField";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 // AF-3D Phase R1 (realism plan) — the night-look upgrades:
 //   billboard particles (velocity-stretched quads + soft depth fade), procedural
@@ -88,6 +98,10 @@ import { createStoneMaps, cloneStoneMaps, applyStoneMaps, disposeStoneMaps } fro
 // invisible statistical sample that keeps the splash/containment analysis honest.
 import { GPUParticleField, gpuParticlesSupported } from "./particlesGPU";
 import { describeNozzleEmitters, allocatePool, EMIT_CLASS } from "./nozzleEmitters";
+// AF-3D-014 (Phase R4) — real nozzle and luminaire bodies, drawn instanced.
+import { FixtureInstances, fixtureKindFor } from "./fixtureModels";
+import { buildVenue, disposeVenue } from "./venueModels";
+import { ModelLayer } from "./modelLibrary";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -129,12 +143,12 @@ const QUALITY_CONFIG = {
             softDepth: false, softScale: 0.5, cones: false, stars: false,
             gpuParticles: false, gpuWater: 0, gpuSpray: 0 },
   medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00,
-            postfx: true,  bloom: 0.35, smaa: false, ibl: true,  ao: false,
+            postfx: true,  bloom: 0.20, smaa: false, ibl: true,  ao: false,
             reflect: 512, reflectEvery: 2,
             softDepth: true, softScale: 0.5, cones: true, stars: true,
             gpuParticles: true, gpuWater: 131072, gpuSpray: 65536 },
   high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
-            postfx: true,  bloom: 0.48, smaa: true,  ibl: true,  ao: true,
+            postfx: true,  bloom: 0.29, smaa: true,  ibl: true,  ao: true,
             reflect: 1024, reflectEvery: 1,
             softDepth: true, softScale: 0.5, cones: true, stars: true,
             gpuParticles: true, gpuWater: 262144, gpuSpray: 131072 },
@@ -231,18 +245,21 @@ uniform float   uTime;
 uniform float   uIntensity;
 uniform vec3    uOrigin;
 uniform vec2    uWind;
-uniform float   uTilt;    // radians
+uniform vec2    uHorizontalSpeed;
+uniform float   uVerticalSpeed;
 varying float   vT;       // 0=base, 1=tip
 varying vec3    vWorldPos;
 varying float   vAlpha;
+varying vec3    vRadial;
 
 void main(){
   float t  = clamp(aPos.y, 0.0, 1.0);
   vT       = t;
 
-  // Bernoulli-like decay
-  float bern = 1.0 - pow(max(t - 0.55, 0.0)/0.45, 2.0) * 0.78;
-  float y = t * uHeight * bern * (0.25 + uIntensity * 0.75);
+  // The coherent core occupies the lower portion of a ballistic jet. Keep Y
+  // monotonic: multiplying the height by a decreasing tip factor folded the
+  // old mesh downward and made the water look like a bent glass rod.
+  float y = t * uHeight;
 
   // Kelvin-Helmholtz turbulent breakup (more at tip)
   float turb = pow(t, 2.2);
@@ -251,16 +268,24 @@ void main(){
   // Wind drag (parabolic, more at tip)
   float w  = t * t;
 
+  // Slightly expanding aeration, then feather into the ballistic spray crown.
+  float taper = mix(1.0, 1.35, t) * mix(1.0, 0.65, smoothstep(0.82, 1.0, t));
+  taper *= 1.0 + 0.06 * sin(t * 75.0 - uTime * 19.0);
+  vRadial = normalize(vec3(aPos.x, 0.0, aPos.z));
+  // The coherent body follows the same ballistic path as the droplets. Its
+  // centerline must lean with a tilted nozzle instead of staying vertical.
+  float flightTime = (uVerticalSpeed - sqrt(max(0.0,
+    uVerticalSpeed*uVerticalSpeed - 19.62*y))) / 9.81;
   vec3 worldPos = uOrigin + vec3(
-    aPos.x + tx * turb + uWind.x * w * 0.9,
+    aPos.x * taper + tx * turb + uHorizontalSpeed.x * flightTime + uWind.x * w * 0.9,
     y,
-    aPos.z + tz * turb + uWind.y * w * 0.9
+    aPos.z * taper + tz * turb + uHorizontalSpeed.y * flightTime + uWind.y * w * 0.9
   );
   vWorldPos = worldPos;
 
   // Breakup alpha: solid at base, transparent at tip
-  float breakup = 1.0 - smoothstep(0.55, 0.95, t);
-  vAlpha = uIntensity * breakup * 0.85;
+  float breakup = 1.0 - smoothstep(0.78, 1.0, t);
+  vAlpha = smoothstep(0.0, 0.16, uIntensity) * breakup * 0.72;
 
   gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
 }`;
@@ -278,6 +303,8 @@ uniform float uFieldRad[${MAX_FIELD_LIGHTS}];
 varying float vT;
 varying vec3  vWorldPos;
 varying float vAlpha;
+varying vec3 vRadial;
+uniform float uTime;
 
 void main(){
   if (vAlpha < 0.01) discard;
@@ -287,13 +314,17 @@ void main(){
   vec3 shallow = mix(uWaterColor, vec3(0.85, 0.95, 1.0), 0.55);
   vec3 col     = mix(shallow, deep, vT * 0.6);
 
-  // SSS bright streak inside core
-  float coreBand = pow(1.0 - abs(vT - 0.3), 6.0);
-  col += coreBand * vec3(0.8, 0.92, 1.0) * 0.7;
+  // Camera-facing longitudinal highlight, not a horizontal bright band.
+  vec3 viewDir = normalize(cameraPosition - vWorldPos);
+  float facing = abs(dot(normalize(vRadial), viewDir));
+  float filament = pow(facing, 9.0);
+  float flow = 0.92 + 0.08 * sin(vWorldPos.y * 42.0 - uTime * 24.0);
+  col += filament * vec3(0.82, 0.92, 1.0) * 0.7;
+  col *= flow;
 
       // RGB main light — subtle global tint only.
   // Main visible color must come from the physical fixture field below.
-    float runtimeTint = clamp(uGlobalLightI * 0.50, 0.0, 0.85);
+    float runtimeTint = clamp(uGlobalLightI * 1.1, 0.0, 0.92);
   float luminance = max(max(col.r, col.g), col.b);
   vec3 tintedCore = uGlobalLight * max(luminance, 0.40);
 
@@ -313,7 +344,7 @@ void main(){
     col += uFieldCol[i] * uFieldInt[i] * beam * 0.95;
   }
 
-  gl_FragColor = vec4(col, vAlpha);
+  gl_FragColor = vec4(col, vAlpha * (0.55 + 0.45 * facing));
 }`;
 
 // ─── LOCALIZED LIT-VOLUME GLOW (camera-facing billboard above each jet) ──────
@@ -345,11 +376,13 @@ uniform float uTime;
 
 void main(){
   vec2 c = vUv - 0.5;
-  float horiz = 1.0 - smoothstep(0.0, 0.5, abs(c.x));
-  float vert  = 1.0 - smoothstep(0.0, 0.5, abs(c.y) * 0.7);
-  float shape = horiz * horiz * vert;
-  float pulse = 0.85 + sin(uTime * 3.0) * 0.15;
-  float a = shape * uIntensity * pulse * 0.55;
+  float horiz = 1.0 - smoothstep(0.03, 0.5, abs(c.x));
+  // Reach zero at both quad edges. The previous *0.7 left a visible flat
+  // rectangle at the top of each glowing jet.
+  float vert = 1.0 - smoothstep(0.14, 0.5, abs(c.y));
+  float shape = horiz * horiz * vert * vert;
+  float pulse = 0.94 + sin(uTime * 2.1) * 0.06;
+  float a = shape * uIntensity * pulse * 0.20;
   gl_FragColor = vec4(uColor, a);
 }`;
 
@@ -361,6 +394,11 @@ uniform float uWind;
 uniform mat4  uReflectMatrix;
 uniform vec4  uRipples[${MAX_RIPPLES}];   // xy = centre, z = age (s), w = strength
 uniform int   uRippleCount;
+uniform sampler2D uHeightTex;
+uniform float uHeightEnabled;
+uniform float uHeightTexel;
+uniform float uWaveExtent;
+uniform float uWaveHeightScale;
 varying vec2  vUv;
 varying vec3  vWorldPos;
 varying vec3  vNormal;
@@ -419,6 +457,25 @@ void main(){
   }
   disp.y += ripple;
 
+  // Coupled shallow-water field. Unlike the readable ring accents above, this grid
+  // exchanges energy between neighbouring cells, so simultaneous jet landings
+  // interfere and reflect from the real basin boundary.
+  float coupledWave = 0.0;
+  if (uHeightEnabled > 0.5) {
+    vec2 huv = P / uWaveExtent + 0.5;
+    if (huv.x >= 0.0 && huv.x <= 1.0 && huv.y >= 0.0 && huv.y <= 1.0) {
+      float hc = (texture2D(uHeightTex, huv).r * 2.0 - 1.0) * uWaveHeightScale;
+      float hl = (texture2D(uHeightTex, huv - vec2(uHeightTexel, 0.0)).r * 2.0 - 1.0) * uWaveHeightScale;
+      float hr = (texture2D(uHeightTex, huv + vec2(uHeightTexel, 0.0)).r * 2.0 - 1.0) * uWaveHeightScale;
+      float hd = (texture2D(uHeightTex, huv - vec2(0.0, uHeightTexel)).r * 2.0 - 1.0) * uWaveHeightScale;
+      float hu = (texture2D(uHeightTex, huv + vec2(0.0, uHeightTexel)).r * 2.0 - 1.0) * uWaveHeightScale;
+      coupledWave = hc;
+      disp.y += coupledWave;
+      dx += (hr - hl) / max(2.0 * uHeightTexel * uWaveExtent, 0.001);
+      dz += (hu - hd) / max(2.0 * uHeightTexel * uWaveExtent, 0.001);
+    }
+  }
+
   vLocalXZ = P;
   // World-space normal. The slope above is already expressed in world XZ, and the
   // fragment stage dots this against world-space view and light vectors — routing it
@@ -428,7 +485,8 @@ void main(){
   // Foam only where wave trains actually superpose near their combined maximum.
   // The old 0.02 threshold sat below every single crest, so daylight painted the
   // whole surface in ordered white rows — wave-pattern stripes, not foam.
-  vFoam   = smoothstep(0.058, 0.105, disp.y) * I;
+  // Quiet pool waves do not form ocean whitecaps. Foam belongs to jet impacts.
+  vFoam   = smoothstep(0.025, 0.09, abs(ripple) + abs(coupledWave) * 0.65) * 0.45;
   vDepth  = 1.0 - length(uv - 0.5) * 2.2;
   // Displacement is authored in world axes, so it is applied to the world position
   // directly rather than being pushed back through the model matrix.
@@ -515,7 +573,10 @@ void main(){
       // why deep water goes blue-green rather than merely darker.
       float pathLen = length(hit - vWorldPos);
       vec3  trans   = exp(-uAbsorb * pathLen);
-      base = floorCol * trans + uDeepColor * (1.0 - trans) * 0.85;
+      // Submerged lining receives filtered skylight, not unlit albedo at full
+      // contrast. A little suspended-water scattering softens the tile pattern.
+      vec3 submerged = floorCol * mix(vec3(0.12), vec3(0.55), clamp(uSkyColor * 2.0, 0.0, 1.0));
+      base = mix(submerged * trans + uDeepColor * (1.0 - trans), uShallowColor, 0.28);
     }
   }
 
@@ -845,14 +906,11 @@ class NozzleV2 {
     this._buildGlow(sharedLightUniforms);
   }
 
+  // The visible body is now an instanced fixture model owned by the scene
+  // (fixtureModels.js), not a per-nozzle mesh — see FixtureInstances. Nothing is
+  // built here any more; `dot` stays null so the dispose path remains valid.
   _buildMarker() {
-    const T=this.T;
-    const dg = new T.CylinderGeometry(0.04, 0.06, 0.12, 8);
-    const dm = new T.MeshStandardMaterial({
-      color:0x334455, emissive:0x001122, roughness:0.3, metalness:0.9
-    });
-    this.dot = new T.Mesh(dg, dm);
-    this.dot.position.set(this.config.x||0, 0.06, this.config.z||0);
+    this.dot = null;
   }
 
   // ── Layer 1: Pressurized water CORE column (a thin cylinder rendered with
@@ -868,13 +926,15 @@ class NozzleV2 {
     }
 
     // Build a low-poly cylinder where Y in [0..1] is parameter along jet
-    const radius = (type === 'laminar') ? 0.022
-                 : (type === 'jet_1d')  ? 0.010
-                 : (type === 'jet_2d')  ? 0.012
-                 : (type === 'geyser')  ? 0.038
-                                        : 0.014; // jet_3d default — matches DN25 bore
+    // This is the visible, aerated stream rather than the nozzle bore. A
+    // literal DN25 cylinder vanishes at the normal overview camera distance.
+    const radius = (type === 'laminar') ? 0.042
+                 : (type === 'jet_1d')  ? 0.034
+                 : (type === 'jet_2d')  ? 0.040
+                 : (type === 'geyser')  ? 0.135
+                                        : 0.072;
     const segments = 10;
-    const heightDivs = 14;
+    const heightDivs = 40;
     const geo = new T.CylinderGeometry(radius, radius * 1.1, 1.0, segments, heightDivs, true);
     // Move pivot so Y=0 is base
     geo.translate(0, 0.5, 0);
@@ -894,7 +954,8 @@ class NozzleV2 {
       uIntensity:    { value: 0 },
       uOrigin:       { value: new T.Vector3(this.config.x||0, 0.0, this.config.z||0) },
       uWind:         { value: new T.Vector2(0,0) },
-      uTilt:         { value: 0 },
+      uHorizontalSpeed: { value: new T.Vector2(0, 0) },
+      uVerticalSpeed: { value: 1 },
       uWaterColor:   { value: new T.Color(0x88ccff) },
       uGlobalLight:  sharedLightUniforms.uGlobalLight,
       uGlobalLightI: sharedLightUniforms.uGlobalLightI,
@@ -971,6 +1032,8 @@ class NozzleV2 {
     const type = cfg.type || 'jet_3d';
     const ox = cfg.x || 0;
     const oz = cfg.z || 0;
+    const yaw = (cfg.rotationY || 0) * Math.PI / 180;
+    const cosYaw = Math.cos(yaw), sinYaw = Math.sin(yaw);
     // Dynamic RGB water coloration
     const wc = tintColor || new this.T.Color(0.55, 0.80, 1.0);
 
@@ -987,16 +1050,32 @@ class NozzleV2 {
       uns.uIntensity.value = ix;
       uns.uOrigin.value.set(ox, 0.05, oz);
       uns.uWind.value.set(wind.x||0, wind.z||0);
-      uns.uHeight.value = this._coreHeightFor(type, ix);
+      // The core ends before the spray's apex, where a pressurised stream breaks
+      // into droplets. Use the same solved/fallback launch speed as the emitters.
+      const fallback = this._coreSpeedFor(type, ix);
+      const speed = this._launchSpeed(ix, fallback);
+      const tiltX = (cfg.tiltX || 0) * Math.PI / 180;
+      const tiltZ = (cfg.tiltZ || 0) * Math.PI / 180;
+      const verticalSpeed = Math.max(0.1, speed * Math.cos(tiltX) * Math.cos(tiltZ));
+      uns.uVerticalSpeed.value = verticalSpeed;
+      const localX = speed * Math.sin(tiltX), localZ = speed * Math.sin(tiltZ);
+      uns.uHorizontalSpeed.value.set(
+        localX * cosYaw + localZ * sinYaw,
+        -localX * sinYaw + localZ * cosYaw,
+      );
+      const apex = JP_jetHeightFor(verticalSpeed);
+      uns.uHeight.value = Math.max(0.05, apex * 0.92);
       if (tintColor) uns.uWaterColor.value.copy(tintColor).multiplyScalar(0.6).add(new this.T.Color(0.3,0.5,0.8));
     }
     if (this.glow) {
       const uns = this.glow.material.uniforms;
       uns.uTime.value = elapsed;
-      uns.uIntensity.value = ix * 0.85;
+      uns.uIntensity.value = ix * 0.55;
       uns.uOrigin.value.set(ox, 0.1, oz);
-      uns.uHeight.value = this._coreHeightFor(type, ix) * 0.9;
-      uns.uRadius.value = this._glowRadiusFor(type, ix);
+      // Light scatters most visibly where the jet meets the water. A full-height
+      // billboard made every stream look like a rectangular blue beam.
+      uns.uHeight.value = 0.9 + ix * (type === 'geyser' ? 1.2 : 0.65);
+      uns.uRadius.value = this._glowRadiusFor(type, ix) * 0.8;
       if (tintColor) uns.uColor.value.copy(tintColor);
     }
 
@@ -1028,8 +1107,9 @@ class NozzleV2 {
         for (let s=0; s<spawnN; s++) {
           const speed = this._launchSpeed(ix, 5.5 + ix*7.0);
           const vy = Math.cos(tiltX)*Math.cos(tiltZ)*speed;
-          const vx = Math.sin(tiltX)*speed + (Math.random()-0.5)*0.06 + wind.x*0.1;
-          const vz = Math.sin(tiltZ)*speed + (Math.random()-0.5)*0.06 + wind.z*0.1;
+          const localX = Math.sin(tiltX)*speed, localZ = Math.sin(tiltZ)*speed;
+          const vx = localX*cosYaw + localZ*sinYaw + (Math.random()-0.5)*0.06 + wind.x*0.1;
+          const vz = -localX*sinYaw + localZ*cosYaw + (Math.random()-0.5)*0.06 + wind.z*0.1;
           const life = vy/9.81*2.0*1.05;
           const sc = 0.10 + ix*0.06;
           this.waterSys.spawn(ox+(Math.random()-0.5)*0.04, 0.08, oz+(Math.random()-0.5)*0.04,
@@ -1051,8 +1131,9 @@ class NozzleV2 {
           const speed = this._launchSpeed(ix, 6.5 + ix*8.5);
           const spread = 0.055 + ix*0.04;
           const vy = Math.cos(tiltX)*speed;
-          const vx = Math.sin(tiltX)*speed + (Math.random()-0.5)*spread + wind.x*0.12;
-          const vz = Math.sin(tiltZ)*speed + (Math.random()-0.5)*spread + wind.z*0.12;
+          const localX = Math.sin(tiltX)*speed, localZ = Math.sin(tiltZ)*speed;
+          const vx = localX*cosYaw + localZ*sinYaw + (Math.random()-0.5)*spread + wind.x*0.12;
+          const vz = -localX*sinYaw + localZ*cosYaw + (Math.random()-0.5)*spread + wind.z*0.12;
           const life = vy/9.81*2.0*1.1;
           const sc = 0.11 + ix*0.06;
           const b = 0.7 + Math.random()*0.3;
@@ -1072,7 +1153,7 @@ class NozzleV2 {
        case 'geyser': {
         const spawnN = Math.floor(delta * 380 * ix);
         for (let s=0; s<spawnN; s++) {
-          const coreSpd = 9.0 + ix*13.0;
+          const coreSpd = this._launchSpeed(ix, 8.0 + ix*7.0);
           const spread = 0.35*ix;
           const vx = (Math.random()-0.5)*spread + wind.x*0.15;
           const vy = coreSpd * (0.88 + Math.random()*0.24);
@@ -1286,9 +1367,10 @@ class NozzleV2 {
         const beamLen = 15.0 + ix * 25.0;
         for (let s = 0; s < spawnN; s++) {
           const t = Math.random(); // position along beam
-          const beamVx = Math.sin(tiltX);
+          const localX = Math.sin(tiltX), localZ = Math.sin(tiltZ);
+          const beamVx = localX*cosYaw + localZ*sinYaw;
           const beamVy = Math.cos(tiltX) * Math.cos(tiltZ);
-          const beamVz = Math.sin(tiltZ);
+          const beamVz = -localX*sinYaw + localZ*cosYaw;
           const px = ox + beamVx * beamLen * t;
           const py = 0.1 + beamVy * beamLen * t;
           const pz = oz + beamVz * beamLen * t;
@@ -1309,13 +1391,14 @@ class NozzleV2 {
 
       case 'motion_1d': {
         const animPhase = Math.sin(elapsed * 1.5 + ox * 0.5) * 0.5 + 0.5;
-        const tiltX = ((cfg.tiltX || 0) + animPhase * 30) * Math.PI / 180;
+        const tiltX = (cfg.motionOverride ? cfg.motionOverride.pan : (cfg.tiltX || 0) + animPhase * 30) * Math.PI / 180;
         const spawnN = Math.floor(delta * 380 * ix);
         for (let s = 0; s < spawnN; s++) {
           const speed = this._launchSpeed(ix, 5.5 + ix * 7.0);
           const vy = Math.cos(tiltX) * speed;
-          const vx = Math.sin(tiltX) * speed + (Math.random()-0.5)*0.1 + wind.x*0.1;
-          const vz = (Math.random()-0.5)*0.1 + wind.z*0.1;
+          const localX = Math.sin(tiltX) * speed;
+          const vx = localX*cosYaw + (Math.random()-0.5)*0.1 + wind.x*0.1;
+          const vz = -localX*sinYaw + (Math.random()-0.5)*0.1 + wind.z*0.1;
           const life = vy/9.81*2.0*1.05;
           const sc = 0.10 + ix*0.06;
           this.waterSys.spawn(ox+(Math.random()-0.5)*0.04, 0.08, oz+(Math.random()-0.5)*0.04,
@@ -1327,14 +1410,15 @@ class NozzleV2 {
       case 'motion_2d': {
         const animX = Math.sin(elapsed * 1.2 + ox * 0.3) * 0.5 + 0.5;
         const animZ = Math.cos(elapsed * 0.9 + oz * 0.4) * 0.5 + 0.5;
-        const tiltX = ((cfg.tiltX || 0) + animX * 25) * Math.PI / 180;
-        const tiltZ = ((cfg.tiltZ || 0) + animZ * 25) * Math.PI / 180;
+        const tiltX = (cfg.motionOverride ? cfg.motionOverride.pan : (cfg.tiltX || 0) + animX * 25) * Math.PI / 180;
+        const tiltZ = (cfg.motionOverride ? cfg.motionOverride.tilt : (cfg.tiltZ || 0) + animZ * 25) * Math.PI / 180;
         const spawnN = Math.floor(delta * 400 * ix);
         for (let s = 0; s < spawnN; s++) {
           const speed = this._launchSpeed(ix, 5.5 + ix * 7.0);
           const vy = Math.cos(tiltX) * Math.cos(tiltZ) * speed;
-          const vx = Math.sin(tiltX) * speed + (Math.random()-0.5)*0.12 + wind.x*0.1;
-          const vz = Math.sin(tiltZ) * speed + (Math.random()-0.5)*0.12 + wind.z*0.1;
+          const localX = Math.sin(tiltX) * speed, localZ = Math.sin(tiltZ) * speed;
+          const vx = localX*cosYaw + localZ*sinYaw + (Math.random()-0.5)*0.12 + wind.x*0.1;
+          const vz = -localX*sinYaw + localZ*cosYaw + (Math.random()-0.5)*0.12 + wind.z*0.1;
           const life = vy/9.81*2.0*1.05;
           const sc = 0.10 + ix*0.06;
           this.waterSys.spawn(ox+(Math.random()-0.5)*0.04, 0.08, oz+(Math.random()-0.5)*0.04,
@@ -1347,15 +1431,16 @@ class NozzleV2 {
         const animX = Math.sin(elapsed * 1.5 + ox * 0.5) * 0.5 + 0.5;
         const animZ = Math.cos(elapsed * 1.1 + oz * 0.6) * 0.5 + 0.5;
         const animY = Math.sin(elapsed * 2.0) * 0.3;
-        const tiltX = ((cfg.tiltX || 0) + animX * 35) * Math.PI / 180;
-        const tiltZ = ((cfg.tiltZ || 0) + animZ * 35) * Math.PI / 180;
+        const tiltX = (cfg.motionOverride ? cfg.motionOverride.pan : (cfg.tiltX || 0) + animX * 35) * Math.PI / 180;
+        const tiltZ = (cfg.motionOverride ? cfg.motionOverride.tilt : (cfg.tiltZ || 0) + animZ * 35) * Math.PI / 180;
         const spawnN = Math.floor(delta * 420 * ix);
 
         for (let s = 0; s < spawnN; s++) {
           const speed = 6.0 + ix * 7.5 + animY * 2.0;
           const vy = Math.cos(tiltX) * Math.cos(tiltZ) * speed;
-          const vx = Math.sin(tiltX) * speed + (Math.random() - 0.5) * 0.15 + wind.x * 0.12;
-          const vz = Math.sin(tiltZ) * speed + (Math.random() - 0.5) * 0.15 + wind.z * 0.12;
+          const localX = Math.sin(tiltX) * speed, localZ = Math.sin(tiltZ) * speed;
+          const vx = localX*cosYaw + localZ*sinYaw + (Math.random() - 0.5) * 0.15 + wind.x * 0.12;
+          const vz = -localX*sinYaw + localZ*cosYaw + (Math.random() - 0.5) * 0.15 + wind.z * 0.12;
           const life = vy / 9.81 * 2.0 * 1.1;
           const sc = 0.11 + ix * 0.07;
 
@@ -1458,7 +1543,7 @@ case 'screen': {
     }
 
     // Layer 4: impact foam at the water surface
-    if (ix > 0.25 && Math.random() < ix*delta*8) {
+    if (ix > 0.25 && Math.random() < ix*delta*18) {
       this._spawnImpactFoam(ox, oz, ix);
     }
   }
@@ -1479,6 +1564,18 @@ case 'screen': {
       case 'motion_2d': return 3.5 + ix * 5.5;
       case 'motion_3d': return 4.0 + ix * 6.0;
       default: return 3.0 + ix * 4.0;
+    }
+  }
+
+  _coreSpeedFor(type, ix) {
+    switch (type) {
+      case 'jet_1d': return 4.5 + ix * 5.5;
+      case 'jet_2d': return 5.5 + ix * 7.0;
+      case 'geyser': return 8.0 + ix * 7.0;
+      case 'laminar': return 6.5 + ix * 7.5;
+      case 'motion_3d': return 6.0 + ix * 7.5;
+      case 'jet_3d': return 6.5 + ix * 8.5;
+      default: return 5.5 + ix * 7.0;
     }
   }
 
@@ -1586,6 +1683,7 @@ export class FountainScene {
     this.cameraMode   = options.cameraMode   || CAMERA_MODES.ORBIT;
     this.lightColor   = options.lightColor   || '#0066ff';
     this.poolGeometry = options.poolGeometry || null;
+    this._siteSurfaces = options.siteSurfaces || [];
     this.wind         = options.wind         || { x:0, z:0 };
 
         this._signals   = {
@@ -1716,12 +1814,12 @@ export class FountainScene {
         this._gpuWater = new GPUParticleField(T, this.renderer, {
           ...shared, count: q.gpuWater, map: this._particleTex.droplet,
           gravity: -9.5, drag: 0.018, turbulence: 0.35,
-          sizeScale: 0.30, alpha: 0.17,
+          sizeScale: 0.44, alpha: 0.14,
         });
         this._gpuSpray = new GPUParticleField(T, this.renderer, {
           ...shared, count: q.gpuSpray, map: this._particleTex.mist,
           gravity: -7.0, drag: 0.024, turbulence: 0.55,
-          sizeScale: 0.42, alpha: 0.10,
+          sizeScale: 0.58, alpha: 0.11,
         });
         this.scene.add(this._gpuWater.mesh, this._gpuSpray.mesh);
         // The CPU water/spray fields become invisible samplers.
@@ -1760,9 +1858,14 @@ export class FountainScene {
 
     this._buildEnvironment();
     this._buildPool();
+    this._buildSiteSurfaces();
+    this._buildVenueElements();
+    this._modelLayer = new ModelLayer(this.THREE, this.scene);
     this._buildWaterSurface();
     this._buildUnderwaterLights();
     this._buildLasers();
+    this._fixtureInstances = new FixtureInstances(this.THREE);
+    this.scene.add(this._fixtureInstances.group);
     this._buildNozzles();
     this._buildReviewOverlays();
     this._setupEvents();
@@ -1823,6 +1926,20 @@ export class FountainScene {
     };
     this._wetTex  = mkTex(this._wetBytes);
     this._heatTex = mkTex(this._heatBytes);
+
+    // Water Realism V2: a coupled heightfield fed by the same physical landing
+    // events as containment. It is intentionally quality-scaled and uploaded as a
+    // universally supported RGBA texture; weak GPUs keep the existing ring path.
+    const heightRes = this.quality === "high" ? 96 : this.quality === "medium" ? 72 : 48;
+    this._heightField = new WaterHeightField({ extent, resolution: heightRes });
+    this._heightBytes = new Uint8Array(heightRes * heightRes * 4);
+    this._heightField.writeRGBA(this._heightBytes);
+    this._heightTex = new T.DataTexture(this._heightBytes, heightRes, heightRes, T.RGBAFormat);
+    this._heightTex.minFilter = T.LinearFilter;
+    this._heightTex.magFilter = T.LinearFilter;
+    this._heightTex.wrapS = this._heightTex.wrapT = T.ClampToEdgeWrapping;
+    this._heightTex.needsUpdate = true;
+    this._heightUploadT = 0;
 
     // Deck overlay. World-space UV rather than geometry UV, so the mapping is correct
     // regardless of what shape the deck happens to be.
@@ -1908,6 +2025,8 @@ export class FountainScene {
       // featureless boil rather than the readable rings a viewer expects.
       if (inside && this._rippleCooldown <= 0) {
         this._rippleCooldown = 0.11;
+        this._heightField?.disturb(x, z,
+          Math.min(0.075, 0.028 + amount * 0.008) * (this._waveResponse ?? 1), 0.34);
         const r = this._ripples[this._rippleNext];
         this._rippleNext = (this._rippleNext + 1) % MAX_RIPPLES;
         r.x = x; r.z = z; r.age = 0; r.str = 1;
@@ -1940,6 +2059,15 @@ export class FountainScene {
   _updateRipples(delta) {
     if (!this._ripples || !this.waterMat?.uniforms?.uRipples) return;
     this._rippleCooldown -= delta;
+    if (this._heightField) {
+      this._heightField.advance(delta);
+      this._heightUploadT += delta;
+      if (this._heightUploadT >= 1 / 30) {
+        this._heightUploadT = 0;
+        this._heightField.writeRGBA(this._heightBytes);
+        this._heightTex.needsUpdate = true;
+      }
+    }
     const u = this.waterMat.uniforms;
     let n = 0;
     for (let i = 0; i < MAX_RIPPLES; i++) {
@@ -2112,7 +2240,34 @@ export class FountainScene {
    */
   attachEditor(editor) {
     this._editor = editor || null;
+    if (editor) this.syncModelGraph(editor.graph);
     return this._editor;
+  }
+
+  _syncHeightFieldPool() {
+    if (!this._heightField) return;
+    const pool = this._poolBoundsForSplash();
+    const span = pool.type === "circular"
+      ? (pool.radius || 6) * 2
+      : Math.max(pool.width || 12, pool.length || 8);
+    // Leave deck space around the water while preserving detail for ordinary pools.
+    this._heightField.setExtent(Math.max(16, span * 1.22));
+    this._heightField.setPool(pool);
+    this._heightField.reset();
+    if (this._heightTex && this._heightBytes) {
+      this._heightField.writeRGBA(this._heightBytes);
+      this._heightTex.needsUpdate = true;
+    }
+  }
+
+  syncModelGraph(graph) { return this._modelLayer?.syncGraph(graph); }
+
+  pickableModels() {
+    return [
+      ...(this._modelLayer?.root.children || []),
+      ...(this._fixtureInstances?.group.children || []),
+      ...(this._engLightMeshes || []),
+    ];
   }
 
   /**
@@ -2234,7 +2389,13 @@ export class FountainScene {
     if (!q.postfx || this._postDisabledByUser) return;
     try {
       const W = this.canvas.clientWidth || 900, H = this.canvas.clientHeight || 600;
-      const composer = new EffectComposer(this.renderer);
+      // Canvas antialiasing does not apply to the composer's offscreen target.
+      // Multisample the scene itself so thin streams survive at export resolution.
+      const target = new T.WebGLRenderTarget(W, H, {
+        type: T.HalfFloatType,
+        samples: Math.min(4, this.renderer.capabilities.maxSamples || 0),
+      });
+      const composer = new EffectComposer(this.renderer, target);
       composer.setPixelRatio?.(this._pr);
       composer.setSize(W, H);
 
@@ -2489,7 +2650,7 @@ export class FountainScene {
     if (this._quadView) { this._renderQuad(); return; }
 
     if (this._postEnabled && this.composer) {
-      if (this._gradePass) this._gradePass.uniforms.uTime.value = this.clock?.elapsedTime || 0;
+      if (this._gradePass) this._gradePass.uniforms.uTime.value = this._baking ? this._bakeElapsed : (this.clock?.elapsedTime || 0);
       this.composer.render();
     } else {
       this.renderer.render(this.scene, this.camera);
@@ -2596,22 +2757,31 @@ export class FountainScene {
     if (this._poolObjects) this._poolObjects.forEach(o => { if(o.parent) o.parent.remove(o); });
     this._poolObjects = [];
 
-    let poolRadius=6, poolW=12, poolL=8, poolType='circular';
+    let poolRadius=6, poolW=12, poolL=8, poolType='circular', poolPoints=[];
     if (geom?.params) {
       poolRadius=geom.params.radius||6;
       poolW=geom.params.width||12;
       poolL=geom.params.length||8;
       const t=geom.poolType||'circular';
-      poolType = (t==='rectangular'||t==='lshape'||t==='freeform'||t==='false_lake'||t==='false_river')
-                  ? 'rectangular' : (t==='elliptical') ? 'ellipse' : t;
+      const polygon = centeredPoolPoints(geom.geometry?.points || []);
+      const polygonal = (t==='lshape'||t==='freeform'||t==='false_lake'||t==='false_river') && polygon.length >= 3;
+      poolType = polygonal ? 'freeform' : t==='rectangular' || t==='lshape' || t==='freeform'
+        || t==='false_lake' || t==='false_river' ? 'rectangular' : t==='elliptical' ? 'ellipse' : t;
+      if (polygonal) {
+        poolPoints = polygon;
+        const bounds = poolPolygonBounds(poolPoints);
+        poolW = bounds?.width || poolW;
+        poolL = bounds?.length || poolL;
+      }
     }
     this._poolRadius=poolRadius; this._poolW=poolW; this._poolL=poolL; this._poolType=poolType;
+    this._poolPoints=poolPoints;
 
     const gt = this._ensureGroundTextures();
 
     const deckMat = new T.MeshStandardMaterial({ color:0x10151b, roughness:0.78, metalness:0.12 });
     if (gt) { applyStoneMaps(deckMat, gt.deck); deckMat.metalness = 0.05; }
-    const deck = new T.Mesh(new T.PlaneGeometry(80,80), deckMat);
+    const deck = new T.Mesh(deckWithOpening(T, { poolType, radius: poolRadius, width: poolW, length: poolL, points:poolPoints }), deckMat);
     deck.rotation.x=-Math.PI/2; deck.position.y=-0.02; deck.receiveShadow=true;
     this.scene.add(deck); this._poolObjects.push(deck);
 
@@ -2623,7 +2793,29 @@ export class FountainScene {
       applyStoneMaps(wallMat, poolType === 'circular' ? gt.wallCyl : gt.wallBox, { normalScale: 0.6 });
       wallMat.metalness = 0.08;
     }
-    const wall = new T.Mesh(wallGeo, wallMat); wall.position.y=0.22; wall.castShadow=true;
+    const wall = new T.Group();
+    if (poolType === 'circular') {
+      const shell = new T.Mesh(wallGeo, wallMat);
+      wallMat.side = T.DoubleSide;
+      wall.add(shell);
+    } else if (poolType === 'freeform') {
+      wallGeo.dispose();
+      poolPerimeterSegments(poolPoints).forEach(segment => {
+        const side = new T.Mesh(new T.BoxGeometry(segment.length + 0.14, 0.9, 0.18), wallMat);
+        side.position.set(segment.x, 0, segment.z);
+        side.rotation.y = -segment.rotation;
+        side.castShadow = true;
+        wall.add(side);
+      });
+    } else {
+      wallGeo.dispose();
+      // Four walls, not a solid box whose top occludes the whole basin.
+      for (const [w, l, x, z] of [[poolW+0.35,0.18,0,poolL/2+0.09], [poolW+0.35,0.18,0,-poolL/2-0.09], [0.18,poolL,poolW/2+0.09,0], [0.18,poolL,-poolW/2-0.09,0]]) {
+        const side = new T.Mesh(new T.BoxGeometry(w, 0.9, l), wallMat);
+        side.position.set(x, 0, z); side.castShadow = true; wall.add(side);
+      }
+    }
+    wall.position.y=0;
     this.scene.add(wall); this._poolObjects.push(wall);
 
     const copingMat = new T.MeshStandardMaterial({color:0x999aaa,roughness:0.2,metalness:0.7});
@@ -2638,6 +2830,13 @@ export class FountainScene {
       // which is why rectangular layouts (box copings) never showed it.
       coping.rotation.x = -Math.PI/2;
       coping.position.y=0.46; this.scene.add(coping); this._poolObjects.push(coping);
+    } else if (poolType==='freeform') {
+      poolPerimeterSegments(poolPoints).forEach(segment => {
+        const coping = new T.Mesh(new T.BoxGeometry(segment.length + 0.12, 0.09, 0.22), copingMat);
+        coping.position.set(segment.x, 0.46, segment.z);
+        coping.rotation.y = -segment.rotation;
+        this.scene.add(coping); this._poolObjects.push(coping);
+      });
     } else {
       const s1 = poolW + 0.35;
       const s2 = poolL + 0.35;
@@ -2651,7 +2850,9 @@ export class FountainScene {
       c4.position.set(-poolW/2-0.175,0.46,0); this.scene.add(c4); this._poolObjects.push(c4);
     }
 
-    const floorGeo = poolType==='circular' ? new T.CircleGeometry(poolRadius,64) : new T.PlaneGeometry(poolW,poolL);
+    const floorGeo = poolType==='circular' ? new T.CircleGeometry(poolRadius,64)
+      : poolType==='freeform' ? poolShapeGeometry(T, poolPoints)
+      : new T.PlaneGeometry(poolW,poolL);
     const floorMat = new T.MeshStandardMaterial({color:0x08101e,roughness:0.95});
     // Mosaic basin lining — visible through the water and under the caustics.
     if (gt) applyStoneMaps(floorMat, gt.basin, { normalScale: 0.45 });
@@ -2662,11 +2863,84 @@ export class FountainScene {
     const gridHelper = new T.GridHelper(40,40,0x263447,0x101b29);
     gridHelper.material.transparent = true;
     gridHelper.material.opacity = 0.32;
-    gridHelper.position.y=0.001; this.scene.add(gridHelper); this._poolObjects.push(gridHelper);
+    gridHelper.position.y=-0.5; this.scene.add(gridHelper); this._poolObjects.push(gridHelper);
+
+    // The shadow frustum is sized from the pool, which only exists now.
+    this._refitShadows();
+  }
+
+  _disposeSiteSurfaces() {
+    if (!this._siteSurfaceGroup) return;
+    this._siteSurfaceGroup.traverse((object) => {
+      object.geometry?.dispose?.();
+      if (Array.isArray(object.material)) object.material.forEach((material) => material?.dispose?.());
+      else object.material?.dispose?.();
+    });
+    this._siteSurfaceGroup.parent?.remove(this._siteSurfaceGroup);
+    this._siteSurfaceGroup = null;
+  }
+
+  _buildSiteSurfaces() {
+    this._disposeSiteSurfaces();
+    if (!this.scene || !Array.isArray(this._siteSurfaces) || !this._siteSurfaces.length) return;
+    const T = this.THREE;
+    const group = new T.Group();
+    group.name = "Engineering Site Surfaces";
+
+    const presets = {
+      grass:  { color: 0x4f8a3c, roughness: 0.96, metalness: 0.0 },
+      paving: { color: 0x999287, roughness: 0.82, metalness: 0.03 },
+      soil:   { color: 0x775137, roughness: 1.0, metalness: 0.0 },
+      rock:   { color: 0x6f747b, roughness: 0.9, metalness: 0.02 },
+      sand:   { color: 0xc4ad78, roughness: 1.0, metalness: 0.0 },
+    };
+
+    this._siteSurfaces.forEach((surface, surfaceIndex) => {
+      const points = Array.isArray(surface?.points) ? surface.points : [];
+      if (surface?.visible === false || points.length < 3) return;
+      const shape = new T.Shape();
+      shape.moveTo(Number(points[0].x || 0), -Number(points[0].z || 0));
+      points.slice(1).forEach((point) => shape.lineTo(Number(point.x || 0), -Number(point.z || 0)));
+      shape.closePath();
+
+      const preset = presets[surface.type] || presets.grass;
+      const material = new T.MeshStandardMaterial({
+        color: surface.color || preset.color,
+        roughness: preset.roughness,
+        metalness: preset.metalness,
+        side: T.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      });
+      const mesh = new T.Mesh(new T.ShapeGeometry(shape), material);
+      mesh.name = surface.label || `Site Surface ${surfaceIndex + 1}`;
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.y = 0.012 + Math.max(-0.01, Math.min(2, Number(surface.elevation || 0)));
+      mesh.receiveShadow = true;
+      group.add(mesh);
+
+      const borderPoints = points.map((point) => new T.Vector3(
+        Number(point.x || 0),
+        mesh.position.y + 0.008,
+        Number(point.z || 0),
+      ));
+      borderPoints.push(borderPoints[0].clone());
+      const border = new T.Line(
+        new T.BufferGeometry().setFromPoints(borderPoints),
+        new T.LineBasicMaterial({ color: material.color.clone().multiplyScalar(1.35) }),
+      );
+      border.name = `${mesh.name} Border`;
+      group.add(border);
+    });
+
+    this._siteSurfaceGroup = group;
+    this.scene.add(group);
   }
 
   _buildWaterSurface() {
     const T=this.THREE;
+    this._syncHeightFieldPool();
     if (this.waterSurface?.parent) this.waterSurface.parent.remove(this.waterSurface);
     const segs=48;
     // Both shapes use a tessellated PLANE; a circular basin is cut to shape in the
@@ -2675,7 +2949,9 @@ export class FountainScene {
     // were tuned, and ripples would have been invisible on them entirely.
     const geo = this._poolType==='circular'
       ? new T.PlaneGeometry(this._poolRadius*2, this._poolRadius*2, 96, 96)
-      : new T.PlaneGeometry(this._poolW, this._poolL, segs, segs);
+      : this._poolType==='freeform'
+        ? polygonWaterGeometry(T, this._poolPoints, 112)
+        : new T.PlaneGeometry(this._poolW, this._poolL, segs, segs);
 
     this.waterMat = new T.ShaderMaterial({
       vertexShader: WATER_VERT_V2, fragmentShader: WATER_FRAG_V2,
@@ -2710,6 +2986,11 @@ export class FountainScene {
           this._poolRadius || 6, this._poolW || 12, this._poolL || 8)},
         uRipples:     {value: Array.from({length: MAX_RIPPLES}, () => new T.Vector4())},
         uRippleCount: {value: 0},
+        uHeightTex:   {value: this._heightTex || null},
+        uHeightEnabled: {value: this._heightTex ? 1.0 : 0.0},
+        uHeightTexel: {value: 1 / Math.max(1, this._heightField?.resolution || 1)},
+        uWaveExtent:  {value: this._heightField?.extent || 32},
+        uWaveHeightScale: {value: this._heightField?.maxHeight || 0.22},
         uFieldCount:     this._lightField.uFieldCount,
         uFieldPos:       this._lightField.uFieldPos,
         uFieldCol:       this._lightField.uFieldCol,
@@ -2721,6 +3002,17 @@ export class FountainScene {
     this.waterSurface.rotation.x=-Math.PI/2;
     this.waterSurface.position.y=0.02;
     this.scene.add(this.waterSurface);
+    // Environment is built before the water on init; initialize these here too.
+    this._setWaterPalette();
+  }
+
+  _setWaterPalette() {
+    const u = this.waterMat?.uniforms;
+    if (!u) return;
+    const day = this.environment === ENVIRONMENTS.DAY;
+    u.uDeepColor.value.set(day ? 0x18506a : 0x010c1c);
+    u.uShallowColor.value.set(day ? 0x5294aa : 0x0c3558);
+    u.uSkyColor.value.set(day ? 0x6ab4d8 : this.environment === ENVIRONMENTS.DUSK ? 0x180820 : 0x030810);
   }
 
   _buildUnderwaterLights() {
@@ -2772,55 +3064,14 @@ export class FountainScene {
     this.scene.add(this._laserGroup);
   }
 
-  _buildEnvironment() { this._applyEnvironment(); this._buildVenueElements(); }
+  _buildEnvironment() { this._applyEnvironment(); }
   _buildVenueElements() {
-    const T=this.THREE;
-    if (this._venueGroup) { this.scene.remove(this._venueGroup); }
-    this._venueGroup = new T.Group();
-
-    const stageMat = new T.MeshStandardMaterial({
-      color: 0x11161b,
-      roughness: 0.72,
-      metalness: 0.18,
+    if (this._venueGroup) disposeVenue(this._venueGroup);
+    this._venueGroup = buildVenue(this.THREE, {
+      poolType: this._poolType, radius: this._poolRadius, points: this._poolPoints,
+      width: this._poolW, length: this._poolL,
+      quality: this.quality, environment: this.environment,
     });
-    const gtStage = this._ensureGroundTextures();
-    if (gtStage) { applyStoneMaps(stageMat, gtStage.stage); stageMat.metalness = 0.05; }
-    const stage = new T.Mesh(new T.CylinderGeometry(11.5, 12.2, 0.22, 96), stageMat);
-    stage.position.y = -0.12;
-    stage.receiveShadow = true;
-    this._venueGroup.add(stage);
-
-    const rimMat = new T.MeshStandardMaterial({
-      color: 0x27313c,
-      emissive: 0x041526,
-      roughness: 0.35,
-      metalness: 0.65,
-    });
-    const rim = new T.Mesh(new T.TorusGeometry(12.35, 0.045, 8, 128), rimMat);
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = 0.03;
-    this._venueGroup.add(rim);
-
-    for (let i=0;i<16;i++){
-      const a=(i/16)*Math.PI*2;
-      const d=24+seededNoise(i, 1)*10;
-      const h=3+seededNoise(i, 2)*6;
-      const tg=new T.CylinderGeometry(0.15,0.9,h,5);
-      const tm=new T.MeshStandardMaterial({color:0x101716,roughness:0.92});
-      const t=new T.Mesh(tg,tm);
-      t.position.set(Math.cos(a)*d,h/2,Math.sin(a)*d);
-      this._venueGroup.add(t);
-    }
-    for (let i=0;i<6;i++){
-      const a=(i/6)*Math.PI*2+0.2;
-      const d=35+seededNoise(i, 3)*15;
-      const h=8+seededNoise(i, 4)*20;
-      const bg=new T.BoxGeometry(4+seededNoise(i, 5)*5,h,4+seededNoise(i, 6)*5);
-      const bm=new T.MeshStandardMaterial({color:0x070b12,roughness:0.95,metalness:0.05});
-      const b=new T.Mesh(bg,bm);
-      b.position.set(Math.cos(a)*d,h/2,Math.sin(a)*d);
-      this._venueGroup.add(b);
-    }
     this.scene.add(this._venueGroup);
   }
   /** Environment-map strength. The sky-dome IBL is dim and truthful, so it can run
@@ -2850,6 +3101,50 @@ export class FountainScene {
     }
   }
 
+  /**
+   * Fit a directional light's shadow frustum to the design (AF-3D-015).
+   *
+   * three.js defaults a DirectionalLightShadow to an orthographic box of +/-5 metres.
+   * Nothing here ever overrode it, so shadows existed only within a 10 m square at
+   * the origin while the pool is up to 12 x 8 m and the deck is 80 x 80 — most of the
+   * scene could neither cast nor receive a shadow, and the boundary cut straight
+   * across the basin.
+   *
+   * The frustum is sized to the actual design rather than to the deck: shadow texel
+   * density is the map resolution divided by the frustum width, so covering ground
+   * nobody looks at is paid for as blur everywhere that matters.
+   */
+  /**
+   * Re-fit every shadow-casting directional light to the CURRENT design. The
+   * environment is built before the pool exists, and the pool can be resized later
+   * from the geometry designer, so the fit has to be re-applied rather than only
+   * computed once at construction.
+   */
+  _refitShadows() {
+    this._envGroup?.traverse?.((o) => {
+      if (o.isDirectionalLight && o.castShadow) this._fitShadowCamera(o, o.shadow.mapSize.x || 2048);
+    });
+  }
+
+  _fitShadowCamera(light, mapSize = 2048) {
+    if (!light?.shadow) return;
+    const half = this._poolType === "circular"
+      ? (this._poolRadius || 6)
+      : Math.max((this._poolW || 12), (this._poolL || 8)) / 2;
+    const extent = Math.min(40, Math.max(14, half * 2.2 + 8));
+    const cam = light.shadow.camera;
+    cam.left = -extent; cam.right = extent;
+    cam.top = extent;   cam.bottom = -extent;
+    cam.near = 0.5;
+    // Far must clear the light's own distance from the scene, or geometry falls out
+    // the back of the frustum and its shadow silently disappears.
+    cam.far = Math.max(80, light.position.length() * 2.2);
+    cam.updateProjectionMatrix();
+    light.shadow.mapSize.set(mapSize, mapSize);
+    light.shadow.normalBias = 0.035;
+    light.shadow.bias = -0.0004;
+  }
+
   _applyEnvironment() {
     const T=this.THREE; const env=this.environment;
     if (this._envGroup) this.scene.remove(this._envGroup);
@@ -2866,12 +3161,13 @@ export class FountainScene {
       this.scene.fog = new T.FogExp2(0x020610, 0.015);
       const amb  = new T.AmbientLight(0x0d1a30, 2.0);
       const moon = new T.DirectionalLight(0x7788bb, 1.2);
-      moon.position.set(-10,30,-10); moon.castShadow=true; moon.shadow.mapSize.set(2048,2048);
-      // normalBias removes the shadow acne that otherwise stipples the curved pool
-      // walls, without the "floating object" gap a large constant bias introduces.
-      moon.shadow.normalBias = 0.035; moon.shadow.bias = -0.0004;
+      moon.position.set(-10,30,-10); moon.castShadow=true;
+      // normalBias (set in _fitShadowCamera) removes the shadow acne that otherwise
+      // stipples the curved pool walls, without the "floating object" gap a large
+      // constant bias introduces.
+      this._fitShadowCamera(moon, 2048);
       this._envGroup.add(amb, moon);
-      if (this.renderer) this.renderer.toneMappingExposure = 2.3;
+      if (this.renderer) this.renderer.toneMappingExposure = 1.55;
       this.waterMat?.uniforms.uSkyColor.value.set(0x020610);
     } else if (env===ENVIRONMENTS.DUSK){
       this.scene.background = new T.Color(0x180820);
@@ -2879,6 +3175,7 @@ export class FountainScene {
       const amb = new T.AmbientLight(0x281030, 2.8);
       const sun = new T.DirectionalLight(0xff5522, 1.8);
       sun.position.set(12,7,-20); sun.castShadow=true;
+      this._fitShadowCamera(sun, 2048);
       const fill = new T.HemisphereLight(0x501880, 0x100820, 1.5);
       this._envGroup.add(amb, sun, fill);
       if (this.renderer) this.renderer.toneMappingExposure = 1.9;
@@ -2888,7 +3185,8 @@ export class FountainScene {
       this.scene.fog = new T.Fog(0x9cc5de, 40, 130);
       const amb = new T.AmbientLight(0xffffff, 2.5);
       const sun = new T.DirectionalLight(0xfff8e8, 3.8);
-      sun.position.set(25,60,25); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
+      sun.position.set(25,60,25); sun.castShadow=true;
+      this._fitShadowCamera(sun, 2048);
       const sky = new T.HemisphereLight(0x6ab4d8, 0x2d5c20, 1.0);
       this._envGroup.add(amb, sun, sky);
       if (this.renderer) this.renderer.toneMappingExposure = 1.0;
@@ -2947,6 +3245,7 @@ export class FountainScene {
       ? this.userNozzles
       : this._defaultLayout();
 
+    const fixtureBodies = [];
     layout.forEach(cfg => {
       // Normalize: ensure type exists
       const finalCfg = {
@@ -2956,15 +3255,25 @@ export class FountainScene {
         z: cfg.z ?? 0,
         tiltX: cfg.tiltX ?? 0,
         tiltZ: cfg.tiltZ ?? 0,
+	rotationY: cfg.rotationY ?? 0,
 	groupId: cfg.groupId || null,
         engineering: cfg.engineering || null,
       };
       const nz = new NozzleV2(this.THREE, this.waterSys, this.spraySys, this.foamSys, this.flameSys, finalCfg, this._lightField);
-      this.scene.add(nz.dot);
+      if (nz.dot) this.scene.add(nz.dot);
       if (nz.core) this.scene.add(nz.core);
       if (nz.glow) this.scene.add(nz.glow);
       this.nozzles.push(nz);
+      fixtureBodies.push({
+        id: finalCfg.id,
+        kind: fixtureKindFor(finalCfg.type),
+        x: finalCfg.x, y: 0, z: finalCfg.z,
+        rotationX: finalCfg.tiltX,
+        rotationY: finalCfg.rotationY,
+        rotationZ: finalCfg.tiltZ,
+      });
     });
+    this._fixtureInstances?.setFixtures(fixtureBodies);
 
     // Re-attach any solved hydraulics to the freshly built nozzle instances, so a
     // re-layout does not silently drop back to the estimated jet heights.
@@ -3055,6 +3364,7 @@ export class FountainScene {
         z:     c.z ?? (c.y ?? 0),
         tiltX: c.tiltX || 0,
         tiltZ: c.tiltZ || 0,
+	rotationY: c.rotationY || 0,
 	groupId: c.groupId || null,
         engineering: c.engineering || null,
       }));
@@ -3081,15 +3391,20 @@ export class FountainScene {
       );
       mk.rotation.x = -Math.PI / 2;
       mk.position.set(lc.x ?? 0, 0.03, lc.z ?? (lc.y ?? 0));
+      mk.userData.nodeId = lc.id;
       this.scene.add(mk);
       this._engLightMeshes.push(mk);
 
       return {
+        id: lc.id,
         x: lc.x ?? 0,
         z: lc.z ?? (lc.y ?? 0),
         color,
         intensity,
         radius,
+        baseColor: color.clone(),
+        baseIntensity: intensity,
+        baseRadius: radius,
       };
     });
 
@@ -3146,6 +3461,7 @@ export class FountainScene {
     // Pattern Designer RGB selections.
     const T = this.THREE;
     const lightI = Math.max(0, Math.min(1, Number(I.lighting || 0)));
+    const individualLights = !!I.fixtureLightStates;
 
     const runtimeColor = this._colorFromSignalColor(
       I.lightingColor,
@@ -3156,30 +3472,32 @@ export class FountainScene {
 
     // Stronger visible global tint for water, spray, pool and glow.
     this._lightField.uGlobalLight.value.copy(runtimeColor);
-    this._lightField.uGlobalLightI.value = lightI * 2.5;
+    this._lightField.uGlobalLightI.value = individualLights ? 0.12 : lightI * 0.7;
     // Keep the pool surface shader synchronized with runtime RGB.
     if (this.waterMat?.uniforms) {
       this.waterMat.uniforms.uLightColor.value.copy(runtimeColor);
-      this.waterMat.uniforms.uLightIntensity.value = Math.max(0.5, lightI * 2.2);
+      this.waterMat.uniforms.uLightIntensity.value = individualLights ? 0.16 : 0.16 + lightI * 0.42;
     }
 
-    // Keep underwater point lights synchronized too.
-    for (const light of this.uwLights || []) {
-      light.color.copy(runtimeColor);
-      light.intensity = Math.max(1.5, lightI * 5.0);
-    }
-
-    if (this.centerLight) {
-      this.centerLight.color.copy(runtimeColor);
-      this.centerLight.intensity = Math.max(2.0, lightI * 7.0);
-    }
-
-    // If the user has engineering RGB lights, runtime RGB must tint them too.
-    if (this._engLights?.length) {
+    // Full-show previews set each engineering light independently by fixture ID.
+    if (I.fixtureLightStates && this._engLights?.length) {
+      this._engLights.forEach((L, index) => {
+        const state = I.fixtureLightStates[L.id];
+        const level = Math.max(0, Math.min(1, Number(state?.intensity) || 0));
+        L.color.copy(this._colorFromSignalColor(state?.color, "#ffffff"));
+        L.intensity = L.baseIntensity * level;
+        L.radius = L.baseRadius;
+        const marker = this._engLightMeshes[index];
+        if (marker?.material) {
+          marker.material.color.copy(L.color);
+          marker.material.opacity = 0.08 + level * 0.84;
+        }
+      });
+    } else if (this._engLights?.length) {
       for (const L of this._engLights) {
         if (L?.color) L.color.copy(runtimeColor);
-        L.intensity = Math.max(Number(L.intensity || 0), lightI * 10.0);
-	L.radius = Math.max(Number(L.radius || 0), 5.5);
+        L.intensity = L.baseIntensity * lightI;
+	L.radius = L.baseRadius;
       }
 
       for (const mesh of this._engLightMeshes || []) {
@@ -3214,6 +3532,7 @@ export class FountainScene {
        // ─── Drive nozzles ──────────────────────────────────────────────────
     this.nozzles.forEach((nz, idx) => {
       const t = nz.config.type;
+      nz.config.motionOverride = I.fixtureMotion?.[nz.config.id] || null;
       let live = 0;
 
       if (this._perNozzle) {
@@ -3262,8 +3581,7 @@ export class FountainScene {
       }
 
       const floor = (IDLE[t] || 0.02) * breath * Math.max(0, 1.0 - live*5.0);
-      live = this._groupIntensityForNozzle(nz, live);
-      const finalI = live > 0.015 ? live : floor;
+      const finalI = this._nozzleOutputIntensity(nz, live, floor);
       nz.setIntensity(finalI);
       nz.update(delta, elapsed, this.wind, this._lightField.uGlobalLight.value);
 
@@ -3316,19 +3634,7 @@ export class FountainScene {
     if (this._cones) {
       // A beam is only visible where there is spray to scatter it.
       const activity = Math.max(I.pump || 0, I.valve || 0, (I.fog || 0) * 0.6);
-      let coneLights = this._engLights;
-      if (!coneLights?.length && lightI > 0.02 && this.uwLights?.length) {
-        // No engineering fixtures placed: synthesize beams at the default
-        // underwater ring so the stock preview still gets the signature look.
-        if (!this._defaultConeLights || this._defaultConeLights.length !== this.uwLights.length) {
-          this._defaultConeLights = this.uwLights.map(l => ({
-            x: l.position.x, z: l.position.z, color: l.color, intensity: 0, radius: 5,
-          }));
-        }
-        for (const c of this._defaultConeLights) c.intensity = lightI * 4.0;
-        coneLights = this._defaultConeLights;
-      }
-      this._cones.update(coneLights, elapsed, activity, this.camera);
+      this._cones.update(this._engLights, elapsed, activity, this.camera);
     }
 
     // ─── Lasers ────────────────────────────────────────────────────────
@@ -3346,7 +3652,7 @@ export class FountainScene {
       this.waterMat.uniforms.uIntensity.value = 0.4 + (I.pump||0)*0.6;
       this.waterMat.uniforms.uWind.value = Math.sqrt(this.wind.x**2 + this.wind.z**2);
       this.waterMat.uniforms.uLightColor.value.copy(this._lightField.uGlobalLight.value);
-      this.waterMat.uniforms.uLightIntensity.value = 0.25 + lightI*0.75;
+      this.waterMat.uniforms.uLightIntensity.value = individualLights ? 0.16 : 0.16 + lightI * 0.42;
       this.waterMat.uniforms.uCameraPos.value.copy(this.camera.position);
     }
 
@@ -3354,11 +3660,13 @@ export class FountainScene {
     const pulseI = lightI * breath;
     const lcol = this._lightField.uGlobalLight.value;
     this.uwLights.forEach((ul,i) => {
-      ul.intensity = 1.5 + pulseI*5.0 * (Math.sin(elapsed*1.3 + i*0.75)*0.28 + 0.72);
+      ul.intensity = individualLights ? 0.12
+        : 0.12 + pulseI * 1.5 * (Math.sin(elapsed*1.3 + i*0.75)*0.18 + 0.82);
       ul.color.lerp(lcol, 0.04);
     });
     if (this.centerLight) {
-      this.centerLight.intensity = 2.5 + pulseI*6.0 * (Math.sin(elapsed*0.85)*0.25 + 0.75);
+      this.centerLight.intensity = individualLights ? 0.16
+        : 0.16 + pulseI * 1.8 * (Math.sin(elapsed*0.85)*0.18 + 0.82);
       this.centerLight.color.lerp(lcol, 0.04);
     }
   }
@@ -3480,6 +3788,9 @@ export class FountainScene {
   _animate() {
     if (!this._initialized) return;
     this._rafId = requestAnimationFrame(() => this._animate());
+    // A baked render owns the simulation and the canvas; the live loop stands down
+    // so wall-clock time can never leak into the exported frames.
+    if (this._baking) { this.clock.getDelta(); return; }
     const delta = Math.min(this.clock.getDelta(), 0.05);
     const elapsed = this.clock.elapsedTime || 0;
     this._tickPerf(delta);
@@ -3490,20 +3801,27 @@ export class FountainScene {
     if (this.renderer.info.autoReset) this.renderer.info.autoReset = false;
     this.renderer.info.reset();
     this._update(delta, elapsed);
+    this._updateCamera(delta);
+    this._renderFrame();
+  }
 
+  /** Place the camera for this frame. Shared by the live loop and the baked render. */
+  _updateCamera(delta) {
     const cam = this.camera;
     // In editor mode the editor owns the camera. Re-deriving it from orbitAngle every
     // frame here would undo every pan and orbit the designer just made.
     if (this._editorMode) {
       this._editor?.update?.();
-      this._renderFrame();
       return;
     }
     const cinematic = [CAMERA_MODES.AERIAL, CAMERA_MODES.FLYTHROUGH, CAMERA_MODES.DRAMATIC, CAMERA_MODES.AUDIENCE];
     if (cinematic.includes(this.cameraMode)) {
       this._pathTime = (this._pathTime + delta*0.08) % 1;
       const cp = this._getCameraPath(this._pathTime, this.cameraMode);
-      if (cp) { cam.position.lerp(cp.pos, 0.025); cam.lookAt(cp.look); }
+      // Frame-rate independent easing (0.025 per 60 Hz frame), so a 24 fps bake moves
+      // the camera exactly like the 60 Hz preview does.
+      const k = 1 - Math.pow(1 - 0.025, Math.max(0, delta) * 60);
+      if (cp) { cam.position.lerp(cp.pos, k); cam.lookAt(cp.look); }
     } else if (this.cameraMode === CAMERA_MODES.ORBIT) {
       if (this.orbitAuto) this.orbitAngle += delta*0.055;
       cam.position.set(Math.cos(this.orbitAngle)*this.orbitRadius, this.orbitHeight, Math.sin(this.orbitAngle)*this.orbitRadius);
@@ -3513,8 +3831,6 @@ export class FountainScene {
     } else if (this.cameraMode === CAMERA_MODES.FRONT) {
       cam.position.set(0, 5, 17); cam.lookAt(0, 4, 0);
     }
-
-    this._renderFrame();
   }
 
   _setupEvents() {
@@ -3611,9 +3927,118 @@ export class FountainScene {
       URL.revokeObjectURL(url);
     }, 500);
   }
+  // ─── Baked (offline) video render - AF-3D-VID-001 ─────────────────────────
+  /**
+   * Render the show frame-by-frame on a VIRTUAL clock and hand each frame to an
+   * encoder with an exact timestamp. Unlike startRecording() (which captures the
+   * live canvas on wall-clock time and drops/duplicates frames whenever a frame
+   * renders slower than real time), the output here is perfectly smooth at any
+   * resolution: a 4K frame may take 200 ms to draw, it still lasts exactly 1/fps.
+   *
+   * @param {object} o
+   * @param {object} o.plan           planBake() result (video/bakedTimeline.js)
+   * @param {(t:number)=>object|null} o.sampleSignals  show state at show-time t
+   * @param {{addFrame:(ts:number,dur:number)=>Promise<void>}} o.encoder
+   * @param {(p:{frame:number,frames:number,phase:string})=>void} [o.onProgress]
+   * @param {{aborted:boolean}} [o.abort]
+   */
+  async bakeVideo({ plan, sampleSignals, encoder, onProgress, abort }) {
+    if (!this._initialized) throw new Error("Scene not initialised");
+    if (this._baking) throw new Error("A video render is already running");
+    if (this._xrSession) throw new Error("Exit VR before rendering a video");
+    const saved = {
+      w: this.canvas.clientWidth || this.canvas.width,
+      h: this.canvas.clientHeight || this.canvas.height,
+      pr: this._pr || 1,
+      overlays: [this._reviewGroup, this._editor?.root].filter(Boolean).map(object => [object, object.visible]),
+      grain: this._gradePass?.uniforms?.uGrain?.value,
+      reflectionInterval: this._reflection?.interval,
+    };
+    const setPR = (pr) => {
+      this._pr = pr;
+      this.renderer.setPixelRatio(pr);
+      this.composer?.setPixelRatio?.(pr);
+    };
+    const apply = (t) => {
+      const s = sampleSignals ? sampleSignals(t) : null;
+      if (!s) return;
+      this._bakeSignalWrite = true;
+      try { this.setSignals(s); } finally { this._bakeSignalWrite = false; }
+    };
+    const yieldUI = () => new Promise((r) => setTimeout(r, 0));
+    const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+    this._baking = true;
+    this._bakeElapsed = this.clock.elapsedTime || 0;
+    try {
+      // Presentation exports must not contain selection gizmos or safety guides.
+      saved.overlays.forEach(([object]) => { object.visible = false; });
+      if (this._gradePass) this._gradePass.uniforms.uGrain.value = 0;
+      if (this._reflection) this._reflection.interval = 1;
+      // Drawing buffer == exact export size at pixel ratio 1, so the encoder gets
+      // true 1080p/4K pixels rather than an upscaled preview.
+      setPR(1);
+      this._bakeResizing = true;
+      try { this.resize(plan.width, plan.height); } finally { this._bakeResizing = false; }
+
+      // 1. Warm-up: the particle system needs a few seconds before the jets are in
+      //    the air. Simulate (no rendering) the seconds leading into the start time.
+      onProgress?.({ frame: 0, frames: plan.frames, phase: "warmup" });
+      for (let k = 0; k < plan.prerollSteps; k++) {
+        if (abort?.aborted) throw new DOMException("Render cancelled", "AbortError");
+        apply(VB_prerollShowTime(plan, k));
+        this._bakeElapsed += plan.prerollDt;
+        this._update(plan.prerollDt, this._bakeElapsed);
+        this._updateCamera(plan.prerollDt);
+        if (k % 30 === 29) await yieldUI();
+      }
+
+      // 2. Frames: fixed physics sub-steps per frame, then one render + encode.
+      const t0 = now();
+      for (let i = 0; i < plan.frames; i++) {
+        if (abort?.aborted) throw new DOMException("Render cancelled", "AbortError");
+        const frameStart = VB_frameShowTime(plan, i) - plan.frameDuration;
+        for (let s = 1; s <= plan.substeps; s++) {
+          apply(Math.max(0, frameStart + s * plan.substepDt));
+          this._bakeElapsed += plan.substepDt;
+          this._update(plan.substepDt, this._bakeElapsed);
+        }
+        this._updateCamera(plan.frameDuration);
+        if (this.renderer.info.autoReset) this.renderer.info.autoReset = false;
+        this.renderer.info.reset();
+        this._renderFrame();
+        // Awaiting respects encoder back-pressure (bounded memory at 4K).
+        await encoder.addFrame(VB_frameTimestamp(plan, i), plan.frameDuration);
+        onProgress?.({ frame: i + 1, frames: plan.frames, phase: "render", elapsedMs: now() - t0 });
+        if (i % 2 === 1) await yieldUI();
+      }
+    } finally {
+      this._baking = false;
+      saved.overlays.forEach(([object, visible]) => { object.visible = visible; });
+      if (this._gradePass && saved.grain !== undefined) this._gradePass.uniforms.uGrain.value = saved.grain;
+      if (this._reflection && saved.reflectionInterval !== undefined) this._reflection.interval = saved.reflectionInterval;
+      setPR(saved.pr);
+      const vp = this._bakeViewport || saved; this._bakeViewport = null;
+      try { this.resize(vp.w, vp.h); } catch (e) { /* canvas gone */ }
+      this.clock.getDelta();   // discard the wall time spent baking
+    }
+  }
+  isBaking() { return !!this._baking; }
+
   /** Expose the last/target export config (for the UI). */
   getExportConfig(opts = {}) { return VE_buildExportConfig({ resolution: opts.resolution || "1080p", fps: opts.fps || 60, withAudio: !!opts.withAudio }); }
+  _nozzleOutputIntensity(nozzle, fallback, floor) {
+    const live = this._groupIntensityForNozzle(nozzle, fallback);
+    // A simulated OFF must also suppress the renderer's decorative idle water.
+    return this._signals?.fixtureIntensities ? live : live > 0.015 ? live : floor;
+  }
     _groupIntensityForNozzle(nozzle, fallback = 0) {
+    // Site simulation is authoritative by fixture ID, including explicit zeroes.
+    // This prevents group averages or a decorative pattern activating other jets.
+    const fixtureIntensities = this._signals?.fixtureIntensities;
+    if (fixtureIntensities) {
+      return Math.max(0, Math.min(1, Number(fixtureIntensities[nozzle?.config?.id]) || 0));
+    }
     const groups = this._signals?.groups || {};
 
     // New system: engineering/runtime group id controls the nozzle
@@ -3697,7 +4122,7 @@ export class FountainScene {
     // Runtime RGB override:
     // When the timeline/manual pattern sends RGB color, all engineering RGB fixtures
     // should adopt that color visually instead of staying at their default library color.
-    if (lightIntensity > 0.01 && this._engLights?.length) {
+    if (lightIntensity > 0.01 && !this._signals?.fixtureLightStates && this._engLights?.length) {
       for (const L of this._engLights) {
         if (L?.color) L.color.copy(color);
         L.intensity = Math.max(L.intensity || 0, lightIntensity * 6.0);
@@ -3719,6 +4144,9 @@ export class FountainScene {
   }  
   setSignals(s) {
     if (!s) return;
+    // During a baked render the show is sampled at exact virtual times by the bake
+    // itself; live React updates (wall-clock playhead) must not interleave.
+    if (this._baking && !this._bakeSignalWrite) return;
 
     this._signals = Object.assign(
       this._signals || {
@@ -3740,7 +4168,10 @@ export class FountainScene {
     this._patternName = null;
     this._perNozzle = a;
   }
-  setEnvironment(env){ this.environment=env; if(this._initialized) this._applyEnvironment(); }
+  setEnvironment(env){
+    this.environment=env;
+    if(this._initialized) { this._applyEnvironment(); this._setWaterPalette(); this._buildVenueElements(); }
+  }
   setCameraMode(m)  { this.cameraMode=m; this._pathTime=0; if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true; }
   setReviewOverlays(visible) {
     this.reviewOverlays = visible !== false;
@@ -3750,8 +4181,8 @@ export class FountainScene {
     const r = this._poolType === "circular"
       ? (this._poolRadius || 6)
       : Math.max((this._poolW || 12) / 2, (this._poolL || 8) / 2);
-    this.orbitRadius = Math.max(8, Math.min(32, r * 2.45));
-    this.orbitHeight = Math.max(5.2, Math.min(18, r * 0.95));
+    this.orbitRadius = Math.max(12, Math.min(38, r * 3.1));
+    this.orbitHeight = Math.max(6, Math.min(20, r * 1.3));
     this.orbitAngle = -0.72;
     this.setCameraMode(CAMERA_MODES.ORBIT);
     this.orbitAuto = false;
@@ -3828,16 +4259,36 @@ export class FountainScene {
     }
   }
   setWind(x,z)      { this.wind={x:x||0, z:z||0}; }
+  setWaterSimulation({ response, damping, boundaryDamping } = {}) {
+    const nextResponse = Number(response);
+    if (Number.isFinite(nextResponse)) {
+      this._waveResponse = Math.max(0, Math.min(2, nextResponse));
+    } else if (!Number.isFinite(this._waveResponse)) {
+      this._waveResponse = 1;
+    }
+    if (!this._heightField) return;
+    if (Number.isFinite(damping)) this._heightField.damping = Math.max(0.9, Math.min(0.9999, damping));
+    if (Number.isFinite(boundaryDamping)) {
+      this._heightField.boundaryDamping = Math.max(0, Math.min(1, boundaryDamping));
+    }
+  }
   setPoolGeometry(geom) {
+    const dimensionsChanged = JSON.stringify(this.poolGeometry) !== JSON.stringify(geom);
     this.poolGeometry = geom;
     if (this._initialized) {
       this._buildPool();
+      this._buildVenueElements();
       this._buildWaterSurface();
       this._buildUnderwaterLights();
       this._buildLasers();
       this._buildNozzles();
       this._buildReviewOverlays();
+      if (dimensionsChanged) this.fitCameraToDesign();
     }
+  }
+  setSiteSurfaces(surfaces) {
+    this._siteSurfaces = Array.isArray(surfaces) ? surfaces : [];
+    if (this._initialized) this._buildSiteSurfaces();
   }
   addNozzle(cfg) {
     if (!cfg.id) cfg.id = 'user-'+Date.now();
@@ -3857,6 +4308,9 @@ export class FountainScene {
 
   resize(w,h) {
     if (!this.renderer) return;
+    // Layout observers keep firing while a bake owns the drawing buffer; remember the
+    // latest viewport size and apply it when the bake restores the preview.
+    if (this._baking && !this._bakeResizing) { this._bakeViewport = { w, h }; return; }
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -3905,6 +4359,12 @@ export class FountainScene {
     this._cones = null;
     this._sky?.dispose?.();
     this._sky = null;
+    if (this._venueGroup) { disposeVenue(this._venueGroup); this._venueGroup = null; }
+    this._disposeSiteSurfaces();
+    this._modelLayer?.dispose?.();
+    this._modelLayer = null;
+    this._fixtureInstances?.dispose?.();
+    this._fixtureInstances = null;
     if (this._particleTex) {
       Object.values(this._particleTex).forEach(t => t?.dispose?.());
       this._particleTex = null;
@@ -3915,6 +4375,9 @@ export class FountainScene {
     }
     this._wetTex?.dispose?.();
     this._heatTex?.dispose?.();
+    this._heightTex?.dispose?.();
+    this._heightTex = null;
+    this._heightField = null;
     this._wetMat?.dispose?.();
     this._wetOverlay?.geometry?.dispose?.();
     this._envRT?.dispose?.();

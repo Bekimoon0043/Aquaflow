@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useShowStore } from "../store/showStore";
 import useEngineeringStore from "../store/engineeringStore";
+import useProjectStore from "../store/projectStore";
 import { createDefaultEngineeringProject } from "../engineering/engineeringProject";
 import {
   downloadShowFile,
@@ -40,6 +41,9 @@ export default function ShowBrowser({ mode, onClose }) {
   const backendAvailable = connectionState === "connected";
   const engineeringRevision = useEngineeringStore((s) => s.lastUpdated);
   const loadEngineeringProject = useEngineeringStore((s) => s.loadProject);
+  const loadProjectDocument = useProjectStore((s) => s.loadProjectDocument);
+  const resetProjectDocument = useProjectStore((s) => s.resetProjectDocument);
+  const markProjectSaved = useProjectStore((s) => s.markSaved);
   const currentEngineering = useMemo(
     () => useEngineeringStore.getState().getProjectPayload(),
     [engineeringRevision]
@@ -115,12 +119,14 @@ export default function ShowBrowser({ mode, onClose }) {
         const saved = await res.json();
         saveToRecent({ name: showName, bpm, duration, show_id: saved.show_id });
         markClean();
+        markProjectSaved(showName);
         addServerLog({ level: "info", msg: `Show saved to backend: ${saved.filename}` });
         await refreshBackendShows();
       } else {
         downloadShowFile(saveState);
         saveToRecent({ name: showName, bpm, duration });
         markClean();
+        markProjectSaved(showName);
         addServerLog({ level: "info", msg: `Show downloaded locally: ${showName}.aqua` });
       }
 
@@ -152,6 +158,7 @@ export default function ShowBrowser({ mode, onClose }) {
       const { state, meta } = await readShowFile(file);
       loadShow(state);
       loadEngineeringProject(state.engineeringProject);
+      loadProjectDocument(state.projectDocument, state.currentShow?.name);
       saveToRecent({ name: meta.name, savedAt: meta.savedAt });
       addServerLog({ level: "info", msg: `Opened local file: ${meta.name}` });
       onClose();
@@ -169,6 +176,7 @@ export default function ShowBrowser({ mode, onClose }) {
       const state = deserializeShow(data);
       loadShow(state);
       loadEngineeringProject(state.engineeringProject);
+      loadProjectDocument(state.projectDocument, state.currentShow?.name);
       saveToRecent({
         name: data.show?.name || showId,
         savedAt: data.savedAt,
@@ -221,6 +229,7 @@ export default function ShowBrowser({ mode, onClose }) {
       snapToGrid: true,
     });
     loadEngineeringProject(createDefaultEngineeringProject());
+    resetProjectDocument(showName || "New Show");
     addServerLog({ level: "info", msg: `New show created: ${showName || "New Show"}` });
     onClose();
   };
@@ -390,6 +399,10 @@ export default function ShowBrowser({ mode, onClose }) {
                       onClick={() => {
                         loadShow(autoSave.state);
                         loadEngineeringProject(autoSave.state.engineeringProject);
+                        loadProjectDocument(
+                          autoSave.state.projectDocument,
+                          autoSave.state.currentShow?.name,
+                        );
                         addServerLog({ level: "info", msg: "Auto-saved session restored" });
                         onClose();
                       }}

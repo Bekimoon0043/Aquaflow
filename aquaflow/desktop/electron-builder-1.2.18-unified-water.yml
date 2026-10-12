@@ -1,0 +1,6 @@
+extends: ./electron-builder.yml
+
+# Unified project + Water Realism V2 desktop update. The base packaging manifest
+# pins the pre-1.2.16 Siemens engine already proven with TIA V17/PLCSIM.
+directories:
+  output: dist-1.2.18-unified-water

@@ -1,0 +1,70 @@
+appId: com.luxurycon.aquaflow
+productName: AquaFlow Studio
+copyright: Copyright © 2026 LuxuryCon
+
+# UI-only maintenance build. It intentionally packages the proven pre-1.2.16
+# PLC engine restored for the working TIA V17 / NetToPLCsim workflow.
+directories:
+  output: dist-1.2.15-ui-state-hotfix
+  buildResources: build
+
+files:
+  - main.js
+  - preload.js
+  - launcher.js
+  - app-config.js
+  - menu.js
+  - updater.js
+  - ui-server.js
+  - cad-native.js
+  - splash.html
+  - "assets/**/*"
+  - "web/**/*"
+  - package.json
+  - "!**/*.map"
+
+asarUnpack:
+  - "web/**"
+
+extraResources:
+  - from: resources/engine-before-1.2.16
+    to: engine
+    filter: ["**/*"]
+  - from: resources/app-config.json
+    to: app-config.json
+
+win:
+  target:
+    - nsis
+  icon: build/AquaFlow.ico
+
+fileAssociations:
+  - ext: aquashow
+    name: AquaFlow Show
+    description: AquaFlow fountain show
+    role: Editor
+    icon: build/aquashow.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  menuCategory: LuxuryCon
+  shortcutName: AquaFlow Studio
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  installerIcon: build/AquaFlow.ico
+  uninstallerIcon: build/AquaFlow.ico
+  installerHeaderIcon: build/AquaFlow.ico
+  installerHeader: build/installerHeader.bmp
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/installerSidebar.bmp
+
+artifactName: AquaFlowSetup-${version}.${ext}
+
+publish:
+  - provider: generic
+    url: https://luxuryconworld.com/updates/aquaflow/
+    channel: latest

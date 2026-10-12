@@ -70,6 +70,7 @@ export default function FountainControlPanel() {
   const [liveChannels, setLiveChannels] = useState(new Set());
   const [seqRunning, setSeqRunning] = useState(false);
   const [siteDemo, setSiteDemo] = useState(null);
+  const [pumpTest, setPumpTest] = useState(null);
   const [manualPattern, setManualPattern] = useState(null);
 
   const [manualIp, setManualIp] = useState("192.168.5.2");
@@ -85,17 +86,19 @@ export default function FountainControlPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, m, k, d, p] = await Promise.all([
+      const [s, m, k, d, pt, p] = await Promise.all([
         apiGet("/ican/status"),
         apiGet("/ican/map/registry").catch(() => ({ devices: [] })),
         apiGet("/safety/status").catch(() => null),
         apiGet("/ican/demo/status").catch(() => null),
+        apiGet("/ican/pump-test/status").catch(() => null),
         apiGet("/ican/manual-pattern/status").catch(() => null),
       ]);
       setStatus(s);
       setChannels(m.devices || []);
       setSafety(k);
       setSiteDemo(d);
+      setPumpTest(pt);
       setManualPattern(p);
     } catch (e) {
       setStatus(null);
@@ -107,9 +110,9 @@ export default function FountainControlPanel() {
   // Poll while connected so a dropped gateway is visible rather than assumed.
   useEffect(() => {
     if (!status?.state || status.state === "idle") return;
-    const t = setInterval(refresh, siteDemo?.running || manualPattern?.running ? 1000 : 4000);
+    const t = setInterval(refresh, siteDemo?.running || pumpTest?.running || manualPattern?.running ? 1000 : 4000);
     return () => clearInterval(t);
-  }, [status?.state, siteDemo?.running, manualPattern?.running, refresh]);
+  }, [status?.state, siteDemo?.running, pumpTest?.running, manualPattern?.running, refresh]);
 
   const run = useCallback(async (name, fn, okMsg) => {
     setBusy(name);
@@ -270,6 +273,21 @@ export default function FountainControlPanel() {
     return r;
   }, "captured fountain demo stopped — all groups off");
 
+  const startPumpTest = () => run("pump observation test", async () => {
+    abortSeq.current = true;
+    setSeqRunning(false);
+    const r = await apiPost("/ican/pump-test/start", {});
+    setPumpTest(r);
+    return r;
+  }, "four-minute water-function observation test started");
+
+  const stopPumpTest = () => run("stop pump test", async () => {
+    const r = await apiPost("/ican/pump-test/stop", {});
+    setPumpTest(r);
+    setLiveChannels(new Set());
+    return r;
+  }, "water-function test stopped — all groups off");
+
   /** The simplest deterministic proof: each mapped channel on, then off, in order. */
   const runSequence = async () => {
     abortSeq.current = false;
@@ -291,6 +309,10 @@ export default function FountainControlPanel() {
   const demoRemaining = Math.max(0, Math.ceil(siteDemo?.remaining_s ?? 60));
   const demoProgress = Math.max(0, Math.min(100,
     ((siteDemo?.elapsed_s || 0) / Math.max(1, siteDemo?.duration_s || 60)) * 100));
+  const pumpRemaining = Math.max(0, Math.ceil(pumpTest?.remaining_s ?? 240));
+  const pumpClock = `${Math.floor(pumpRemaining / 60)}:${String(pumpRemaining % 60).padStart(2, "0")}`;
+  const pumpProgress = Math.max(0, Math.min(100,
+    ((pumpTest?.elapsed_s || 0) / Math.max(1, pumpTest?.duration_s || 240)) * 100));
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: C.panel, padding: 14, fontFamily: MONO }}>
@@ -498,7 +520,7 @@ export default function FountainControlPanel() {
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <button style={btn(!!siteDemo?.running, C.ok)}
-            disabled={!!busy || seqRunning || !!siteDemo?.running || !!manualPattern?.running || !connected || !armed || !permit}
+            disabled={!!busy || seqRunning || !!siteDemo?.running || !!pumpTest?.running || !!manualPattern?.running || !connected || !armed || !permit}
             onClick={startSiteDemo}>
             {siteDemo?.running ? `Running 0:${String(demoRemaining).padStart(2, "0")}` : "START 1-MINUTE DEMO"}
           </button>
@@ -524,12 +546,58 @@ export default function FountainControlPanel() {
         )}
       </Step>
 
-      <Step n={6} title="Build and run manual site patterns" done={manualPattern?.outcome === "completed"}>
+      <Step n={6} title="Run the four-minute water-pump observation test" done={pumpTest?.outcome === "completed"}>
+        <div style={{ fontSize: 10, color: C.text, lineHeight: 1.5, marginBottom: 8 }}>
+          Starts with a 1:00 walk delay, then uses separate 30-second windows for the
+          recovered Running Fountain, Foam/front and Peacock/rear functions, with OFF
+          windows between them. The four middle motors share one legacy command. The
+          fire pump and fire valves stay off for the entire test.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "54px 1fr", gap: "2px 8px", marginBottom: 8, fontSize: 9 }}>
+          {(pumpTest?.schedule || [
+            { start_s: 0, end_s: 60, label: "Walk delay / all off" },
+            { start_s: 60, end_s: 90, label: "Running Fountain / four middle motors" },
+            { start_s: 90, end_s: 120, label: "All off" },
+            { start_s: 120, end_s: 150, label: "Foam / front" },
+            { start_s: 150, end_s: 180, label: "All off" },
+            { start_s: 180, end_s: 210, label: "Peacock / rear" },
+            { start_s: 210, end_s: 240, label: "Final all off" },
+          ]).map(item => (
+            <div key={`${item.start_s}-${item.end_s}`} style={{ display: "contents" }}>
+              <span style={{ color: C.accent }}>{Math.floor(item.start_s / 60)}:{String(item.start_s % 60).padStart(2, "0")}</span>
+              <span style={{ color: C.text }}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <button style={btn(!!pumpTest?.running, C.ok)}
+            disabled={!!busy || seqRunning || !!siteDemo?.running || !!pumpTest?.running || !!manualPattern?.running || !connected || !armed || !permit}
+            onClick={startPumpTest}>
+            {pumpTest?.running ? `Running ${pumpClock}` : "START 4-MINUTE PUMP TEST"}
+          </button>
+          <button style={btn(false, C.danger)} disabled={!!busy || !pumpTest?.running}
+            onClick={stopPumpTest}>
+            STOP PUMP TEST
+          </button>
+          <span style={{ color: pumpTest?.running ? C.ok : C.dim, fontSize: 10 }}>
+            {pumpTest?.running
+              ? `${pumpTest.frames_sent || 0}/${pumpTest.total_events || 0} commands sent`
+              : pumpTest?.outcome && pumpTest.outcome !== "idle"
+                ? `last result: ${pumpTest.outcome}${pumpTest.error ? ` — ${pumpTest.error}` : ""}`
+                : "ready"}
+          </span>
+        </div>
+        <div style={{ height: 4, background: C.line, borderRadius: 2, marginTop: 8, overflow: "hidden" }}>
+          <div style={{ width: `${pumpProgress}%`, height: "100%", background: pumpTest?.running ? C.ok : C.accent }} />
+        </div>
+      </Step>
+
+      <Step n={7} title="Build and run manual site patterns" done={manualPattern?.outcome === "completed"}>
         <ICANManualPatternEditor
           connected={connected}
           armed={armed}
           permit={permit}
-          siteDemoRunning={!!siteDemo?.running}
+          siteDemoRunning={!!siteDemo?.running || !!pumpTest?.running}
           channelTestRunning={seqRunning}
           status={manualPattern}
           setStatus={setManualPattern}
@@ -538,9 +606,9 @@ export default function FountainControlPanel() {
         />
       </Step>
 
-      <Step n={7} title="Manual channel test" done={false}>
+      <Step n={8} title="Manual channel test" done={false}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-          <button style={btn(seqRunning, C.ok)} disabled={!armed || !permit || !!busy || seqRunning || !!siteDemo?.running || !!manualPattern?.running || !hasChannels}
+          <button style={btn(seqRunning, C.ok)} disabled={!armed || !permit || !!busy || seqRunning || !!siteDemo?.running || !!pumpTest?.running || !!manualPattern?.running || !hasChannels}
             onClick={runSequence}>
             {seqRunning ? "Running…" : "Run test sequence"}
           </button>
@@ -551,7 +619,7 @@ export default function FountainControlPanel() {
             const on = liveChannels.has(d.device_id);
             return (
               <button key={d.device_id} style={btn(on, on ? C.ok : C.accent, !armed)}
-                disabled={!armed || !permit || !!busy || !!siteDemo?.running || !!manualPattern?.running}
+                disabled={!armed || !permit || !!busy || !!siteDemo?.running || !!pumpTest?.running || !!manualPattern?.running}
                 onClick={() => setChannel(d, !on)}>
                 {d.label || d.device_id} {on ? "ON" : "OFF"}
               </button>

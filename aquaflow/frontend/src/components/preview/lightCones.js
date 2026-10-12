@@ -170,16 +170,16 @@ export class LightConeSet {
       const L = list[i];
       const fieldI = L ? Math.max(0, Number(L.intensity || 0)) : 0;
       // A beam needs medium to scatter in: dim over still water, full through spray.
-      const beamI = fieldI * (0.25 + 0.75 * act) * 0.095;
+      const beamI = fieldI * (0.20 + 0.80 * act) * 0.035;
       if (!L || beamI < 0.004) {
         cone.visible = false;
         continue;
       }
       cone.visible = true;
       const radius = Math.max(1, Number(L.radius || 6));
-      const height = Math.min(9, 2.2 + radius * 0.75);
+      const height = Math.min(6.5, 2.0 + radius * 0.55);
       cone.position.set(L.x || 0, 0.04, L.z || 0);
-      cone.scale.set(radius * 0.22, height, radius * 0.22);
+      cone.scale.set(radius * 0.16, height, radius * 0.16);
       const u = cone.material.uniforms;
       u.uColor.value.copy(L.color);
       u.uIntensity.value = Math.min(0.9, beamI);

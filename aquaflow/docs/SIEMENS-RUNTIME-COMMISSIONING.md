@@ -131,12 +131,15 @@ Perform these with qualified staff and outputs secured:
 | Wrong DB/IP | Clear failure, zero writes to an unverified DB |
 | Incompatible signature/version | Verify rejects |
 | PLC STOP | Heartbeat stops; AquaFlow disarms |
+| PLC heartbeat stops after Verify but before Arm | Arm rejects before writing any command frame |
+| PLC begins reporting RUN after Verify but before Arm | Arm rejects before writing any command frame; find the other controller |
 | Remove Ethernet cable | PLC watchdog makes outputs safe; AquaFlow reports unconfirmed Stop |
 | Restore cable | Reconnect verifies only; no automatic restart |
 | Restart AquaFlow | Verify/Arm/Start required |
 | Restart PLC | No automatic show resume |
 | Remove local permit | PLC forces safe state and AquaFlow stops |
 | Missing acknowledgement | No success is claimed and no next nonzero frame is sent |
+| OFF acknowledged but PLC still reports RUN | Stop remains unconfirmed; AquaFlow invalidates verification and requires investigation before rearming |
 
 ## Current test evidence
 
@@ -149,7 +152,7 @@ Perform these with qualified staff and outputs secured:
 | RGB encoding/generated PLC mapping | generated source/unit tests | No | Passed |
 | Heartbeat, missing ack and permit loss | FakeS7Server | No | Passed |
 | Reconnect without resume | FakeS7Server | No | Passed |
-| PLCSIM | Not available/used in this workspace | No | **UNVERIFIED** |
+| TIA V17 standard PLCSIM through NetToPLCsim | Operator test on 2026-09-30 | Simulated CPU, real TCP/S7 connection | Operator reports Verify succeeded using the matching site package. AquaFlow independently read DB100 magic `AF03`, contract v2, signature `0x6A3198F3`, and a moving PLC heartbeat. Pump/valve/light commands and disconnect recovery are **not recorded as passed**. |
 | Physical S7-1200 | Not connected for this work | No | **UNVERIFIED** |
 
-Do not change the last two rows to Passed until the result is captured with the actual TIA version, CPU order number, firmware, project signature and observed I/O behavior.
+The PLCSIM result validates the contract read path and site identity check, not physical output behavior. Before a production release, record an attended run on the exact CPU/firmware and I/O hardware, including physical feedback, stop acknowledgement, PLC watchdog on cable loss, and controlled recovery. Record a second operator's observation for every pump, valve and light mapping.

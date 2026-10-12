@@ -37,6 +37,11 @@ class PatternRequest(BaseModel):
     pattern: str = "cascade"      # cascade | burst | wave | pulse | random
 
 
+class OptimizeRequest(BaseModel):
+    tracks: list
+    bpm: float = 128.0
+
+
 @router.post("/generate")
 async def generate_show(req: GenerateRequest):
     """
@@ -185,8 +190,9 @@ async def generate_pattern(req: PatternRequest):
 
 
 @router.post("/optimize-energy")
-async def optimize_energy(tracks: list, bpm: float = 128.0):
+async def optimize_energy(req: OptimizeRequest):
     """Optimize power consumption while maintaining visual quality"""
+    tracks, bpm = req.tracks, req.bpm
     optimizations = []
     total_savings = 0
 

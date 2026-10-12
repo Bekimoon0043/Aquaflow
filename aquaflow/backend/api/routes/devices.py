@@ -121,14 +121,20 @@ async def write_modbus(cmd: ModbusCommand):
 
 @router.post("/{device_id}/test")
 async def test_device(device_id: str):
-    """Run a test pattern on a device"""
-    return {"device_id": device_id, "status": "test_started"}
+    """Reject legacy tests that have no verified protocol route."""
+    result = await device_manager.send_command(device_id, {"command": "test", "params": {}})
+    if not result.get("success"):
+        raise HTTPException(409, result.get("error", "Device test was not started"))
+    return {"device_id": device_id, "status": "test_started", "result": result}
 
 
 @router.post("/{device_id}/identify")
 async def identify_device(device_id: str):
-    """Flash/blink a device for identification"""
-    return {"device_id": device_id, "status": "identifying"}
+    """Reject legacy identify actions that have no verified protocol route."""
+    result = await device_manager.send_command(device_id, {"command": "identify", "params": {}})
+    if not result.get("success"):
+        raise HTTPException(409, result.get("error", "Device identify was not started"))
+    return {"device_id": device_id, "status": "identifying", "result": result}
 
 @router.post("/{device_id}/command")
 async def send_device_command(device_id: str, cmd: DeviceCommand):
@@ -141,12 +147,17 @@ async def send_device_command(device_id: str, cmd: DeviceCommand):
 
         result = await device_manager.send_command(device_id, command_payload)
 
+        if not result.get("success"):
+            raise HTTPException(409, result.get("error", "Device command was not sent"))
+
         return {
             "device_id": device_id,
             "status": "command_sent",
             "result": result,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"Device command failed: {str(e)}")
 

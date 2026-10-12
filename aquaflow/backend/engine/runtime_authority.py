@@ -36,11 +36,12 @@ class RuntimeAuthority:
         self._protocol_bus = None
         self._hardware_output = None
         self._device_manager = None
+        self._siemens_sites = None
         self._last_trip: dict | None = None
         self._last_recovery: dict | None = None
 
     def register(self, *, safety=None, show_engine=None, protocol_bus=None,
-                 hardware_output=None, device_manager=None) -> "RuntimeAuthority":
+                 hardware_output=None, device_manager=None, siemens_sites=None) -> "RuntimeAuthority":
         """Register output actors. Idempotent; only non-None args overwrite."""
         if safety is not None:
             self._safety = safety
@@ -52,6 +53,8 @@ class RuntimeAuthority:
             self._hardware_output = hardware_output
         if device_manager is not None:
             self._device_manager = device_manager
+        if siemens_sites is not None:
+            self._siemens_sites = siemens_sites
         return self
 
     async def _invoke(self, results: dict, name: str, target, method: str, *args) -> None:
@@ -87,6 +90,9 @@ class RuntimeAuthority:
         # 5. best-effort device-manager safe stop (no-op if it exposes no E-stop —
         #    this is what previously crashed the WS handler with AttributeError)
         await self._invoke(results, "device_manager", self._device_manager, "emergency_stop")
+        # Preserve existing actors' stop latency if the new PLC is unreachable.
+        if self._siemens_sites is not None:
+            await self._invoke(results, "siemens_sites", self._siemens_sites, "emergency_stop")
         trip = {"kind": "emergency_stop", "source": source, "at": time.time(), "results": results}
         self._last_trip = trip
         logger.critical("RuntimeAuthority EMERGENCY STOP by %s → %s", source, results)
@@ -98,6 +104,8 @@ class RuntimeAuthority:
         results: dict = {}
         await self._invoke(results, "protocol_bus", self._protocol_bus, "blackout")
         await self._invoke(results, "hardware_output", self._hardware_output, "blackout_all")
+        if self._siemens_sites is not None:
+            await self._invoke(results, "siemens_sites", self._siemens_sites, "blackout")
         trip = {"kind": "blackout", "source": source, "at": time.time(), "results": results}
         self._last_trip = trip
         return trip

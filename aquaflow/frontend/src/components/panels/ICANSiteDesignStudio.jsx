@@ -2,6 +2,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost, apiUrl } from "../../utils/apiClient";
 import ICANManualPatternEditor from "./ICANManualPatternEditor";
+import useEngineeringStore from "../../store/engineeringStore";
+import { useICANPreviewStore } from "../../store/icanPreviewStore";
+import {
+  createICANSiteEngineeringProject,
+  ICAN_SITE_LAYOUT_SUMMARY,
+} from "../../data/icanSiteEngineeringProject";
 
 const C = { line:"#173044", text:"#9bb0c3", bright:"#d8e7f4", accent:"#00aaff", ok:"#37d67a", warn:"#ffb020", danger:"#ff5c6c", bg:"#010409" };
 const input = { background:C.bg, border:`1px solid ${C.line}`, borderRadius:3, color:C.bright, padding:"6px 8px", fontSize:10, fontFamily:"monospace" };
@@ -30,7 +36,7 @@ export default function ICANSiteDesignStudio() {
   const [style, setStyle] = useState("");
   const [duration, setDuration] = useState(60);
   const [bpm, setBpm] = useState(120);
-  const [audioFile, setAudioFile] = useState(null);
+  const [audioFile, setAudioFile] = useState(() => useICANPreviewStore.getState().audioFile);
   const [job, setJob] = useState(null);
   const [busy, setBusy] = useState("");
   const [messages, setMessages] = useState([]);
@@ -133,12 +139,28 @@ export default function ICANSiteDesignStudio() {
   const permit = !!safety?.permit;
   const result = job?.result;
 
+  const openSiteDesign = panel => {
+    const engineering = useEngineeringStore.getState();
+    if (!engineering.fixtures.some(fixture => fixture.engineering?.siteFunction === "running-fountain")) {
+      engineering.loadProject(createICANSiteEngineeringProject());
+      say(`Loaded the ${ICAN_SITE_LAYOUT_SUMMARY.totalWaterNozzles}-outlet site model`, "ok");
+    }
+    window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail:{ panel } }));
+  };
+
   return <div style={{ padding:10, overflowY:"auto", height:"100%", color:C.text, fontFamily:"monospace" }}>
     <div style={{ padding:9, border:`1px solid ${C.line}`, background:"rgba(0,170,255,.035)", marginBottom:9 }}>
       <div style={{ color:C.bright, fontSize:12, marginBottom:5 }}>Real Fountain Design Studio</div>
       <div style={{ fontSize:9, lineHeight:1.55 }}>
-        Designs target the recovered 64-valve surface. Group 2 frequency control and Group 25 fire/rear control are locked.
-        Group 17 can only use the exact support state that already ran the fountain. Hardware Run still requires the three Fountain Control safety gates.
+        The engineering model contains 76 running jets, 16 foam outlets and 8 peacock outlets. Hardware pattern output remains limited to the first 64 capture-mapped running valves;
+        running valves 65-76 and peacock frequency setpoints remain commissioning-locked. Hardware Run still requires the three Fountain Control safety gates.
+      </div>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:7 }}>
+        <button onClick={()=>openSiteDesign("geometry")} style={button(C.accent)}>OPEN SITE ENGINEERING DESIGN</button>
+        <button onClick={()=>openSiteDesign("preview")} style={button(C.ok)}>OPEN SITE 3D SIMULATION</button>
+      </div>
+      <div style={{ color:C.warn, fontSize:9, marginTop:5 }}>
+        Layout and quantities are confirmed. Dimensions, hydraulic values, pipe sizes and exact coordinates are provisional until the site survey.
       </div>
       <div style={{ display:"flex", gap:10, marginTop:6, fontSize:9 }}>
         <span style={{ color:connected?C.ok:C.warn }}>Gateway {connected?"connected":"not connected"}</span>

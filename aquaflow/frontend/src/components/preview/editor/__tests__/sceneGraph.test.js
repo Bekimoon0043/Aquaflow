@@ -309,6 +309,37 @@ describe("serialisation", () => {
   it("produces an empty graph from nothing", () => {
     expect(SceneGraph.fromJSON(null).count()).toBe(0);
   });
+
+  it("restores a saved graph in place and emits one coherent event", () => {
+    const g = new SceneGraph();
+    g.add({ id: "kept", type: NODE_TYPES.NOZZLE, position: { x: 2 } });
+    g.select(["kept"]);
+    const saved = g.toJSON();
+    g.add({ id: "later", type: NODE_TYPES.LIGHT });
+    const seen = [];
+    g.subscribe(reason => seen.push(reason));
+
+    const sameGraph = g.replaceFromJSON(saved, { selection: ["kept"], reason: "history" });
+    expect(sameGraph).toBe(g);
+    expect(g.get("later")).toBeNull();
+    expect(g.worldPosition("kept").x).toBe(2);
+    expect(g.selected()).toEqual(["kept"]);
+    expect(seen).toEqual(["history"]);
+  });
+});
+
+describe("editable metadata", () => {
+  it("updates names, locks and properties through observable graph methods", () => {
+    const g = new SceneGraph();
+    g.add({ id: "n", type: NODE_TYPES.NOZZLE });
+    const seen = [];
+    g.subscribe(reason => seen.push(reason));
+    g.setName("n", "Center Jet");
+    g.setLocked("n", true);
+    g.setProps("n", { nozzleType: "geyser" });
+    expect(g.get("n")).toMatchObject({ name: "Center Jet", locked: true, props: { nozzleType: "geyser" } });
+    expect(seen).toEqual(["rename", "lock", "props"]);
+  });
 });
 
 describe("change notification", () => {
@@ -327,5 +358,18 @@ describe("change notification", () => {
     const g = new SceneGraph();
     g.subscribe(() => { throw new Error("bad listener"); });
     expect(() => g.add({ type: NODE_TYPES.NOZZLE })).not.toThrow();
+  });
+
+  it("batches many mutations into one named notification", () => {
+    const g = new SceneGraph();
+    const seen = [];
+    g.subscribe(reason => seen.push(reason));
+    g.transaction(() => {
+      const group = g.add({ type: NODE_TYPES.GROUP });
+      g.add({ type: NODE_TYPES.NOZZLE, parentId: group.id });
+      g.add({ type: NODE_TYPES.LIGHT });
+    }, "external-sync");
+    expect(g.count()).toBe(3);
+    expect(seen).toEqual(["external-sync"]);
   });
 });

@@ -115,3 +115,19 @@ export function centerToWorld(point, center = { cx: 0, cy: 0 }) {
     z: (Number(point.z) || 0) - (Number(center.cy) || 0),
   };
 }
+
+/**
+ * worldToEngineering(point, center) → { x, y, z }
+ *
+ * Exact inverse of engineeringToWorld for editable viewport objects. `point.y` is
+ * height in 3D; the returned `y` is the engineering plan-depth coordinate and the
+ * returned `z` is fixture elevation. Keeping the inverse beside the forward mapping
+ * prevents viewport edits from accumulating a pool-centre offset on every save.
+ */
+export function worldToEngineering(point, center = { cx: 0, cy: 0 }) {
+  return {
+    x: (Number(point?.x) || 0) + (Number(center.cx) || 0),
+    y: (Number(point?.z) || 0) + (Number(center.cy) || 0),
+    z: Number(point?.y) || 0,
+  };
+}

@@ -26,6 +26,7 @@ import {
 const DEFAULT_ENGINEERING_LAYERS = [
   { key: "pool_outline", label: "Pool Outline", visible: true, locked: false, color: "#00aaff" },
   { key: "water_surface", label: "Water Surface", visible: true, locked: false, color: "#0044aa" },
+  { key: "landscape", label: "Landscape / Land", visible: true, locked: false, color: "#65a30d" },
   { key: "nozzles", label: "Nozzles", visible: true, locked: false, color: "#00ccaa" },
   { key: "lights", label: "Lights", visible: true, locked: false, color: "#ffcc00" },
   { key: "measurements", label: "Measurements", visible: true, locked: false, color: "#ffcc00" },
@@ -33,6 +34,11 @@ const DEFAULT_ENGINEERING_LAYERS = [
   { key: "pipework", label: "Pipework", visible: true, locked: false, color: "#ff8800" },
   { key: "equipment", label: "Equipment", visible: true, locked: false, color: "#888888" },
 ];
+
+const mergeEngineeringLayers = (layers = []) => DEFAULT_ENGINEERING_LAYERS.map((fallback) => ({
+  ...fallback,
+  ...(layers.find((layer) => layer.key === fallback.key) || {}),
+}));
 
 const useEngineeringStore = create((set, get) => ({
   // ─── Project metadata ────────────────────────────────────────────────────────
@@ -59,6 +65,12 @@ const useEngineeringStore = create((set, get) => ({
   // Each fixture: { id, type, label, x, y, z, rotation, zone, engineering:{}, symbol:{} }
   // Symbol metadata automatically derived from type via getEngineeringSymbol()
   fixtures: [],
+
+  // Editable venue content placed in the 3D workspace (people, trees, buildings, GLB).
+  siteModels: [],
+
+  // Editable site-plan polygons (grass, paving, soil, rock and sand).
+  siteSurfaces: [],
 
   // ─── Layers ──────────────────────────────────────────────────────────────────
   // Each layer: { key, label, visible, locked, color }
@@ -111,9 +123,9 @@ pipes: [],
       poolType:          normalized.pool_type,
       params:            normalized.params,
       fixtures:          normalized.fixtures,
-      layers:            normalized.layers.length
-        ? normalized.layers
-        : DEFAULT_ENGINEERING_LAYERS.map((layer) => ({ ...layer })),
+      siteModels:        normalized.site_models,
+      siteSurfaces:      normalized.site_surfaces,
+      layers:            mergeEngineeringLayers(normalized.layers),
       measurements:      normalized.measurements,
       depthZones:        normalized.depth_zones,
       hydraulicSummary:  normalized.hydraulics || get().hydraulicSummary,
@@ -145,6 +157,8 @@ pipes: [],
       params:      s.params,
       geometry:    s.geometry,
       fixtures:    s.fixtures,
+      site_models: s.siteModels,
+      site_surfaces: s.siteSurfaces,
       layers:      s.layers,
       measurements:s.measurements,
       depth_zones: s.depthZones,

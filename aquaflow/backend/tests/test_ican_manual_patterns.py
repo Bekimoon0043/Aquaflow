@@ -48,15 +48,15 @@ def step(duration_ms=100, **groups):
 
 def test_site_layout_records_operator_facts_and_keeps_capture_mapping_provisional():
     summary = SITE_FOUNTAIN_LAYOUT["physical_summary"]
-    assert summary == {
-        "front_outputs": 9,
-        "front_pumps": 1,
-        "rear_high_sides": 2,
-        "rear_pumps": 1,
-        "middle_nozzles": 64,
-        "middle_pumps": 4,
-        "total_pumps": 6,
-    }
+    assert summary["running_nozzles"] == 76
+    assert summary["running_sections"] == 19
+    assert summary["nozzles_per_running_section"] == 4
+    assert summary["foam_left_nozzles"] == 8
+    assert summary["foam_right_nozzles"] == 8
+    assert summary["peacock_nozzles"] == 8
+    assert summary["total_water_nozzles"] == 100
+    assert summary["foam_pumps"] == 2
+    assert summary["total_pumps"] == 7
     assert SITE_FOUNTAIN_LAYOUT["mapping_status"] == "provisional"
     presets = {item["id"]: item for item in SITE_FOUNTAIN_LAYOUT["presets"]}
     assert presets["proven-opening"]["confidence"] == "hardware-proven"
@@ -67,7 +67,7 @@ def test_site_layout_records_operator_facts_and_keeps_capture_mapping_provisiona
         {"group": 1, "channels": list(range(9, 25))}]
     assert presets["middle-d"]["addresses"] == [
         {"group": 9, "channels": list(range(25, 41))}]
-    assert any("pump addresses" in item for item in SITE_FOUNTAIN_LAYOUT["unresolved"])
+    assert any("65-76" in item for item in SITE_FOUNTAIN_LAYOUT["unresolved"])
 
 
 def test_pattern_normalization_makes_sorted_absolute_states_and_duration():

@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { API_BASE_URL } from "../../config";
+import useEngineeringStore from "../../store/engineeringStore";
+import { FIXTURE_LIBRARY } from "../../data/fixtureLibrary";
 
 const API = API_BASE_URL;
 
@@ -24,16 +26,40 @@ const DEFAULT_NOZZLES = [
   { id:"n-mist-0", label:"Mist 1",        type:"mist",    pressure_kpa:60,  height_mult:0.8, angle_offset:0, flow_correction:1.0 },
 ];
 
+// Calibration rows for the nozzles in the open Engineering design (falls back to samples).
+export function nozzlesFromDesign(fixtures = []) {
+  const categories = new Map(FIXTURE_LIBRARY.map(item => [item.key, item.category]));
+  return fixtures
+    .filter(f => f?.id && (categories.get(f.type) === "Nozzles" || String(f.type || "").startsWith("nozzle")))
+    .map(f => {
+      const bar = Number(f.engineering?.pressureBar ?? FIXTURE_LIBRARY.find(i => i.key === f.type)?.engineering?.pressureBar) || 1;
+      return { id: f.id, label: f.label || f.type, type: String(f.type).replace(/^nozzle_/, ""),
+        pressure_kpa: Math.round(bar * 100), height_mult: 1.0, angle_offset: 0, flow_correction: 1.0 };
+    });
+}
+
+// Inputs this panel itself forced to a fault. "Undo test faults" restores only these,
+// never forcing any other safety input to OK.
+export function restoreBody(injected) {
+  return Object.fromEntries([...injected].map(key => [key, true]));
+}
+
 export default function CalibrationPanel() {
+  const fixtures = useEngineeringStore(s => s.fixtures);
+  const designNozzles = useMemo(() => nozzlesFromDesign(fixtures), [fixtures]);
   const [tab, setTab]           = useState("nozzles");
-  const [nozzles, setNozzles]   = useState(DEFAULT_NOZZLES);
+  const [nozzles, setNozzles]   = useState(() => designNozzles.length ? designNozzles : DEFAULT_NOZZLES);
+  const [injected, setInjected] = useState(() => new Set());
+  const usingSamples = !designNozzles.length;
+  useEffect(() => { if (designNozzles.length) setNozzles(designNozzles); }, [designNozzles]);
   const [venue, setVenue]       = useState(DEFAULT_VENUE);
   const [selected, setSelected] = useState(null);
   const [simActive, setSimActive] = useState(false);
   const [simValues, setSimValues] = useState({ pressure:180, flow:12.5, temp:22 });
   const [saved, setSaved]       = useState(false);
 
-  // Simulate sensor readings
+  // Simulated sensor readings — DISPLAY ONLY. This never writes to the safety kernel:
+  // feeding fake "OK" inputs could hide a real fault on site.
   useEffect(() => {
     if (!simActive) return;
     const id = setInterval(() => {
@@ -43,16 +69,6 @@ export default function CalibrationPanel() {
         temp:     21 + Math.random() * 2,
         water_level: 0.7 + Math.random() * 0.2,
       });
-      // Feed simulated values to safety kernel
-      fetch(`${API}/safety/inputs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          water_level_ok: true,
-          pressure_ok: true,
-          plc_heartbeat_ok: true,
-        }),
-      }).catch(() => {});
     }, 1000);
     return () => clearInterval(id);
   }, [simActive]);
@@ -89,7 +105,7 @@ export default function CalibrationPanel() {
         <div style={{ flex:1 }}/>
         {saved && <span style={{ color:"#00ff88", fontSize:10 }}>✓ Saved</span>}
         <button onClick={saveCalibration} style={{ padding:"3px 10px", background:"#003520", color:"#00ff88", border:"1px solid #00aa4444", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10 }}>
-          SAVE CALIBRATION
+          RECORD IN LOG
         </button>
       </div>
 
@@ -113,6 +129,7 @@ export default function CalibrationPanel() {
             {/* Nozzle list */}
             <div style={{ width:180, flexShrink:0 }}>
               <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>SELECT NOZZLE</div>
+              {usingSamples && <div style={{ color:"#c9a227", fontSize:9, marginBottom:6 }}>No design open — showing sample nozzles. Open your fountain in Engineering to calibrate its real nozzles.</div>}
               {nozzles.map(n => (
                 <div key={n.id} onClick={()=>setSelected(n.id)} style={{
                   padding:"6px 8px", marginBottom:3, background:"#050d18",
@@ -234,8 +251,8 @@ export default function CalibrationPanel() {
             </div>
 
             <div style={{ fontSize:10, color:"#556677", marginBottom:10, lineHeight:1.6 }}>
-              Simulation mode generates fake sensor readings and feeds them to the safety kernel every second.
-              Use this to test the full ARM → PLAY → FAULT recovery workflow without real hardware.
+              Simulation shows made-up sensor readings on this screen only. It never changes the safety system.
+              Fault injection below forces a real safety input to FAULT (safe direction) to rehearse the recovery workflow on a bench. Never use it on a live fountain.
             </div>
 
             {/* Live sim values */}
@@ -273,22 +290,26 @@ export default function CalibrationPanel() {
                   fetch(`${API}/safety/inputs`, {
                     method:"POST", headers:{"Content-Type":"application/json"},
                     body:JSON.stringify(fault.body)
-                  });
+                  }).then(() => setInjected(prev => new Set([...prev, ...Object.keys(fault.body)]))).catch(() => {});
                 }} style={{
                   padding:"4px 8px", background:"#1a0808", color:"#ff8866",
                   border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:9,
                 }}>{fault.label}</button>
               ))}
-              <button onClick={()=>{
-                fetch(`${API}/safety/inputs`, {
+              <button disabled={!injected.size} title={injected.size ? `Restore only: ${[...injected].join(", ")}` : "No test faults injected from this screen"} onClick={async ()=>{
+                if (!window.confirm(`Undo the test faults injected from this screen (${[...injected].join(", ")})?
+
+Only these inputs are restored. Real sensors keep reporting their real state, and any other fault stays active.`)) return;
+                await fetch(`${API}/safety/inputs`, {
                   method:"POST", headers:{"Content-Type":"application/json"},
-                  body:JSON.stringify({ water_level_ok:true, pressure_ok:true, estop_chain_closed:true, plc_heartbeat_ok:true })
-                });
-                fetch(`${API}/safety/reset`, { method:"POST", headers:{"Content-Type":"application/json"}, body:"{}" });
+                  body:JSON.stringify(restoreBody(injected))
+                }).catch(() => {});
+                await fetch(`${API}/safety/reset`, { method:"POST", headers:{"Content-Type":"application/json"}, body:"{}" }).catch(() => {});
+                setInjected(new Set());
               }} style={{
                 padding:"4px 8px", background:"#003520", color:"#00ff88",
                 border:"1px solid #00aa4444", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:9,
-              }}>↩ CLEAR ALL FAULTS</button>
+              }}>↩ UNDO TEST FAULTS{injected.size ? ` (${injected.size})` : ""}</button>
             </div>
           </div>
         )}

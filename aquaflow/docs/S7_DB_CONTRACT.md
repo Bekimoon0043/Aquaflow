@@ -1,5 +1,8 @@
 # AquaFlow ↔ S7-1215C Data Block Contract (AF-IO-005)
 
+> This is the generic Field I/O DB1 example, not the Siemens Site show-runtime contract. New pump/valve/light sites use `SIEMENS-PLC-RUNTIME-CONTRACT.md`.
+
+
 The published interface between AquaFlow's field I/O and the SIMATIC S7-1200 rack
 (CPU 1215C DC/DC/DC, 6ES7215-1AG40-0XB0). The TIA-side engineer builds exactly this;
 AquaFlow's default field-point config addresses exactly this. Neither side invents

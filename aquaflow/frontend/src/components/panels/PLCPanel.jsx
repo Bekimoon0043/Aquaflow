@@ -3,6 +3,8 @@ import { useShowStore } from "../../store/showStore";
 import { API_BASE_URL } from "../../config";
 import { apiGet, apiPost } from "../../utils/apiClient";
 import SiemensSitePanel from "./SiemensSitePanel";
+import SiemensSetupWizard from "./siemens/SiemensSetupWizard";
+import SiemensIOMapTab from "./siemens/SiemensIOMapTab";
 import {
   PREFILL_KEY, PREFILL_EVENT, applyPlcPrefill, buildConnectBody, profileGateSatisfied,
   parseModbusPoints, verifyOutcomeStyle, verifySummary,
@@ -41,7 +43,7 @@ export function plcTypeSubLabel(t) {
 }
 
 export default function PLCPanel() {
-  const [tab, setTab] = useState("connect");
+  const [tab, setTab] = useState("setup");
   const { devices, addServerLog } = useShowStore();
 
   return (
@@ -54,7 +56,7 @@ export default function PLCPanel() {
       </div>
 
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--bg-surface)", flexShrink: 0 }}>
-        {[["connect","Connect"],["site","Siemens Site"],["tags","Tag Browser"],["map","Tag Map"],["monitor","Monitor"],["fieldio","Field I/O"]].map(([key, label]) => (
+        {[["setup","Siemens Setup"],["map","I/O Map"],["site","Advanced Site"],["connect","Generic PLC"],["tags","Tag Browser"],["monitor","Monitor"],["fieldio","Field I/O"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{
             flex: 1, padding: "7px 0", background: "transparent", border: "none",
             borderBottom: tab === key ? "2px solid var(--accent)" : "2px solid transparent",
@@ -68,10 +70,11 @@ export default function PLCPanel() {
       </div>
 
       <div style={{ flex: 1, overflowY: "auto" }}>
+        {tab === "setup"   && <SiemensSetupWizard onOpenAdvanced={() => setTab("site")} />}
+        {tab === "map"     && <SiemensIOMapTab onOpenSetup={() => setTab("setup")} />}
         {tab === "connect" && <ConnectTab addServerLog={addServerLog} />}
-        {tab === "site" && <SiemensSitePanel />}
+        {tab === "site"    && <SiemensSitePanel />}
         {tab === "tags"    && <TagBrowserTab addServerLog={addServerLog} />}
-        {tab === "map"     && <SiemensSitePanel />}
         {tab === "monitor" && <MonitorTab />}
         {tab === "fieldio" && <FieldIOTab />}
       </div>
@@ -493,46 +496,102 @@ function FieldStatusRow({ f }) {
 }
 
 // ── Tag Browser Tab ────────────────────────────────────────────────────────────
+// Pure helpers (exported for tests).
+
+// Profile tags carry access "read" (PLC status/feedback) — never written.
+export function isReadOnlyTag(tag) {
+  const a = String(tag?.access || "").trim().toLowerCase();
+  return a === "read" || a === "readonly" || a === "read_only" || a === "ro";
+}
+
+// Human-readable outcome of POST /plc/{id}/tags/{tag}/write. A 400/403 carries
+// the backend's refusal reason in `detail` — show it verbatim.
+export function plcWriteOutcome(ok, status, data) {
+  if (!ok) {
+    const detail = data && (typeof data.detail === "string" ? data.detail : data.detail ? JSON.stringify(data.detail) : "");
+    if (status === 403) return { ok: false, msg: `Write refused by safety gate — ${detail || "safety permit not granted"}` };
+    if (status === 400) return { ok: false, msg: `Write refused — ${detail || "tag is read-only"}` };
+    return { ok: false, msg: `Write failed — ${detail || `HTTP ${status}`}` };
+  }
+  if (!data || data.success !== true) return { ok: false, msg: "Write not accepted — PLC not connected or tag not found" };
+  return { ok: true, msg: "" };
+}
+
 function TagBrowserTab({ addServerLog }) {
   const [plcId, setPlcId] = useState("");
   const [tags, setTags] = useState([]);
   const [plcs, setPlcs] = useState([]);
   const [writeTag, setWriteTag] = useState(null);
   const [writeValue, setWriteValue] = useState("");
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [writeMsg, setWriteMsg] = useState(null);   // { ok, msg }
+  const [loadError, setLoadError] = useState("");
+
+  const isDemo = plcId === "demo";
 
   useEffect(() => {
     fetch(`${API}/`).then(r => r.json()).then(d => setPlcs(d.plcs || [])).catch(() => {});
   }, []);
 
+  const closeWrite = () => { setWriteTag(null); setConfirmPending(false); setWriteValue(""); };
+
   const loadTags = async (id) => {
     setPlcId(id);
+    setTags([]);
+    setLoadError("");
+    setWriteMsg(null);
+    closeWrite();
+    if (!id || id === "demo") return;   // demo tags load only via the explicit button
     try {
       const res = await fetch(`${API}/${id}/tags`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setTags(data.tags || []);
-    } catch {
-      // Show default tags for demo
-      const res2 = await fetch(`${API}/default-tags/modbus_tcp`).catch(() => null);
-      if (res2) {
-        const d = await res2.json().catch(() => ({}));
-        setTags(d.tags || []);
-      }
+    } catch (e) {
+      // No silent demo fallback — a failed load must never look like real tags.
+      setLoadError(`Could not load tags for this PLC — ${e.message || "backend unreachable"}`);
+    }
+  };
+
+  const loadDemoTags = async () => {
+    setLoadError("");
+    try {
+      const res = await fetch(`${API}/default-tags/modbus_tcp`);
+      const d = await res.json();
+      setTags(d.tags || []);
+    } catch (e) {
+      setLoadError(`Could not load demo tags — ${e.message || "backend unreachable"}`);
     }
   };
 
   const doWrite = async () => {
-    if (!writeTag || writeValue === "") return;
+    if (!writeTag || writeValue === "" || isDemo) return;
+    setWriting(true);
     try {
-      await fetch(`${API}/${plcId}/tags/${writeTag.id}/write`, {
+      const res = await fetch(`${API}/${plcId}/tags/${writeTag.id}/write`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value: parseFloat(writeValue) }),
       });
-      addServerLog({ level: "info", msg: `Wrote ${writeValue} to ${writeTag.name}` });
-      setWriteTag(null);
+      const data = await res.json().catch(() => ({}));
+      const out = plcWriteOutcome(res.ok, res.status, data);
+      if (out.ok) {
+        const msg = `Wrote ${writeValue} to ${writeTag.name} (${writeTag.address})`;
+        addServerLog({ level: "info", msg });
+        setWriteMsg({ ok: true, msg });
+        closeWrite();
+      } else {
+        addServerLog({ level: "warn", msg: `${writeTag.name}: ${out.msg}` });
+        setWriteMsg(out);
+        setConfirmPending(false);
+      }
     } catch {
-      addServerLog({ level: "warn", msg: "Write failed — PLC not connected" });
-    }
+      const out = { ok: false, msg: "Write failed — backend unreachable" };
+      addServerLog({ level: "warn", msg: out.msg });
+      setWriteMsg(out);
+      setConfirmPending(false);
+    } finally { setWriting(false); }
   };
 
   const TYPE_COLORS = { bool: "#10b981", int: "#00d4ff", real: "#f59e0b", word: "#8b5cf6", dint: "#f97316" };
@@ -544,62 +603,113 @@ function TagBrowserTab({ addServerLog }) {
         style={{ width: "100%", marginBottom: 12, fontSize: 11 }}>
         <option value="">-- Select PLC --</option>
         {plcs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        <option value="demo">Demo (Default Tags)</option>
+        <option value="demo">Demo (Default Tags) — not a real PLC</option>
       </select>
 
-      {plcId === "demo" && tags.length === 0 && (
-        <button className="btn primary" onClick={() => fetch(`${API}/default-tags/siemens_s7`).then(r=>r.json()).then(d=>setTags(d.tags||[]))}
+      {loadError && (
+        <div style={{ padding: "7px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, border: "1px solid rgba(239,68,68,0.3)", color: "var(--red)" }}>
+          ✕ {loadError}
+        </div>
+      )}
+
+      {isDemo && (
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: "1px solid #f59e0b", color: "#f59e0b" }}>
+          DEMO — example Modbus TCP tag layout only. Not a real PLC: no values, writes disabled.
+        </div>
+      )}
+
+      {isDemo && tags.length === 0 && (
+        <button className="btn primary" onClick={loadDemoTags}
           style={{ width: "100%", justifyContent: "center", fontSize: 11, marginBottom: 10 }}>
           Load Demo Tags
         </button>
       )}
 
+      {writeMsg && (
+        <div style={{ padding: "7px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10,
+          border: `1px solid ${writeMsg.ok ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+          color: writeMsg.ok ? "var(--green)" : "var(--red)" }}>
+          {writeMsg.ok ? "✓" : "✕"} {writeMsg.msg}
+        </div>
+      )}
+
       {writeTag && (
         <div style={{ padding: "10px 12px", background: "rgba(0,212,255,0.05)", border: "1px solid var(--border-accent)", borderRadius: "var(--radius-md)", marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 6 }}>Write to: <strong style={{ color: "var(--text-primary)" }}>{writeTag.name}</strong></div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <input className="input" type="number" value={writeValue} onChange={e => setWriteValue(e.target.value)}
-              placeholder={`${writeTag.min_value} - ${writeTag.max_value}`} style={{ flex: 1, fontSize: 11 }} />
-            <button className="btn primary" onClick={doWrite} style={{ fontSize: 10 }}>Write</button>
-            <button className="btn" onClick={() => setWriteTag(null)} style={{ fontSize: 10 }}>✕</button>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 6 }}>
+            Write to: <strong style={{ color: "var(--text-primary)" }}>{writeTag.name}</strong>
+            <span style={{ fontFamily: "var(--font-mono)", marginLeft: 6 }}>{writeTag.address}</span>
+          </div>
+          {confirmPending ? (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="btn primary" onClick={doWrite} disabled={writing}
+                style={{ flex: 1, justifyContent: "center", fontSize: 10, borderColor: "#f59e0b" }}>
+                {writing ? "Writing..." : `Confirm write ${writeValue} to ${writeTag.name} at ${writeTag.address}`}
+              </button>
+              <button className="btn" onClick={() => setConfirmPending(false)} disabled={writing} style={{ fontSize: 10 }}>Cancel</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 6 }}>
+              <input className="input" type="number" value={writeValue} onChange={e => setWriteValue(e.target.value)}
+                placeholder={`${writeTag.min_value} - ${writeTag.max_value}`} style={{ flex: 1, fontSize: 11 }} />
+              <button className="btn primary" onClick={() => { setWriteMsg(null); setConfirmPending(true); }}
+                disabled={writeValue === "" || isDemo} style={{ fontSize: 10 }}>Write…</button>
+              <button className="btn" onClick={closeWrite} style={{ fontSize: 10 }}>✕</button>
+            </div>
+          )}
+          <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 5 }}>
+            Non-zero writes need the safety permit; writing 0 is always allowed.
           </div>
         </div>
       )}
 
       {tags.length > 0 && (
         <div>
-          <SectionLabel>Tags ({tags.length})</SectionLabel>
-          {tags.map((tag, i) => (
-            <div key={i} style={{ padding: "7px 10px", marginBottom: 5, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
-              onClick={() => setWriteTag(tag)}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, fontFamily: "var(--font-mono)", background: `${TYPE_COLORS[tag.tag_type] || "#888"}15`, color: TYPE_COLORS[tag.tag_type] || "#888", border: `1px solid ${TYPE_COLORS[tag.tag_type] || "#888"}33` }}>
-                  {tag.tag_type?.toUpperCase()}
-                </span>
-                <span style={{ fontSize: 11, color: "var(--text-primary)", flex: 1 }}>{tag.name}</span>
-                {tag.current_value !== null && tag.current_value !== undefined && (
-                  <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-accent)" }}>
-                    {typeof tag.current_value === "boolean" ? (tag.current_value ? "ON" : "OFF") : Number(tag.current_value).toFixed(1)}
-                    {tag.unit ? ` ${tag.unit}` : ""}
+          <SectionLabel>Tags ({tags.length}){isDemo ? " — demo" : ""}</SectionLabel>
+          {tags.map((tag, i) => {
+            const ro = isReadOnlyTag(tag);
+            const writable = !ro && !isDemo;
+            return (
+              <div key={i} style={{ padding: "7px 10px", marginBottom: 5, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", cursor: writable ? "pointer" : "default" }}
+                title={ro ? "Read-only PLC field — never written" : isDemo ? "Demo tag — not a real PLC" : "Click to write"}
+                onClick={() => { if (writable) { setWriteTag(tag); setWriteValue(""); setConfirmPending(false); setWriteMsg(null); } }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, fontFamily: "var(--font-mono)", background: `${TYPE_COLORS[tag.tag_type] || "#888"}15`, color: TYPE_COLORS[tag.tag_type] || "#888", border: `1px solid ${TYPE_COLORS[tag.tag_type] || "#888"}33` }}>
+                    {tag.tag_type?.toUpperCase()}
                   </span>
-                )}
+                  <span style={{ fontSize: 11, color: "var(--text-primary)", flex: 1 }}>{tag.name}</span>
+                  {ro && <span style={{ fontSize: 8, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>READ-ONLY</span>}
+                  {tag.current_value !== null && tag.current_value !== undefined && (
+                    <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-accent)" }}>
+                      {typeof tag.current_value === "boolean" ? (tag.current_value ? "ON" : "OFF") : Number(tag.current_value).toFixed(1)}
+                      {tag.unit ? ` ${tag.unit}` : ""}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                  {tag.address} {tag.mapped_device ? `→ ${tag.mapped_device}` : ""}
+                </div>
               </div>
-              <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
-                {tag.address} {tag.mapped_device ? `→ ${tag.mapped_device}` : ""}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ── Tag Map Tab ────────────────────────────────────────────────────────────────
+// ── Monitor Tab ────────────────────────────────────────────────────────────────
+// "Live" only when values actually arrived recently — never a decorative pulse.
+export const MONITOR_LIVE_WINDOW_MS = 2000;
+export function monitorIsLive(lastValuesAt, now, windowMs = MONITOR_LIVE_WINDOW_MS) {
+  return !!lastValuesAt && now - lastValuesAt <= windowMs;
+}
+
 function MonitorTab() {
   const [values, setValues] = useState({});
   const [plcs, setPlcs] = useState([]);
   const [selectedPlc, setSelectedPlc] = useState("");
+  const [lastValuesAt, setLastValuesAt] = useState(0);
+  const [now, setNow] = useState(Date.now());
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -607,21 +717,29 @@ function MonitorTab() {
   }, []);
 
   useEffect(() => {
+    setValues({});
+    setLastValuesAt(0);
     if (!selectedPlc) return;
     const poll = async () => {
       try {
         const res = await fetch(`${API}/${selectedPlc}/values`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setValues(data.values || {});
-      } catch {}
+        const v = data.values || {};
+        setValues(v);
+        if (Object.keys(v).length > 0) setLastValuesAt(Date.now());
+      } catch {
+        setValues({});
+      }
+      setNow(Date.now());
     };
     poll();
     intervalRef.current = setInterval(poll, 500);
     return () => clearInterval(intervalRef.current);
   }, [selectedPlc]);
 
-  const DEMO_VALUES = { pump_speed: 72.5, pump_run: 1, valve_bank: 255, pressure: 4.2, flow_rate: 125.0 };
-  const displayValues = Object.keys(values).length > 0 ? values : DEMO_VALUES;
+  const live = monitorIsLive(lastValuesAt, now);
+  const entries = Object.entries(values);
 
   return (
     <div style={{ padding: 12 }}>
@@ -629,20 +747,29 @@ function MonitorTab() {
         <select className="select" value={selectedPlc} onChange={e => setSelectedPlc(e.target.value)} style={{ flex: 1, fontSize: 11 }}>
           <option value="">-- Select PLC --</option>
           {plcs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          <option value="demo">Demo Values</option>
         </select>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 6px var(--green)", animation: "pulse-glow 1s infinite" }} />
+        <div title={live ? "live — values received in the last 2 s" : "no data"}
+          style={live
+            ? { width: 6, height: 6, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 6px var(--green)", animation: "pulse-glow 1s infinite" }
+            : { width: 6, height: 6, borderRadius: "50%", background: "var(--text-muted)", opacity: 0.6 }} />
+        <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: live ? "var(--green)" : "var(--text-muted)" }}>
+          {live ? "LIVE" : "NO DATA"}
+        </span>
       </div>
 
       <SectionLabel>Live Tag Values</SectionLabel>
-      {Object.entries(displayValues).map(([key, val]) => (
-        <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+      {entries.length === 0 ? (
+        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
+          No live PLC values — connect a PLC first
+        </div>
+      ) : entries.map(([key, val]) => (
+        <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", opacity: live ? 1 : 0.5 }}>
           <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flex: 1 }}>{key}</span>
           <div style={{ width: 60, height: 3, background: "var(--border)", borderRadius: 2 }}>
             <div style={{ width: `${Math.min(100, (parseFloat(val) / 1000) * 100)}%`, height: "100%", background: "var(--accent)", borderRadius: 2 }} />
           </div>
           <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-accent)", minWidth: 50, textAlign: "right" }}>
-            {typeof val === "boolean" ? (val ? "ON" : "OFF") : Number(val).toFixed(1)}
+            {val === null || val === undefined ? "—" : typeof val === "boolean" ? (val ? "ON" : "OFF") : Number(val).toFixed(1)}
           </span>
         </div>
       ))}

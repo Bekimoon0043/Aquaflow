@@ -34,6 +34,14 @@ const ALLOW_DEMO_SCAN = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_
 export default function DeviceDiscoveryPanel() {
   const [tab, setTab] = useState("scan");
   const { devices, addServerLog } = useShowStore();
+  useEffect(() => {
+    const openTab = (event) => {
+      const requested = event?.detail?.tab;
+      if (["scan", "controllers", "dmx", "test", "config"].includes(requested)) setTab(requested);
+    };
+    window.addEventListener("aquaflow:open-device-tab", openTab);
+    return () => window.removeEventListener("aquaflow:open-device-tab", openTab);
+  }, []);
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-panel)" }}>

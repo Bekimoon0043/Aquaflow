@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from license.license_engine import (
     validate_license,
+    validate_for_this_machine,
     generate_hardware_fingerprint,
     save_license_cache,
     load_license_cache,
@@ -119,7 +120,7 @@ def get_license_status():
     # 2. Try license file
     license_data = _find_license_file()
     if license_data:
-        result = validate_license(license_data, fp)
+        result = validate_for_this_machine(license_data)
         if result["status"] == LicenseStatus.VALID:
             save_license_cache(license_data)
             set_current_license(result)
@@ -131,7 +132,7 @@ def get_license_status():
     # 3. Fall back to cache
     cached = load_license_cache()
     if cached:
-        result = validate_license(cached, fp)
+        result = validate_for_this_machine(cached)
         if result["status"] == LicenseStatus.VALID:
             grace = check_grace_period()
             if grace["within_grace"]:
@@ -191,7 +192,7 @@ def activate_license(req: ActivateRequest):
         )
 
     fp     = generate_hardware_fingerprint()
-    result = validate_license(license_data, fp)
+    result = validate_for_this_machine(license_data)
 
     if result["status"] != LicenseStatus.VALID:
         raise HTTPException(status_code=403, detail=result["message"])
@@ -204,8 +205,8 @@ def activate_license(req: ActivateRequest):
 @router.post("/api/license/validate")
 def validate_endpoint(req: ValidateRequest):
     """Server-side validation endpoint (used by license server)."""
-    fp     = req.hardware_fingerprint or generate_hardware_fingerprint()
-    result = validate_license(req.license_data, fp)
+    result = (validate_license(req.license_data, req.hardware_fingerprint) if req.hardware_fingerprint
+              else validate_for_this_machine(req.license_data))
     return _build_response(result)
 
 

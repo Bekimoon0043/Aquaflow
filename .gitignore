@@ -21,7 +21,9 @@ coverage/
 
 # Build output / artifacts
 dist/
+dist-*/
 build/
+build-*/
 *.spec
 *.exe
 *.zip
@@ -40,6 +42,9 @@ diagnostics/
 *_import_test.txt
 frontend_bundle.txt
 
+# Research scratch area (third-party clones, carved artifacts — do not commit)
+tmp/
+
 # Audio / media
 *.mp3
 
@@ -50,3 +55,23 @@ licenses/
 
 # AQ-X-005 runtime fault/maintenance log (generated at runtime)
 aquaflow/backend/data/maintenance_log.json
+
+# Release builds (large binaries)
+release/
+
+# Build / test output scratch
+output/
+outputs/
+work/
+
+# Network captures
+*.pcap
+*.pcapng
+*.etl
+
+# Packaged engine bundles and smoke tests
+aquaflow/desktop/resources/engine*/
+aquaflow/desktop/resources/smoke-*/
+
+# Test scratch
+pytest_summary*.txt

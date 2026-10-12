@@ -61,6 +61,7 @@ export default function BeatMarkerLane({
     // Draw measure bars
     ctx.strokeStyle = '#3a3a5e';
     ctx.lineWidth = 1;
+    const measureLabelStride = Math.max(1, Math.ceil(36 / measureWidth));
     for (let m = 0; m * measureWidth < totalWidth; m++) {
       const x = m * measureWidth;
       ctx.beginPath();
@@ -71,12 +72,12 @@ export default function BeatMarkerLane({
       // Measure number
       ctx.fillStyle = '#6a6a8e';
       ctx.font = '10px sans-serif';
-      ctx.fillText(`${m + 1}`, x + 2, 12);
+      if (m % measureLabelStride === 0) ctx.fillText(`${m + 1}`, x + 2, 12);
     }
 
     // Draw beat ticks within measures
     ctx.strokeStyle = '#2a2a4e';
-    for (let m = 0; m * measureWidth < totalWidth; m++) {
+    for (let m = 0; measureWidth / beatsPerMeasure >= 4 && m * measureWidth < totalWidth; m++) {
       for (let b = 1; b < beatsPerMeasure; b++) {
         const x = m * measureWidth + (b * measureWidth / beatsPerMeasure);
         ctx.beginPath();
