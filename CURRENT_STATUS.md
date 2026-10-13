@@ -1,6 +1,8 @@
 # AquaFlow Studio — Current Status
 
-**2026-10-13: AutoCAD import + rendering programme (AF-CAD / AF-3D) — source only, not yet packaged**
+**2026-10-13: AutoCAD import + rendering programme (AF-CAD / AF-3D) — installed as 1.2.32**
+
+- **Installed on this PC as 1.2.32** (silent NSIS upgrade). New engine `resources/engine-1.2.32` bundles ezdxf; packaged smoke test PASS (health, `/api/cad/import` recognises the round-trip test design, `/api/cad/export.dxf` 200). Not yet exercised by hand in the installed UI.
 
 Plan: `AF-CAD-DESIGN-RENDER-PLAN.md` (research report + 45-task phased plan). API
 contract: `docs/CAD-IMPORT-CONTRACT.md`.
