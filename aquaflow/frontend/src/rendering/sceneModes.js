@@ -71,3 +71,85 @@ export function getSceneMode(name) {
 export function isNightScene(name) {
   return !!getSceneMode(name).isNight;
 }
+
+// ─── AF-3D-024: tone-mapping operators ──────────────────────────────────────
+// ACES stays the default so every saved show looks exactly as it did. AgX keeps
+// saturated night LED colours from the ACES hue skew (blue LEDs drifting purple);
+// Neutral (Khronos PBR Neutral) is hue-preserving for daytime product colour.
+//
+// Exposure is CALIBRATED per operator rather than shared: the three curves place
+// mid-grey very differently (three's ACES even carries a built-in 1/0.6 gain), so a
+// raw operator swap at the same exposure would brighten or crush the whole scene.
+// calibratedExposure() solves for the exposure at which the new operator maps the
+// scene's mid-grey to the same display value ACES gives at the preset's exposure.
+
+export const TONE_MAPPING = Object.freeze({
+  aces:    Object.freeze({ id: "aces",    label: "ACES (default)", three: "ACESFilmicToneMapping" }),
+  agx:     Object.freeze({ id: "agx",     label: "AgX (night)",    three: "AgXToneMapping" }),
+  neutral: Object.freeze({ id: "neutral", label: "Neutral (day)",  three: "NeutralToneMapping" }),
+});
+export const DEFAULT_TONE_MAPPING = "aces";
+
+/** Resolve an operator by id; unknown / missing ids fall back to ACES. */
+export function getToneMapping(name) {
+  return TONE_MAPPING[String(name || "").toLowerCase()] || TONE_MAPPING[DEFAULT_TONE_MAPPING];
+}
+
+/**
+ * The THREE constant for an operator. If the installed three.js lacks the operator
+ * (AgX/Neutral arrived in r160/r162), fall back to ACES rather than to no tone mapping.
+ */
+export function threeToneMapping(THREE, name) {
+  const op = getToneMapping(name);
+  return THREE?.[op.three] ?? THREE?.ACESFilmicToneMapping;
+}
+
+const clamp01 = v => Math.min(1, Math.max(0, v));
+
+/**
+ * Achromatic (grey-axis) response of three r165's operators, AFTER exposure.
+ * Grey is preserved by every operator's colour matrices to within rounding, so the
+ * scalar curve is enough to calibrate exposure.
+ */
+export function toneCurveGrey(name, x) {
+  const id = getToneMapping(name).id;
+  if (id === "agx") {
+    const mn = -12.47393, mx = 4.026069;
+    const c = clamp01((Math.log2(Math.max(x, 1e-10)) - mn) / (mx - mn));
+    const c2 = c * c, c4 = c2 * c2;
+    const v = 15.5 * c4 * c2 - 40.14 * c4 * c + 31.96 * c4 - 6.868 * c2 * c + 0.4298 * c2 + 0.1191 * c - 0.00232;
+    return clamp01(Math.pow(Math.max(0, v), 2.2));
+  }
+  if (id === "neutral") {
+    const start = 0.8 - 0.04;
+    const c = x - (x < 0.08 ? x - 6.25 * x * x : 0.04);
+    if (c < start) return c;
+    const d = 1 - start;
+    return 1 - (d * d) / (c + d - start);
+  }
+  const v = x / 0.6;   // three's ACES carries a subjective 1/0.6 gain
+  return clamp01((v * (v + 0.0245786) - 0.000090537) / (v * (0.983729 * v + 0.4329510) + 0.238081));
+}
+
+/** Scene-referred mid-grey: the calibration anchor. */
+export const TONE_CALIBRATION_GREY = 0.18;
+
+/**
+ * Exposure for `name` that reproduces ACES's display mid-grey at `acesExposure`.
+ * ACES itself returns the input unchanged, so the default path is bit-identical.
+ */
+export function calibratedExposure(name, acesExposure) {
+  const base = Number(acesExposure);
+  if (!(base > 0)) return acesExposure;
+  const id = getToneMapping(name).id;
+  if (id === "aces") return base;
+  const g = TONE_CALIBRATION_GREY;
+  const target = toneCurveGrey("aces", g * base);
+  // Every curve is monotonic in exposure, so bisect in log space.
+  let lo = base / 64, hi = base * 64;
+  for (let i = 0; i < 80; i++) {
+    const mid = Math.sqrt(lo * hi);
+    if (toneCurveGrey(id, g * mid) < target) lo = mid; else hi = mid;
+  }
+  return Math.sqrt(lo * hi);
+}

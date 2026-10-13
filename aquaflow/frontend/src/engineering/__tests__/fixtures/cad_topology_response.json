@@ -1,0 +1,546 @@
+{
+ "assumptions": [
+  "Valves are modelled as open, lossless junctions.",
+  "Pump cand_11 head not in drawing \u2014 using 20 m.",
+  "Nozzle emitter k from: assumed 40 L/min @ 1 bar."
+ ],
+ "attached": {
+  "cand_0": "n4",
+  "cand_1": "n5",
+  "cand_11": "n0",
+  "cand_12": "n1",
+  "cand_2": "n6",
+  "cand_3": "n7",
+  "cand_4": "n8"
+ },
+ "dangling": [
+  [
+   2.0,
+   2.0
+  ],
+  [
+   22.0,
+   9.0
+  ]
+ ],
+ "groups": [
+  {
+   "confirmed": false,
+   "direct_nozzles": [],
+   "nozzles": [
+    "cand_0",
+    "cand_1",
+    "cand_2",
+    "cand_3",
+    "cand_4"
+   ],
+   "pump": "cand_11",
+   "valve_nozzles": {
+    "cand_12": [
+     "cand_0",
+     "cand_1",
+     "cand_2",
+     "cand_3",
+     "cand_4"
+    ]
+   },
+   "valves": [
+    "cand_12"
+   ]
+  }
+ ],
+ "links": [
+  {
+   "dn": 50.0,
+   "from": "n0",
+   "id": "l0",
+   "length_m": 4.0,
+   "material": "PVC",
+   "pipe_index": 0,
+   "source_handle": "7B",
+   "to": "n1"
+  },
+  {
+   "dn": 50.0,
+   "from": "n1",
+   "id": "l1",
+   "length_m": 15.0,
+   "material": "PVC",
+   "pipe_index": 1,
+   "source_handle": "7C",
+   "to": "n8"
+  },
+  {
+   "dn": 50.0,
+   "from": "n8",
+   "id": "l2",
+   "length_m": 1.0,
+   "material": "PVC",
+   "pipe_index": 1,
+   "source_handle": "7C",
+   "to": "n7"
+  },
+  {
+   "dn": 50.0,
+   "from": "n7",
+   "id": "l3",
+   "length_m": 1.0,
+   "material": "PVC",
+   "pipe_index": 1,
+   "source_handle": "7C",
+   "to": "n6"
+  },
+  {
+   "dn": 50.0,
+   "from": "n6",
+   "id": "l4",
+   "length_m": 1.0,
+   "material": "PVC",
+   "pipe_index": 1,
+   "source_handle": "7C",
+   "to": "n5"
+  },
+  {
+   "dn": 50.0,
+   "from": "n5",
+   "id": "l5",
+   "length_m": 1.0,
+   "material": "PVC",
+   "pipe_index": 1,
+   "source_handle": "7C",
+   "to": "n4"
+  },
+  {
+   "dn": 50.0,
+   "from": "n4",
+   "id": "l6",
+   "length_m": 1.0,
+   "material": "PVC",
+   "pipe_index": 1,
+   "source_handle": "7C",
+   "to": "n2"
+  },
+  {
+   "dn": 50.0,
+   "from": "n1",
+   "id": "l7",
+   "length_m": 7.0,
+   "material": "PVC",
+   "pipe_index": 2,
+   "source_handle": "7D",
+   "to": "n3"
+  }
+ ],
+ "nodes": [
+  {
+   "attachments": [
+    {
+     "id": "cand_11",
+     "type": "pump"
+    }
+   ],
+   "component": 0,
+   "degree": 1,
+   "id": "n0",
+   "position": [
+    26.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [
+    {
+     "id": "cand_12",
+     "type": "valve"
+    }
+   ],
+   "component": 0,
+   "degree": 3,
+   "id": "n1",
+   "position": [
+    22.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [],
+   "component": 0,
+   "degree": 1,
+   "id": "n2",
+   "position": [
+    2.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [],
+   "component": 0,
+   "degree": 1,
+   "id": "n3",
+   "position": [
+    22.0,
+    9.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [
+    {
+     "id": "cand_0",
+     "type": "nozzle"
+    }
+   ],
+   "component": 0,
+   "degree": 2,
+   "id": "n4",
+   "position": [
+    3.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [
+    {
+     "id": "cand_1",
+     "type": "nozzle"
+    }
+   ],
+   "component": 0,
+   "degree": 2,
+   "id": "n5",
+   "position": [
+    4.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [
+    {
+     "id": "cand_2",
+     "type": "nozzle"
+    }
+   ],
+   "component": 0,
+   "degree": 2,
+   "id": "n6",
+   "position": [
+    5.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [
+    {
+     "id": "cand_3",
+     "type": "nozzle"
+    }
+   ],
+   "component": 0,
+   "degree": 2,
+   "id": "n7",
+   "position": [
+    6.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  },
+  {
+   "attachments": [
+    {
+     "id": "cand_4",
+     "type": "nozzle"
+    }
+   ],
+   "component": 0,
+   "degree": 2,
+   "id": "n8",
+   "position": [
+    7.0,
+    2.0
+   ],
+   "pump": "cand_11"
+  }
+ ],
+ "pipes": [
+  {
+   "dn": 50.0,
+   "id": null,
+   "index": 0,
+   "layer": "F-PIPE PVC DN50",
+   "material": "PVC",
+   "provenance": {
+    "dn": "pipe field",
+    "material": "pipe field"
+   },
+   "source_handle": "7B"
+  },
+  {
+   "dn": 50.0,
+   "id": null,
+   "index": 1,
+   "layer": "F-PIPE PVC DN50",
+   "material": "PVC",
+   "provenance": {
+    "dn": "pipe field",
+    "material": "pipe field"
+   },
+   "source_handle": "7C"
+  },
+  {
+   "dn": 50.0,
+   "id": null,
+   "index": 2,
+   "layer": "F-PIPE PVC DN50",
+   "material": "PVC",
+   "provenance": {
+    "dn": "pipe field",
+    "material": "pipe field"
+   },
+   "source_handle": "7D"
+  }
+ ],
+ "solver_input": {
+  "method": "hazen-williams",
+  "nodes": [
+   {
+    "demand": 0.0,
+    "elevation": 0.0,
+    "fixed_head": 20.0,
+    "id": "n0"
+   },
+   {
+    "demand": 0.0,
+    "elevation": 0.0,
+    "id": "n1"
+   },
+   {
+    "demand": 0.0,
+    "elevation": 0.0,
+    "id": "n2"
+   },
+   {
+    "demand": 0.0,
+    "elevation": 0.0,
+    "id": "n3"
+   },
+   {
+    "demand": 0.0,
+    "discharge_coeff": 0.97,
+    "elevation": 0.0,
+    "emitter_exponent": 0.5,
+    "emitter_k": 0.00020880613017821098,
+    "id": "n4"
+   },
+   {
+    "demand": 0.0,
+    "discharge_coeff": 0.97,
+    "elevation": 0.0,
+    "emitter_exponent": 0.5,
+    "emitter_k": 0.00020880613017821098,
+    "id": "n5"
+   },
+   {
+    "demand": 0.0,
+    "discharge_coeff": 0.97,
+    "elevation": 0.0,
+    "emitter_exponent": 0.5,
+    "emitter_k": 0.00020880613017821098,
+    "id": "n6"
+   },
+   {
+    "demand": 0.0,
+    "discharge_coeff": 0.97,
+    "elevation": 0.0,
+    "emitter_exponent": 0.5,
+    "emitter_k": 0.00020880613017821098,
+    "id": "n7"
+   },
+   {
+    "demand": 0.0,
+    "discharge_coeff": 0.97,
+    "elevation": 0.0,
+    "emitter_exponent": 0.5,
+    "emitter_k": 0.00020880613017821098,
+    "id": "n8"
+   }
+  ],
+  "pipes": [
+   {
+    "diameter": 0.05,
+    "from": "n0",
+    "id": "p0",
+    "length": 4.0,
+    "links": [
+     "l0"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n1"
+   },
+   {
+    "diameter": 0.05,
+    "from": "n1",
+    "id": "p1",
+    "length": 15.0,
+    "links": [
+     "l1"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n8"
+   },
+   {
+    "diameter": 0.05,
+    "from": "n1",
+    "id": "p2",
+    "length": 7.0,
+    "links": [
+     "l7"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n3"
+   },
+   {
+    "diameter": 0.05,
+    "from": "n4",
+    "id": "p3",
+    "length": 1.0,
+    "links": [
+     "l6"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n2"
+   },
+   {
+    "diameter": 0.05,
+    "from": "n5",
+    "id": "p4",
+    "length": 1.0,
+    "links": [
+     "l5"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n4"
+   },
+   {
+    "diameter": 0.05,
+    "from": "n6",
+    "id": "p5",
+    "length": 1.0,
+    "links": [
+     "l4"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n5"
+   },
+   {
+    "diameter": 0.05,
+    "from": "n7",
+    "id": "p6",
+    "length": 1.0,
+    "links": [
+     "l3"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n6"
+   },
+   {
+    "diameter": 0.05,
+    "from": "n8",
+    "id": "p7",
+    "length": 1.0,
+    "links": [
+     "l2"
+    ],
+    "minor_loss": 0.0,
+    "roughness": 150.0,
+    "to": "n7"
+   }
+  ]
+ },
+ "stats": {
+  "components": 1,
+  "dangling": 2,
+  "links": 8,
+  "nodes": 9,
+  "nozzles": 5,
+  "pumps": 1,
+  "valves": 1
+ },
+ "tolerance_m": 0.05,
+ "unattached": [
+  {
+   "distance_m": 3.9051,
+   "id": "cand_5",
+   "position": [
+    19.5,
+    6.0
+   ],
+   "reason": "no pipe within 0.05 m",
+   "type": "nozzle"
+  },
+  {
+   "distance_m": 4.272,
+   "id": "cand_6",
+   "position": [
+    18.0,
+    7.5
+   ],
+   "reason": "no pipe within 0.05 m",
+   "type": "nozzle"
+  },
+  {
+   "distance_m": 6.265,
+   "id": "cand_7",
+   "position": [
+    16.5,
+    6.0
+   ],
+   "reason": "no pipe within 0.05 m",
+   "type": "nozzle"
+  },
+  {
+   "distance_m": 4.717,
+   "id": "cand_8",
+   "position": [
+    18.0,
+    4.5
+   ],
+   "reason": "no pipe within 0.05 m",
+   "type": "nozzle"
+  },
+  {
+   "distance_m": 9.0554,
+   "id": "cand_9",
+   "position": [
+    1.0,
+    11.0
+   ],
+   "reason": "no pipe within 0.05 m",
+   "type": "light"
+  },
+  {
+   "distance_m": 2.2361,
+   "id": "cand_10",
+   "position": [
+    23.0,
+    11.0
+   ],
+   "reason": "no pipe within 0.05 m",
+   "type": "light"
+  }
+ ],
+ "unsolved_components": [],
+ "warnings": []
+}

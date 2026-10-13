@@ -310,3 +310,82 @@ export class FixtureInstances {
     this.group.parent?.remove(this.group);
   }
 }
+
+/**
+ * AF-3D-019 — engineering light fixtures, instanced.
+ *
+ * Each RGB fixture used to add its own CircleGeometry + MeshBasicMaterial marker:
+ * one draw call per light per pass (main, reflection, quad panes), and the geometry
+ * and material were never disposed on rebuild. With the light cap lifted
+ * (AF-3D-022) a 300-fixture site would have been 300+ draw calls of markers alone.
+ *
+ * Now every light is two instances: a stainless luminaire body (the `light` kind
+ * above) and an additive lens disc whose per-instance colour carries the fixture's
+ * live colour and level. Two InstancedMeshes regardless of fixture count.
+ */
+export class LightMarkerInstances {
+  constructor(THREE, { radius = 0.35 } = {}) {
+    this.T = THREE;
+    this.group = new THREE.Group();
+    this.group.name = "light-fixtures";
+    this.bodies = new FixtureInstances(THREE, { emissive: 0x335577 });
+    this.group.add(this.bodies.group);
+    this._discGeo = new THREE.CircleGeometry(radius, 24);
+    // Additive: a lit lens adds light; level is carried by colour brightness, which
+    // replaces the old per-mesh opacity without needing a material per fixture.
+    this._discMat = new THREE.MeshBasicMaterial({
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, toneMapped: true,
+    });
+    this.disc = null;
+    this.count = 0;
+    this._tmp = new THREE.Color();
+  }
+
+  /** Rebuild for a new fixture list: [{ id, x, z, y?, color: THREE.Color }]. */
+  setLights(lights = []) {
+    const T = this.T;
+    const n = lights.length;
+    this.bodies.setFixtures(lights.map(l => ({ id: l.id, kind: "light", x: l.x || 0, y: -0.12, z: l.z || 0 })));
+    if (!this.disc || this.disc.instanceMatrix.count < n) {
+      if (this.disc) { this.group.remove(this.disc); this.disc.dispose(); }
+      this.disc = new T.InstancedMesh(this._discGeo, this._discMat, Math.max(1, n));
+      this.disc.frustumCulled = false;
+      this.disc.renderOrder = 2;
+      this.disc.name = "light-lenses";
+      this.group.add(this.disc);
+    }
+    const m = new T.Matrix4(), q = new T.Quaternion().setFromEuler(new T.Euler(-Math.PI / 2, 0, 0));
+    const p = new T.Vector3(), s = new T.Vector3(1, 1, 1);
+    for (let i = 0; i < n; i++) {
+      p.set(lights[i].x || 0, 0.03, lights[i].z || 0);
+      m.compose(p, q, s);
+      this.disc.setMatrixAt(i, m);
+      this.disc.setColorAt(i, lights[i].color || this._tmp.set(1, 1, 1));
+    }
+    this.disc.count = n;
+    this.disc.instanceMatrix.needsUpdate = true;
+    if (this.disc.instanceColor) this.disc.instanceColor.needsUpdate = true;
+    this.disc.userData.nodeIds = lights.map(l => l.id || null);
+    this.count = n;
+  }
+
+  /** Per-frame: colour x level for instance i (level 0..1, default 0.92 = old opacity). */
+  setLevel(i, color, level = 0.92) {
+    if (!this.disc || i >= this.count) return;
+    this._tmp.copy(color).multiplyScalar(Math.max(0, Math.min(1, level)));
+    this.disc.setColorAt(i, this._tmp);
+    this.disc.instanceColor.needsUpdate = true;
+  }
+
+  /** Meshes for picking / pass-hiding lists. */
+  meshes() { return [this.disc, ...this.bodies.group.children].filter(Boolean); }
+
+  dispose() {
+    if (this.disc) this.disc.dispose();
+    this._discGeo.dispose();
+    this._discMat.dispose();
+    this.bodies.dispose();
+    this.group.parent?.remove(this.group);
+  }
+}

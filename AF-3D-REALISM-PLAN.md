@@ -122,12 +122,28 @@ Each phase is independently shippable and gated behind the existing `RENDER_QUAL
 | AF-3D-010 | R3 | GPGPU ripple heightfield + projected caustics | 3–5 d |
 | AF-3D-011 | R3 | Wet-surface PBR upgrade | 1 d |
 | AF-3D-012 | R4 | PBR ground/basin materials | 1–2 d |
-| AF-3D-013 | R4 | Instanced glTF fixture models | 3–4 d |
+| AF-3D-013 → **AF-3D-019** | R4 | Instanced glTF fixture models (renumbered — see ID note below) | 3–4 d |
 | AF-3D-014 | R4 | Venue backdrop presets ×3 | 3–5 d |
 | AF-3D-015 | R4 | Shadow frustum fit / CSM | 1 d |
 | AF-3D-016 | R5 | God rays, motion blur/long exposure, DoF | 3–4 d |
 
 **~6–8 working weeks total; Phase R1 alone (~1.5 weeks) delivers the bulk of the perceived jump.**
+
+> **ID note (AF-3D-018, 2026-10-13).** This plan's "AF-3D-013 instanced glTF fixture
+> models" collided with the shipped **AF-3D-013, the performance HUD** (`getPerfStats`,
+> see `CURRENT_STATUS.md`). The fixture-model item is **renumbered AF-3D-019**, as set
+> out in `AF-CAD-DESIGN-RENDER-PLAN.md` (Phase 3), which also adds AF-3D-017 (polygon
+> basin mask), AF-3D-018 (this growth guardrail), AF-3D-020 (large-show benchmark),
+> AF-3D-021 (scene decomposition), AF-3D-022 (light texture / HG beam lighting),
+> AF-3D-023 (three.js upgrade spike), AF-3D-024 (AgX/Neutral tone mapping) and later
+> items. AF-3D-008, 014, 015 and 016 keep their IDs.
+>
+> **Growth guardrail (AF-3D-018).** `FountainScene_v6.js` had grown to 4,387 lines
+> despite §3's "must not grow" rule. `src/components/preview/__tests__/sceneGuard.test.js`
+> now fails if it exceeds 4,387 lines (ceiling to be lowered as it shrinks, never
+> raised). AF-3D-021 split shaders, post-processing, lighting, basin and tier config
+> into `sceneShaders.js`, `scenePost.js`, `sceneLighting.js`, `sceneBasin.js` and
+> `sceneQuality.js`.
 
 ## 5. Research sources
 

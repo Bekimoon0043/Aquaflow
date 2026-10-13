@@ -17,6 +17,7 @@ import {
 } from "./reflections";
 import {
   ENVIRONMENTS, SCENE_MODES, NIGHT_SCENE_NAMES, getSceneMode, isNightScene,
+  TONE_MAPPING, DEFAULT_TONE_MAPPING, getToneMapping, threeToneMapping, calibratedExposure,
 } from "./sceneModes";
 
 export {
@@ -27,6 +28,7 @@ export {
   reflectPoint, reflectionMatrix, fresnelSchlick, normalReflectance, reflectionConfig,
   // scene modes
   ENVIRONMENTS, SCENE_MODES, NIGHT_SCENE_NAMES, getSceneMode, isNightScene,
+  TONE_MAPPING, DEFAULT_TONE_MAPPING, getToneMapping, threeToneMapping, calibratedExposure,
 };
 
 export const RENDER_ENGINE_VERSION = "1.0.0";

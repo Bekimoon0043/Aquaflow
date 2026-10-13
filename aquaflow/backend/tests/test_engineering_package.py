@@ -4,7 +4,8 @@ Contract tests for the Engineering Package Export (AQ-X-010).
 Asserts the three acceptance criteria:
   1. a full engineering package is exported (one valid ZIP of deliverables),
   2. all required documents are included (manifest complete + matching checksums),
-  3. PDF and DXF formats are supported (valid cover PDF + R12 DXF layout).
+  3. PDF and DXF formats are supported (valid cover PDF + DXF layout — the ezdxf
+     AC1027 writer since AF-CAD-003; R12 stays available via cad_writer='r12').
 """
 import io
 import zipfile
@@ -105,9 +106,17 @@ def test_cover_pdf_is_valid(package):
     assert b"Grand Plaza Fountain" in pdf          # project name rendered
 
 
-def test_layout_dxf_is_r12(package):
+def test_layout_dxf_is_ezdxf_writer(package):
+    # AF-CAD-003: the package DXF comes from the single ezdxf writer (was R12).
     _, _, zf = package
     dxf = zf.read("layout.dxf").decode("utf-8")
+    assert "AC1027" in dxf and dxf.rstrip().endswith("EOF")
+    assert "AQF_NOZZLE_" in dxf and "AQUAFLOW" in dxf
+
+
+def test_layout_dxf_legacy_r12_opt_in():
+    docs, _ = build_documents({**DESIGN, "cad_writer": "r12"})
+    dxf = docs["layout.dxf"].decode("utf-8")
     assert "AC1009" in dxf and dxf.rstrip().endswith("EOF")
 
 

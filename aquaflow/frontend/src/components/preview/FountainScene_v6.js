@@ -43,17 +43,17 @@
  */
 
 import * as THREE from "three";
+// Basin / water-surface / site-surface construction lives in sceneBasin.js.
+import { buildPool, disposeSiteSurfaces, buildSiteSurfaces, buildWaterSurface, setCadUnderlay } from "./sceneBasin";
+// Environment lights, shadows, sky, underwater + engineering lights: sceneLighting.js.
 import {
-  centeredPoolPoints,
-  deckWithOpening,
-  polygonWaterGeometry,
-  poolPerimeterSegments,
-  poolPolygonBounds,
-  poolShapeGeometry,
-} from './basinGeometry';
+  envIntensityFor, buildSky, refitShadows, fitShadowCamera, applyEnvironment,
+  buildUnderwaterLights, setEngineeringLights, colorFromSignalColor,
+  applyRuntimeLighting, setLightColor,
+} from "./sceneLighting";
 // Photorealistic Rendering Engine (AQ-S3-004) — single source of truth for the
 // environment presets and gravity used by the water physics below.
-import { ENVIRONMENTS as RE_ENVIRONMENTS, GRAVITY as RE_GRAVITY } from "../../rendering";
+import { ENVIRONMENTS as RE_ENVIRONMENTS, GRAVITY as RE_GRAVITY, threeToneMapping, calibratedExposure, getToneMapping } from "../../rendering";
 // VR Walkthrough Engine (AQ-S3-006) — WebXR session config + guided-tour sequencing.
 import {
   isVRSupported as WT_isVRSupported, vrSessionOptions as WT_vrSessionOptions,
@@ -63,35 +63,25 @@ import {
 // 4K Video Export Engine (AQ-S3-007) — export config + A/V sync.
 import { buildExportConfig as VE_buildExportConfig, combineStreams as VE_combineStreams } from "../../video/videoExport";
 import { frameShowTime as VB_frameShowTime, frameTimestamp as VB_frameTimestamp, prerollShowTime as VB_prerollShowTime } from "../../video/bakedTimeline";
-// AQ-S3-010 — cinematic post-processing chain. A fountain is emissive water, light and
-// flame against a night sky: bloom is what makes it read as *light* rather than bright
-// pixels, so the composer is the single biggest visual win available here.
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
-import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+// AQ-S3-010 — the cinematic post chain (bloom, AO, grade, SMAA) and the AF-3D-008
+// half-res spray composite live in scenePost.js.
 // AQ-S2-002 Phase 2 — solver-driven jet physics (pure, unit-tested, single definition).
 import { launchSpeed as JP_launchSpeed, jetHeightFor as JP_jetHeightFor, normalizePhysics as JP_normalizePhysics } from "./jetPhysics";
 // AQ-S3-012 — a real mirror image in the pool, and a record of where the water lands.
 import { WaterReflectionProbe } from "./waterReflection";
 import { SplashMap, insidePool as SM_insidePool, litresPerImpact as SM_litresPerImpact } from "./splashMap";
 import { WaterHeightField } from "./waterHeightField";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 // AF-3D Phase R1 (realism plan) — the night-look upgrades:
 //   billboard particles (velocity-stretched quads + soft depth fade), procedural
 //   sprite textures, an opaque-scene depth probe, a sky dome with starfield that
 //   doubles as the IBL source, and volumetric beam cones for the RGB fixtures.
 import { buildBillboardGeometry, buildBillboardMaterial } from "./particlesBillboard";
 import { makeDropletTexture, makeMistTexture, makeFoamTexture, makeFlameTexture } from "./particleTextures";
-import { SceneDepthProbe } from "./sceneDepth";
-import { createSkyDome, createSkyIBL } from "./skyDome";
+// (sky dome construction moved to sceneLighting.js)
 import { LightConeSet } from "./lightCones";
 // AF-3D-012 (pulled forward from Phase R4) — procedural stone/tile PBR maps for the
 // hard surfaces; the flat single-colour deck was the loudest remaining CGI cue.
-import { createStoneMaps, cloneStoneMaps, applyStoneMaps, disposeStoneMaps } from "./groundTextures";
+import { createStoneMaps, cloneStoneMaps, disposeStoneMaps } from "./groundTextures";
 // AF-3D-006/007 (Phase R2) — GPU particle simulation. State lives in float textures
 // and is advanced by shaders, lifting the count an order of magnitude above what the
 // CPU field can carry. The CPU field stays as the low-tier fallback AND as the
@@ -99,9 +89,19 @@ import { createStoneMaps, cloneStoneMaps, applyStoneMaps, disposeStoneMaps } fro
 import { GPUParticleField, gpuParticlesSupported } from "./particlesGPU";
 import { describeNozzleEmitters, allocatePool, EMIT_CLASS } from "./nozzleEmitters";
 // AF-3D-014 (Phase R4) — real nozzle and luminaire bodies, drawn instanced.
-import { FixtureInstances, fixtureKindFor } from "./fixtureModels";
+import { FixtureInstances, LightMarkerInstances, fixtureKindFor } from "./fixtureModels";
 import { buildVenue, disposeVenue } from "./venueModels";
 import { ModelLayer } from "./modelLibrary";
+import { QUALITY_CONFIG, CPU_SAMPLE_FRACTION } from "./sceneQuality";
+import {
+  buildEnvironmentIBL, buildPostFX, setPostFX, disposePostFX,
+  configureHalfResSpray, renderHalfResSpray, restoreVisibility, halfResSprayObjects,
+} from "./scenePost";
+import { FixtureLightField, bindFieldLightUniforms } from "./fixtureLightField";
+import {
+  CORE_VERT, CORE_FRAG, GLOW_VERT, GLOW_FRAG,
+  FOG_VERT, FOG_FRAG, LASER_VERT, LASER_FRAG, MAX_RIPPLES,
+} from "./sceneShaders";
 
 export const NOZZLE_TYPES = {
   JET_1D:"jet_1d", JET_2D:"jet_2d", JET_3D:"jet_3d",
@@ -118,597 +118,27 @@ export const CAMERA_MODES  = {
 };
 export const RENDER_QUALITY = { LOW:"low", MEDIUM:"medium", HIGH:"high" };
 
-// Max RGB fixture lights uploaded to the spatial light field shader
-const MAX_FIELD_LIGHTS = 16;
+// AF-3D-022: fixture lights live in a clustered light TEXTURE (fixtureLightField.js),
+// so the old 16-light uniform cap is gone. Volumetric beam cones stay a per-mesh
+// effect and are drawn for the brightest MAX_BEAM_CONES fixtures only.
+const MAX_BEAM_CONES = 16;
 // Emitter slots in the GPU field's parameter texture. A nozzle contributes one or
 // two (a jet plus its atomised shell), so this carries a large design comfortably.
 const MAX_GPU_EMITTERS = 96;
-// Concurrent impact ripples on the pool surface. A ring buffer: the newest impact
-// replaces the oldest, so a busy show keeps its most recent disturbances.
-const MAX_RIPPLES = 8;
-// postFX per tier: `low` stays on the direct render path (no composer) so weak GPUs keep
-// their frame rate; `medium` gets bloom + grade; `high` adds SMAA and a wider bloom.
-// `reflect` is the planar-reflection target size in px, 0 = off. `reflectEvery` renders
-// it on every Nth frame: the mirror image is low-frequency and tolerates staleness far
-// better than the direct image, so medium buys the effect at half the cost.
-// AF-3D R1 additions per tier: `softDepth` renders the opaque-scene depth probe that
-// soft particles and light cones fade against (one cheap extra pass at `softScale` ×
-// canvas resolution); `cones` draws the volumetric fixture beams; `stars` puts the
-// starfield in the night sky dome. `low` keeps all three off — it exists for weak GPUs
-// and its frame budget is already spoken for.
-const QUALITY_CONFIG = {
-  low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
-            postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false,
-            reflect: 0,   reflectEvery: 1,
-            softDepth: false, softScale: 0.5, cones: false, stars: false,
-            gpuParticles: false, gpuWater: 0, gpuSpray: 0 },
-  medium: { pixelRatio: 1.5, shadows: true,  markerScale: 1.00, exposure: 1.00,
-            postfx: true,  bloom: 0.20, smaa: false, ibl: true,  ao: false,
-            reflect: 512, reflectEvery: 2,
-            softDepth: true, softScale: 0.5, cones: true, stars: true,
-            gpuParticles: true, gpuWater: 131072, gpuSpray: 65536 },
-  high:   { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
-            postfx: true,  bloom: 0.29, smaa: true,  ibl: true,  ao: true,
-            reflect: 1024, reflectEvery: 1,
-            softDepth: true, softScale: 0.5, cones: true, stars: true,
-            gpuParticles: true, gpuWater: 262144, gpuSpray: 131072 },
-};
+// MAX_RIPPLES (the pool-surface impact ring buffer) lives with the water shader.
+// QUALITY_CONFIG (per-tier feature table) and CPU_SAMPLE_FRACTION live in sceneQuality.js.
 
-/**
- * When the GPU field is drawing the water, the CPU field keeps running at this
- * fraction purely as a PHYSICS SAMPLE: invisible, but still reporting impacts to the
- * splash map. That map converts impacts into calibrated litres/minute of spill — an
- * engineering figure, not decoration — and its calibration divides solved flow by the
- * spawn rate it actually measures, so sampling one droplet in sixteen changes the
- * per-impact volume and leaves the reported litres unchanged. Dropping the CPU field
- * entirely would have silently zeroed a commissioning number.
- */
-const CPU_SAMPLE_FRACTION = 1 / 16;
-
-// ── Camera-response pass ────────────────────────────────────────────────────
-// Applied after bloom, before OutputPass (which owns tone mapping + colour space).
-// These are lens/sensor behaviours a real camera exhibits — optical vignetting,
-// lateral chromatic aberration and sensor noise — not a stylistic "filter". Values
-// are deliberately near the threshold of perception: they make the image read as
-// photographed rather than synthetic, without altering what an engineer can measure.
-const CINEMATIC_SHADER = {
-  uniforms: {
-    tDiffuse:    { value: null },
-    uTime:       { value: 0 },
-    uVignette:   { value: 0.42 },   // gentle optical falloff, not a dark tunnel
-    uAberration: { value: 0.30 },   // slight edge-only RGB split, as a real lens
-    uGrain:      { value: 0.012 },  // faint sensor noise in the shadows
-    uSaturation: { value: 1.03 },
-    uContrast:   { value: 1.02 },
-    uResolution: { value: new THREE.Vector2(1, 1) },
-  },
-  vertexShader: /* glsl */`
-    varying vec2 vUv;
-    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
-  `,
-  fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse;
-    uniform float uTime, uVignette, uAberration, uGrain, uSaturation, uContrast;
-    uniform vec2  uResolution;
-    varying vec2 vUv;
-
-    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-
-    void main(){
-      vec2 uv = vUv;
-      vec2 toCenter = uv - 0.5;
-      float r2 = dot(toCenter, toCenter);          // 0 at centre -> 0.5 at corners
-
-      // Chromatic aberration: zero in the middle, grows toward the frame edge, the way
-      // a real lens behaves. Scaled to pixels so it is resolution-independent.
-      vec2 px = (uAberration / max(uResolution.x, 1.0)) * r2 * 4.0 * normalize(toCenter + 1e-6);
-      vec3 col;
-      col.r = texture2D(tDiffuse, uv + px).r;
-      col.g = texture2D(tDiffuse, uv).g;
-      col.b = texture2D(tDiffuse, uv - px).b;
-
-      // Saturation + contrast, around mid grey.
-      float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(luma), col, uSaturation);
-      col = (col - 0.5) * uContrast + 0.5;
-
-      // Vignette — smooth, keeps the pool centre bright. Written as 1.0 - smoothstep
-      // with increasing edges: reversed edges (edge0 > edge1) are undefined in GLSL.
-      float vig = 1.0 - smoothstep(0.18, 0.95, r2 * uVignette * 2.4);
-      col *= mix(1.0, vig, clamp(uVignette, 0.0, 1.0));
-
-      // Animated fine grain; strongest in the shadows so highlights stay clean.
-      float g = hash(uv * uResolution + fract(uTime) * 137.0) - 0.5;
-      col += g * uGrain * (1.0 - smoothstep(0.0, 0.75, luma));
-
-      gl_FragColor = vec4(max(col, 0.0), 1.0);
-    }
-  `,
-};
+/** The `n` most intense fixtures — beam cones are per-mesh, so only these get one. */
+function brightestLights(lights, n) {
+  if (!Array.isArray(lights) || lights.length <= n) return lights || [];
+  return [...lights].sort((a, b) => (b.intensity || 0) - (a.intensity || 0)).slice(0, n);
+}
 
 function seededNoise(i, salt = 0) {
   const x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
   return x - Math.floor(x);
 }
 
-// ─── PARTICLE SPRITES ────────────────────────────────────────────────────────
-// The point-sprite shaders that lived here moved to particlesBillboard.js when the
-// particles became instanced, velocity-stretched quads (AF-3D-002). The droplet
-// optical model, light-field injection and premultiplied blending rationale are
-// preserved there verbatim — plus soft-depth fade and sprite textures.
-
-// ─── WATER CORE COLUMN SHADER — coherent pressurized body ───────────────────
-const CORE_VERT = /* glsl */`
-attribute vec3  aPos;     // base pos (cylinder vertex, y in [0..1])
-uniform float   uHeight;
-uniform float   uTime;
-uniform float   uIntensity;
-uniform vec3    uOrigin;
-uniform vec2    uWind;
-uniform vec2    uHorizontalSpeed;
-uniform float   uVerticalSpeed;
-varying float   vT;       // 0=base, 1=tip
-varying vec3    vWorldPos;
-varying float   vAlpha;
-varying vec3    vRadial;
-
-void main(){
-  float t  = clamp(aPos.y, 0.0, 1.0);
-  vT       = t;
-
-  // The coherent core occupies the lower portion of a ballistic jet. Keep Y
-  // monotonic: multiplying the height by a decreasing tip factor folded the
-  // old mesh downward and made the water look like a bent glass rod.
-  float y = t * uHeight;
-
-  // Kelvin-Helmholtz turbulent breakup (more at tip)
-  float turb = pow(t, 2.2);
-  float tx = sin(t*14.0 + uTime*7.0) * 0.030;
-  float tz = cos(t*11.0 - uTime*5.5) * 0.026;
-  // Wind drag (parabolic, more at tip)
-  float w  = t * t;
-
-  // Slightly expanding aeration, then feather into the ballistic spray crown.
-  float taper = mix(1.0, 1.35, t) * mix(1.0, 0.65, smoothstep(0.82, 1.0, t));
-  taper *= 1.0 + 0.06 * sin(t * 75.0 - uTime * 19.0);
-  vRadial = normalize(vec3(aPos.x, 0.0, aPos.z));
-  // The coherent body follows the same ballistic path as the droplets. Its
-  // centerline must lean with a tilted nozzle instead of staying vertical.
-  float flightTime = (uVerticalSpeed - sqrt(max(0.0,
-    uVerticalSpeed*uVerticalSpeed - 19.62*y))) / 9.81;
-  vec3 worldPos = uOrigin + vec3(
-    aPos.x * taper + tx * turb + uHorizontalSpeed.x * flightTime + uWind.x * w * 0.9,
-    y,
-    aPos.z * taper + tz * turb + uHorizontalSpeed.y * flightTime + uWind.y * w * 0.9
-  );
-  vWorldPos = worldPos;
-
-  // Breakup alpha: solid at base, transparent at tip
-  float breakup = 1.0 - smoothstep(0.78, 1.0, t);
-  vAlpha = smoothstep(0.0, 0.16, uIntensity) * breakup * 0.72;
-
-  gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
-}`;
-
-const CORE_FRAG = /* glsl */`
-precision highp float;
-uniform vec3  uWaterColor;
-uniform vec3  uGlobalLight;
-uniform float uGlobalLightI;
-uniform int   uFieldCount;
-uniform vec3  uFieldPos[${MAX_FIELD_LIGHTS}];
-uniform vec3  uFieldCol[${MAX_FIELD_LIGHTS}];
-uniform float uFieldInt[${MAX_FIELD_LIGHTS}];
-uniform float uFieldRad[${MAX_FIELD_LIGHTS}];
-varying float vT;
-varying vec3  vWorldPos;
-varying float vAlpha;
-varying vec3 vRadial;
-uniform float uTime;
-
-void main(){
-  if (vAlpha < 0.01) discard;
-
-  // Cross-section: bright TIR core, slight rim
-  vec3 deep    = uWaterColor * 0.7;
-  vec3 shallow = mix(uWaterColor, vec3(0.85, 0.95, 1.0), 0.55);
-  vec3 col     = mix(shallow, deep, vT * 0.6);
-
-  // Camera-facing longitudinal highlight, not a horizontal bright band.
-  vec3 viewDir = normalize(cameraPosition - vWorldPos);
-  float facing = abs(dot(normalize(vRadial), viewDir));
-  float filament = pow(facing, 9.0);
-  float flow = 0.92 + 0.08 * sin(vWorldPos.y * 42.0 - uTime * 24.0);
-  col += filament * vec3(0.82, 0.92, 1.0) * 0.7;
-  col *= flow;
-
-      // RGB main light — subtle global tint only.
-  // Main visible color must come from the physical fixture field below.
-    float runtimeTint = clamp(uGlobalLightI * 1.1, 0.0, 0.92);
-  float luminance = max(max(col.r, col.g), col.b);
-  vec3 tintedCore = uGlobalLight * max(luminance, 0.40);
-
-  col = mix(col, tintedCore, runtimeTint);
-  col += uGlobalLight * uGlobalLightI * 0.25;
-
-  // RGB fixture field
-  for (int i = 0; i < ${MAX_FIELD_LIGHTS}; i++) {
-    if (i >= uFieldCount) break;
-        vec2 hd = vWorldPos.xz - uFieldPos[i].xz;
-    float horizontalFall = 1.0 - clamp(length(hd) / uFieldRad[i], 0.0, 1.0);
-    horizontalFall = horizontalFall * horizontalFall;
-
-    float verticalFall = exp(-max(vWorldPos.y, 0.0) * 0.22);
-    float beam = horizontalFall * verticalFall;
-
-    col += uFieldCol[i] * uFieldInt[i] * beam * 0.95;
-  }
-
-  gl_FragColor = vec4(col, vAlpha * (0.55 + 0.45 * facing));
-}`;
-
-// ─── LOCALIZED LIT-VOLUME GLOW (camera-facing billboard above each jet) ──────
-const GLOW_VERT = /* glsl */`
-uniform vec3   uOrigin;
-uniform float  uHeight;
-uniform float  uRadius;
-varying vec2   vUv;
-varying vec3   vWorld;
-
-void main(){
-  vUv = uv;
-  // Build camera-facing billboard centered on (uOrigin + height/2)
-  vec3 center = uOrigin + vec3(0.0, uHeight * 0.5, 0.0);
-  vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
-  vec3 camUp    = vec3(0.0, 1.0, 0.0);
-  vec3 world = center + camRight * position.x * uRadius + camUp * position.y * uHeight * 0.5;
-  vWorld = world;
-  gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
-}`;
-
-const GLOW_FRAG = /* glsl */`
-precision highp float;
-varying vec2  vUv;
-varying vec3  vWorld;
-uniform vec3  uColor;
-uniform float uIntensity;
-uniform float uTime;
-
-void main(){
-  vec2 c = vUv - 0.5;
-  float horiz = 1.0 - smoothstep(0.03, 0.5, abs(c.x));
-  // Reach zero at both quad edges. The previous *0.7 left a visible flat
-  // rectangle at the top of each glowing jet.
-  float vert = 1.0 - smoothstep(0.14, 0.5, abs(c.y));
-  float shape = horiz * horiz * vert * vert;
-  float pulse = 0.94 + sin(uTime * 2.1) * 0.06;
-  float a = shape * uIntensity * pulse * 0.20;
-  gl_FragColor = vec4(uColor, a);
-}`;
-
-// ─── WATER SURFACE — Gerstner + GGX + caustic + RGB light field ─────────────
-const WATER_VERT_V2 = /* glsl */`
-uniform float uTime;
-uniform float uIntensity;
-uniform float uWind;
-uniform mat4  uReflectMatrix;
-uniform vec4  uRipples[${MAX_RIPPLES}];   // xy = centre, z = age (s), w = strength
-uniform int   uRippleCount;
-uniform sampler2D uHeightTex;
-uniform float uHeightEnabled;
-uniform float uHeightTexel;
-uniform float uWaveExtent;
-uniform float uWaveHeightScale;
-varying vec2  vUv;
-varying vec3  vWorldPos;
-varying vec3  vNormal;
-varying float vDepth;
-varying float vFoam;
-varying vec4  vReflectCoord;
-varying vec2  vLocalXZ;
-
-vec3 gerstner(vec2 p, vec2 dir, float amp, float freq, float speed, float steep, float t){
-  float phase = dot(dir, p) * freq + t * speed;
-  float s = sin(phase), c = cos(phase);
-  return vec3(steep * amp * dir.x * c, amp * s, steep * amp * dir.y * c);
-}
-
-void main(){
-  vUv = uv;
-  // Wave input must be the WORLD ground plane. A PlaneGeometry's local position lies
-  // in XY with z identically zero, so the old position.xz fed every Gerstner term
-  // (x, 0): each wave reduced to dir.x * x, varying along X and constant along Z.
-  // The result was a set of parallel bands rather than a wave field — the surface
-  // could never look like water no matter how the amplitudes were tuned.
-  vec3 wp0 = (modelMatrix * vec4(position, 1.0)).xyz;
-  vec2 P   = wp0.xz;
-  float I  = max(uIntensity, 0.2);
-  vec3 w1 = gerstner(P, normalize(vec2( 1.0, 0.6)), 0.035*I, 2.1, 1.20, 0.8, uTime);
-  vec3 w2 = gerstner(P, normalize(vec2(-0.7, 1.0)), 0.028*I, 1.8, 0.90, 0.6, uTime*0.85);
-  vec3 w3 = gerstner(P, normalize(vec2( 0.3,-1.0)), 0.018*I, 3.5, 1.80, 0.4, uTime*1.15);
-  vec3 w4 = gerstner(P, normalize(vec2(-1.0, 0.4)), 0.012*I, 4.8, 2.40, 0.3, uTime*0.70);
-  vec3 disp = w1 + w2 + w3 + w4;
-  float dx = (w1.y + w2.y + w3.y) * 2.0;
-  float dz = (w1.y + w2.y + w4.y) * 2.0;
-
-  // ── Impact ripples (AF-3D-010) ──
-  // Expanding rings where the jets ACTUALLY land, sourced from the same impact
-  // events the splash map records. Ambient wave trains make a pool look animated
-  // but inert; rings appearing under a running jet are what tie the surface to the
-  // show. The slope is differentiated analytically rather than sampled, so the
-  // normal stays exact — a ripple visible in the reflection but not in the shading
-  // reads as a decal painted on glass.
-  float ripple = 0.0;
-  for (int i = 0; i < ${MAX_RIPPLES}; i++) {
-    if (i >= uRippleCount) break;
-    vec2  d     = P - uRipples[i].xy;
-    float r     = length(d) + 1e-4;
-    float age   = uRipples[i].z;
-    float front = age * 1.7;                    // ring travel, metres/second
-    float env   = exp(-abs(r - front) * 3.2)    // energy stays at the wavefront
-                * exp(-age * 1.15)              // and decays with age
-                * uRipples[i].w;
-    float k     = 9.0;
-    float phase = (r - front) * k;
-    ripple += sin(phase) * env * 0.05;
-    float dhdr = cos(phase) * k * env * 0.05;
-    dx += dhdr * (d.x / r) * 2.0;
-    dz += dhdr * (d.y / r) * 2.0;
-  }
-  disp.y += ripple;
-
-  // Coupled shallow-water field. Unlike the readable ring accents above, this grid
-  // exchanges energy between neighbouring cells, so simultaneous jet landings
-  // interfere and reflect from the real basin boundary.
-  float coupledWave = 0.0;
-  if (uHeightEnabled > 0.5) {
-    vec2 huv = P / uWaveExtent + 0.5;
-    if (huv.x >= 0.0 && huv.x <= 1.0 && huv.y >= 0.0 && huv.y <= 1.0) {
-      float hc = (texture2D(uHeightTex, huv).r * 2.0 - 1.0) * uWaveHeightScale;
-      float hl = (texture2D(uHeightTex, huv - vec2(uHeightTexel, 0.0)).r * 2.0 - 1.0) * uWaveHeightScale;
-      float hr = (texture2D(uHeightTex, huv + vec2(uHeightTexel, 0.0)).r * 2.0 - 1.0) * uWaveHeightScale;
-      float hd = (texture2D(uHeightTex, huv - vec2(0.0, uHeightTexel)).r * 2.0 - 1.0) * uWaveHeightScale;
-      float hu = (texture2D(uHeightTex, huv + vec2(0.0, uHeightTexel)).r * 2.0 - 1.0) * uWaveHeightScale;
-      coupledWave = hc;
-      disp.y += coupledWave;
-      dx += (hr - hl) / max(2.0 * uHeightTexel * uWaveExtent, 0.001);
-      dz += (hu - hd) / max(2.0 * uHeightTexel * uWaveExtent, 0.001);
-    }
-  }
-
-  vLocalXZ = P;
-  // World-space normal. The slope above is already expressed in world XZ, and the
-  // fragment stage dots this against world-space view and light vectors — routing it
-  // through normalMatrix (which maps object space to VIEW space) mixed two frames of
-  // reference and quietly corrupted every fresnel, specular and refraction term.
-  vNormal = normalize(vec3(-dx*1.8, 1.0, -dz*1.8));
-  // Foam only where wave trains actually superpose near their combined maximum.
-  // The old 0.02 threshold sat below every single crest, so daylight painted the
-  // whole surface in ordered white rows — wave-pattern stripes, not foam.
-  // Quiet pool waves do not form ocean whitecaps. Foam belongs to jet impacts.
-  vFoam   = smoothstep(0.025, 0.09, abs(ripple) + abs(coupledWave) * 0.65) * 0.45;
-  vDepth  = 1.0 - length(uv - 0.5) * 2.2;
-  // Displacement is authored in world axes, so it is applied to the world position
-  // directly rather than being pushed back through the model matrix.
-  vec4 wp = vec4(wp0 + disp, 1.0);
-  vWorldPos = wp.xyz;
-  // Project against the FLAT plane, not the wave-displaced point: the mirror lives at
-  // the mean waterline, and projecting the displaced position would double-count the
-  // wave (once here, once via the normal perturbation in the fragment stage) and make
-  // the reflection swim.
-  vReflectCoord = uReflectMatrix * (modelMatrix * vec4(position, 1.0));
-  gl_Position = projectionMatrix * viewMatrix * wp;
-}`;
-
-const WATER_FRAG_V2 = /* glsl */`
-precision highp float;
-uniform float uTime;
-uniform vec3  uLightColor;
-uniform float uLightIntensity;
-uniform vec3  uDeepColor;
-uniform vec3  uShallowColor;
-uniform vec3  uSkyColor;
-uniform float uRoughness;
-uniform vec3  uCameraPos;
-uniform sampler2D uReflectTex;
-uniform float uReflectStrength;   // 0 disables the sample and falls back to flat sky
-uniform float uIntensity;         // surface agitation — drives reflection break-up
-uniform sampler2D uFloorTex;      // basin lining, sampled through the refracted ray
-uniform float uHasFloorTex;
-uniform float uFloorY;            // basin floor height, world metres
-uniform float uFloorScale;        // world metres per texture tile
-uniform vec3  uAbsorb;            // Beer-Lambert extinction per metre, per channel
-uniform vec4  uPoolShape;         // x: 1 = circular, y: radius, z: width, w: length
-uniform int   uFieldCount;
-uniform vec3  uFieldPos[${MAX_FIELD_LIGHTS}];
-uniform vec3  uFieldCol[${MAX_FIELD_LIGHTS}];
-uniform float uFieldInt[${MAX_FIELD_LIGHTS}];
-uniform float uFieldRad[${MAX_FIELD_LIGHTS}];
-varying vec2  vUv;
-varying vec3  vWorldPos;
-varying vec3  vNormal;
-varying float vDepth;
-varying float vFoam;
-varying vec4  vReflectCoord;
-varying vec2  vLocalXZ;
-
-void main(){
-  // A circular basin is drawn as a tessellated plane and cut to shape here. A fan
-  // (CircleGeometry) has vertices only on its rim, so wave displacement and ripples
-  // had nothing to move — the round pools were flat by construction.
-  if (uPoolShape.x > 0.5 && length(vLocalXZ) > uPoolShape.y) discard;
-
-  float depth = clamp(vDepth, 0.0, 1.0);
-  float absorption = exp(-depth * 2.5);
-  vec3  base = mix(uDeepColor, uShallowColor, pow(1.0 - absorption, 0.7));
-
-  vec3 viewIn = normalize(vWorldPos - uCameraPos);
-
-  // ── Refraction through the surface onto the basin floor (AF-3D-009) ──
-  // Reflection alone cannot make a basin read as water: looking down, fresnel says
-  // you see THROUGH it, and what you see is the lining, displaced by the waves. The
-  // basin is a known flat plane, so the refracted ray can be intersected with it
-  // analytically — no second scene pass, and the wobble is physically the right
-  // shape rather than a scrolling normal-map trick.
-  float causticsFloor = 0.0;
-  if (uHasFloorTex > 0.5) {
-    vec3 rdir = refract(viewIn, normalize(vNormal), 1.0 / 1.333);
-    if (rdir.y < -1e-3) {
-      float t   = (uFloorY - vWorldPos.y) / rdir.y;
-      vec3  hit = vWorldPos + rdir * t;
-      // World-space tiling: the lining is seamless, so this avoids having to match
-      // the floor mesh's own UV layout for two different pool shapes.
-      vec3 floorCol = texture2D(uFloorTex, hit.xz / uFloorScale).rgb;
-
-      // Caustics belong HERE — focused light on the floor — not painted on the
-      // surface as they were before. Animated in world space so they stay put as
-      // the camera orbits.
-      float k1 = sin(hit.x * 3.1 + uTime * 1.1) * cos(hit.z * 2.6 + uTime * 0.85);
-      float k2 = sin(hit.x * 2.0 - uTime * 1.3) * cos(hit.z * 2.2 + uTime * 0.65);
-      causticsFloor = pow(max(k1 * k2, 0.0), 2.0) * 0.9;
-      floorCol *= 1.0 + causticsFloor * 2.2;
-      floorCol += causticsFloor * uLightColor * uLightIntensity * 0.5;
-
-      // Beer-Lambert along the real path length: red is stripped first, which is
-      // why deep water goes blue-green rather than merely darker.
-      float pathLen = length(hit - vWorldPos);
-      vec3  trans   = exp(-uAbsorb * pathLen);
-      // Submerged lining receives filtered skylight, not unlit albedo at full
-      // contrast. A little suspended-water scattering softens the tile pattern.
-      vec3 submerged = floorCol * mix(vec3(0.12), vec3(0.55), clamp(uSkyColor * 2.0, 0.0, 1.0));
-      base = mix(submerged * trans + uDeepColor * (1.0 - trans), uShallowColor, 0.28);
-    }
-  }
-
-  // Surface-level shimmer, kept subtle now that the real caustics live on the floor.
-  float c3 = sin((vUv.x + vUv.y) * 9.0 + uTime * 0.9) * 0.5;
-  float caustics = pow(max(c3, 0.0), 3.0) * 0.2 + causticsFloor * 0.25;
-
-    // Main light caustic tint
-  base += caustics * uLightColor * uLightIntensity * 0.7;
-
-  // Per-fixture light field — pool surface receives bleeds + specular tint
-  vec3 fieldContrib = vec3(0.0);
-  for (int i = 0; i < ${MAX_FIELD_LIGHTS}; i++) {
-    if (i >= uFieldCount) break;
-    float dist = distance(vWorldPos, uFieldPos[i]);
-    float fall = 1.0 - clamp(dist / uFieldRad[i], 0.0, 1.0);
-    fall = fall * fall;
-    fieldContrib += uFieldCol[i] * uFieldInt[i] * fall;
-  }
-      // Realistic surface bleed: visible reflection, not full material recolor.
-    base += fieldContrib * 0.95;
-  base += fieldContrib * caustics * 1.35;
-
-  float fieldStrength = clamp(length(fieldContrib), 0.0, 1.0);
-  base = mix(base, base + fieldContrib * 1.4, fieldStrength);
-
-  // GGX specular
-  vec3 viewDir  = normalize(uCameraPos - vWorldPos);
-  vec3 lightDir = normalize(vec3(0.4, 1.0, 0.6));
-  vec3 halfDir  = normalize(viewDir + lightDir);
-  float NdotH   = max(dot(vNormal, halfDir), 0.0);
-  float rough   = max(uRoughness, 0.05);
-  float a2      = rough * rough;
-  float denom   = NdotH * NdotH * (a2 - 1.0) + 1.0;
-  float ggx     = a2 / (3.14159 * denom * denom);
-  base += vec3(ggx * 0.35);
-
-  // Colored specular spike under strong RGB fixtures
-  base += fieldContrib * ggx * 1.8;
-
-  // ── Fresnel reflection ────────────────────────────────────────────────────
-  // Schlick against water's true normal-incidence reflectance. For IOR 1.333,
-  // F0 = ((1.333-1)/(1.333+1))^2 = 0.02: looking straight down, water reflects
-  // almost nothing and you see the basin; at a grazing angle it becomes a mirror.
-  // That enormous swing is the single strongest cue that a surface IS water, so it
-  // is worth getting exactly right rather than approximating with a tuned power.
-  float NdotV   = max(dot(vNormal, viewDir), 0.0);
-  const float F0 = 0.02;
-  float fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
-
-  // The mirror image, projected from the reflection pass and perturbed by the wave
-  // normal so it breaks up and streams with the surface.
-  vec3 skyFallback = uSkyColor * 0.55 + uLightColor * 0.10;
-  vec3 reflected   = skyFallback;
-  if (uReflectStrength > 0.0 && vReflectCoord.w > 0.0) {
-    vec2 ruv = vReflectCoord.xy / vReflectCoord.w;
-    // Perturbation shrinks as the surface calms, and with distance, so a still pool
-    // gives a clean mirror and a driven one gives broken light.
-    vec2 distort = vNormal.xz * (0.055 + 0.10 * uIntensity);
-    vec2 suv = clamp(ruv + distort, vec2(0.001), vec2(0.999));
-    vec3 mirrorCol = texture2D(uReflectTex, suv).rgb;
-    // Water is not a perfect mirror: it tints what it reflects and loses a little
-    // energy doing it.
-    mirrorCol *= mix(vec3(1.0), uShallowColor * 2.2 + vec3(0.35), 0.28);
-    reflected = mix(skyFallback, mirrorCol, uReflectStrength);
-  }
-  base = mix(base, reflected, fresnel);
-
-  // Underwater light bleed
-  base += uLightColor * uLightIntensity * 0.3 * depth;
-
-  // Foam
-  float foamTex = sin(vUv.x*80.0 + uTime) * cos(vUv.y*80.0 + uTime*0.8) * 0.5 + 0.5;
-  base = mix(base, vec3(0.95, 0.97, 1.0), vFoam * foamTex * 0.7);
-
-  // Edge darkening
-  base *= 0.85 + depth * 0.15;
-
-  // Opacity follows the same fresnel term. Looking down you see INTO the water, so it
-  // is translucent; at a grazing angle the surface is a mirror and nothing behind it
-  // shows through. A constant alpha makes water look like tinted glass.
-  float alpha = mix(0.86, 1.0, fresnel);
-  gl_FragColor = vec4(base, alpha);
-}`;
-
-// ─── FOG SHADER ──────────────────────────────────────────────────────────────
-const FOG_VERT = /* glsl */`
-attribute vec3  aOffset;
-attribute float aScale;
-attribute float aDensity;
-attribute float aLife;
-uniform float uTime;
-varying float vDensity;
-varying float vLife;
-void main(){
-  vDensity = aDensity; vLife = aLife;
-  vec3 pos = aOffset;
-  pos.x += sin(uTime*0.3 + aOffset.z) * 0.10;
-  pos.z += cos(uTime*0.25 + aOffset.x) * 0.08;
-  vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-  gl_PointSize = aScale * (500.0 / -mvPos.z);
-  gl_Position  = projectionMatrix * mvPos;
-}`;
-
-const FOG_FRAG = /* glsl */`
-precision highp float;
-uniform vec3 uFogColor;
-varying float vDensity; varying float vLife;
-void main(){
-  vec2 uv = gl_PointCoord - 0.5;
-  float d = length(uv); if(d > 0.5) discard;
-  float a = smoothstep(0.5, 0.05, d) * vDensity * vLife * 0.35;
-  gl_FragColor = vec4(uFogColor, a);
-}`;
-
-// ─── LASER BEAM ──────────────────────────────────────────────────────────────
-const LASER_VERT = /* glsl */`
-varying float vPos;
-void main(){
-  vPos = position.y;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`;
-const LASER_FRAG = /* glsl */`
-precision highp float;
-uniform vec3 uColor; uniform float uIntensity; uniform float uTime;
-varying float vPos;
-void main(){
-  float glow  = exp(-abs(vPos - 0.5) * 8.0);
-  float flick = 0.85 + sin(uTime * 40.0) * 0.15;
-  float a = uIntensity * flick * (0.6 + glow * 0.4);
-  gl_FragColor = vec4(uColor + glow * 0.5, a * 0.9);
-}`;
 // ─── GPU Particle System (with anisotropic stretch + RGB field uniforms) ────
 const MAX_WATER  = 60000;
 const MAX_SPRAY  = 22000;
@@ -746,7 +176,6 @@ class GPUParticleSystem {
     // geometry wraps THIS class's arrays, so the simulation below is untouched.
     const geo = buildBillboardGeometry(T, maxCount, this);
     this.mat = buildBillboardMaterial(T, {
-      maxFieldLights: MAX_FIELD_LIGHTS,
       blendMode,
       map,
     });
@@ -891,7 +320,7 @@ class GPUParticleSystem {
 }
 
 // ─── NozzleV2 — 4-layer fountain stack (core column + breakup + mist + impact)
-class NozzleV2 {
+export class NozzleV2 {
   constructor(T, waterSys, spraySys, foamSys, flameSys, config, sharedLightUniforms) {
     this.T = T;
     this.waterSys = waterSys;
@@ -959,11 +388,7 @@ class NozzleV2 {
       uWaterColor:   { value: new T.Color(0x88ccff) },
       uGlobalLight:  sharedLightUniforms.uGlobalLight,
       uGlobalLightI: sharedLightUniforms.uGlobalLightI,
-      uFieldCount:   sharedLightUniforms.uFieldCount,
-      uFieldPos:     sharedLightUniforms.uFieldPos,
-      uFieldCol:     sharedLightUniforms.uFieldCol,
-      uFieldInt:     sharedLightUniforms.uFieldInt,
-      uFieldRad:     sharedLightUniforms.uFieldRad,
+      ...sharedLightUniforms.field,
     };
 
     this.core = new T.Mesh(geo, new T.ShaderMaterial({
@@ -1685,6 +1110,8 @@ export class FountainScene {
     this.poolGeometry = options.poolGeometry || null;
     this._siteSurfaces = options.siteSurfaces || [];
     this.wind         = options.wind         || { x:0, z:0 };
+    this.toneMapping  = getToneMapping(options.toneMapping).id;   // AF-3D-024
+    this._halfResUser = !!options.halfResSpray;                   // AF-3D-008 (medium)
 
         this._signals   = {
       pump: 0,
@@ -1742,8 +1169,8 @@ export class FountainScene {
     if (T.SRGBColorSpace) this.renderer.outputColorSpace = T.SRGBColorSpace;
     this.renderer.shadowMap.enabled = q.shadows;
     this.renderer.shadowMap.type    = T.PCFSoftShadowMap;
-    this.renderer.toneMapping       = T.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 2.1 * q.exposure;
+    this.renderer.toneMapping       = threeToneMapping(T, this.toneMapping);
+    this._setBaseExposure(2.1 * q.exposure);
     this.renderer.xr.enabled = true;   // VR Walkthrough (AQ-S3-006)
 
     this.scene  = new T.Scene();
@@ -1755,12 +1182,11 @@ export class FountainScene {
     this._lightField = {
       uGlobalLight:  { value: new T.Color(0,0,0) },
       uGlobalLightI: { value: 0.0 },
-      uFieldCount:   { value: 0 },
-      uFieldPos:     { value: Array.from({length:MAX_FIELD_LIGHTS}, () => new T.Vector3()) },
-      uFieldCol:     { value: Array.from({length:MAX_FIELD_LIGHTS}, () => new T.Color(0,0,0)) },
-      uFieldInt:     { value: new Float32Array(MAX_FIELD_LIGHTS) },
-      uFieldRad:     { value: new Float32Array(MAX_FIELD_LIGHTS).fill(4.0) },
+      field:         null,   // FixtureLightField uniforms (AF-3D-022), set just below
     };
+
+    this._fieldLights = new FixtureLightField(T);
+    this._lightField.field = this._fieldLights.uniforms;
 
     // AF-3D-003: procedural sprite textures. Null (no DOM / headless) simply means
     // the shaders fall back to their analytic shapes.
@@ -1779,11 +1205,7 @@ export class FountainScene {
     [this.waterSys, this.spraySys, this.foamSys].forEach(ps => {
       ps.uniforms.uGlobalLight  = this._lightField.uGlobalLight;
       ps.uniforms.uGlobalLightI = this._lightField.uGlobalLightI;
-      ps.uniforms.uFieldCount   = this._lightField.uFieldCount;
-      ps.uniforms.uFieldPos     = this._lightField.uFieldPos;
-      ps.uniforms.uFieldCol     = this._lightField.uFieldCol;
-      ps.uniforms.uFieldInt     = this._lightField.uFieldInt;
-      ps.uniforms.uFieldRad     = this._lightField.uFieldRad;
+      bindFieldLightUniforms(ps.uniforms, this._fieldLights);
     });
 
     this._buildFogSystem();
@@ -1791,17 +1213,10 @@ export class FountainScene {
 
     // AF-3D-001: opaque-scene depth probe for soft particles + beam cones. An
     // enhancement, never a dependency — on failure the sprites keep hard edges.
+    // Built by configureHalfResSpray: full-res while the AF-3D-008 half-res spray
+    // pass needs it as the upsample reference, `softScale` otherwise.
     this._depthProbe = null;
-    if (q.softDepth) {
-      try {
-        this._depthProbe = new SceneDepthProbe(T, this.renderer, {
-          width: W * PR, height: H * PR, scale: q.softScale,
-        });
-      } catch (err) {
-        console.warn("[FountainScene] depth probe unavailable:", err?.message || err);
-        this._depthProbe = null;
-      }
-    }
+    configureHalfResSpray(this);
 
     // AF-3D-007: GPU particle fields. When they are carrying the water, the CPU
     // fields keep simulating as an invisible physics sample (see CPU_SAMPLE_FRACTION)
@@ -1810,7 +1225,7 @@ export class FountainScene {
     this._gpuSpray = null;
     if (q.gpuParticles && gpuParticlesSupported(T, this.renderer)) {
       try {
-        const shared = { maxFieldLights: MAX_FIELD_LIGHTS, maxEmitters: MAX_GPU_EMITTERS };
+        const shared = { maxEmitters: MAX_GPU_EMITTERS };
         this._gpuWater = new GPUParticleField(T, this.renderer, {
           ...shared, count: q.gpuWater, map: this._particleTex.droplet,
           gravity: -9.5, drag: 0.018, turbulence: 0.35,
@@ -1831,11 +1246,7 @@ export class FountainScene {
         [this._gpuWater, this._gpuSpray].forEach(f => {
           f.uniforms.uGlobalLight  = this._lightField.uGlobalLight;
           f.uniforms.uGlobalLightI = this._lightField.uGlobalLightI;
-          f.uniforms.uFieldCount   = this._lightField.uFieldCount;
-          f.uniforms.uFieldPos     = this._lightField.uFieldPos;
-          f.uniforms.uFieldCol     = this._lightField.uFieldCol;
-          f.uniforms.uFieldInt     = this._lightField.uFieldInt;
-          f.uniforms.uFieldRad     = this._lightField.uFieldRad;
+          bindFieldLightUniforms(f.uniforms, this._fieldLights);
         });
       } catch (err) {
         console.warn("[FountainScene] GPU particles unavailable:", err?.message || err);
@@ -1846,7 +1257,7 @@ export class FountainScene {
     // AF-3D-005: volumetric beam cones for the RGB fixture lights.
     this._cones = null;
     if (q.cones) {
-      this._cones = new LightConeSet(T, MAX_FIELD_LIGHTS);
+      this._cones = new LightConeSet(T, MAX_BEAM_CONES);
       this.scene.add(this._cones.group);
     }
     this._bindSoftDepth();
@@ -1866,6 +1277,9 @@ export class FountainScene {
     this._buildLasers();
     this._fixtureInstances = new FixtureInstances(this.THREE);
     this.scene.add(this._fixtureInstances.group);
+    // AF-3D-019: every engineering light is an instance (body + lens), not a mesh.
+    this._lightMarkers = new LightMarkerInstances(this.THREE);
+    this.scene.add(this._lightMarkers.group);
     this._buildNozzles();
     this._buildReviewOverlays();
     this._setupEvents();
@@ -2044,9 +1458,16 @@ export class FountainScene {
    */
   _poolBoundsForSplash() {
     const b = this._splashBounds || (this._splashBounds = {});
+    b.mask = null;
     if (this._poolType === "circular") {
       b.type = "circular";
       b.radius = this._poolRadius || 6;
+    } else if (this._poolType === "freeform" && this._basinMask) {
+      // AF-3D-017: the polygon itself, not its bounding rectangle.
+      b.type = "polygon";
+      b.mask = this._basinMask;
+      b.width = this._poolW || 12;
+      b.length = this._poolL || 8;
     } else {
       b.type = "rect";
       b.width = this._poolW || 12;
@@ -2267,6 +1688,7 @@ export class FountainScene {
       ...(this._modelLayer?.root.children || []),
       ...(this._fixtureInstances?.group.children || []),
       ...(this._engLightMeshes || []),
+      ...(this._lightMarkers?.bodies.group.children || []),
     ];
   }
 
@@ -2349,163 +1771,13 @@ export class FountainScene {
     this._splashUploadT = 999;
   }
 
-  // ── Image-based lighting ────────────────────────────────────────────────────
-  // The pool, deck and nozzle bodies are MeshStandardMaterial. Without an environment
-  // they can only respond to the punctual lights, which reads flat and plastic.
-  //
-  // AF-3D-004: the probe is now generated FROM THE SKY DOME, so what the materials
-  // reflect agrees with the sky the viewer can actually see — a night scene gets a
-  // dark horizon-graded probe instead of a bright white studio. The RoomEnvironment
-  // studio probe survives only as the fallback when the sky probe cannot be built.
-  _buildEnvironmentIBL() {
-    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
-    if (!q.ibl) return;
-    const T = this.THREE;
-    try {
-      this._envRT?.dispose?.();
-      this._envRT = createSkyIBL(T, this.renderer, this.environment);
-      this._iblKind = this._envRT ? "sky" : null;
-      if (!this._envRT) {
-        const pmrem = new T.PMREMGenerator(this.renderer);
-        const room = new RoomEnvironment();   // r165: takes an optional renderer, not THREE
-        this._envRT = pmrem.fromScene(room, 0.04);
-        this._iblKind = "room";
-        room.dispose?.();
-        pmrem.dispose();
-      }
-      this.scene.environment = this._envRT.texture;
-      this.scene.environmentIntensity = this._envIntensityFor(this.environment);
-    } catch (e) {
-      this._envRT = null;   // IBL is an enhancement: never fatal
-      this._iblKind = null;
-    }
-  }
+  _buildEnvironmentIBL() { return buildEnvironmentIBL(this); }
 
-  // ── Post-processing chain ───────────────────────────────────────────────────
-  _buildPostFX() {
-    const T = this.THREE;
-    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
-    this._postEnabled = false;
-    if (!q.postfx || this._postDisabledByUser) return;
-    try {
-      const W = this.canvas.clientWidth || 900, H = this.canvas.clientHeight || 600;
-      // Canvas antialiasing does not apply to the composer's offscreen target.
-      // Multisample the scene itself so thin streams survive at export resolution.
-      const target = new T.WebGLRenderTarget(W, H, {
-        type: T.HalfFloatType,
-        samples: Math.min(4, this.renderer.capabilities.maxSamples || 0),
-      });
-      const composer = new EffectComposer(this.renderer, target);
-      composer.setPixelRatio?.(this._pr);
-      composer.setSize(W, H);
+  _buildPostFX() { return buildPostFX(this); }
 
-      composer.addPass(new RenderPass(this.scene, this.camera));
+  setPostFX(opts) { return setPostFX(this, opts); }
 
-      // Ambient occlusion — contact darkening where floor/kerb/nozzle bases meet.
-      // Runs on the LINEAR scene buffer, before tone mapping. Solid geometry only:
-      // the water particles are transparent and do not write depth.
-      if (q.ao) {
-        try {
-          const gtao = new GTAOPass(this.scene, this.camera, W, H);
-          gtao.output = GTAOPass.OUTPUT.Default;
-          if (typeof gtao.updateGtaoMaterial === "function") {
-            gtao.updateGtaoMaterial({
-              radius: 0.55,        // metres — tight contact shadows, not global dimming
-              distanceExponent: 1.0,
-              thickness: 1.0,
-              scale: 0.9,
-              samples: 16,
-            });
-          }
-          composer.addPass(gtao);
-          this._aoPass = gtao;
-        } catch (e) {
-          this._aoPass = null;   // AO is an enhancement, never fatal
-        }
-      }
-
-      // Tone mapping + sRGB conversion BEFORE bloom (lesson from the first cut,
-      // verified against live screenshots): this scene's water/spray are additive
-      // particle shaders whose linear-HDR sum runs far above 1.0 across most of the
-      // frame, so bloom thresholded in pre-tonemap HDR bloomed *everything* and the
-      // night scene washed out into white fog. Tone-mapping first means bloom sees
-      // exactly the image the user sees, and the threshold below reliably selects
-      // only genuinely bright screen content — jet cores, fixtures, flame.
-      composer.addPass(new OutputPass());
-
-      // Display-referred bloom: threshold 0.82 catches only near-white pixels.
-      const bloom = new UnrealBloomPass(
-        new T.Vector2(W, H),
-        q.bloom,        // strength
-        0.42,           // radius — tight halo; wider smears the dense jet core
-        0.86            // threshold — display-referred, only true highlights
-      );
-      composer.addPass(bloom);
-      this._bloomPass = bloom;
-
-      // Cinematic grade (vignette / aberration / grain / saturation).
-      const grade = new ShaderPass(CINEMATIC_SHADER);
-      grade.uniforms.uResolution.value.set(W * this._pr, H * this._pr);
-      composer.addPass(grade);
-      this._gradePass = grade;
-
-      if (q.smaa) {
-        const smaa = new SMAAPass(W * this._pr, H * this._pr);
-        composer.addPass(smaa);
-        this._smaaPass = smaa;
-      }
-
-      this.composer = composer;
-      this._postEnabled = true;
-    } catch (e) {
-      // Any failure (old GPU, missing extension) falls back to the direct render path.
-      this.composer = null;
-      this._postEnabled = false;
-    }
-  }
-
-  /** Toggle / tune the post chain at runtime. setPostFX(false) restores direct render. */
-  setPostFX(opts) {
-    if (opts === false || opts === true) opts = { enabled: opts };
-    const o = opts || {};
-    if (o.enabled === false) {
-      this._postDisabledByUser = true;
-      this._disposePostFX();
-      return;
-    }
-    if (o.enabled === true) {
-      this._postDisabledByUser = false;
-      if (!this.composer && this._initialized) this._buildPostFX();
-    }
-    if (this._bloomPass) {
-      if (typeof o.bloom === "number")     this._bloomPass.strength  = o.bloom;
-      if (typeof o.bloomRadius === "number")    this._bloomPass.radius    = o.bloomRadius;
-      if (typeof o.bloomThreshold === "number") this._bloomPass.threshold = o.bloomThreshold;
-    }
-    if (this._gradePass) {
-      const u = this._gradePass.uniforms;
-      if (typeof o.vignette === "number")   u.uVignette.value   = o.vignette;
-      if (typeof o.aberration === "number") u.uAberration.value = o.aberration;
-      if (typeof o.grain === "number")      u.uGrain.value      = o.grain;
-      if (typeof o.saturation === "number") u.uSaturation.value = o.saturation;
-      if (typeof o.contrast === "number")   u.uContrast.value   = o.contrast;
-    }
-  }
-
-  _disposePostFX() {
-    try {
-      this._smaaPass = null;
-      this._aoPass?.dispose?.();
-      this._aoPass = null;
-      this._bloomPass?.dispose?.();
-      this._bloomPass = null;
-      this._gradePass?.material?.dispose?.();
-      this._gradePass = null;
-      this.composer?.dispose?.();
-    } catch (e) { /* disposal is best-effort */ }
-    this.composer = null;
-    this._postEnabled = false;
-  }
+  _disposePostFX() { return disposePostFX(this); }
 
   // ── Solver-driven jet physics (AQ-S2-002 Phase 2) ───────────────────────────
   /**
@@ -2573,6 +1845,12 @@ export class FountainScene {
     const near = this.camera.near, far = this.camera.far;
     systems.forEach(ps => ps.setSoftDepth(this._depthProbe.texture, ix, iy, near, far));
     this._cones?.setDepth(this._depthProbe.texture, ix, iy, near, far);
+    // AF-3D-008: spray drawn into the half-res target sees half-res gl_FragCoord.
+    if (this._halfRes) {
+      const lr = this._halfRes.lowRes;
+      halfResSprayObjects(this).forEach(ps => ps.setSoftDepth(this._depthProbe.texture, 1 / lr.x, 1 / lr.y, near, far));
+      this._halfRes.setDepth(this._depthProbe.texture);
+    }
   }
 
   /** Release the GPU particle fields and hand the water back to the CPU path. */
@@ -2603,7 +1881,7 @@ export class FountainScene {
       this.waterSys?.mesh, this.spraySys?.mesh, this.foamSys?.mesh, this.flameSys?.mesh,
       this._gpuWater?.mesh, this._gpuSpray?.mesh,
       this._fogMesh, this.waterSurface, this._wetOverlay, this._reviewGroup,
-      this._laserGroup, this._cones?.group, this._sky?.group, this._editor?.root,
+      this._laserGroup, this._cones?.group, this._sky?.group, this._editor?.root, this._cadUnderlay?.group,
       ...(this.nozzles || []).map(n => n.glow),
       ...(this.nozzles || []).map(n => n.core),
       ...(this._engLightMeshes || []),
@@ -2633,7 +1911,7 @@ export class FountainScene {
         // The water cannot reflect itself; the analysis overlays and the editor's
         // gizmos and handles are annotation rather than scene. None belongs in the
         // mirror image — a reflected gizmo would be both wrong and distracting.
-        [this.waterSurface, this._wetOverlay, this._reviewGroup, this._editor?.root]
+        [this.waterSurface, this._wetOverlay, this._reviewGroup, this._editor?.root, this._cadUnderlay?.group]
       );
       this._setSoftDepthEnabled(!this._quadView);
       const u = this.waterMat?.uniforms;
@@ -2651,7 +1929,9 @@ export class FountainScene {
 
     if (this._postEnabled && this.composer) {
       if (this._gradePass) this._gradePass.uniforms.uTime.value = this._baking ? this._bakeElapsed : (this.clock?.elapsedTime || 0);
+      const halfRes = renderHalfResSpray(this);   // AF-3D-008
       this.composer.render();
+      restoreVisibility(halfRes);
     } else {
       this.renderer.render(this.scene, this.camera);
     }
@@ -2750,261 +2030,13 @@ export class FountainScene {
     return this._groundTex;
   }
 
-  // ── Pool / surface / lasers / venue ─────────────────────────────────────
-  _buildPool() {
-    const T=this.THREE;
-    const geom=this.poolGeometry;
-    if (this._poolObjects) this._poolObjects.forEach(o => { if(o.parent) o.parent.remove(o); });
-    this._poolObjects = [];
+  _buildPool() { return buildPool(this); }
 
-    let poolRadius=6, poolW=12, poolL=8, poolType='circular', poolPoints=[];
-    if (geom?.params) {
-      poolRadius=geom.params.radius||6;
-      poolW=geom.params.width||12;
-      poolL=geom.params.length||8;
-      const t=geom.poolType||'circular';
-      const polygon = centeredPoolPoints(geom.geometry?.points || []);
-      const polygonal = (t==='lshape'||t==='freeform'||t==='false_lake'||t==='false_river') && polygon.length >= 3;
-      poolType = polygonal ? 'freeform' : t==='rectangular' || t==='lshape' || t==='freeform'
-        || t==='false_lake' || t==='false_river' ? 'rectangular' : t==='elliptical' ? 'ellipse' : t;
-      if (polygonal) {
-        poolPoints = polygon;
-        const bounds = poolPolygonBounds(poolPoints);
-        poolW = bounds?.width || poolW;
-        poolL = bounds?.length || poolL;
-      }
-    }
-    this._poolRadius=poolRadius; this._poolW=poolW; this._poolL=poolL; this._poolType=poolType;
-    this._poolPoints=poolPoints;
+  _disposeSiteSurfaces() { return disposeSiteSurfaces(this); }
 
-    const gt = this._ensureGroundTextures();
+  _buildSiteSurfaces() { return buildSiteSurfaces(this); }
 
-    const deckMat = new T.MeshStandardMaterial({ color:0x10151b, roughness:0.78, metalness:0.12 });
-    if (gt) { applyStoneMaps(deckMat, gt.deck); deckMat.metalness = 0.05; }
-    const deck = new T.Mesh(deckWithOpening(T, { poolType, radius: poolRadius, width: poolW, length: poolL, points:poolPoints }), deckMat);
-    deck.rotation.x=-Math.PI/2; deck.position.y=-0.02; deck.receiveShadow=true;
-    this.scene.add(deck); this._poolObjects.push(deck);
-
-    const wallGeo = poolType==='circular'
-      ? new T.CylinderGeometry(poolRadius+0.18, poolRadius+0.18, 0.45, 64, 1, true)
-      : new T.BoxGeometry(poolW+0.35, 0.45, poolL+0.35);
-    const wallMat = new T.MeshStandardMaterial({ color:0x252535, roughness:0.65, metalness:0.25 });
-    if (gt) {
-      applyStoneMaps(wallMat, poolType === 'circular' ? gt.wallCyl : gt.wallBox, { normalScale: 0.6 });
-      wallMat.metalness = 0.08;
-    }
-    const wall = new T.Group();
-    if (poolType === 'circular') {
-      const shell = new T.Mesh(wallGeo, wallMat);
-      wallMat.side = T.DoubleSide;
-      wall.add(shell);
-    } else if (poolType === 'freeform') {
-      wallGeo.dispose();
-      poolPerimeterSegments(poolPoints).forEach(segment => {
-        const side = new T.Mesh(new T.BoxGeometry(segment.length + 0.14, 0.9, 0.18), wallMat);
-        side.position.set(segment.x, 0, segment.z);
-        side.rotation.y = -segment.rotation;
-        side.castShadow = true;
-        wall.add(side);
-      });
-    } else {
-      wallGeo.dispose();
-      // Four walls, not a solid box whose top occludes the whole basin.
-      for (const [w, l, x, z] of [[poolW+0.35,0.18,0,poolL/2+0.09], [poolW+0.35,0.18,0,-poolL/2-0.09], [0.18,poolL,poolW/2+0.09,0], [0.18,poolL,-poolW/2-0.09,0]]) {
-        const side = new T.Mesh(new T.BoxGeometry(w, 0.9, l), wallMat);
-        side.position.set(x, 0, z); side.castShadow = true; wall.add(side);
-      }
-    }
-    wall.position.y=0;
-    this.scene.add(wall); this._poolObjects.push(wall);
-
-    const copingMat = new T.MeshStandardMaterial({color:0x999aaa,roughness:0.2,metalness:0.7});
-    // Polished stone, not chrome: with a real albedo the high metalness read as
-    // smoked mirror and swallowed the texture.
-    if (gt) { applyStoneMaps(copingMat, gt.coping, { normalScale: 0.4 }); copingMat.metalness = 0.22; }
-    if (poolType==='circular') {
-      const coping = new T.Mesh(new T.TorusGeometry(poolRadius+0.18,0.09,8,64), copingMat);
-      // A torus is generated standing in the XY plane. Without this rotation the pool
-      // rim was installed VERTICALLY — a giant archway hooping over the water, its
-      // lower half buried under the deck. Only circular pools build a torus coping,
-      // which is why rectangular layouts (box copings) never showed it.
-      coping.rotation.x = -Math.PI/2;
-      coping.position.y=0.46; this.scene.add(coping); this._poolObjects.push(coping);
-    } else if (poolType==='freeform') {
-      poolPerimeterSegments(poolPoints).forEach(segment => {
-        const coping = new T.Mesh(new T.BoxGeometry(segment.length + 0.12, 0.09, 0.22), copingMat);
-        coping.position.set(segment.x, 0.46, segment.z);
-        coping.rotation.y = -segment.rotation;
-        this.scene.add(coping); this._poolObjects.push(coping);
-      });
-    } else {
-      const s1 = poolW + 0.35;
-      const s2 = poolL + 0.35;
-      const c1 = new T.Mesh(new T.BoxGeometry(s1,0.09,0.18), copingMat);
-      c1.position.set(0,0.46, poolL/2+0.175); this.scene.add(c1); this._poolObjects.push(c1);
-      const c2 = new T.Mesh(new T.BoxGeometry(s1,0.09,0.18), copingMat);
-      c2.position.set(0,0.46,-poolL/2-0.175); this.scene.add(c2); this._poolObjects.push(c2);
-      const c3 = new T.Mesh(new T.BoxGeometry(0.18,0.09,s2), copingMat);
-      c3.position.set(poolW/2+0.175,0.46,0); this.scene.add(c3); this._poolObjects.push(c3);
-      const c4 = new T.Mesh(new T.BoxGeometry(0.18,0.09,s2), copingMat);
-      c4.position.set(-poolW/2-0.175,0.46,0); this.scene.add(c4); this._poolObjects.push(c4);
-    }
-
-    const floorGeo = poolType==='circular' ? new T.CircleGeometry(poolRadius,64)
-      : poolType==='freeform' ? poolShapeGeometry(T, poolPoints)
-      : new T.PlaneGeometry(poolW,poolL);
-    const floorMat = new T.MeshStandardMaterial({color:0x08101e,roughness:0.95});
-    // Mosaic basin lining — visible through the water and under the caustics.
-    if (gt) applyStoneMaps(floorMat, gt.basin, { normalScale: 0.45 });
-    const floor = new T.Mesh(floorGeo,floorMat);
-    floor.rotation.x=-Math.PI/2; floor.position.y=-0.45;
-    this.scene.add(floor); this._poolObjects.push(floor);
-
-    const gridHelper = new T.GridHelper(40,40,0x263447,0x101b29);
-    gridHelper.material.transparent = true;
-    gridHelper.material.opacity = 0.32;
-    gridHelper.position.y=-0.5; this.scene.add(gridHelper); this._poolObjects.push(gridHelper);
-
-    // The shadow frustum is sized from the pool, which only exists now.
-    this._refitShadows();
-  }
-
-  _disposeSiteSurfaces() {
-    if (!this._siteSurfaceGroup) return;
-    this._siteSurfaceGroup.traverse((object) => {
-      object.geometry?.dispose?.();
-      if (Array.isArray(object.material)) object.material.forEach((material) => material?.dispose?.());
-      else object.material?.dispose?.();
-    });
-    this._siteSurfaceGroup.parent?.remove(this._siteSurfaceGroup);
-    this._siteSurfaceGroup = null;
-  }
-
-  _buildSiteSurfaces() {
-    this._disposeSiteSurfaces();
-    if (!this.scene || !Array.isArray(this._siteSurfaces) || !this._siteSurfaces.length) return;
-    const T = this.THREE;
-    const group = new T.Group();
-    group.name = "Engineering Site Surfaces";
-
-    const presets = {
-      grass:  { color: 0x4f8a3c, roughness: 0.96, metalness: 0.0 },
-      paving: { color: 0x999287, roughness: 0.82, metalness: 0.03 },
-      soil:   { color: 0x775137, roughness: 1.0, metalness: 0.0 },
-      rock:   { color: 0x6f747b, roughness: 0.9, metalness: 0.02 },
-      sand:   { color: 0xc4ad78, roughness: 1.0, metalness: 0.0 },
-    };
-
-    this._siteSurfaces.forEach((surface, surfaceIndex) => {
-      const points = Array.isArray(surface?.points) ? surface.points : [];
-      if (surface?.visible === false || points.length < 3) return;
-      const shape = new T.Shape();
-      shape.moveTo(Number(points[0].x || 0), -Number(points[0].z || 0));
-      points.slice(1).forEach((point) => shape.lineTo(Number(point.x || 0), -Number(point.z || 0)));
-      shape.closePath();
-
-      const preset = presets[surface.type] || presets.grass;
-      const material = new T.MeshStandardMaterial({
-        color: surface.color || preset.color,
-        roughness: preset.roughness,
-        metalness: preset.metalness,
-        side: T.DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2,
-      });
-      const mesh = new T.Mesh(new T.ShapeGeometry(shape), material);
-      mesh.name = surface.label || `Site Surface ${surfaceIndex + 1}`;
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = 0.012 + Math.max(-0.01, Math.min(2, Number(surface.elevation || 0)));
-      mesh.receiveShadow = true;
-      group.add(mesh);
-
-      const borderPoints = points.map((point) => new T.Vector3(
-        Number(point.x || 0),
-        mesh.position.y + 0.008,
-        Number(point.z || 0),
-      ));
-      borderPoints.push(borderPoints[0].clone());
-      const border = new T.Line(
-        new T.BufferGeometry().setFromPoints(borderPoints),
-        new T.LineBasicMaterial({ color: material.color.clone().multiplyScalar(1.35) }),
-      );
-      border.name = `${mesh.name} Border`;
-      group.add(border);
-    });
-
-    this._siteSurfaceGroup = group;
-    this.scene.add(group);
-  }
-
-  _buildWaterSurface() {
-    const T=this.THREE;
-    this._syncHeightFieldPool();
-    if (this.waterSurface?.parent) this.waterSurface.parent.remove(this.waterSurface);
-    const segs=48;
-    // Both shapes use a tessellated PLANE; a circular basin is cut to shape in the
-    // fragment stage. CircleGeometry is a fan with vertices only on its rim, so it
-    // had no interior to displace — round pools were flat no matter how the waves
-    // were tuned, and ripples would have been invisible on them entirely.
-    const geo = this._poolType==='circular'
-      ? new T.PlaneGeometry(this._poolRadius*2, this._poolRadius*2, 96, 96)
-      : this._poolType==='freeform'
-        ? polygonWaterGeometry(T, this._poolPoints, 112)
-        : new T.PlaneGeometry(this._poolW, this._poolL, segs, segs);
-
-    this.waterMat = new T.ShaderMaterial({
-      vertexShader: WATER_VERT_V2, fragmentShader: WATER_FRAG_V2,
-      transparent:true, side:T.FrontSide, depthWrite:false,
-      uniforms:{
-        uTime:           {value:0},
-        uIntensity:      {value:1.0},
-        uWind:           {value:0},
-        uLightColor:     {value:new T.Color(0x0066ff)},
-        uLightIntensity: {value:0.5},
-        uDeepColor:      {value:new T.Color(0x010c1c)},
-        uShallowColor:   {value:new T.Color(0x0c3558)},
-        uSkyColor:       {value:new T.Color(0x030810)},
-        uRoughness:      {value:0.3},
-        uCameraPos:      {value:new T.Vector3()},
-        // Planar reflection. Strength stays 0 until a probe has actually rendered a
-        // frame, so the water falls back to the flat sky term rather than sampling an
-        // empty target and going black.
-        uReflectTex:      {value: this._reflection ? this._reflection.texture : null},
-        uReflectMatrix:   {value: this._reflection ? this._reflection.textureMatrix : new T.Matrix4()},
-        uReflectStrength: {value: 0.0},
-        // Refraction onto the basin floor + the impact-ripple ring buffer (R3).
-        uFloorTex:    {value: this._groundTex?.basin?.map || null},
-        uHasFloorTex: {value: this._groundTex?.basin?.map ? 1.0 : 0.0},
-        uFloorY:      {value: -0.45},
-        uFloorScale:  {value: 2.0},
-        // Water's extinction coefficients: red is absorbed roughly an order of
-        // magnitude faster than blue, which is why depth reads blue-green.
-        uAbsorb:      {value: new T.Vector3(0.46, 0.09, 0.06)},
-        uPoolShape:   {value: new T.Vector4(
-          this._poolType === 'circular' ? 1 : 0,
-          this._poolRadius || 6, this._poolW || 12, this._poolL || 8)},
-        uRipples:     {value: Array.from({length: MAX_RIPPLES}, () => new T.Vector4())},
-        uRippleCount: {value: 0},
-        uHeightTex:   {value: this._heightTex || null},
-        uHeightEnabled: {value: this._heightTex ? 1.0 : 0.0},
-        uHeightTexel: {value: 1 / Math.max(1, this._heightField?.resolution || 1)},
-        uWaveExtent:  {value: this._heightField?.extent || 32},
-        uWaveHeightScale: {value: this._heightField?.maxHeight || 0.22},
-        uFieldCount:     this._lightField.uFieldCount,
-        uFieldPos:       this._lightField.uFieldPos,
-        uFieldCol:       this._lightField.uFieldCol,
-        uFieldInt:       this._lightField.uFieldInt,
-        uFieldRad:       this._lightField.uFieldRad,
-      }
-    });
-    this.waterSurface = new T.Mesh(geo, this.waterMat);
-    this.waterSurface.rotation.x=-Math.PI/2;
-    this.waterSurface.position.y=0.02;
-    this.scene.add(this.waterSurface);
-    // Environment is built before the water on init; initialize these here too.
-    this._setWaterPalette();
-  }
+  _buildWaterSurface() { return buildWaterSurface(this); }
 
   _setWaterPalette() {
     const u = this.waterMat?.uniforms;
@@ -3015,28 +2047,7 @@ export class FountainScene {
     u.uSkyColor.value.set(day ? 0x6ab4d8 : this.environment === ENVIRONMENTS.DUSK ? 0x180820 : 0x030810);
   }
 
-  _buildUnderwaterLights() {
-    // Underwater "ambient" point lights (the engineering-driven RGB lights are
-    // handled separately by _rebuildEngineeringLights and the RGB light field).
-    const T=this.THREE;
-    if (this._uwGroup) { this.scene.remove(this._uwGroup); }
-    this._uwGroup = new T.Group();
-
-    const r = this._poolType==='circular' ? this._poolRadius*0.65 : Math.min(this._poolW,this._poolL)*0.3;
-    this.uwLights=[];
-    const count=8;
-    for (let i=0; i<count; i++){
-      const angle=(i/count)*Math.PI*2;
-      const light=new T.PointLight(0x0066ff, 2.0, 12, 2);
-      light.position.set(Math.cos(angle)*r, -0.2, Math.sin(angle)*r);
-      this._uwGroup.add(light);
-      this.uwLights.push(light);
-    }
-    this.centerLight=new T.PointLight(0x0044cc, 3.5, 22, 2);
-    this.centerLight.position.set(0,0.5,0);
-    this._uwGroup.add(this.centerLight);
-    this.scene.add(this._uwGroup);
-  }
+  _buildUnderwaterLights() { return buildUnderwaterLights(this); }
 
   _buildLasers() {
     const T=this.THREE;
@@ -3074,142 +2085,15 @@ export class FountainScene {
     });
     this.scene.add(this._venueGroup);
   }
-  /** Environment-map strength. The sky-dome IBL is dim and truthful, so it can run
-   *  near full strength; the RoomEnvironment fallback is a bright studio probe that
-   *  must be held far lower or it flattens the night mood. */
-  _envIntensityFor(env) {
-    const nightish = env === ENVIRONMENTS.NIGHT || env === ENVIRONMENTS.ARENA;
-    if (this._iblKind === "sky") return nightish ? 1.5 : 1.0;
-    return nightish ? 0.16 : 0.42;
-  }
+  _envIntensityFor(env) { return envIntensityFor(this, env); }
 
-  /** AF-3D-004: the sky dome (and starfield at night) replacing the flat backdrop. */
-  _buildSky() {
-    const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
-    this._sky?.dispose?.();
-    this._sky = null;
-    try {
-      this._sky = createSkyDome(this.THREE, this.environment, {
-        stars: q.stars ? null : false,   // null = per-preset default
-        pixelRatio: this._pr || 1,
-      });
-      this.scene.add(this._sky.group);
-    } catch (err) {
-      // The scene.background colour below remains the fallback backdrop.
-      console.warn("[FountainScene] sky dome unavailable:", err?.message || err);
-      this._sky = null;
-    }
-  }
+  _buildSky() { return buildSky(this); }
 
-  /**
-   * Fit a directional light's shadow frustum to the design (AF-3D-015).
-   *
-   * three.js defaults a DirectionalLightShadow to an orthographic box of +/-5 metres.
-   * Nothing here ever overrode it, so shadows existed only within a 10 m square at
-   * the origin while the pool is up to 12 x 8 m and the deck is 80 x 80 — most of the
-   * scene could neither cast nor receive a shadow, and the boundary cut straight
-   * across the basin.
-   *
-   * The frustum is sized to the actual design rather than to the deck: shadow texel
-   * density is the map resolution divided by the frustum width, so covering ground
-   * nobody looks at is paid for as blur everywhere that matters.
-   */
-  /**
-   * Re-fit every shadow-casting directional light to the CURRENT design. The
-   * environment is built before the pool exists, and the pool can be resized later
-   * from the geometry designer, so the fit has to be re-applied rather than only
-   * computed once at construction.
-   */
-  _refitShadows() {
-    this._envGroup?.traverse?.((o) => {
-      if (o.isDirectionalLight && o.castShadow) this._fitShadowCamera(o, o.shadow.mapSize.x || 2048);
-    });
-  }
+  _refitShadows() { return refitShadows(this); }
 
-  _fitShadowCamera(light, mapSize = 2048) {
-    if (!light?.shadow) return;
-    const half = this._poolType === "circular"
-      ? (this._poolRadius || 6)
-      : Math.max((this._poolW || 12), (this._poolL || 8)) / 2;
-    const extent = Math.min(40, Math.max(14, half * 2.2 + 8));
-    const cam = light.shadow.camera;
-    cam.left = -extent; cam.right = extent;
-    cam.top = extent;   cam.bottom = -extent;
-    cam.near = 0.5;
-    // Far must clear the light's own distance from the scene, or geometry falls out
-    // the back of the frustum and its shadow silently disappears.
-    cam.far = Math.max(80, light.position.length() * 2.2);
-    cam.updateProjectionMatrix();
-    light.shadow.mapSize.set(mapSize, mapSize);
-    light.shadow.normalBias = 0.035;
-    light.shadow.bias = -0.0004;
-  }
+  _fitShadowCamera(light, mapSize = 2048) { return fitShadowCamera(this, light, mapSize); }
 
-  _applyEnvironment() {
-    const T=this.THREE; const env=this.environment;
-    if (this._envGroup) this.scene.remove(this._envGroup);
-    this._envGroup = new T.Group();
-    this._buildSky();
-    // Keep the IBL probe in step with the preset — and, since the probe IS the sky
-    // now, rebuild it whenever the environment changes after init.
-    if (this._envRT && this.scene) {
-      this._buildEnvironmentIBL();
-    }
-
-    if (env===ENVIRONMENTS.NIGHT){
-      this.scene.background = new T.Color(0x020610);
-      this.scene.fog = new T.FogExp2(0x020610, 0.015);
-      const amb  = new T.AmbientLight(0x0d1a30, 2.0);
-      const moon = new T.DirectionalLight(0x7788bb, 1.2);
-      moon.position.set(-10,30,-10); moon.castShadow=true;
-      // normalBias (set in _fitShadowCamera) removes the shadow acne that otherwise
-      // stipples the curved pool walls, without the "floating object" gap a large
-      // constant bias introduces.
-      this._fitShadowCamera(moon, 2048);
-      this._envGroup.add(amb, moon);
-      if (this.renderer) this.renderer.toneMappingExposure = 1.55;
-      this.waterMat?.uniforms.uSkyColor.value.set(0x020610);
-    } else if (env===ENVIRONMENTS.DUSK){
-      this.scene.background = new T.Color(0x180820);
-      this.scene.fog = new T.Fog(0x250f35, 25, 90);
-      const amb = new T.AmbientLight(0x281030, 2.8);
-      const sun = new T.DirectionalLight(0xff5522, 1.8);
-      sun.position.set(12,7,-20); sun.castShadow=true;
-      this._fitShadowCamera(sun, 2048);
-      const fill = new T.HemisphereLight(0x501880, 0x100820, 1.5);
-      this._envGroup.add(amb, sun, fill);
-      if (this.renderer) this.renderer.toneMappingExposure = 1.9;
-      this.waterMat?.uniforms.uSkyColor.value.set(0x180820);
-    } else if (env===ENVIRONMENTS.DAY){
-      this.scene.background = new T.Color(0x6ab4d8);
-      this.scene.fog = new T.Fog(0x9cc5de, 40, 130);
-      const amb = new T.AmbientLight(0xffffff, 2.5);
-      const sun = new T.DirectionalLight(0xfff8e8, 3.8);
-      sun.position.set(25,60,25); sun.castShadow=true;
-      this._fitShadowCamera(sun, 2048);
-      const sky = new T.HemisphereLight(0x6ab4d8, 0x2d5c20, 1.0);
-      this._envGroup.add(amb, sun, sky);
-      if (this.renderer) this.renderer.toneMappingExposure = 1.0;
-      this.waterMat?.uniforms.uSkyColor.value.set(0x6ab4d8);
-      this.waterMat?.uniforms.uDeepColor.value.set(0x0d3550);
-      this.waterMat?.uniforms.uShallowColor.value.set(0x2d7aaa);
-    } else if (env===ENVIRONMENTS.ARENA){
-      this.scene.background = new T.Color(0x010305);
-      this.scene.fog = new T.FogExp2(0x010305, 0.013);
-      const amb = new T.AmbientLight(0x040810, 1.5);
-      const cols=[0xff1100,0x0011ff,0x00ff22,0xff8800,0xff00cc,0x00eeff];
-      cols.forEach((color,i)=>{
-        const a=(i/cols.length)*Math.PI*2;
-        const sp=new T.SpotLight(color,25,70,Math.PI/5,0.3,2);
-        sp.position.set(Math.cos(a)*18,22,Math.sin(a)*18);
-        sp.target.position.set(0,0,0); sp.castShadow=true;
-        this._envGroup.add(sp, sp.target);
-      });
-      this._envGroup.add(amb);
-      if (this.renderer) this.renderer.toneMappingExposure = 2.6;
-    }
-    this.scene.add(this._envGroup);
-  }
+  _applyEnvironment() { return applyEnvironment(this); }
 
   // ── Nozzle layout (default OR engineering override) ─────────────────────
   _defaultLayout() {
@@ -3372,69 +2256,12 @@ export class FountainScene {
     if (this._initialized) this._buildNozzles();
   }
 
-  // ── Engineering: drive Phase-2 RGB light field from fixture lights ──────
-  setEngineeringLights(lightConfigs) {
-    const T = this.THREE;
-    // Remove any visible markers
-    this._engLightMeshes.forEach(m => { if (m.parent) m.parent.remove(m); });
-    this._engLightMeshes = [];
+  setEngineeringLights(lightConfigs) { return setEngineeringLights(this, lightConfigs); }
 
-    this._engLights = (lightConfigs||[]).slice(0, MAX_FIELD_LIGHTS).map(lc => {
-      const color = new T.Color(typeof lc.color === 'string' ? lc.color : (lc.color || 0x0066ff));
-      const intensity = (lc.intensity ?? 4.0);
-      const radius = lc.radius ?? 6.0;
-      // Tiny marker for debugging
-      const mk = new T.Mesh(
-        new T.CircleGeometry(0.35, 24),
-        new T.MeshBasicMaterial({ color, transparent: true, opacity: 0.92,
-          side: T.DoubleSide, depthWrite: false })
-      );
-      mk.rotation.x = -Math.PI / 2;
-      mk.position.set(lc.x ?? 0, 0.03, lc.z ?? (lc.y ?? 0));
-      mk.userData.nodeId = lc.id;
-      this.scene.add(mk);
-      this._engLightMeshes.push(mk);
-
-      return {
-        id: lc.id,
-        x: lc.x ?? 0,
-        z: lc.z ?? (lc.y ?? 0),
-        color,
-        intensity,
-        radius,
-        baseColor: color.clone(),
-        baseIntensity: intensity,
-        baseRadius: radius,
-      };
-    });
-
-    // Immediately push to shader light-field
-    this._uploadLightField();
-  }
-
-    _uploadLightField() {
-    const lf = this._lightField;
-    if (!lf) return;
-
-    const lights = Array.isArray(this._engLights) ? this._engLights : [];
-    const n = Math.min(lights.length, MAX_FIELD_LIGHTS);
-
-    lf.uFieldCount.value = n;
-
-    for (let i = 0; i < MAX_FIELD_LIGHTS; i++) {
-      if (i < n) {
-        const L = lights[i];
-        lf.uFieldPos.value[i].set(L.x || 0, 0.35, L.z || 0);
-        lf.uFieldCol.value[i].copy(L.color || new this.THREE.Color(1, 1, 1));
-        lf.uFieldInt.value[i] = Math.max(0, Number(L.intensity || 0)) * 1.8;
-        lf.uFieldRad.value[i] = Math.max(1, Number(L.radius || 6));
-      } else {
-        lf.uFieldPos.value[i].set(0, 0, 0);
-        lf.uFieldCol.value[i].setRGB(0, 0, 0);
-        lf.uFieldInt.value[i] = 0;
-        lf.uFieldRad.value[i] = 1;
-      }
-    }
+  _uploadLightField() {
+    // AF-3D-022: every fixture goes into the light texture; the cluster grid is only
+    // rebuilt when a fixture moves.
+    this._fieldLights?.setLights(Array.isArray(this._engLights) ? this._engLights : []);
   }
 
   // ── Patterns: delta-driven (BUG FIX: previously setInterval) ────────────
@@ -3487,11 +2314,7 @@ export class FountainScene {
         L.color.copy(this._colorFromSignalColor(state?.color, "#ffffff"));
         L.intensity = L.baseIntensity * level;
         L.radius = L.baseRadius;
-        const marker = this._engLightMeshes[index];
-        if (marker?.material) {
-          marker.material.color.copy(L.color);
-          marker.material.opacity = 0.08 + level * 0.84;
-        }
+        this._lightMarkers?.setLevel(index, L.color, 0.08 + level * 0.84);
       });
     } else if (this._engLights?.length) {
       for (const L of this._engLights) {
@@ -3500,9 +2323,7 @@ export class FountainScene {
 	L.radius = L.baseRadius;
       }
 
-      for (const mesh of this._engLightMeshes || []) {
-        if (mesh?.material?.color) mesh.material.color.copy(runtimeColor);
-      }
+      for (let i = 0; i < this._engLights.length; i++) this._lightMarkers?.setLevel(i, runtimeColor);
     }
 
     this._uploadLightField();
@@ -3634,7 +2455,7 @@ export class FountainScene {
     if (this._cones) {
       // A beam is only visible where there is spray to scatter it.
       const activity = Math.max(I.pump || 0, I.valve || 0, (I.fog || 0) * 0.6);
-      this._cones.update(this._engLights, elapsed, activity, this.camera);
+      this._cones.update(brightestLights(this._engLights, MAX_BEAM_CONES), elapsed, activity, this.camera);
     }
 
     // ─── Lasers ────────────────────────────────────────────────────────
@@ -3781,6 +2602,8 @@ export class FountainScene {
         ibl: this._iblKind || null,
         pixelRatio: this._pr || 1,
         reflectRes: q.reflect || 0,
+        toneMapping: this.toneMapping,
+        halfResSpray: !!this._halfRes,
       },
     };
   }
@@ -4086,62 +2909,9 @@ export class FountainScene {
     return fallback;
   }
 
-  // ─── Public API ─────────────────────────────────────────────────────────
-  // BUG FIX: setSignals merges (not overwrites) so PreviewPanel.timeline driver
-  // doesn't blank a manually set signal
-  _colorFromSignalColor(value, fallback = "#ffffff") {
-    const T = this.THREE;
+  _colorFromSignalColor(value, fallback = "#ffffff") { return colorFromSignalColor(this, value, fallback); }
 
-    if (typeof value === "string") {
-      return new T.Color(value);
-    }
-
-    if (value && typeof value === "object") {
-      return new T.Color(
-        value.r ?? 1,
-        value.g ?? 1,
-        value.b ?? 1
-      );
-    }
-
-    return new T.Color(fallback);
-  }
-
-  _applyRuntimeLighting() {
-    if (!this._lightField) return;
-
-    const lightIntensity = Math.max(0, Math.min(1, Number(this._signals?.lighting || 0)));
-    const color = this._colorFromSignalColor(
-      this._signals?.lightingColor,
-      this.lightColor || "#ffffff"
-    );
-
-    this._lightField.uGlobalLight.value.copy(color);
-    this._lightField.uGlobalLightI.value = lightIntensity * 1.8;
-
-    // Runtime RGB override:
-    // When the timeline/manual pattern sends RGB color, all engineering RGB fixtures
-    // should adopt that color visually instead of staying at their default library color.
-    if (lightIntensity > 0.01 && !this._signals?.fixtureLightStates && this._engLights?.length) {
-      for (const L of this._engLights) {
-        if (L?.color) L.color.copy(color);
-        L.intensity = Math.max(L.intensity || 0, lightIntensity * 6.0);
-      }
-
-      for (const mesh of this._engLightMeshes || []) {
-        if (mesh?.material?.color) {
-          mesh.material.color.copy(color);
-        }
-      }
-
-      this._uploadLightField?.();
-    }
-
-    // Keep render-panel light color visually synchronized with active runtime color.
-    if (lightIntensity > 0.01) {
-      this.lightColor = `#${color.getHexString()}`;
-    }
-  }  
+  _applyRuntimeLighting() { return applyRuntimeLighting(this); }
   setSignals(s) {
     if (!s) return;
     // During a baked render the show is sampled at exact virtual times by the bake
@@ -4244,21 +3014,25 @@ export class FountainScene {
   }
   /** Stop the presentation tour. */
   stopPresentation(){ this._presenting=false; if(this._presentTimer){ clearTimeout(this._presentTimer); this._presentTimer=null; } }
-      setLightColor(hex) {
-    this.lightColor = hex;
-
-    // Only apply panel light color directly when runtime is not actively
-    // driving lighting. If runtime lighting is active, setSignals/_update
-    // remains the authority.
-    const activeRuntimeLighting = Number(this._signals?.lighting || 0) > 0.01;
-
-    if (!activeRuntimeLighting && this._lightField) {
-      const color = this._colorFromSignalColor(hex, "#ffffff");
-      this._lightField.uGlobalLight.value.copy(color);
-      this._lightField.uGlobalLightI.value = 0.5;
-    }
-  }
+      setLightColor(hex) { return setLightColor(this, hex); }
   setWind(x,z)      { this.wind={x:x||0, z:z||0}; }
+  /** AF-3D-024: exposure presets are authored for ACES; other operators are recalibrated. */
+  _setBaseExposure(acesExposure) {
+    this._baseExposure = acesExposure;
+    if (this.renderer) this.renderer.toneMappingExposure = calibratedExposure(this.toneMapping, acesExposure);
+  }
+  /** AF-3D-008: opt the medium tier into half-res spray (high is always on, low never). */
+  setHalfResSpray(on) {
+    this._halfResUser = !!on;
+    return this.renderer ? configureHalfResSpray(this) : this._halfResUser;
+  }
+  setToneMapping(name) {
+    this.toneMapping = getToneMapping(name).id;
+    if (!this.renderer) return this.toneMapping;
+    this.renderer.toneMapping = threeToneMapping(this.THREE, this.toneMapping);
+    this._setBaseExposure(this._baseExposure ?? this.renderer.toneMappingExposure);
+    return this.toneMapping;
+  }
   setWaterSimulation({ response, damping, boundaryDamping } = {}) {
     const nextResponse = Number(response);
     if (Number.isFinite(nextResponse)) {
@@ -4286,6 +3060,8 @@ export class FountainScene {
       if (dimensionsChanged) this.fitCameraToDesign();
     }
   }
+  /** AF-CAD-011: the locked CAD underlay ({ toWorld, centerKey } — see sceneBasin.js). */
+  setCadUnderlay(underlay, opts) { return setCadUnderlay(this, underlay, opts); }
   setSiteSurfaces(surfaces) {
     this._siteSurfaces = Array.isArray(surfaces) ? surfaces : [];
     if (this._initialized) this._buildSiteSurfaces();
@@ -4328,6 +3104,7 @@ export class FountainScene {
     if (this._depthProbe) {
       const pr = this._pr || 1;
       this._depthProbe.setSize(w * pr, h * pr);
+      this._halfRes?.setSize(w * pr, h * pr);
       this._bindSoftDepth();
     }
   }
@@ -4354,6 +3131,8 @@ export class FountainScene {
     this._reflection = null;
     this._depthProbe?.dispose?.();
     this._depthProbe = null;
+    this._halfRes?.dispose?.();
+    this._halfRes = null;
     this._disposeGPUFields();
     this._cones?.dispose?.();
     this._cones = null;
@@ -4361,10 +3140,13 @@ export class FountainScene {
     this._sky = null;
     if (this._venueGroup) { disposeVenue(this._venueGroup); this._venueGroup = null; }
     this._disposeSiteSurfaces();
+    setCadUnderlay(this, null);
     this._modelLayer?.dispose?.();
     this._modelLayer = null;
     this._fixtureInstances?.dispose?.();
     this._fixtureInstances = null;
+    this._lightMarkers?.dispose?.();
+    this._lightMarkers = null;
     if (this._particleTex) {
       Object.values(this._particleTex).forEach(t => t?.dispose?.());
       this._particleTex = null;
@@ -4378,10 +3160,14 @@ export class FountainScene {
     this._heightTex?.dispose?.();
     this._heightTex = null;
     this._heightField = null;
+    this._basinMask?.dispose?.();
+    this._basinMask = null;
     this._wetMat?.dispose?.();
     this._wetOverlay?.geometry?.dispose?.();
     this._envRT?.dispose?.();
     this._envRT = null;
+    this._fieldLights?.dispose?.();
+    this._fieldLights = null;
     this.renderer?.dispose();
   }
 }

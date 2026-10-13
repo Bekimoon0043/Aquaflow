@@ -33,7 +33,11 @@ export class WaterHeightField {
       const wz = ((z + 0.5) / n) * this.extent - half;
       for (let x = 0; x < n; x++) {
         const wx = ((x + 0.5) / n) * this.extent - half;
-        const inside = pool.type === "circular"
+        // AF-3D-017: polygon basins use the shared mask, so ripples never run across
+        // deck that sits inside the basin's bounding box (the notch of an L, an island).
+        const inside = pool.type === "polygon" && pool.mask
+          ? pool.mask.contains(wx, wz)
+          : pool.type === "circular"
           ? wx * wx + wz * wz <= Math.pow(Number(pool.radius) || 0, 2)
           : Math.abs(wx) <= (Number(pool.width) || this.extent) / 2
             && Math.abs(wz) <= (Number(pool.length) || this.extent) / 2;

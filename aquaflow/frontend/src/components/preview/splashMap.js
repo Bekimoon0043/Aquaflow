@@ -264,10 +264,14 @@ export function heatColor(t) {
 
 /**
  * Is a world point inside the basin?
- * Mirrors the pool shapes the designer can actually build.
+ * Mirrors the pool shapes the designer can actually build: circular and rectangular
+ * analytically (unchanged since calibration), polygons through basinMask.js.
  */
 export function insidePool(x, z, pool) {
   if (!pool) return false;
+  // AF-3D-017: a polygon basin (freeform / L-shape / islands) carries its mask. Its
+  // bounding rectangle is NOT the basin — the notch of an L is deck, not water.
+  if (pool.type === "polygon" && pool.mask) return pool.mask.contains(x, z);
   if (pool.type === "circular") {
     const r = pool.radius || 0;
     return x * x + z * z <= r * r;

@@ -24,7 +24,32 @@
  *
  * The simulation (spawn/advect/impact) is untouched and stays in
  * FountainScene_v6.js; this module only owns geometry + material.
+ *
+ * AF-3D-022: fixture light is evaluated once per PARTICLE in the vertex stage from
+ * the clustered light texture (fixtureLightField.js) and handed to the fragment
+ * stage as `vFieldLight` — no fixture cap, and no per-pixel light loop.
  */
+import { FIELD_LIGHT_GLSL, HG_G } from "./fixtureLightField";
+
+/** Uniform placeholders; the scene re-points them at its shared FixtureLightField. */
+export function fieldLightUniformStubs(T) {
+  return {
+    uLightTex: { value: null },
+    uClusterTex: { value: null },
+    uClusterBounds: { value: new T.Vector4(0, 0, 1, 1) },
+    uClusterDim: { value: 1 },
+    uFieldCount: { value: 0 },
+  };
+}
+
+/** Vertex-stage snippet: per-particle fixture light for world position `wp`. */
+export const FIELD_LIGHT_VARYING = /* glsl */ `
+varying vec3 vFieldLight;
+${FIELD_LIGHT_GLSL}
+vec3 particleFieldLight(vec3 wp){
+  return fieldLight(wp, normalize(cameraPosition - wp), ${HG_G.toFixed(2)}, 1.0);
+}
+`;
 
 /** Build the instanced quad geometry over the caller's simulation arrays. */
 export function buildBillboardGeometry(T, maxCount, arrays) {
@@ -65,8 +90,10 @@ varying vec3  vWorldPos;
 varying vec2  vUv;
 varying float vViewZ;
 varying float vSeed;
+${FIELD_LIGHT_VARYING}
 
 void main(){
+  vFieldLight = particleFieldLight(aOffset);
   vColor    = aColor;
   vLife     = aLife;
   vWorldPos = aOffset;
@@ -104,9 +131,12 @@ void main(){
  * The droplet fragment stage. Exported so the GPU-simulated field (particlesGPU.js)
  * renders with the SAME optical model, light-field injection and soft-depth fade —
  * the two backends must be visually indistinguishable, so this shading exists once.
- * Its contract is the varying set: vColor, vLife, vWorldPos, vUv, vViewZ, vSeed.
+ * Its contract is the varying set: vColor, vLife, vWorldPos, vUv, vViewZ, vSeed,
+ * vFieldLight. (The argument is accepted for call-site compatibility and ignored:
+ * the fixture count is no longer baked into the shader.)
  */
-export function billboardFrag(maxFieldLights) {
+// eslint-disable-next-line no-unused-vars
+export function billboardFrag(_unusedMaxFieldLights) {
   return /* glsl */ `
 precision highp float;
 varying vec4  vColor;
@@ -115,6 +145,7 @@ varying vec3  vWorldPos;
 varying vec2  vUv;
 varying float vViewZ;
 varying float vSeed;
+varying vec3  vFieldLight;
 
 uniform sampler2D uMap;
 uniform float uUseMap;
@@ -128,11 +159,6 @@ uniform float uSoftDist;
 
 uniform vec3  uGlobalLight;
 uniform float uGlobalLightI;
-uniform int   uFieldCount;
-uniform vec3  uFieldPos[${maxFieldLights}];
-uniform vec3  uFieldCol[${maxFieldLights}];
-uniform float uFieldInt[${maxFieldLights}];
-uniform float uFieldRad[${maxFieldLights}];
 
 void main(){
   vec2  uv = vUv - 0.5;
@@ -167,15 +193,9 @@ void main(){
   col = mix(col, tintedWater + spec * vec3(1.0), runtimeTint);
   col += uGlobalLight * uGlobalLightI * 0.35;
 
-  for (int i = 0; i < ${maxFieldLights}; i++) {
-    if (i >= uFieldCount) break;
-    vec2  hd = vWorldPos.xz - uFieldPos[i].xz;
-    float horizontalFall = 1.0 - clamp(length(hd) / uFieldRad[i], 0.0, 1.0);
-    horizontalFall = horizontalFall * horizontalFall;
-    float verticalFall = exp(-max(vWorldPos.y, 0.0) * 0.28);
-    float beam = smoothstep(0.0, 0.85, horizontalFall) * verticalFall;
-    col += uFieldCol[i] * uFieldInt[i] * beam * 0.95;
-  }
+  // Fixture light (cone x distance x Henyey-Greenstein), computed per particle in
+  // the vertex stage. Linear HDR: a droplet in a bright beam goes above 1 and blooms.
+  col += vFieldLight;
 
   // Texture modulates the analytic shape rather than replacing it, so lighting
   // and saturation behaviour stay identical with or without a DOM to draw on.
@@ -211,7 +231,7 @@ void main(){
  * @param {object} opts { maxFieldLights, blendMode: "scatter"|"emissive",
  *                        map: Texture|null, sizeScale }
  */
-export function buildBillboardMaterial(T, { maxFieldLights, blendMode = "scatter", map = null, sizeScale = 0.55 } = {}) {
+export function buildBillboardMaterial(T, { maxFieldLights = 0, blendMode = "scatter", map = null, sizeScale = 0.55 } = {}) {
   const uniforms = {
     uSizeScale: { value: sizeScale },
     uMap: { value: map },
@@ -224,11 +244,7 @@ export function buildBillboardMaterial(T, { maxFieldLights, blendMode = "scatter
     uSoftDist: { value: 0.6 },
     uGlobalLight: { value: new T.Color(1, 1, 1) },
     uGlobalLightI: { value: 0.0 },
-    uFieldCount: { value: 0 },
-    uFieldPos: { value: Array.from({ length: maxFieldLights }, () => new T.Vector3()) },
-    uFieldCol: { value: Array.from({ length: maxFieldLights }, () => new T.Color(0, 0, 0)) },
-    uFieldInt: { value: new Float32Array(maxFieldLights) },
-    uFieldRad: { value: new Float32Array(maxFieldLights).fill(4.0) },
+    ...fieldLightUniformStubs(T),
   };
 
   return new T.ShaderMaterial({

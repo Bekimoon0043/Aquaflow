@@ -1,9 +1,16 @@
 """
-cad_layout.py — AquaFlow Recovery, AQ-X-009
+cad_layout.py — AquaFlow Recovery, AQ-X-009 (writer converged by AF-CAD-003 / 020)
 
 CAD layout generator — exports a fountain design to a CAD-compatible DXF drawing.
 
-Produces a valid AutoCAD R12 (AC1009) ASCII DXF from a pool design: the pool
+Since AF-CAD-003 the default writer is the ezdxf one in ``services.cad_export``
+(AC1027, blocks + ATTRIBs + AQUAFLOW XDATA, CAD +Y-up — identical layers, XDATA and
+Y convention to the designer's browser export). ``generate_layout(design,
+writer="r12")`` and ``generate_dxf()`` keep the original hand-written R12 writer as a
+thin legacy option for consumers that need AC1009; note the legacy writer emits plan
+coordinates unflipped.
+
+The legacy writer produces a valid AutoCAD R12 (AC1009) ASCII DXF from a pool design: the pool
 outline, every fixture placed at its true (x, y) coordinate with a label, and the
 pipework, each on the correct drawing layer. DXF is the vendor-neutral CAD exchange
 format that every DWG application (AutoCAD, BricsCAD, DraftSight, …) imports, so this
@@ -23,36 +30,15 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-DXF_VERSION = "AC1009"          # AutoCAD R12 — the most widely importable DXF
+from services.cad_export import AQF_LAYERS, fixture_layer, export_layout
+
+DXF_VERSION = "AC1009"          # legacy writer: AutoCAD R12 — the most widely importable DXF
 INSUNITS_METERS = 6
 
-# Drawing layers → AutoCAD Color Index. Order is the table order.
-LAYERS: list[tuple[str, int]] = [
-    ("POOL_OUTLINE", 5),    # blue
-    ("WATER_SURFACE", 141), # light blue
-    ("NOZZLES", 4),         # cyan
-    ("LIGHTS", 2),          # yellow
-    ("PIPEWORK", 30),       # orange
-    ("EQUIPMENT", 8),       # grey
-    ("MEASUREMENTS", 2),    # yellow
-    ("ANNOTATIONS", 7),     # white/black
-]
+# Drawing layers → AutoCAD Color Index. Order is the table order. One shared layer set
+# for both writers (and the browser exporter) — defined in services.cad_export.
+LAYERS: list[tuple[str, int]] = list(AQF_LAYERS)
 LAYER_NAMES = {name for name, _ in LAYERS}
-
-# Fixture default drawing radius (m) by class, and which layer it lands on.
-_LIGHT_TOKENS = ("light", "rgb", "led", "spot", "par", "beam", "wash", "underwater")
-_NOZZLE_TOKENS = ("nozzle", "jet", "geyser", "spray", "fan", "arch", "laminar",
-                  "foam", "running", "mist", "crown")
-
-
-def fixture_layer(fixture_type: str) -> str:
-    """Return the drawing layer for a fixture type."""
-    t = str(fixture_type or "").strip().lower()
-    if any(tok in t for tok in _LIGHT_TOKENS):
-        return "LIGHTS"
-    if any(tok in t for tok in _NOZZLE_TOKENS):
-        return "NOZZLES"
-    return "EQUIPMENT"
 
 
 def fixture_radius(fixture_type: str) -> float:
@@ -112,10 +98,13 @@ def _pool_boundary(design: dict) -> tuple[str, dict]:
     length = float(params.get("length", 8))
     radius = float(params.get("radius", 6))
     center = geom.get("center") or [w / 2.0, length / 2.0]
+    if isinstance(center, dict):                      # browser project shape {x, y}
+        center = [center.get("x", 0), center.get("y", 0)]
     cx, cy = float(center[0]), float(center[1])
 
     if geom.get("points"):
-        pts = [(float(p[0]), float(p[1])) for p in geom["points"]]
+        pts = [(float(p["x"]), float(p["y"])) if isinstance(p, dict) else (float(p[0]), float(p[1]))
+               for p in geom["points"]]
         xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
         return _polygon("POOL_OUTLINE", pts, closed=True), \
             {"minx": min(xs), "miny": min(ys), "maxx": max(xs), "maxy": max(ys)}
@@ -206,29 +195,46 @@ def generate_dxf(design: dict) -> str:
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def generate_layout(design: dict) -> dict:
+def generate_layout(design: dict, writer: Optional[str] = None) -> dict:
     """
     Build the CAD export payload for a design.
 
     Returns the DXF text, a suggested filename, layer list, drawing stats, and the
     DWG-compatibility note (DXF is imported natively by every DWG application).
+
+    ``writer`` selects the DXF writer: ``"ezdxf"`` (default — AC1027 with blocks,
+    attributes and AQUAFLOW XDATA, CAD +Y-up) or ``"r12"`` (legacy AC1009 writer).
+    When omitted, ``design["cad_writer"]`` is honoured, so API callers can opt in to
+    the legacy output without a new parameter.
     """
-    dxf = generate_dxf(design)
+    writer = str(writer or design.get("cad_writer") or "ezdxf").lower()
     name = str(design.get("name") or design.get("projectName") or "fountain_layout")
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name) or "fountain_layout"
     fixtures = [f for f in (design.get("fixtures") or []) if isinstance(f, dict)]
+    if writer in ("r12", "legacy", "ac1009"):
+        dxf = generate_dxf(design)
+        version, layers, blocks = DXF_VERSION, [n for n, _ in LAYERS], []
+        entity_count = sum(dxf.count("\n0\n" + kind + "\n")
+                           for kind in ("CIRCLE", "LINE", "TEXT", "POINT"))
+        writer = "r12"
+    else:
+        out = export_layout(design)
+        dxf, version, layers, blocks = out["dxf"], out["dxf_version"], out["layers"], out["blocks"]
+        entity_count = out["entity_count"]
+        writer = "ezdxf"
     return {
         "dxf": dxf,
         "filename": f"{safe}.dxf",
         "format": "dxf",
-        "dxf_version": DXF_VERSION,
+        "writer": writer,
+        "dxf_version": version,
         "units": "meters",
-        "layers": [name for name, _ in LAYERS],
+        "layers": layers,
+        "blocks": blocks,
         "stats": {
             "fixture_count": len(fixtures),
-            "layer_count": len(LAYERS),
-            "entity_count": dxf.count("\n0\nCIRCLE") + dxf.count("\n0\nLINE")
-                            + dxf.count("\n0\nTEXT") + dxf.count("\n0\nPOINT"),
+            "layer_count": len(layers),
+            "entity_count": entity_count,
             "byte_size": len(dxf.encode("utf-8")),
         },
         "dwg": {

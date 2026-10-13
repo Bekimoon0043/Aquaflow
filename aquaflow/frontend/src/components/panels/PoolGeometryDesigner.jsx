@@ -31,7 +31,9 @@ import { getSymbolForType, drawSymbol } from "../../engineering/fixtureSymbols";
 import PipePropertiesPanel from "./PipePropertiesPanel";
 import FixtureLibraryBrowser, { fixtureMatchesTool } from "./FixtureLibraryBrowser";
 import CADImportDialog from "./CADImportDialog";
-import { exportCadDxf } from "../../engineering/cadExchange";
+import { requestCadExportDxf } from "../../engineering/cadExchange";
+import { drawCadUnderlay, prepareCadUnderlay, setUnderlayLayerVisible, setUnderlayVisible, underlayLayerVisibility } from "../../engineering/cadUnderlay";
+import { snapPlanPoint, fixtureDragPosition } from "../../engineering/designerSnap";
 import { apiGet, apiPost } from "../../utils/apiClient";
 import {
   geometryForPoolType,
@@ -376,6 +378,9 @@ export default function PoolGeometryDesigner() {
   const projectFileInputRef = useRef(null);
   const projectLoadRevision = useEngineeringStore((state) => state.loadRevision);
   const projectId = useEngineeringStore((state) => state.projectId);
+  // AF-CAD-011: locked whole-drawing CAD underlay (reference only; never selectable/editable).
+  const cadUnderlay = useEngineeringStore((state) => state.cadUnderlay);
+  const updateCadUnderlay = useCallback((next) => useEngineeringStore.getState().updateEngineering({ cadUnderlay: next }), []);
   const [showCADImport, setShowCADImport] = useState(false);
   const [cadExportBusy, setCadExportBusy] = useState(false);
   const [fitAfterCADImport, setFitAfterCADImport] = useState(false);
@@ -778,6 +783,10 @@ const activePipeForPanel =
     // World to canvas
     const wx = (x) => pan.x + x * zoom;
     const wy = (y) => pan.y + y * zoom;
+
+    // AF-CAD-011: locked CAD underlay behind the whole design — batched (one stroke per
+    // layer/colour) and viewport-culled through its spatial index.
+    if (cadUnderlay) drawCadUnderlay(ctx, cadUnderlay, { zoom, pan, width: W, height: H });
 
     // Site/land surfaces are engineering geometry: draw them below the pool so the
     // basin remains legible while grass, paving and planting areas can be edited.
@@ -1280,6 +1289,7 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
     ctx.fillText(`0,0`, pan.x+2, pan.y-4);
 
   }, [
+  cadUnderlay,
   geometry,
   fixtures,
   selectedFixture,
@@ -1580,14 +1590,11 @@ setSelectedSurfaceVertex(null);
   setSelectedSegment
 ]);
 
-  const snapPoint = (pt) => {
-    if(!snapToGrid) return pt;
-    const step = Number(gridStep || 0.5);
-    return {
-      x: Math.round(pt.x / step) * step,
-      y: Math.round(pt.y / step) * step,
-    };
-  };
+  // With SNAP on, a visible CAD underlay vertex/centre inside a 10 px aperture wins over the grid.
+  const underlaySnap = (cadUnderlay && cadUnderlay.visible !== false)
+    ? (pt) => prepareCadUnderlay(cadUnderlay)?.index.nearestVertex(pt, 10 / zoom, { visibleLayers: underlayLayerVisibility(cadUnderlay) })
+    : null;
+  const snapPoint = (pt) => snapPlanPoint(pt, { enabled: snapToGrid, step: Number(gridStep || 0.5), underlaySnap });
 
   const getGripHit = (pt) => {
     const threshold = Math.max(0.15, 8 / zoom);
@@ -2061,7 +2068,9 @@ setFixtures(prev => [...prev, {
     }
 
     if(tool === "select" && e.buttons === 1 && selectedFixture !== null) {
-      setFixtures(prev => prev.map((f,i) => i===selectedFixture ? {...f, x:Math.round(world.x*10)/10, y:Math.round(world.y*10)/10} : f));
+      // AF-CAD-002: full precision with SNAP off; snapped exactly once with SNAP on.
+      const next = fixtureDragPosition(rawWorld, { snapToGrid, gridStep: Number(gridStep || 0.5), underlaySnap });
+      setFixtures(prev => prev.map((f,i) => i===selectedFixture ? {...f, x:next.x, y:next.y} : f));
     }
   };
 
@@ -2162,6 +2171,7 @@ setFixtures(prev => [...prev, {
    fixtures,
    site_models: useEngineeringStore.getState().siteModels || [],
    site_surfaces: siteSurfaces,
+   cad_underlay: cadUnderlay || null,
    manualPipes,
    measurements,
    layers,
@@ -2302,10 +2312,13 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
     "text/csv"
   );
 };
-  const exportProjectDXF = () => {
+  // AF-CAD-003: one writer — the backend ezdxf exporter when the engine is reachable, the
+  // browser writer (same layers / XDATA / frame) only offline.
+  const exportProjectDXF = async () => {
     try {
-      const dxf = exportCadDxf(buildProjectPayload());
+      const { dxf, writer } = await requestCadExportDxf(buildProjectPayload());
       downloadTextFile(`${safeFileName(projectName)}.dxf`, dxf, "application/dxf");
+      if (writer === "browser") setExportStatus("DXF exported with the built-in writer (AquaFlow engine not running): no blocks/attributes or dimensions.");
     } catch (error) {
       setExportStatus(`CAD export failed: ${error.message}`);
     }
@@ -2317,7 +2330,14 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
     setExportStatus("Creating AutoCAD DWG… Choose where to save the drawing.");
     try {
       if (!window.aquaflow?.exportDWG) throw new Error("Native DWG export needs the updated AquaFlow desktop app. Close and reopen it after installing the update.");
-      const result = await window.aquaflow.exportDWG({name:projectName,dxf:exportCadDxf(buildProjectPayload())});
+      // AF-CAD-018: the desktop app gates ODA File Converter by licence edition / acknowledgement.
+      const licenseEdition = await apiGet("/license/status").then((s) => String(s?.edition || "UNKNOWN")).catch(() => "UNKNOWN");
+      const { dxf } = await requestCadExportDxf(buildProjectPayload());
+      const request = { name:projectName, dxf, licenseEdition };
+      let result = await window.aquaflow.exportDWG(request);
+      if (result?.needsOdaAcknowledgement && window.confirm(`${result.notice}\n\nConfirm that this export is for non-commercial use to convert with ODA File Converter.`)) {
+        result = await window.aquaflow.exportDWG({ ...request, odaAcknowledged:true });
+      }
       if (result?.canceled) setExportStatus("DWG export canceled.");
       else if (!result?.ok) throw new Error(result?.error || "The CAD engine could not create the DWG.");
       else setExportStatus(`DWG saved: ${result.path} (${result.engine}; AutoCAD 2022 compatible).`);
@@ -2349,6 +2369,8 @@ rows.push(["", "Analog I/O", "", "", `${hydraulicSummary.totalAnalogInputs} IN /
     restoreEngineeringSnapshot(next);
     historyRef.current = commitEngineeringHistory(historyRef.current, next);
     setHistoryVersion(version => version + 1);
+    // The underlay is a reference drawing kept outside undo snapshots (it can be 50k+ entities).
+    updateCadUnderlay(project.cad_underlay ?? null);
     setShowCADImport(false);
     setFitAfterCADImport(true);
     setSaved(false);
@@ -3938,6 +3960,31 @@ onRemoveNode={removeNode}
               </span>
             </div>
           ))}
+
+          {/* AF-CAD-011: locked CAD underlay, per-layer visibility */}
+          {showLayerPanel && cadUnderlay && (
+            <div style={{ marginTop:7, paddingTop:6, borderTop:"1px solid #0a3040" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"18px 1fr auto", gap:4, alignItems:"center", marginBottom:3 }}>
+                <button onClick={()=>updateCadUnderlay(setUnderlayVisible(cadUnderlay, cadUnderlay.visible === false))} title="Show/Hide CAD underlay" aria-label="Toggle CAD underlay" style={{ background:"#06121c", border:"1px solid #0a3040", borderRadius:3, color:cadUnderlay.visible !== false?"#00ccaa":"#334455", cursor:"pointer", fontSize:9 }}>
+                  {cadUnderlay.visible !== false ? "👁" : "–"}
+                </button>
+                <span title={`${cadUnderlay.filename || "CAD drawing"} · locked reference · ${cadUnderlay.items.length} entities`} style={{ color:"#7ab", fontSize:9, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                  🔒 CAD {cadUnderlay.filename || "UNDERLAY"}
+                </span>
+                <button onClick={()=>{ if (window.confirm("Remove the CAD reference drawing from this design? The design itself is unchanged.")) updateCadUnderlay(null); }} title="Remove CAD underlay" style={{ background:"none", border:"none", color:"#556677", cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>✕</button>
+              </div>
+              <div style={{ maxHeight:150, overflowY:"auto" }}>
+                {cadUnderlay.layers.map(l => (
+                  <label key={l.name} style={{ display:"grid", gridTemplateColumns:"14px 10px 1fr auto", gap:4, alignItems:"center", padding:"1px 0 1px 8px", cursor:"pointer" }}>
+                    <input type="checkbox" checked={l.visible !== false} onChange={e=>updateCadUnderlay(setUnderlayLayerVisible(cadUnderlay, l.name, e.target.checked))} aria-label={`Show CAD layer ${l.name}`} style={{ margin:0 }} />
+                    <span style={{ width:8, height:8, borderRadius:2, background:l.color, display:"inline-block" }} />
+                    <span style={{ color:l.visible !== false?"#7ab":"#334455", fontSize:8, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{l.name}</span>
+                    <span style={{ color:"#334455", fontSize:8 }}>{l.count}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Save */}
@@ -4081,7 +4128,7 @@ onRemoveNode={removeNode}
           <button onClick={() => setShowCADImport(true)} style={{ width:"100%", padding:"7px", marginBottom:6, background:"#001530", color:"#65d8ff", border:"1px solid #00aaff66", borderRadius:3, cursor:"pointer", fontSize:10, fontFamily:"monospace" }}>
             IMPORT AUTOCAD DWG / DXF
           </button>
-          <div style={{ color:"#91adc0", fontSize:9, lineHeight:1.5, marginBottom:7 }}>Native DWG uses installed AutoCAD 2018+ or ODA File Converter. DXF exchange is also available.</div>
+          <div style={{ color:"#91adc0", fontSize:9, lineHeight:1.5, marginBottom:7 }}>Native DWG uses your installed AutoCAD 2018+ (ODA File Converter: non-commercial use only). DXF and the AutoLISP export work without a DWG engine.</div>
           {exportStatus && (
             <div style={{ color:"#00ccaa", fontSize:9, marginBottom:5 }}>{exportStatus}</div>
           )}

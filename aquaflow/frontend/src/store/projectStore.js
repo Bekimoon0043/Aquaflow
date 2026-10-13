@@ -6,6 +6,10 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   environment: "night",
   cameraMode: "orbit",
   quality: "medium",
+  // AF-3D-024: ACES stays the default so saved shows look unchanged.
+  toneMapping: "aces",
+  // AF-3D-008: half-resolution spray/mist pass. Always on for high; opt-in on medium.
+  halfResSpray: false,
   pattern: "none",
   lightColor: "#0066ff",
   windX: 0,

@@ -1,6 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {MAX_CAD_BYTES,autoCadScript,validateDrawing,convertCadDrawing,registerCadIpc}=require('../cad-native');
+const {MAX_CAD_BYTES,ODA_NOTICE,autoCadScript,validateDrawing,convertCadDrawing,registerCadIpc,odaPolicy,resetOdaAcknowledgement,
+ permittedEngines,enginesForRequest,getCadCapabilities}=require('../cad-native');
 const dxf='0\nSECTION\n2\nENTITIES\n0\nCIRCLE\n10\n0\n20\n0\n40\n1\n0\nENDSEC\n0\nEOF\n';
 function ipcFixture(){
  const handlers=new Map(),frame={},sender={mainFrame:frame},win={webContents:sender};
@@ -15,9 +16,52 @@ test('validates actual DWG magic and rejects renamed DXF and incomplete drawings
  assert.throws(()=>validateDrawing(Buffer.from('AutoCAD Binary DXF'),'dxf'),/ASCII/);
  const bytes=Buffer.alloc(512);bytes.write('AC1032');validateDrawing(bytes,'dwg');validateDrawing(Buffer.from(dxf),'dxf');
 });
-test('bounds both CAD input types before starting an engine',()=>{
- assert.throws(()=>validateDrawing(Buffer.alloc(MAX_CAD_BYTES+1),'dwg'),/10 MB/);
- assert.throws(()=>validateDrawing(Buffer.alloc(0),'dxf'),/10 MB/);
+test('bounds both CAD input types before starting an engine (100 MB, aligned with the backend importer)',()=>{
+ assert.equal(MAX_CAD_BYTES,100*1024*1024);
+ assert.throws(()=>validateDrawing(Buffer.alloc(MAX_CAD_BYTES+1),'dwg'),/100 MB/);
+ assert.throws(()=>validateDrawing(Buffer.alloc(0),'dxf'),/100 MB/);
+});
+const AUTOCAD={kind:'autocad',file:'C:/AutoCAD/accoreconsole.exe',name:'AutoCAD 2022'};
+const ODA={kind:'oda',file:'C:/ODA/ODAFileConverter.exe',name:'ODA File Converter'};
+test('AF-CAD-018: AutoCAD stays the default; ODA needs the licence gate',()=>{
+ resetOdaAcknowledgement();
+ const unknown=odaPolicy({licenseEdition:'STRONG_BETA'});
+ assert.equal(unknown.allowed,false);assert.equal(unknown.needsAcknowledgement,true);assert.match(unknown.notice,/non-commercial use only/);
+ assert.deepEqual(permittedEngines([AUTOCAD,ODA],unknown),[AUTOCAD]);
+ const commercial=odaPolicy({licenseEdition:'STUDIO',acknowledged:true});
+ assert.equal(commercial.allowed,false);assert.equal(commercial.blocked,true);
+ assert.equal(odaPolicy({licenseEdition:'STRONG_BETA'}).allowed,false,'a blocked commercial request never acknowledges');
+ assert.equal(odaPolicy({licenseEdition:'PLAYER',commercialApproved:true}).allowed,true);
+ assert.equal(odaPolicy({licenseEdition:'',acknowledged:true}).allowed,true);
+ assert.equal(odaPolicy({licenseEdition:'NONE'}).allowed,true,'acknowledgement lasts for the session');
+ assert.equal(odaPolicy({licenseEdition:'STUDIO'}).allowed,false,'commercial stays disabled even after a session acknowledgement');
+ resetOdaAcknowledgement();
+ assert.equal(odaPolicy({licenseEdition:'NONE'}).allowed,false);
+});
+test('AF-CAD-018: request routing returns acknowledgement / blocked results instead of running ODA',()=>{
+ resetOdaAcknowledgement();
+ const odaOnly={findEngines:()=>[ODA],commercialApproved:()=>false};
+ const ask=enginesForRequest({licenseEdition:'STRONG_BETA'},odaOnly).result;
+ assert.equal(ask.ok,false);assert.equal(ask.needsOdaAcknowledgement,true);assert.equal(ask.notice,ODA_NOTICE);
+ const blocked=enginesForRequest({licenseEdition:'STUDIO',odaAcknowledged:true},odaOnly).result;
+ assert.equal(blocked.odaBlocked,true);assert.match(blocked.error,/odaCommercialApproved/);
+ const ok=enginesForRequest({licenseEdition:'STRONG_BETA',odaAcknowledged:true},odaOnly);
+ assert.deepEqual(ok.engines,[ODA]);assert.equal(ok.notice,ODA_NOTICE);
+ resetOdaAcknowledgement();
+ const withAutocad=enginesForRequest({licenseEdition:'STUDIO'},{findEngines:()=>[AUTOCAD,ODA],commercialApproved:()=>false});
+ assert.deepEqual(withAutocad.engines,[AUTOCAD]);assert.equal(withAutocad.notice,null);
+ const caps=getCadCapabilities({engines:[ODA]});
+ assert.equal(caps.engineKind,'oda');assert.equal(caps.odaNotice,ODA_NOTICE);assert.equal(caps.maxBytes,MAX_CAD_BYTES);
+});
+test('AF-CAD-018: an ODA-only install asks for acknowledgement through IPC before converting',async()=>{
+ resetOdaAcknowledgement();
+ const handlers=new Map(),frame={},sender={mainFrame:frame},win={webContents:sender};
+ registerCadIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},dialog:{},getMainWindow:()=>win,findEngines:()=>[ODA],commercialApproved:()=>false});
+ const dwg=Buffer.alloc(600);dwg.write('AC1032');
+ const result=await handlers.get('cad:import-dwg')({sender,senderFrame:frame},new Uint8Array(dwg),{licenseEdition:'STRONG_BETA'});
+ assert.equal(result.ok,false);assert.equal(result.needsOdaAcknowledgement,true);
+ const blocked=await handlers.get('cad:import-dwg')({sender,senderFrame:frame},new Uint8Array(dwg),{licenseEdition:'STUDIO',odaAcknowledged:true});
+ assert.equal(blocked.odaBlocked,true);
 });
 test('rejects missing engines and unsupported format conversions',async()=>{
  await assert.rejects(convertCadDrawing(Buffer.from(dxf),'dxf','dwg',{engines:[]}),/Native CAD engine|Install licensed/);

@@ -76,6 +76,38 @@ secret, security notes): **[LICENSE-ADMIN.md](LICENSE-ADMIN.md)**.
 
 ---
 
+## AutoCAD drawings (DXF / DWG) — optional components and licensing
+
+AquaFlow imports AutoCAD drawings in **Engineering Design → IMPORT AUTOCAD DWG / DXF**
+(full workflow: [AUTOCAD-DESIGN-EXCHANGE.md](AUTOCAD-DESIGN-EXCHANGE.md)). Nothing extra is
+needed for **DXF** (ASCII or binary, up to 100 MB): the bundled AquaFlow engine reads it.
+
+For **DWG** files, AquaFlow does **not** ship a DWG reader. Use one of:
+
+1. **Your own AutoCAD 2018 or later** (recommended, default). AquaFlow finds
+   `accoreconsole.exe` automatically and always uses it first.
+2. **The AquaFlow AutoLISP export** — load `tools/autocad/aquaflow_export.lsp` in AutoCAD
+   (`APPLOAD`), run its export command, and import the `.json` it writes. No converter or
+   extra licence is needed.
+3. **Save as DXF** in AutoCAD and import the DXF.
+4. **ODA File Converter** — only if you install it yourself, and **only for non-commercial
+   use**. ODA File Converter is free for non-commercial use only; commercial use needs an
+   ODA membership or written permission from the Open Design Alliance.
+   - With a **commercial AquaFlow licence (STUDIO, PLAYER)** the ODA route is **disabled**.
+   - With any other licence (beta, unknown) AquaFlow shows the notice and asks you to
+     confirm non-commercial use **once per app session**.
+
+**Admin:** only after ODA has confirmed in writing that your use is permitted, enable the ODA
+route for commercial licences by adding `"odaCommercialApproved": true` to
+`resources/app-config.json` (or setting `AQUAFLOW_ODA_COMMERCIAL_APPROVED=1`). Keep the
+written ODA decision on file. LibreDWG (GPLv3) is never linked or bundled with AquaFlow.
+Converter paths can be pinned with `AQUAFLOW_ACCORECONSOLE` / `AQUAFLOW_ODA_CONVERTER`.
+
+CAD import and export are design-data operations only: they never send commands to the
+fountain hardware, and imported fixtures never receive hardware addresses automatically.
+
+---
+
 ## Building the installer (Admin, reference)
 
 ```powershell
@@ -100,3 +132,5 @@ it carries the bundled secret. See BUILD.md for details.
 | Antivirus blocks the app/engine | Unsigned exe; allow it / add an exception. A code-signing cert removes this (Tier B). |
 | Activation refused | See "If activation is refused" above — the message says exactly why. |
 | Machine changed / new PC | The old license won't work (machine-locked). Get the new Machine ID and have the admin issue a fresh license. |
+| DWG import says "ODA File Converter is disabled for commercial AquaFlow licences" | Expected licence gate. Use AutoCAD, save as DXF, or use the AutoLISP export (see "AutoCAD drawings" above). |
+| CAD import says it used the "basic built-in reader" | The AquaFlow engine is not running. Relaunch the app; DXF over 10 MB, binary DXF and AutoLISP `.json` need the engine. |

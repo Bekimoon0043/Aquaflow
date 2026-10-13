@@ -72,6 +72,10 @@ const useEngineeringStore = create((set, get) => ({
   // Editable site-plan polygons (grass, paving, soil, rock and sand).
   siteSurfaces: [],
 
+  // AF-CAD-011: locked CAD underlay (plan-frame reference drawing, engineering/cadUnderlay.js).
+  // Kept out of the designer's undo snapshots; persisted as `cad_underlay` in .aqua.
+  cadUnderlay: null,
+
   // ─── Layers ──────────────────────────────────────────────────────────────────
   // Each layer: { key, label, visible, locked, color }
   layers: DEFAULT_ENGINEERING_LAYERS.map((layer) => ({ ...layer })),
@@ -125,6 +129,7 @@ pipes: [],
       fixtures:          normalized.fixtures,
       siteModels:        normalized.site_models,
       siteSurfaces:      normalized.site_surfaces,
+      cadUnderlay:       normalized.cad_underlay,
       layers:            mergeEngineeringLayers(normalized.layers),
       measurements:      normalized.measurements,
       depthZones:        normalized.depth_zones,
@@ -159,6 +164,7 @@ pipes: [],
       fixtures:    s.fixtures,
       site_models: s.siteModels,
       site_surfaces: s.siteSurfaces,
+      cad_underlay: s.cadUnderlay,
       layers:      s.layers,
       measurements:s.measurements,
       depth_zones: s.depthZones,

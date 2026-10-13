@@ -4,7 +4,7 @@ validate_engineering_package.py — AQ-X-010 verification
 Builds the full engineering package for a design and verifies:
   1. a full package is exported (one valid ZIP of deliverables),
   2. all required documents are included (manifest complete, checksums match),
-  3. PDF and DXF formats are supported (valid cover PDF + R12 DXF layout).
+  3. PDF and DXF formats are supported (valid cover PDF + ezdxf AC1027 DXF layout).
 
 Run:  python backend/validate_engineering_package.py   (from the aquaflow/ dir)
 """
@@ -85,7 +85,8 @@ check("cover.pdf has an xref + trailer", b"xref" in pdf and b"trailer" in pdf)
 check("cover.pdf carries the project name",
       b"Grand Plaza Fountain" in pdf)
 dxf = zf.read("layout.dxf").decode("utf-8")
-check("layout.dxf is AutoCAD R12", "AC1009" in dxf and dxf.rstrip().endswith("EOF"))
+check("layout.dxf is the ezdxf AC1027 layout (AF-CAD-003)",
+      "AC1027" in dxf and dxf.rstrip().endswith("EOF"))
 check("manifest advertises PDF + DXF support",
       manifest["pdf_supported"] and manifest["dxf_supported"])
 check("formats include pdf, dxf, xlsx, svg, json",

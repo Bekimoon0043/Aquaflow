@@ -1,5 +1,51 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-13: AutoCAD import + rendering programme (AF-CAD / AF-3D) — source only, not yet packaged**
+
+Plan: `AF-CAD-DESIGN-RENDER-PLAN.md` (research report + 45-task phased plan). API
+contract: `docs/CAD-IMPORT-CONTRACT.md`.
+
+- **AutoCAD import (backend, ezdxf 1.4, MIT).** `POST /api/cad/import` reads ASCII/binary
+  DXF up to 100 MB: units ($INSUNITS, unitless → suggested unit + warning), nested /
+  mirrored / dynamic blocks (effective names), ATTRIBs, AQUAFLOW XDATA, curves flattened,
+  hatches, text, closed outlines with islands, ACAD_TABLE + text-grid schedules, XREF list
+  (`services/cad_import.py`). Recognition with confidence + reasons, multilingual keywords,
+  geometry signatures, tag↔schedule join with field provenance, saved mapping templates
+  (`services/cad_recognition.py`, AF-CAD-010/012/016). Re-import diff (AF-CAD-017).
+  Pipe topology → pump/valve/nozzle groups → hydraulic solver input
+  (`services/cad_topology.py`, AF-CAD-015). AutoLISP `AQFEXPORT` plugin for the
+  zero-licence DWG path (`aquaflow/tools/autocad/`, AF-CAD-019 — **not yet run inside
+  AutoCAD**).
+- **One DXF writer** (`services/cad_export.py`, AC1027, blocks `AQF_<TYPE>_<MODEL>` with
+  ID/MODEL/HEIGHT/CHANNEL attributes, XDATA). The engineering package, `/api/cad/layout`
+  and the designer export now produce the same DXF; legacy R12 is opt-in
+  (AF-CAD-003/020). **Behaviour change:** `/api/cad/layout` returns AC1027 by default.
+- **Import UI.** `CADImportDialog.jsx` uses the backend (offline fallback to the old
+  client parser): review by confidence, apply-to-all-instances, basin/island choice,
+  wall height / floor level, land from hatches, diff before apply, optional hydraulic
+  network confirmation. Fixture IDs and hardware addresses are preserved; addresses are
+  never invented. Whole drawing kept as a locked per-layer underlay in 2D and 3D
+  (AF-CAD-011). One CAD → plan → 3D frame in `geometryContract.js` (AF-CAD-001). SNAP-off
+  drag keeps full precision (AF-CAD-002). ODA converter gated for commercial editions
+  (AF-CAD-018). d92c329 is in installer 1.2.31.
+- **Rendering.** Freeform/L-shaped basins and islands now use a polygon mask for
+  particles, splash and ripples instead of a rectangle (AF-3D-017; circle/rect pools
+  unchanged). Tone mapping ACES/AgX/Neutral (AF-3D-024). Up to 1024 fixture lights via a
+  light texture with HG scattering (AF-3D-022). Half-res spray pass (AF-3D-008).
+  Instanced light bodies — 300 lights: high 1994 → 503 draw calls, medium 854 → 258
+  (AF-3D-019). `FountainScene_v6.js` 4387 → 3173 lines, split into scenePost / sceneLighting /
+  sceneBasin / sceneShaders / sceneQuality, with a line-count guard test (AF-3D-021/018).
+- **AF-3D-020 benchmark (software renderer, fps not meaningful):** 64 valves, 7 pumps,
+  300 fixtures — low 703 draw calls / 251k tris, medium 844 / 956k, high 1562 / 3.31M.
+  Real-GPU fps still to be measured.
+- **Tests:** frontend 812 passed, 2 failed (`referenceFountainShow.test.js`: missing
+  `outputs/Reference_Keyhole_Crown_Fountain.aqua`, pre-existing); `vite build` OK.
+  Backend 1137 passed, 21 skipped, 1 failed (`test_loopback_output_timing_within_spec`,
+  also fails on clean HEAD).
+- **Open:** AF-CAD-013 multi-basin data model; Phase 2 CAD designer tools (AF-CAD-030…041);
+  AF-3D-023 three.js/WebGPU spike; dense all-on lighting washes the pool near-white under
+  ACES (needs real-GPU tuning); test against a real customer fountain DXF.
+
 **2026-10-09 (later): Siemens device model + setup wizard — installed as 1.2.21**
 
 - **New screens.** Devices → PLC opens on **Siemens Setup**, a 7-step wizard: Design →

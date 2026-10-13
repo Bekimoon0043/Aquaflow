@@ -23,6 +23,7 @@ datas += collect_data_files("data", include_py_files=False)        # backend/dat
 datas += [("data", "data")]                                        # ensure the folder ships
 # asyncua ships its standard address space as a pickle next to the package.
 datas += collect_data_files("asyncua", include_py_files=False)
+datas += collect_data_files("ezdxf", include_py_files=False)   # AF-CAD-010 (fonts, resources)
 
 # ── Hidden imports PyInstaller's static analysis can miss ──────────────────────────
 # uvicorn's protocol/loop implementations are imported by string at runtime, and several
@@ -41,6 +42,10 @@ hiddenimports += collect_submodules("asyncua")
 hiddenimports += collect_submodules("pycomm3")
 hiddenimports += collect_submodules("cryptography")
 hiddenimports += ["OpenSSL", "OpenSSL.crypto", "sortedcontainers", "dateutil", "pytz", "aiosqlite"]
+# AF-CAD-010/020: ezdxf (MIT) — services/cad_import.py + cad_export.py. ezdxf loads entity
+# classes, the recover module and its fonts/pattern data by name at runtime. The add-ons
+# (matplotlib/Qt drawing frontends, ODA wrappers) are not used and are left out.
+hiddenimports += collect_submodules("ezdxf", filter=lambda name: not name.startswith("ezdxf.addons"))
 hiddenimports += [
     "uvicorn.logging",
     "uvicorn.loops.auto", "uvicorn.loops.asyncio",

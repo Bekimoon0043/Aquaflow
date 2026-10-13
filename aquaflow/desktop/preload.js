@@ -10,7 +10,12 @@ contextBridge.exposeInMainWorld("aquaflow", {
   shell: "electron",
   getCadCapabilities() { return ipcRenderer.invoke("cad:capabilities"); },
   exportDWG(request) { return ipcRenderer.invoke("cad:export-dwg",request); },
-  importDWG(bytes) { return ipcRenderer.invoke("cad:import-dwg",bytes); },
+  // AF-CAD-018: options = { licenseEdition, odaAcknowledged } (ODA licence gate). Returns the
+  // converted ASCII DXF, which the renderer hands to the backend importer (POST /api/cad/import).
+  importDWG(bytes, options) {
+    const { licenseEdition, odaAcknowledged } = options || {};
+    return ipcRenderer.invoke("cad:import-dwg",bytes,{ licenseEdition: String(licenseEdition || ""), odaAcknowledged: odaAcknowledged === true });
+  },
 
   // The main process emits 'open-show' with an absolute .aquashow path when the user
   // uses File > Open Show or double-clicks a .aquashow file (AF-PKG-006). The frontend

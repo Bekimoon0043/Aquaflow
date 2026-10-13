@@ -35,16 +35,41 @@ export function poolPerimeterSegments(points = []) {
   }).filter(segment => segment.length > 0.001);
 }
 
+/**
+ * AF-CAD-014: islands (geometry.holes) shifted by the SAME bounding-box centre as the
+ * outer outline from centeredPoolPoints(), so holes and the basin share one 3D frame.
+ */
+export function centeredPoolHoles(outerPoints = [], holes = []) {
+  const valid = outerPoints.filter(finitePoint).map(point => ({ x: Number(point.x), y: Number(point.y) }));
+  if (valid.length < 3 || !Array.isArray(holes)) return [];
+  const xs = valid.map(point => point.x), ys = valid.map(point => point.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  return holes
+    .map(hole => (Array.isArray(hole) ? hole : hole?.points || []).filter(finitePoint)
+      .map(point => ({ x: Number(point.x) - cx, y: Number(point.y) - cy })))
+    .filter(hole => hole.length >= 3);
+}
+
 // Flat meshes use rotation.x = -PI/2 (local y → world -z); walls and fixtures put plan y at world +z.
 const toShapePlane = points => points.map(point => ({ x: point.x, y: -point.y }));
 
-export function poolShapeGeometry(T, planPoints = []) {
+/** Basin floor/surface shape. `holes` (optional, already centred) cut islands out of it. */
+export function poolShapeGeometry(T, planPoints = [], holes = []) {
   if (planPoints.length < 3) return null;
   const points = toShapePlane(planPoints);
   const shape = new T.Shape();
   shape.moveTo(points[0].x, points[0].y);
   points.slice(1).forEach(point => shape.lineTo(point.x, point.y));
   shape.closePath();
+  (holes || []).filter(hole => hole?.length >= 3).forEach(hole => {
+    const outline = toShapePlane(hole);
+    const path = new T.Path();
+    path.moveTo(outline[0].x, outline[0].y);
+    outline.slice(1).forEach(point => path.lineTo(point.x, point.y));
+    path.closePath();
+    shape.holes.push(path);
+  });
   return new T.ShapeGeometry(shape, 24);
 }
 

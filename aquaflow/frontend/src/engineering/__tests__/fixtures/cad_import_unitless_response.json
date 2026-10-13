@@ -1,0 +1,1855 @@
+{
+ "closed_outlines": [
+  {
+   "area_m2": 288.0,
+   "block_path": [],
+   "excluded": null,
+   "handle": "39",
+   "hole_handles": [
+    "3A"
+   ],
+   "holes": [
+    [
+     [
+      10.0,
+      4.0
+     ],
+     [
+      14.0,
+      4.0
+     ],
+     [
+      14.0,
+      8.0
+     ],
+     [
+      10.0,
+      8.0
+     ]
+    ]
+   ],
+   "layer": "F-BASIN-WATER",
+   "parent_handle": null,
+   "points": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     24.0,
+     0.0
+    ],
+    [
+     24.0,
+     12.0
+    ],
+    [
+     0.0,
+     12.0
+    ]
+   ],
+   "source": "LWPOLYLINE"
+  },
+  {
+   "area_m2": 16.0,
+   "block_path": [],
+   "excluded": null,
+   "handle": "3A",
+   "hole_handles": [],
+   "holes": [],
+   "layer": "F-ISLAND",
+   "parent_handle": "39",
+   "points": [
+    [
+     10.0,
+     4.0
+    ],
+    [
+     14.0,
+     4.0
+    ],
+    [
+     14.0,
+     8.0
+    ],
+    [
+     10.0,
+     8.0
+    ]
+   ],
+   "source": "LWPOLYLINE"
+  },
+  {
+   "area_m2": 17.5,
+   "block_path": [],
+   "excluded": "layer F-DEPTH-ZONE is depth (not structural)",
+   "handle": "3B",
+   "hole_handles": [],
+   "holes": [],
+   "layer": "F-DEPTH-ZONE",
+   "parent_handle": null,
+   "points": [
+    [
+     1.0,
+     1.0
+    ],
+    [
+     8.0,
+     1.0
+    ],
+    [
+     8.0,
+     3.5
+    ],
+    [
+     1.0,
+     3.5
+    ]
+   ],
+   "source": "LWPOLYLINE"
+  }
+ ],
+ "dxf_version": "AC1027",
+ "entities": [
+  {
+   "block_path": [],
+   "closed": true,
+   "color": 5,
+   "handle": "39",
+   "kind": "polyline",
+   "layer": "F-BASIN-WATER",
+   "points": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     24.0,
+     0.0
+    ],
+    [
+     24.0,
+     12.0
+    ],
+    [
+     0.0,
+     12.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "closed": true,
+   "color": 3,
+   "handle": "3A",
+   "kind": "polyline",
+   "layer": "F-ISLAND",
+   "points": [
+    [
+     10.0,
+     4.0
+    ],
+    [
+     14.0,
+     4.0
+    ],
+    [
+     14.0,
+     8.0
+    ],
+    [
+     10.0,
+     8.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "closed": true,
+   "color": 150,
+   "handle": "3B",
+   "kind": "polyline",
+   "layer": "F-DEPTH-ZONE",
+   "points": [
+    [
+     1.0,
+     1.0
+    ],
+    [
+     8.0,
+     1.0
+    ],
+    [
+     8.0,
+     3.5
+    ],
+    [
+     1.0,
+     3.5
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "44",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "42",
+   "position": [
+    3.0,
+    2.08
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-01",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "45",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "42",
+   "position": [
+    3.0,
+    2.2
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "MODEL",
+   "text": "JET-25",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "42"
+   ],
+   "center": [
+    3.0,
+    2.0
+   ],
+   "color": 4,
+   "handle": "3F",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.05,
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "48",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "46",
+   "position": [
+    4.0,
+    2.08
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-02",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "49",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "46",
+   "position": [
+    4.0,
+    2.2
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "MODEL",
+   "text": "JET-25",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "46"
+   ],
+   "center": [
+    4.0,
+    2.0
+   ],
+   "color": 4,
+   "handle": "3F",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.05,
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "4C",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "4A",
+   "position": [
+    5.0,
+    2.08
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-03",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "4D",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "4A",
+   "position": [
+    5.0,
+    2.2
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "MODEL",
+   "text": "JET-25",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "4A"
+   ],
+   "center": [
+    5.0,
+    2.0
+   ],
+   "color": 4,
+   "handle": "3F",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.05,
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "50",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "4E",
+   "position": [
+    6.0,
+    2.08
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-04",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "51",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "4E",
+   "position": [
+    6.0,
+    2.2
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "MODEL",
+   "text": "JET-25",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "4E"
+   ],
+   "center": [
+    6.0,
+    2.0
+   ],
+   "color": 4,
+   "handle": "3F",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.05,
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "54",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "52",
+   "position": [
+    7.0,
+    2.08
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-05",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "55",
+   "height": 0.1,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "52",
+   "position": [
+    7.0,
+    2.2
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "MODEL",
+   "text": "JET-25",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "52"
+   ],
+   "center": [
+    7.0,
+    2.0
+   ],
+   "color": 4,
+   "handle": "3F",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.05,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "65",
+    "5D"
+   ],
+   "center": [
+    19.5,
+    6.0
+   ],
+   "color": 4,
+   "handle": "59",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.04,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "65",
+    "5F"
+   ],
+   "center": [
+    18.0,
+    7.5
+   ],
+   "color": 4,
+   "handle": "59",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.04,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "65",
+    "61"
+   ],
+   "center": [
+    16.5,
+    6.0
+   ],
+   "color": 4,
+   "handle": "59",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.04,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "65",
+    "63"
+   ],
+   "center": [
+    18.0,
+    4.5
+   ],
+   "color": 4,
+   "handle": "59",
+   "kind": "circle",
+   "layer": "F-NOZZLES",
+   "radius": 0.04,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "6B"
+   ],
+   "center": [
+    1.0,
+    11.0
+   ],
+   "color": 2,
+   "handle": "6A",
+   "kind": "circle",
+   "layer": "F-LIGHTS",
+   "radius": 0.08,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "6D"
+   ],
+   "center": [
+    23.0,
+    11.0
+   ],
+   "color": 2,
+   "handle": "6A",
+   "kind": "circle",
+   "layer": "F-LIGHTS",
+   "radius": 0.08,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "73"
+   ],
+   "closed": true,
+   "color": 8,
+   "handle": "72",
+   "kind": "polyline",
+   "layer": "F-EQUIP",
+   "points": [
+    [
+     25.7,
+     1.7
+    ],
+    [
+     26.3,
+     1.7
+    ],
+    [
+     26.3,
+     2.3
+    ],
+    [
+     25.7,
+     2.3
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "79"
+   ],
+   "closed": true,
+   "color": 8,
+   "handle": "78",
+   "kind": "polyline",
+   "layer": "F-EQUIP",
+   "points": [
+    [
+     21.9,
+     1.9
+    ],
+    [
+     22.1,
+     2.1
+    ],
+    [
+     22.1,
+     1.9
+    ],
+    [
+     21.9,
+     2.1
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "closed": false,
+   "color": 30,
+   "handle": "7B",
+   "kind": "polyline",
+   "layer": "F-PIPE PVC DN50",
+   "points": [
+    [
+     26.0,
+     2.0
+    ],
+    [
+     22.0,
+     2.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "closed": false,
+   "color": 30,
+   "handle": "7C",
+   "kind": "polyline",
+   "layer": "F-PIPE PVC DN50",
+   "points": [
+    [
+     22.0,
+     2.0
+    ],
+    [
+     2.0,
+     2.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "closed": false,
+   "color": 30,
+   "handle": "7D",
+   "kind": "polyline",
+   "layer": "F-PIPE PVC DN50",
+   "points": [
+    [
+     22.0,
+     2.0
+    ],
+    [
+     22.0,
+     9.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "7E",
+   "kind": "hatch",
+   "layer": "L-LAWN",
+   "loops": [
+    [
+     [
+      -6.0,
+      -6.0
+     ],
+     [
+      30.0,
+      -6.0
+     ],
+     [
+      30.0,
+      -2.0
+     ],
+     [
+      -6.0,
+      -2.0
+     ]
+    ]
+   ],
+   "pattern": "GRASS",
+   "solid": false,
+   "source": "HATCH"
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "7F",
+   "height": 0.4,
+   "kind": "text",
+   "layer": "A-TEXT",
+   "position": [
+    0.0,
+    13.0
+   ],
+   "rotation_deg": 0.0,
+   "source": "TEXT",
+   "text": "CENTRAL PLAZA FOUNTAIN",
+   "z": 0.0
+  }
+ ],
+ "extents": {
+  "max": [
+   30.0,
+   13.0
+  ],
+  "min": [
+   -6.0,
+   -6.0
+  ]
+ },
+ "filename": "central_plaza_unitless.dxf",
+ "inserts": [
+  {
+   "attribs": {
+    "ID": "N-01",
+    "MODEL": "JET-25"
+   },
+   "block": "NOZZLE_JET_DN25",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "NOZZLE_JET_DN25",
+   "handle": "42",
+   "instance_id": "42",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    3.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {
+    "ID": "N-02",
+    "MODEL": "JET-25"
+   },
+   "block": "NOZZLE_JET_DN25",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "NOZZLE_JET_DN25",
+   "handle": "46",
+   "instance_id": "46",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    4.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {
+    "ID": "N-03",
+    "MODEL": "JET-25"
+   },
+   "block": "NOZZLE_JET_DN25",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "NOZZLE_JET_DN25",
+   "handle": "4A",
+   "instance_id": "4A",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    5.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {
+    "ID": "N-04",
+    "MODEL": "JET-25"
+   },
+   "block": "NOZZLE_JET_DN25",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "NOZZLE_JET_DN25",
+   "handle": "4E",
+   "instance_id": "4E",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    6.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {
+    "ID": "N-05",
+    "MODEL": "JET-25"
+   },
+   "block": "NOZZLE_JET_DN25",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "NOZZLE_JET_DN25",
+   "handle": "52",
+   "instance_id": "52",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    7.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "RING4",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "RING4",
+   "handle": "65",
+   "instance_id": "65",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    18.0,
+    6.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "JET_RING_HEAD",
+   "block_path": [
+    "65"
+   ],
+   "color": 4,
+   "depth": 1,
+   "effective_name": "JET_RING_HEAD",
+   "handle": "5D",
+   "instance_id": "65/5D",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": "65",
+   "position": [
+    19.5,
+    6.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "JET_RING_HEAD",
+   "block_path": [
+    "65"
+   ],
+   "color": 4,
+   "depth": 1,
+   "effective_name": "JET_RING_HEAD",
+   "handle": "5F",
+   "instance_id": "65/5F",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": "65",
+   "position": [
+    18.0,
+    7.5,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "JET_RING_HEAD",
+   "block_path": [
+    "65"
+   ],
+   "color": 4,
+   "depth": 1,
+   "effective_name": "JET_RING_HEAD",
+   "handle": "61",
+   "instance_id": "65/61",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": "65",
+   "position": [
+    16.5,
+    6.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "JET_RING_HEAD",
+   "block_path": [
+    "65"
+   ],
+   "color": 4,
+   "depth": 1,
+   "effective_name": "JET_RING_HEAD",
+   "handle": "63",
+   "instance_id": "65/63",
+   "layer": "F-NOZZLES",
+   "mirrored": false,
+   "parent_handle": "65",
+   "position": [
+    18.0,
+    4.5,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "LED_SPOT_RGB",
+   "block_path": [],
+   "color": 2,
+   "depth": 0,
+   "effective_name": "LED_SPOT_RGB",
+   "handle": "6B",
+   "instance_id": "6B",
+   "layer": "F-LIGHTS",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    1.0,
+    11.0,
+    0.0
+   ],
+   "rotation_deg": 45.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "LED_SPOT_RGB",
+   "block_path": [],
+   "color": 2,
+   "depth": 0,
+   "effective_name": "LED_SPOT_RGB",
+   "handle": "6D",
+   "instance_id": "6D",
+   "layer": "F-LIGHTS",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    23.0,
+    11.0,
+    0.0
+   ],
+   "rotation_deg": 45.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "PUMP_SUBMERSIBLE",
+   "block_path": [],
+   "color": 8,
+   "depth": 0,
+   "effective_name": "PUMP_SUBMERSIBLE",
+   "handle": "73",
+   "instance_id": "73",
+   "layer": "F-EQUIP",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    26.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  },
+  {
+   "attribs": {},
+   "block": "VALVE_SOLENOID",
+   "block_path": [],
+   "color": 8,
+   "depth": 0,
+   "effective_name": "VALVE_SOLENOID",
+   "handle": "79",
+   "instance_id": "79",
+   "layer": "F-EQUIP",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    22.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {}
+  }
+ ],
+ "layers": [
+  {
+   "color": 7,
+   "entity_count": 10,
+   "frozen": false,
+   "name": "0",
+   "off": false
+  },
+  {
+   "color": 7,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "Defpoints",
+   "off": false
+  },
+  {
+   "color": 5,
+   "entity_count": 1,
+   "frozen": false,
+   "name": "F-BASIN-WATER",
+   "off": false
+  },
+  {
+   "color": 3,
+   "entity_count": 1,
+   "frozen": false,
+   "name": "F-ISLAND",
+   "off": false
+  },
+  {
+   "color": 150,
+   "entity_count": 1,
+   "frozen": false,
+   "name": "F-DEPTH-ZONE",
+   "off": false
+  },
+  {
+   "color": 4,
+   "entity_count": 19,
+   "frozen": false,
+   "name": "F-NOZZLES",
+   "off": false
+  },
+  {
+   "color": 2,
+   "entity_count": 4,
+   "frozen": false,
+   "name": "F-LIGHTS",
+   "off": false
+  },
+  {
+   "color": 8,
+   "entity_count": 4,
+   "frozen": false,
+   "name": "F-EQUIP",
+   "off": false
+  },
+  {
+   "color": 30,
+   "entity_count": 3,
+   "frozen": false,
+   "name": "F-PIPE PVC DN50",
+   "off": false
+  },
+  {
+   "color": 82,
+   "entity_count": 1,
+   "frozen": false,
+   "name": "L-LAWN",
+   "off": false
+  },
+  {
+   "color": 7,
+   "entity_count": 1,
+   "frozen": false,
+   "name": "A-TEXT",
+   "off": false
+  },
+  {
+   "color": 7,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "A-SCHED",
+   "off": false
+  }
+ ],
+ "recognition": {
+  "basins": [
+   {
+    "area_m2": 288.0,
+    "confidence": 0.85,
+    "hole_handles": [
+     "3A"
+    ],
+    "holes": [
+     [
+      [
+       10.0,
+       4.0
+      ],
+      [
+       14.0,
+       4.0
+      ],
+      [
+       14.0,
+       8.0
+      ],
+      [
+       10.0,
+       8.0
+      ]
+     ]
+    ],
+    "layer": "F-BASIN-WATER",
+    "points": [
+     [
+      0.0,
+      0.0
+     ],
+     [
+      24.0,
+      0.0
+     ],
+     [
+      24.0,
+      12.0
+     ],
+     [
+      0.0,
+      12.0
+     ]
+    ],
+    "reasons": [
+     "layer F-BASIN-WATER matches BASIN"
+    ],
+    "role": "basin",
+    "source_handle": "39"
+   },
+   {
+    "area_m2": 16.0,
+    "confidence": 0.85,
+    "hole_handles": [],
+    "holes": [],
+    "layer": "F-ISLAND",
+    "points": [
+     [
+      10.0,
+      4.0
+     ],
+     [
+      14.0,
+      4.0
+     ],
+     [
+      14.0,
+      8.0
+     ],
+     [
+      10.0,
+      8.0
+     ]
+    ],
+    "reasons": [
+     "layer F-ISLAND matches ISLAND",
+     "closed outline inside basin 39"
+    ],
+    "role": "island",
+    "source_handle": "3A"
+   }
+  ],
+  "candidates": [
+   {
+    "aquaflow_id": null,
+    "attribs": {
+     "ID": "N-01",
+     "MODEL": "JET-25"
+    },
+    "block": "NOZZLE_JET_DN25",
+    "confidence": 0.87,
+    "field_provenance": {
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "JET-25",
+     "pump_id": null
+    },
+    "group": "block:NOZZLE_JET_DN25",
+    "id": "cand_0",
+    "layer": "F-NOZZLES",
+    "position": [
+     3.0,
+     2.0
+    ],
+    "reasons": [
+     "attributes ID=N-01, MODEL=JET-25",
+     "block name matches NOZZLE",
+     "layer F-NOZZLES matches NOZZLE",
+     "5 instances in group block:NOZZLE_JET_DN25"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "42",
+    "tag": "N-01",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {
+     "ID": "N-02",
+     "MODEL": "JET-25"
+    },
+    "block": "NOZZLE_JET_DN25",
+    "confidence": 0.87,
+    "field_provenance": {
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "JET-25",
+     "pump_id": null
+    },
+    "group": "block:NOZZLE_JET_DN25",
+    "id": "cand_1",
+    "layer": "F-NOZZLES",
+    "position": [
+     4.0,
+     2.0
+    ],
+    "reasons": [
+     "attributes ID=N-02, MODEL=JET-25",
+     "block name matches NOZZLE",
+     "layer F-NOZZLES matches NOZZLE",
+     "5 instances in group block:NOZZLE_JET_DN25"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "46",
+    "tag": "N-02",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {
+     "ID": "N-03",
+     "MODEL": "JET-25"
+    },
+    "block": "NOZZLE_JET_DN25",
+    "confidence": 0.87,
+    "field_provenance": {
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "JET-25",
+     "pump_id": null
+    },
+    "group": "block:NOZZLE_JET_DN25",
+    "id": "cand_2",
+    "layer": "F-NOZZLES",
+    "position": [
+     5.0,
+     2.0
+    ],
+    "reasons": [
+     "attributes ID=N-03, MODEL=JET-25",
+     "block name matches NOZZLE",
+     "layer F-NOZZLES matches NOZZLE",
+     "5 instances in group block:NOZZLE_JET_DN25"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "4A",
+    "tag": "N-03",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {
+     "ID": "N-04",
+     "MODEL": "JET-25"
+    },
+    "block": "NOZZLE_JET_DN25",
+    "confidence": 0.87,
+    "field_provenance": {
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "JET-25",
+     "pump_id": null
+    },
+    "group": "block:NOZZLE_JET_DN25",
+    "id": "cand_3",
+    "layer": "F-NOZZLES",
+    "position": [
+     6.0,
+     2.0
+    ],
+    "reasons": [
+     "attributes ID=N-04, MODEL=JET-25",
+     "block name matches NOZZLE",
+     "layer F-NOZZLES matches NOZZLE",
+     "5 instances in group block:NOZZLE_JET_DN25"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "4E",
+    "tag": "N-04",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {
+     "ID": "N-05",
+     "MODEL": "JET-25"
+    },
+    "block": "NOZZLE_JET_DN25",
+    "confidence": 0.87,
+    "field_provenance": {
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "JET-25",
+     "pump_id": null
+    },
+    "group": "block:NOZZLE_JET_DN25",
+    "id": "cand_4",
+    "layer": "F-NOZZLES",
+    "position": [
+     7.0,
+     2.0
+    ],
+    "reasons": [
+     "attributes ID=N-05, MODEL=JET-25",
+     "block name matches NOZZLE",
+     "layer F-NOZZLES matches NOZZLE",
+     "5 instances in group block:NOZZLE_JET_DN25"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "52",
+    "tag": "N-05",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "JET_RING_HEAD",
+    "confidence": 0.87,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:JET_RING_HEAD",
+    "id": "cand_5",
+    "layer": "F-NOZZLES",
+    "position": [
+     19.5,
+     6.0
+    ],
+    "reasons": [
+     "block name matches JET",
+     "layer F-NOZZLES matches NOZZLE",
+     "4 instances in group block:JET_RING_HEAD"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "65/5D",
+    "tag": null,
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "JET_RING_HEAD",
+    "confidence": 0.87,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:JET_RING_HEAD",
+    "id": "cand_6",
+    "layer": "F-NOZZLES",
+    "position": [
+     18.0,
+     7.5
+    ],
+    "reasons": [
+     "block name matches JET",
+     "layer F-NOZZLES matches NOZZLE",
+     "4 instances in group block:JET_RING_HEAD"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "65/5F",
+    "tag": null,
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "JET_RING_HEAD",
+    "confidence": 0.87,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:JET_RING_HEAD",
+    "id": "cand_7",
+    "layer": "F-NOZZLES",
+    "position": [
+     16.5,
+     6.0
+    ],
+    "reasons": [
+     "block name matches JET",
+     "layer F-NOZZLES matches NOZZLE",
+     "4 instances in group block:JET_RING_HEAD"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "65/61",
+    "tag": null,
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "JET_RING_HEAD",
+    "confidence": 0.87,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:JET_RING_HEAD",
+    "id": "cand_8",
+    "layer": "F-NOZZLES",
+    "position": [
+     18.0,
+     4.5
+    ],
+    "reasons": [
+     "block name matches JET",
+     "layer F-NOZZLES matches NOZZLE",
+     "4 instances in group block:JET_RING_HEAD"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "65/63",
+    "tag": null,
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "LED_SPOT_RGB",
+    "confidence": 0.84,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:LED_SPOT_RGB",
+    "id": "cand_9",
+    "layer": "F-LIGHTS",
+    "position": [
+     1.0,
+     11.0
+    ],
+    "reasons": [
+     "block name matches LED",
+     "layer F-LIGHTS matches LIGHT"
+    ],
+    "rotation_deg": 45.0,
+    "source_handle": "6B",
+    "tag": null,
+    "type": "light",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "LED_SPOT_RGB",
+    "confidence": 0.84,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:LED_SPOT_RGB",
+    "id": "cand_10",
+    "layer": "F-LIGHTS",
+    "position": [
+     23.0,
+     11.0
+    ],
+    "reasons": [
+     "block name matches LED",
+     "layer F-LIGHTS matches LIGHT"
+    ],
+    "rotation_deg": 45.0,
+    "source_handle": "6D",
+    "tag": null,
+    "type": "light",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "PUMP_SUBMERSIBLE",
+    "confidence": 0.8,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:PUMP_SUBMERSIBLE",
+    "id": "cand_11",
+    "layer": "F-EQUIP",
+    "position": [
+     26.0,
+     2.0
+    ],
+    "reasons": [
+     "block name matches PUMP"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "73",
+    "tag": null,
+    "type": "pump",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": null,
+    "attribs": {},
+    "block": "VALVE_SOLENOID",
+    "confidence": 0.8,
+    "field_provenance": {},
+    "fields": {
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": null,
+     "pump_id": null
+    },
+    "group": "block:VALVE_SOLENOID",
+    "id": "cand_12",
+    "layer": "F-EQUIP",
+    "position": [
+     22.0,
+     2.0
+    ],
+    "reasons": [
+     "block name matches VALVE"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "79",
+    "tag": null,
+    "type": "valve",
+    "z": 0.0
+   }
+  ],
+  "groups": [
+   {
+    "count": 4,
+    "key": "block:JET_RING_HEAD",
+    "mean_confidence": 0.87,
+    "type": "nozzle"
+   },
+   {
+    "count": 2,
+    "key": "block:LED_SPOT_RGB",
+    "mean_confidence": 0.84,
+    "type": "light"
+   },
+   {
+    "count": 5,
+    "key": "block:NOZZLE_JET_DN25",
+    "mean_confidence": 0.87,
+    "type": "nozzle"
+   },
+   {
+    "count": 1,
+    "key": "block:PUMP_SUBMERSIBLE",
+    "mean_confidence": 0.8,
+    "type": "pump"
+   },
+   {
+    "count": 1,
+    "key": "block:VALVE_SOLENOID",
+    "mean_confidence": 0.8,
+    "type": "valve"
+   }
+  ],
+  "land": [
+   {
+    "layer": "L-LAWN",
+    "loops": [
+     [
+      [
+       -6.0,
+       -6.0
+      ],
+      [
+       30.0,
+       -6.0
+      ],
+      [
+       30.0,
+       -2.0
+      ],
+      [
+       -6.0,
+       -2.0
+      ]
+     ]
+    ],
+    "material": "grass",
+    "pattern": "GRASS",
+    "reason": "hatch pattern GRASS",
+    "source_handle": "7E"
+   }
+  ],
+  "pipes": [
+   {
+    "closed": false,
+    "dn": 50,
+    "layer": "F-PIPE PVC DN50",
+    "material": "PVC",
+    "points": [
+     [
+      26.0,
+      2.0
+     ],
+     [
+      22.0,
+      2.0
+     ]
+    ],
+    "provenance": {
+     "dn": "layer F-PIPE PVC DN50",
+     "material": "layer F-PIPE PVC DN50"
+    },
+    "source_handle": "7B"
+   },
+   {
+    "closed": false,
+    "dn": 50,
+    "layer": "F-PIPE PVC DN50",
+    "material": "PVC",
+    "points": [
+     [
+      22.0,
+      2.0
+     ],
+     [
+      2.0,
+      2.0
+     ]
+    ],
+    "provenance": {
+     "dn": "layer F-PIPE PVC DN50",
+     "material": "layer F-PIPE PVC DN50"
+    },
+    "source_handle": "7C"
+   },
+   {
+    "closed": false,
+    "dn": 50,
+    "layer": "F-PIPE PVC DN50",
+    "material": "PVC",
+    "points": [
+     [
+      22.0,
+      2.0
+     ],
+     [
+      22.0,
+      9.0
+     ]
+    ],
+    "provenance": {
+     "dn": "layer F-PIPE PVC DN50",
+     "material": "layer F-PIPE PVC DN50"
+    },
+    "source_handle": "7D"
+   }
+  ],
+  "template_used": null
+ },
+ "stats": {
+  "entities": 31,
+  "inserts": 14,
+  "parse_ms": 0,
+  "skipped": {
+   "ATTDEF": 10
+  },
+  "truncated": false
+ },
+ "tables": [],
+ "units": {
+  "insunits": 0,
+  "name": "mm",
+  "suggested": "mm",
+  "to_m": 0.001,
+  "unitless": true
+ },
+ "version": 1,
+ "warnings": [
+  "Drawing is unitless ($INSUNITS=0); assumed 'mm' from its extents (3.6e+04 drawing units). Confirm or re-import with units=mm|cm|m|in|ft."
+ ],
+ "xrefs": []
+}

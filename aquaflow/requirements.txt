@@ -8,6 +8,8 @@ pymodbus>=3.6.0
 aiomqtt>=1.2.0
 # Core numeric layer
 numpy>=1.26.0
+# CAD import/export (AF-CAD-010/020): ezdxf — MIT licence
+ezdxf>=1.3,<2
 # Optional advanced audio analysis (install later if needed)
 # librosa>=0.10.0
 # Optional: for full AI

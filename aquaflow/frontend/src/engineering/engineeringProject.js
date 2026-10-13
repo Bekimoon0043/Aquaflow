@@ -1,3 +1,5 @@
+import { normalizeCadUnderlay } from "./cadUnderlay";
+
 export const DEFAULT_DEPTH_ZONES = [
   { id: "shallow", zone: "shallow", label: "Shallow", depth: 0.3, color: "#7ec8e3", points: [] },
   { id: "medium", zone: "medium", label: "Medium", depth: 0.8, color: "#0077b6", points: [] },
@@ -17,6 +19,8 @@ export function createDefaultEngineeringProject() {
     fixtures: [],
     site_models: [],
     site_surfaces: [],
+    // AF-CAD-011: locked whole-drawing CAD reference (engineering/cadUnderlay.js).
+    cad_underlay: null,
     layers: [],
     measurements: [],
     depth_zones: DEFAULT_DEPTH_ZONES.map((zone) => ({ ...zone, points: [] })),
@@ -48,6 +52,7 @@ export function normalizeEngineeringProject(project = {}) {
     site_surfaces: Array.isArray(project.site_surfaces || project.siteSurfaces)
       ? (project.site_surfaces || project.siteSurfaces)
       : [],
+    cad_underlay: normalizeCadUnderlay(project.cad_underlay || project.cadUnderlay),
     layers: Array.isArray(project.layers) ? project.layers : [],
     measurements: Array.isArray(project.measurements) ? project.measurements : [],
     depth_zones: Array.isArray(project.depth_zones || project.depthZones)

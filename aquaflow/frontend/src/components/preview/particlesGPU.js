@@ -46,11 +46,31 @@
  * calibrated containment figures — real engineering output — stay exactly as tested.
  */
 
-import { billboardFrag } from "./particlesBillboard";
+import { billboardFrag, fieldLightUniformStubs, FIELD_LIGHT_VARYING } from "./particlesBillboard";
 import { emitterOpacityScale } from './waterOptics';
 
 /** Rows of the emitter parameter texture. Must match EMIT_ROWS in the shaders. */
 const EMIT_ROWS = 6;
+
+/**
+ * Push the basin shape into a simulation material's uniforms (AF-3D-017).
+ * Circular and rectangular pools keep their analytic test — numerically identical
+ * to before; a polygon pool (`type: "polygon"` with a basinMask.js `mask`) switches
+ * the shader to the rasterised mask. Exported for headless tests.
+ */
+export function applyPoolUniforms(u, pool, THREE, blankMask = null) {
+  const polygon = pool.type === "polygon" && pool.mask && !pool.mask.empty;
+  u.uPool.value.set(
+    polygon ? 2 : pool.type === "circular" ? 1 : 0,
+    pool.radius || 6, pool.width || 12, pool.length || 8,
+  );
+  if (polygon) {
+    if (u.uPoolMask) u.uPoolMask.value = pool.mask.texture(THREE);
+    if (u.uPoolMaskBounds) u.uPoolMaskBounds.value.set(...pool.mask.gpuBounds);
+  } else if (u.uPoolMask && blankMask) {
+    u.uPoolMask.value = blankMask;
+  }
+}
 
 /**
  * Can this renderer simulate particles on the GPU?
@@ -79,7 +99,9 @@ uniform float uGravity;
 uniform float uDrag;
 uniform float uTurb;
 uniform vec2  uWind;
-uniform vec4  uPool;      // x: 1 = circular, y: radius, z: width, w: length
+uniform vec4  uPool;      // x: 1 = circular, 0 = rect, 2 = polygon mask; y: radius, z: width, w: length
+uniform sampler2D uPoolMask;     // AF-3D-017: rasterised basin (polygon with holes)
+uniform vec4  uPoolMaskBounds;   // xy = mask origin (world xz), zw = 1 / mask size
 varying vec2  vUv;
 
 float hash11(float p){ p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
@@ -95,6 +117,12 @@ vec4 emitTexel(float idx, float row){
 }
 
 bool insidePool(vec2 xz){
+  if (uPool.x > 1.5) {
+    // Freeform / L-shaped / island basins: the mask, not the bounding rectangle.
+    vec2 m = (xz - uPoolMaskBounds.xy) * uPoolMaskBounds.zw;
+    if (m.x < 0.0 || m.y < 0.0 || m.x > 1.0 || m.y > 1.0) return false;
+    return texture2D(uPoolMask, m).r > 0.5;
+  }
   if (uPool.x > 0.5) return dot(xz, xz) <= uPool.y * uPool.y;
   return abs(xz.x) <= uPool.z * 0.5 && abs(xz.y) <= uPool.w * 0.5;
 }
@@ -265,12 +293,14 @@ varying vec3  vWorldPos;
 varying vec2  vUv;
 varying float vViewZ;
 varying float vSeed;
+${FIELD_LIGHT_VARYING}
 
 vec4 emitTexel(float idx, float row){
   return texture2D(uEmit, vec2((idx + 0.5) / uEmitSize.x, (row + 0.5) / uEmitSize.y));
 }
 
 void main(){
+  vFieldLight = vec3(0.0);
   vec2 puv = (vec2(mod(aIndex, uTexSize.x), floor(aIndex / uTexSize.x)) + 0.5) / uTexSize;
   vec4 pl = texture2D(uPosTex, puv);
   vec4 vm = texture2D(uVelTex, puv);
@@ -305,6 +335,7 @@ void main(){
   vColor    = vec4(e3.rgb, uAlpha * emitTexel(emitIdx, 5.0).z);
   vLife     = lifeFrac;
   vWorldPos = pl.xyz;
+  vFieldLight = particleFieldLight(pl.xyz);
   vSeed     = seed;
   vUv       = uv;
 
@@ -382,6 +413,11 @@ export class GPUParticleField {
     if (T.NoColorSpace) this.metaTex.colorSpace = T.NoColorSpace;
     this.metaTex.needsUpdate = true;
 
+    // A sampler must always be bound; a 1x1 empty mask stands in until a polygon
+    // basin supplies a real one.
+    this._blankMask = new T.DataTexture(new Uint8Array(4), 1, 1, T.RGBAFormat);
+    this._blankMask.needsUpdate = true;
+
     const simUniforms = () => ({
       uPos:  { value: null },
       uVel:  { value: null },
@@ -395,6 +431,8 @@ export class GPUParticleField {
       uTurb: { value: turbulence },
       uWind: { value: new T.Vector2() },
       uPool: { value: new T.Vector4(1, 6, 12, 8) },
+      uPoolMask: { value: this._blankMask },
+      uPoolMaskBounds: { value: new T.Vector4(0, 0, 1, 1) },
     });
 
     this.velMat = new T.ShaderMaterial({ vertexShader: SIM_VERT, fragmentShader: VEL_FRAG, uniforms: simUniforms(), depthTest: false, depthWrite: false });
@@ -448,11 +486,7 @@ export class GPUParticleField {
         uSoftDist: { value: 0.6 },
         uGlobalLight: { value: new T.Color(1, 1, 1) },
         uGlobalLightI: { value: 0.0 },
-        uFieldCount: { value: 0 },
-        uFieldPos: { value: Array.from({ length: maxFieldLights }, () => new T.Vector3()) },
-        uFieldCol: { value: Array.from({ length: maxFieldLights }, () => new T.Color(0, 0, 0)) },
-        uFieldInt: { value: new Float32Array(maxFieldLights) },
-        uFieldRad: { value: new Float32Array(maxFieldLights).fill(4.0) },
+        ...fieldLightUniformStubs(T),
       },
     });
     this.uniforms = this.mat.uniforms;
@@ -543,12 +577,7 @@ export class GPUParticleField {
       u.uTime.value = elapsed;
       u.uDt.value = dt;
       if (wind) u.uWind.value.set(wind.x || 0, wind.z || 0);
-      if (pool) {
-        u.uPool.value.set(
-          pool.type === "circular" ? 1 : 0,
-          pool.radius || 6, pool.width || 12, pool.length || 8,
-        );
-      }
+      if (pool) applyPoolUniforms(u, pool, this.T, this._blankMask);
     }
 
     const prevTarget = r.getRenderTarget();
@@ -576,6 +605,7 @@ export class GPUParticleField {
     this.velRT.forEach(rt => rt.dispose());
     this.emitTex.dispose();
     this.metaTex.dispose();
+    this._blankMask.dispose();
     this.velMat.dispose();
     this.posMat.dispose();
     this.mat.dispose();

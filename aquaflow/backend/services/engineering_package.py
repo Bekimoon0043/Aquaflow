@@ -13,10 +13,14 @@ with per-document checksums.
   * all required documents included — a fixed REQUIRED_DOCUMENTS set is always
     present (the manifest lists every document with its format, size and SHA-256),
   * PDF and DXF formats supported — a hand-built (dependency-free) cover PDF and the
-    R12 DXF layout, alongside XLSX / SVG / JSON deliverables.
+    DXF layout, alongside XLSX / SVG / JSON deliverables.
 
-No external CAD/PDF/report engine is required: PDF and DXF are written directly, XLSX
-via the existing BOM generator (openpyxl-free), SVG via the P&ID generator.
+The DXF comes from the single ezdxf writer (``services.cad_export``, AF-CAD-003/020):
+AC1027 with one block per component type, ID/MODEL/HEIGHT/CHANNEL attributes and
+AQUAFLOW XDATA — the same drawing the designer's export and ``/api/cad/export.dxf``
+produce for the same design. Set ``design["cad_writer"] = "r12"`` for the legacy
+AC1009 layout. PDF is written directly, XLSX via the existing BOM generator, SVG via
+the P&ID generator.
 """
 from __future__ import annotations
 
@@ -26,7 +30,7 @@ import json
 import zipfile
 from datetime import date
 
-from services.cad_layout import generate_dxf, LAYERS
+from services.cad_layout import generate_layout, LAYERS
 from services.dependency_graph import build_dependency_graph
 
 # The documents a "full" engineering package must always contain.
@@ -126,8 +130,12 @@ def build_documents(design: dict) -> tuple[dict, list[str]]:
     project = str(design.get("name") or design.get("projectName") or "AquaFlow Project")
     fixtures = [f for f in (design.get("fixtures") or []) if isinstance(f, dict)]
 
-    # CAD layout (DXF) — always.
-    docs["layout.dxf"] = generate_dxf(design).encode("utf-8")
+    # CAD layout (DXF) — always. Same writer as /api/cad/export.dxf (AF-CAD-003).
+    try:
+        docs["layout.dxf"] = generate_layout(design)["dxf"].encode("utf-8")
+    except Exception as exc:                      # never lose the drawing: fall back
+        warnings.append(f"ezdxf layout failed ({exc}); legacy R12 layout written instead.")
+        docs["layout.dxf"] = generate_layout(design, writer="r12")["dxf"].encode("utf-8")
 
     # Dependency graph (JSON) — always.
     dep = build_dependency_graph(fixtures)

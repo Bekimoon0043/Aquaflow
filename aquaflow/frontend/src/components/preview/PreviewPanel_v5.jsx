@@ -27,7 +27,7 @@ import {
   importDesign, importEngineeringFixtures, importSiteModels, graphToNozzles, graphToLights,
   graphToEngineeringFixtures, graphToSiteModels, reconcileEngineeringGraph,
 } from "./editor/fixtureBridge";
-import { poolCenter } from "../../engineering/geometryContract";
+import { poolCenter, engineeringToWorld } from "../../engineering/geometryContract";
 import {
   EditorToolbar, LibraryPalette, SceneTree, Inspector, ShortcutHint, useLibraryDrop,
 } from "./editor/ui/workspaceUI";
@@ -101,6 +101,10 @@ export default function PreviewPanel() {
   const setEnv = setRenderField("environment");
   const setCam = setRenderField("cameraMode");
   const setQuality = setRenderField("quality");
+  const toneMapping = renderSettings.toneMapping || "aces";
+  const setToneMapping = setRenderField("toneMapping");
+  const halfResSpray = !!renderSettings.halfResSpray;
+  const setHalfResSpray = setRenderField("halfResSpray");
   const setPattern = setRenderField("pattern");
   const setLightCol = setRenderField("lightColor");
   const setWindX = setRenderField("windX");
@@ -320,6 +324,8 @@ if (sitePreview.active && sitePreview.plan) {
     if (!canvasRef.current) return;
     const scene = new FountainScene(canvasRef.current, {
       environment: env, quality, cameraMode: cam, lightColor: lightCol,
+      toneMapping: useProjectStore.getState().render.toneMapping,
+      halfResSpray: !!useProjectStore.getState().render.halfResSpray,
     });
     scene.init();
     scene.setWaterSimulation?.({
@@ -458,6 +464,22 @@ if (sitePreview.active && sitePreview.plan) {
       setEngineeringSaveState("Synced from Engineering");
     });
 
+    // AF-CAD-011: the locked CAD underlay on the 3D ground plane, in the same frame
+    // as the pool. The scene rebuilds it only when its items or the pool centre move.
+    const syncCadUnderlay = (st) => {
+      const center = poolCenter(st.geometry, st.params, st.poolType);
+      scene.setCadUnderlay?.(st.cadUnderlay || null, {
+        toWorld: (p) => engineeringToWorld(p, center),
+        centerKey: `${center.cx},${center.cy}`,
+      });
+    };
+    try { syncCadUnderlay(useEngineeringStore.getState()); } catch (e) { console.warn("[PreviewPanel] CAD underlay", e); }
+    const offUnderlay = useEngineeringStore.subscribe((next, previous) => {
+      if (next.cadUnderlay === previous.cadUnderlay && next.geometry === previous.geometry
+        && next.params === previous.params && next.poolType === previous.poolType) return;
+      try { syncCadUnderlay(next); } catch (e) { console.warn("[PreviewPanel] CAD underlay", e); }
+    });
+
     // VR Walkthrough (AQ-S3-006): probe headset availability for the toolbar.
     if (scene.supportsVR) scene.supportsVR().then(setVrSupported).catch(() => setVrSupported(false));
     // Size the renderer from the CANVAS, not the container. The container includes the
@@ -478,6 +500,7 @@ if (sitePreview.active && sitePreview.plan) {
       offEditor();
       offModels();
       offEngineering();
+      offUnderlay();
       clearTimeout(publishTimer);
       editor.dispose();
       editorRef.current = null;
@@ -504,6 +527,8 @@ if (sitePreview.active && sitePreview.plan) {
     });
   }, [waveResponse, waveDamping, waveBoundaryDamping]);
   useEffect(() => { sceneRef.current?.setReviewOverlays?.(reviewOverlays); }, [reviewOverlays]);
+  useEffect(() => { sceneRef.current?.setToneMapping?.(toneMapping); }, [toneMapping]);
+  useEffect(() => { sceneRef.current?.setHalfResSpray?.(halfResSpray); }, [halfResSpray]);
 
   // Poll the renderer's own counters while the HUD is up. 4 Hz: the scene already
   // averages FPS over a second, so sampling faster would only add React renders.
@@ -904,6 +929,20 @@ if (sitePreview.active && sitePreview.plan) {
                 <button key={q} onClick={()=>setQuality(q)} style={{ ...btnSm(quality===q), flex:1, textAlign:"center", textTransform:"capitalize" }}>{q}</button>
               ))}
             </div>
+
+            <div style={sectionLabel}>Tone Mapping</div>
+            <div style={{ display:"flex", gap:3, marginBottom:6 }}>
+              {[["aces","ACES"],["agx","AgX"],["neutral","Neutral"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setToneMapping(id)} title={id==="aces" ? "Default look" : id==="agx" ? "Saturated night LED colour without hue skew" : "Hue-preserving daytime colour"}
+                  style={{ ...btnSm(toneMapping===id), flex:1, textAlign:"center" }}>{label}</button>
+              ))}
+            </div>
+            {quality === "medium" && (
+              <label style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, color:"#71869a", fontSize:9 }}>
+                <input type="checkbox" checked={halfResSpray} onChange={e=>setHalfResSpray(e.target.checked)} />
+                Half-resolution spray &amp; mist (faster)
+              </label>
+            )}
 
             <div style={sectionLabel}>Water Interaction</div>
             {[
