@@ -232,6 +232,7 @@ export function createAssetResolver({ projectPath = null, packageFiles = null, b
 function applyProjectState(data) {
   const state = deserializeShow(data);
   useShowStore.getState().loadShow(state);
+  useShowStore.getState().markLocalProjectLoaded?.();
   useEngineeringStore.getState().loadProject(state.engineeringProject);
   useProjectStore.getState().loadProjectDocument(state.projectDocument, state.currentShow?.name);
   return state;

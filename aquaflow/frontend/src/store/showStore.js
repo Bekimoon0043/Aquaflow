@@ -390,6 +390,9 @@ export const useShowStore = create(
     lastServerSyncAt: null,
     serverMirrorSignature: null,
     serverRevision: 0,
+    // Set when a project is explicitly opened on this PC. Until the backend echoes the
+    // same show snapshot, a delayed startup snapshot must not replace the opened file.
+    localProjectPendingSync: false,
     undoStack: [],
     redoStack: [],
     pendingHistorySnapshot: null,
@@ -956,16 +959,33 @@ generatedTracks: [], // Stores tracks generated from engineering fixtures
 
     applyServerShowSnapshot: (snapshot) =>
       set((s) => {
-        const payload = snapshot?.currentShow ? snapshot : {
-          currentShow: snapshot?.show || {},
+        const payload = {
+          currentShow: snapshot?.currentShow || snapshot?.show || {},
           nodes: snapshot?.nodes || [],
           connections: snapshot?.connections || [],
           timelineTracks: snapshot?.timelineTracks || snapshot?.tracks || [],
           devices: snapshot?.devices || [],
-          timelineZoom: snapshot?.ui?.timelineZoom,
-          showGrid: snapshot?.ui?.showGrid,
-          snapToGrid: snapshot?.ui?.snapToGrid,
+          timelineZoom: snapshot?.timelineZoom ?? snapshot?.ui?.timelineZoom,
+          showGrid: snapshot?.showGrid ?? snapshot?.ui?.showGrid,
+          snapToGrid: snapshot?.snapToGrid ?? snapshot?.ui?.snapToGrid,
         };
+        if (s.localProjectPendingSync) {
+          const incomingSignature = buildRuntimeSignature(payload);
+          const localSignature = buildRuntimeSignature({
+            currentShow: s.currentShow,
+            nodes: s.nodes,
+            connections: s.connections,
+            timelineTracks: s.timelineTracks,
+            devices: s.devices,
+            timelineZoom: s.timelineZoom,
+            showGrid: s.showGrid,
+            snapToGrid: s.snapToGrid,
+          });
+          // The provider will push the opened project through useServerShowSync. Ignore
+          // older startup state until that exact show/timeline is broadcast back.
+          if (incomingSignature !== localSignature) return;
+          s.localProjectPendingSync = false;
+        }
         if (payload.currentShow) Object.assign(s.currentShow, payload.currentShow);
         if (payload.nodes) s.nodes = payload.nodes;
         if (payload.connections) s.connections = payload.connections;
@@ -994,6 +1014,10 @@ generatedTracks: [], // Stores tracks generated from engineering fixtures
         });
         s.lastServerSyncAt = Date.now();
       }),
+
+    markLocalProjectLoaded: () => set((s) => {
+      s.localProjectPendingSync = true;
+    }),
 
     updateTelemetry: (deviceId, values) =>
       set((s) => {

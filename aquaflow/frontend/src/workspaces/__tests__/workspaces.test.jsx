@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // AF-NEXT-014 — guided operator workspaces: switching, panel reachability, project-state
-// guidance, diagnostic navigation and the pilot walkthrough. The harness wires the real
+// guidance, diagnostic navigation and the generic Start workflow. The harness wires the real
 // controller/components exactly as App.jsx does (same open-panel event, same stores).
 import fs from "node:fs";
 import path from "node:path";
@@ -22,7 +22,6 @@ import {
 import { resetProjectSignals } from "../projectSignals";
 import { takePanelAction } from "../navigation";
 import { publishPreflightResult, takePendingFocus } from "../../preflight/preflight";
-import { openLebuPilot } from "../pilotProject";
 import TopBar from "../../components/TopBar";
 
 // TopBar needs only `send` from the WebSocket context; nothing is sent in these tests.
@@ -31,7 +30,6 @@ vi.mock("../../hooks/WebSocketContext", () => ({ useWS: () => ({ send: () => fal
 globalThis.React = React;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appSource = fs.readFileSync(path.resolve(here, "..", "..", "App.jsx"), "utf8");
-const pilotText = () => fs.readFileSync(path.resolve(here, "..", "..", "..", "..", "samples", "lebu-pilot", "Lebu_Fountain_Pilot.aqua"), "utf8");
 
 /** Panels App.jsx actually renders. */
 function appPanels() {
@@ -44,8 +42,6 @@ const baseDeps = (extra = {}) => ({
   fetchSiemensSites: vi.fn(async () => ({ sites: [] })),
   fetchCommissioning: vi.fn(async () => ({ hardware_commissioned: false })),
   runPreflight: vi.fn(async () => ({ ok: true, issues: [], summary: { errors: 0, warnings: 0, infos: 0, total: 0 }, target: { kind: "preview" } })),
-  openPilot: vi.fn(async () => openLebuPilot({ readText: async () => pilotText() })),
-  confirm: () => true,
   ...extra,
 });
 
@@ -65,7 +61,7 @@ function Harness({ deps }) {
       onDiagnostic={g.runDiagnostic} onRunPreflight={g.runPreflightNow} preflightBusy={g.preflightBusy} preflightError={g.preflightError} />
     <WorkspaceNav workspace={g.workspace} activePanel={activePanel} onOpen={g.open} />
     <output data-testid="active-panel">{activePanel}</output>
-    {g.startOpen && <StartCard pilotState={g.pilotState} onOpenPilot={g.openPilot} onImportCad={() => {}} onOpenProject={() => {}} onClose={() => g.setStartOpen(false)} />}
+    {g.startOpen && <StartCard onImportCad={() => g.setStartOpen(false)} onOpenProject={() => g.setStartOpen(false)} onClose={() => g.setStartOpen(false)} />}
   </>;
 }
 
@@ -253,61 +249,14 @@ describe("AF-NEXT-014 every warning opens its responsible object or procedure", 
   });
 });
 
-describe("AF-NEXT-014 pilot walkthrough (no legacy menus)", () => {
-  it("open pilot → Design shows basins → Program shows show → run preflight → Commission shows PLCSIM step", async () => {
+describe("AF-NEXT-014 generic Start workflow", () => {
+  it("offers CAD import and project open without bundling a customer-specific pilot", () => {
     const deps = baseDeps();
     render(<Harness deps={deps} />);
-    // First run: the Start card offers the pilot.
-    fireEvent.click(screen.getByRole("button", { name: "Open the pilot" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Start a fountain project/ })).toBeNull());
-    expect(deps.openPilot).toHaveBeenCalledTimes(1);
-
-    // Design: the pilot's DWG basin and fixtures are reflected in the checklist.
-    expect(tab("Design").getAttribute("aria-selected")).toBe("true");
-    expect(activePanel()).toBe("geometry");
-    openChecklist();
-    expect(checklistStep("design-basins").dataset.status).toBe("done");
-    expect(checklistStep("design-basins").textContent).toMatch(/1 basin.*from the drawing/);
-    expect(checklistStep("design-units").textContent).toMatch(/meters/);
-    expect(checklistStep("design-fixtures").textContent).toMatch(/39 fixtures/);
-    expect(checklistStep("design-trust").dataset.status).toBe("warn"); // honest: generic estimates
-
-    // Program: the show, its groups and patterns.
-    fireEvent.click(tab("Program"));
-    expect(activePanel()).toBe("show_programmer");
-    openChecklist();
-    expect(checklistStep("program-groups").textContent).toMatch(/6 groups/);
-    expect(checklistStep("program-patterns").textContent).toMatch(/Lebu Fountain · Pilot.*13 patterns.*60 s/);
-    expect(screen.getByTestId("next-step").dataset.step).toBe("program-preflight");
-
-    // Run preflight from the guidance strip (read-only gate; clips compiled from the patterns).
-    fireEvent.click(within(screen.getByTestId("next-step")).getByRole("button", { name: "Run preflight" }));
-    await waitFor(() => expect(deps.runPreflight).toHaveBeenCalledTimes(1));
-    const [project, target] = deps.runPreflight.mock.calls[0];
-    expect(target).toEqual({ kind: "preview" });
-    expect(project.fixtures).toHaveLength(39);
-    expect(project.clips.length).toBeGreaterThan(0);
-    expect(project.groups).toHaveLength(6);
-    await waitFor(() => expect(screen.getByTestId("next-step").textContent).toMatch(/All Program steps are done/));
-
-    // Commission: the PLCSIM step and the safe procedure — never an arm/start/pulse button.
-    fireEvent.click(tab("Commission"));
-    expect(activePanel()).toBe("plc");
-    openChecklist();
-    const plcsim = checklistStep("commission-plcsim");
-    expect(plcsim.textContent).toMatch(/Test on PLCSIM/);
-    expect(plcsim.textContent).toMatch(/never starts, arms or pulses/);
-    expect(checklistStep("commission-preflight").dataset.status).toBe("done");
-    expect(document.body.textContent).not.toMatch(/\b(Arm|Start show|Pulse)\b/);
-    fireEvent.click(within(plcsim).getByRole("button", { name: /Open PLCSIM setup/ }));
-    expect(activePanel()).toBe("plc");
-    expect(takePanelAction("plc")).toEqual({ action: "tab", detail: { tab: "setup" } });
-    // The commissioning procedure opens the bundled article.
-    openChecklist();
-    fireEvent.click(within(checklistStep("commission-procedure")).getByRole("button", { name: /Open procedure/ }));
-    expect(activePanel()).toBe("docs");
-    expect(takePanelAction("docs")).toEqual({ action: "article", detail: { articleId: "safe-commissioning" } });
-    expect(deps.fetchSiemensSites).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Import CAD…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open project…" })).toBeTruthy();
+    expect(screen.queryByText(/Lebu/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /pilot/i })).toBeNull();
   });
 });
 

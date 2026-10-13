@@ -5,7 +5,7 @@ Release date: 2026-10-13
 ## Highlights
 
 - Added the guided Design, Program, Commission and Operate workspaces, with project-aware next steps and warnings that open the responsible tool or object.
-- Bundled the Lebu Fountain pilot project and verified it opens in the packaged desktop application.
+- Added a generic Start screen for CAD import and opening user projects. The Lebu design remains a repository test fixture and is not bundled in the production application.
 - Unified show-frame evaluation between programming, the simulation timeline, 3D preview and compilation; documented the shared colour pipeline.
 - Added multi-basin/island CAD round-trip, drafting history, common snapping, typed dimensions, selection/groups and stable engineering IDs.
 - Added equipment provenance/confidence, verified-model workflows, hydraulics/splash diagnostics and a fail-closed preflight gate.
@@ -24,11 +24,11 @@ Release date: 2026-10-13
 ## Verification summary
 
 - Backend: **1,248 passed, 21 skipped** (1,269 collected).
-- Frontend: **1,102 passed** across 104 files.
+- Frontend: **1,104 passed** across 105 files.
 - Protocol loopback harness: **5/5 passed**, explicitly `SIMULATED`.
 - Focused PLC/protocol simulator set: **223/223 passed**.
 - Packaged engine: health, valid STUDIO license, controller catalog and isolated Siemens simulation passed.
-- Unpacked desktop: version 1.2.33, bundled Lebu pilot, controller evidence labels and loopback-only startup resources passed.
+- Unpacked and installed desktop: version 1.2.33, generic Start workflow, controller evidence labels and loopback-only startup resources passed. No customer-specific pilot asset was packaged.
 
 This Tier A build is intentionally **not Authenticode-signed**. Verify the SHA-256 checksum in `SHA256SUMS.txt` before installation.
 

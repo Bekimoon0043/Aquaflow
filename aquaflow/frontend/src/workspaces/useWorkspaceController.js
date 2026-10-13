@@ -23,7 +23,6 @@ import {
 } from "./workspaceModel";
 import { openWorkspaceTarget } from "./navigation";
 import { getProjectSignals, reopenAssetReport, subscribeProjectSignals } from "./projectSignals";
-import { openLebuPilot } from "./pilotProject";
 
 const HELP_PANELS = new Set(HELP_ENTRIES.map(e => e.target.panel));
 
@@ -55,9 +54,7 @@ const defaultDeps = {
   fetchSiemensSites: () => apiGet("/siemens-sites"),
   fetchCommissioning: () => apiGet("/hardware/commissioning"),
   runPreflight: (project, target) => runPreflight(project, target),
-  openPilot: () => openLebuPilot(),
   storage: undefined,
-  confirm: (text) => (typeof window !== "undefined" && window.confirm ? window.confirm(text) : true),
 };
 
 export default function useWorkspaceController({ activePanel, setActivePanel, deps: injected = {} }) {
@@ -164,27 +161,9 @@ export default function useWorkspaceController({ activePanel, setActivePanel, de
     }
   }, [deps, workspace]);
 
-  const [pilotState, setPilotState] = useState({ busy: false, error: "" });
-  const openPilot = useCallback(async () => {
-    const dirty = useProjectStore.getState().dirty || useShowStore.getState().isDirty;
-    if (dirty && !deps.confirm("Open the Lebu pilot sample? Unsaved changes in the current project will be replaced.")) return false;
-    setPilotState({ busy: true, error: "" });
-    try {
-      await deps.openPilot();
-      setPilotState({ busy: false, error: "" });
-      setStartOpen(false);
-      setWorkspace("design");
-      setActivePanel("geometry");
-      return true;
-    } catch (e) {
-      setPilotState({ busy: false, error: e?.message || String(e) });
-      return false;
-    }
-  }, [deps, setActivePanel]);
-
   return {
     workspace, selectWorkspace, snapshot, guidance, steps: guidance[workspace] || [], diagnostics, allDiagnostics,
     open, goStep, runDiagnostic, runPreflightNow, preflightBusy, preflightError,
-    startOpen, setStartOpen, openPilot, pilotState, refreshRemote,
+    startOpen, setStartOpen, refreshRemote,
   };
 }

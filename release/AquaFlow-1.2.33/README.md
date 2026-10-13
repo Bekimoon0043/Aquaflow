@@ -7,7 +7,6 @@ Included release materials:
 - `CHANGELOG.md`
 - `KNOWN-LIMITATIONS.md`
 - `SHA256SUMS.txt`
-- Sample project: `aquaflow/samples/lebu-pilot/Lebu_Fountain_Pilot.aqua`
 - Commissioning checklist: `HARDWARE_COMMISSIONING_CHECKLIST.md`
 - Blank commissioning record: `AF-HUB-011_COMMISSIONING_RECORD.md`
 - Controlled-integration evidence: `docs/evidence/AF-NEXT-015.md`

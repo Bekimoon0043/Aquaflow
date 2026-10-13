@@ -2,7 +2,6 @@
 
 - This is an unsigned Tier A/internal installer. Windows SmartScreen may show **Unknown publisher**. Verify the published SHA-256 first.
 - No controller/device is labeled site commissioned. Physical operation requires the exact site's signed checklist, E-stop/interlock controls and approved operator.
-- The Lebu pilot is a design/programming sample. Its hardware addresses are unmapped and it is not a commissioned installation.
 - I-CAN bench evidence applies only to the recorded `192.168.5.2` gateway/path. Several electrical/outlet mappings remain provisional.
 - Siemens PLCSIM proves the contract and simulated runtime path, not physical CPU, I/O, watchdog or actuator behavior.
 - Art-Net and sACN are verified against local UDP loopback receivers, not a signed physical node/fixture run.

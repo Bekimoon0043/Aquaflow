@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useShowStore } from "../store/showStore";
 import useEngineeringStore from "../store/engineeringStore";
-import { useWebSocket } from "./useWebSocket";
+import { useWS } from "./WebSocketContext";
 import { buildRuntimePayload, buildRuntimeSignature } from "../utils/runtimeSync";
 // AF-HUB-004 — the backend payload's fixtures come from the single master
 // (engineeringStore.fixtures), projected deterministically; never a stale mirror.
 import { projectGroups, assertFixtureConsistency } from "../runtime/fixtureProjection";
 
 export function useServerShowSync() {
-  const { send } = useWebSocket();
+  // The root WebSocketProvider owns the one backend connection. Creating another
+  // useWebSocket() here allowed two initial snapshots to race: a late stale snapshot
+  // could replace a project that the user had just opened (its engineering model stayed
+  // loaded while the show/timeline reverted to "Untitled Show"). Send syncs through the
+  // provider connection so snapshot ordering and ownership stay deterministic.
+  const { send } = useWS();
   const syncState = useShowStore((s) => ({
     currentShow: s.currentShow,
     nodes: s.nodes,
@@ -21,6 +26,7 @@ export function useServerShowSync() {
     snapToGrid: s.snapToGrid,
     connectionState: s.connectionState,
     serverMirrorSignature: s.serverMirrorSignature,
+    localProjectPendingSync: s.localProjectPendingSync,
     isDirty: s.isDirty,
   }));
 
@@ -67,7 +73,9 @@ export function useServerShowSync() {
     if (!readyRef.current) {
       readyRef.current = true;
       const hasServerMirror = Boolean(syncState.serverMirrorSignature);
-      const shouldPushInitialState = !hasServerMirror || (syncState.isDirty && signature !== syncState.serverMirrorSignature);
+      const shouldPushInitialState = syncState.localProjectPendingSync
+        || !hasServerMirror
+        || (syncState.isDirty && signature !== syncState.serverMirrorSignature);
 
       if (!shouldPushInitialState) {
         lastSyncedRef.current = signature;

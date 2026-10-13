@@ -21,8 +21,8 @@ Date: 2026-10-13. Scope: `aquaflow/frontend` only. Nothing in this ticket connec
 | Model (pure) | `src/workspaces/workspaceModel.js` defines the four workspaces and the panel catalog, `workspaceForPanel`, persistence, `buildProjectSnapshot`, `buildGuidance`, `nextStep` and `collectWorkspaceDiagnostics`. |
 | Navigation | `src/workspaces/navigation.js` provides `openWorkspaceTarget` and `usePanelAction`. A request sent to a lazy panel is dispatched as `aquaflow:panel-action` and also parked until the panel mounts. This is the same pattern as `takePendingFocus`. Diagnostic fixes are handed to the existing `openDiagnosticFix`. |
 | Signals | `src/workspaces/projectSignals.js` keeps the last preflight result (`aquaflow:preflight-result`) and the last asset report (`aquaflow:asset-report` / `-updated`). A project baseline clears both. |
-| Controller | `src/workspaces/useWorkspaceController.js` stores the chosen workspace and keeps it in step with `activePanel`. It builds the live snapshot, guidance and diagnostics from the existing stores. It also provides "Run preflight", which compiles Show Studio patterns read-only when Show Studio has not been opened yet, and "Open pilot". |
-| Pilot | `src/workspaces/pilotProject.js` opens `aquaflow/samples/lebu-pilot/Lebu_Fountain_Pilot.aqua` through the normal `openProjectBytes` loader. The file is bundled as a lazy 54 kB raw chunk. `vite.config.js` allows `../samples` on the dev server. |
+| Controller | `src/workspaces/useWorkspaceController.js` stores the chosen workspace and keeps it in step with `activePanel`. It builds the live snapshot, guidance and diagnostics from the existing stores. It also provides "Run preflight", which compiles Show Studio patterns read-only when Show Studio has not been opened yet. |
+| Start workflow | The production Start card is generic: Import CAD, Open project, or continue. The Lebu project is retained only as a repository test fixture and is not imported or bundled by the application. |
 | UI | `src/components/workspace/WorkspaceSwitcher.jsx` (top-bar tabs plus a Start button), `WorkspaceNav.jsx` (left nav, a "More in …" list and Help, collapsible), `GuidanceStrip.jsx` (next step, checklist and a Warnings list) and `StartCard.jsx`, styled by `workspace.css`. |
 | App wiring (additive) | `App.jsx` adds the imports, the controller, the switcher passed into `TopBar`, the guidance strip, a `workspace-frame` around the existing `.workspace` with the nav, and the Start card. Every existing line is preserved, including the user's `PreviewShowTimeline` and `ProjectRecoveryHost` changes. |
 | Top bar | `TopBar.jsx` and `topBarMenu.js`: when a switcher is supplied, the menus are **File · Edit · [Design Program Commission Operate · Start] · All tools · Help**. "All tools" contains every entry of the old Design, Devices, Runtime, AI and Help menus, with section headers, so every panel and every action is still available. `MENU_ITEMS` is unchanged. Without a switcher, the old seven menus render as before. |
@@ -84,7 +84,7 @@ New: `src/workspaces/__tests__/workspaces.test.jsx` (jsdom, testing-library, 10 
 | guidance (pure) | Basins and drawing, units without a declaration, an unknown fixture (Go selects it), generic data, preflight errors that block, a PLCSIM site with a compiled show marked done, and the procedure step as an operator action. |
 | guidance (live) | Store changes and a published preflight result update the checklist. |
 | diagnostics | Each of the following is clicked and checked: <ul><li>open_clip opens Show Studio, with pending focus on `{clipId, itemId, timeMs}`.</li><li>A splash issue without a fix opens Preview.</li><li>A hydraulics item opens the Engineering Designer, with the engineering pending focus set.</li><li>Generic data opens Engineering Tools, with the Verified Models tab request parked.</li><li>A missing asset re-dispatches the asset report.</li></ul> |
-| **walkthrough** | A new operator uses only the workspace UI, never the legacy menus: <ol><li>First-run Start card → **Open the pilot** (real `.aqua` through the real loader).</li><li>**Design**: "1 basin … from the drawing", units "meters", "39 fixtures", trust warning (honest: generic estimates).</li><li>**Program**: "6 groups", "Lebu Fountain · Pilot · 13 patterns · 60 s". The next step is Run preflight.</li><li>**Run preflight** from the strip. The gate receives 39 fixtures, 6 groups and compiled clips with a `preview` target, and Program is then "all done".</li><li>**Commission** opens Siemens Setup. The "Test on PLCSIM" step is shown with its no-auto-start note. Go parks the `setup` tab, and the procedure opens the `safe-commissioning` article. No Arm, Start show or Pulse control appears.</li></ol> |
+| **Start workflow** | First run exposes generic CAD import and project-open actions and contains no customer-specific pilot option. The separate test fixture continues to validate the CAD-derived design and show data without shipping it in the application. |
 | panel-side request | A request parked before the lazy Documentation panel mounts opens the procedure article on mount. |
 | top bar | The switcher tabs and the File, Edit, All tools and Help menus render. Clicking each All tools panel item opens all 34 panels. |
 
@@ -95,7 +95,7 @@ New: `src/workspaces/__tests__/workspaces.test.jsx` (jsdom, testing-library, 10 
 | `npx vitest run src/workspaces` | 10/10 passed. It also prints React `act()` warnings from the mocked async site/commissioning fetches; these are harmless. |
 | `npx vitest run src/workspaces src/docs src/components/__tests__/topBarMenu.test.js src/preflight` | 5 files, all passed. |
 | `npx vitest run` (full) | **104 files, 1100/1100 passed** on the final run. On an earlier run, one test failed: `components/preview/__tests__/sceneAdaptive.test.js › eco draws fewer, larger droplets`. That file belongs to AF-NEXT-013's untracked, in-progress adaptive-quality work, owned by the concurrent agent. It passed alone and passed on the rerun. |
-| `npx vite build` | Built. Only the existing >750 kB `three`/`mediabunny` chunk warning appears. The pilot is its own lazy chunk, `Lebu_Fountain_Pilot-*.js`, 54 kB (7 kB gzip). |
+| `npx vite build` | Built. Only the existing >750 kB `three`/`mediabunny` chunk warning appears. Final packaging verification found zero `Lebu`/`Pilot` assets in `desktop/web/assets`. |
 
 ## Screenshots
 
@@ -110,7 +110,7 @@ No screenshots were captured. The studio is behind `AppLicenseGate`, which needs
 - The PLCSIM step reads the site's mode and compiled show only. It does not read Verify or Test acceptance results, because those need the status endpoint that polls the PLC. Those checks remain operator actions in Siemens Setup.
 - "Units confirmed" relies on the CAD import dialog's rule: it refuses a unitless drawing until a unit is chosen. A legacy project with a CAD underlay but no unit record shows a warning.
 - The preflight shown in the guidance is the last run in this session. Opening another project clears it. Editing the show after a run does not mark it stale; re-run it before output.
-- The Lebu pilot is a design and programming sample with **unmapped** hardware. Completing its walkthrough is not evidence of a commissioned installation. Physical commissioning follows `HARDWARE_COMMISSIONING_CHECKLIST.md` with the site's approved operator.
+- Customer-specific test fixtures are not shipped as product content. Physical commissioning follows `HARDWARE_COMMISSIONING_CHECKLIST.md` with the site's approved operator.
 
 ## Rollback
 

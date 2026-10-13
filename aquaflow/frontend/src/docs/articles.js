@@ -98,7 +98,7 @@ export const ARTICLES = [
     "diagnostics — those only open the responsible screen. The safe order is: (1) design and program " +
     "the show, then run Preflight with zero errors; (2) create the Siemens site from the design and " +
     "prove the program on the PLCSIM test PLC (Siemens Setup → Connect: 'Test PLC: PLCSIM on this PC', " +
-    "then Verify and Test there) — the Lebu pilot and any software or PLCSIM result are NOT evidence " +
+    "then Verify and Test there) — test fixtures and any software or PLCSIM result are NOT evidence " +
     "that an installation is commissioned; (3) on site, the approved commissioning engineer follows " +
     "HARDWARE_COMMISSIONING_CHECKLIST.md in the AquaFlow repository: pre-flight with the hardware " +
     "E-stop tested cold, the simulated host output self-test, real per-protocol transmission, the " +

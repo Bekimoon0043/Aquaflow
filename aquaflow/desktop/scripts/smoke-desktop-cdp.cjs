@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // AF-NEXT-016 — read-only desktop release smoke through Chromium DevTools.
 // Launch the unpacked/installed app with --remote-debugging-port=<port> and an
-// isolated --user-data-dir first. This script opens the bundled pilot and the
-// controller catalog; it never arms, starts, pulses, deploys or writes hardware.
+// isolated --user-data-dir first. This script opens the generic workspace and controller
+// catalog; it never arms, starts, pulses, deploys or writes hardware.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -83,25 +83,12 @@ async function run() {
       throw new Error(`Unexpected external startup resource: ${resourceHosts.join(", ")}`);
     }
 
-    if (!(await evaluate("document.body.innerText.includes('Lebu Fountain · Pilot')"))) {
-      let pilotAction = await evaluate(`(() => {
-        const buttons = [...document.querySelectorAll('button')];
-        const pilot = buttons.find(x => /pilot/i.test(x.innerText));
-        if (pilot) { pilot.click(); return 'pilot'; }
-        const start = buttons.find(x => x.innerText.trim() === 'Start');
-        if (start) { start.click(); return 'start'; }
-        return '';
-      })()`);
-      if (pilotAction === "start") {
-        await waitFor("[...document.querySelectorAll('button')].some(x => /pilot/i.test(x.innerText))", "Start card");
-        pilotAction = await evaluate(`(() => {
-          const b = [...document.querySelectorAll('button')].find(x => /pilot/i.test(x.innerText));
-          if (!b) return ''; b.click(); return 'pilot';
-        })()`);
-      }
-      if (pilotAction !== "pilot") throw new Error("Bundled pilot button was not found");
-    }
-    await waitFor("document.body.innerText.includes('Lebu Fountain · Pilot')", "bundled Lebu pilot");
+    const customerPilot = await evaluate("document.body.innerText.toLowerCase().includes('lebu fountain pilot')");
+    if (customerPilot) throw new Error("Customer-specific Lebu pilot is present in the production Start screen");
+    await evaluate(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => /continue with the current project/i.test(x.innerText));
+      if (!b) return false; b.click(); return true;
+    })()`);
 
     const commissionClicked = await evaluate(`(() => {
       const b = [...document.querySelectorAll('button')].find(x => /commission/i.test(x.innerText));
@@ -114,11 +101,12 @@ async function run() {
       if (!b) return false; b.click(); return true;
     })()`);
     if (!devicesClicked) throw new Error("Device Discovery navigation button was not found");
-    await waitFor("document.body.innerText.toLowerCase().includes('device discovery')", "Device Discovery panel", 10000);
-    await evaluate(`(() => {
+    await waitFor("[...document.querySelectorAll('button')].some(x => /^controllers$/i.test(x.innerText.trim()))", "Device Discovery tabs", 10000);
+    const controllersClicked = await evaluate(`(() => {
       const b = [...document.querySelectorAll('button')].find(x => /^controllers$/i.test(x.innerText.trim()));
       if (!b) return false; b.click(); return true;
     })()`);
+    if (!controllersClicked) throw new Error("Controllers tab was not found");
     await waitFor("document.body.innerText.toLowerCase().includes('controller catalog (20)')", "controller catalog");
     const body = await evaluate("document.body.innerText");
     for (const label of ["BENCH VERIFIED", "SIMULATED", "UNSUPPORTED"]) {
@@ -136,7 +124,7 @@ async function run() {
       version: "1.2.33",
       license: license.status,
       edition: license.edition,
-      pilot: "Lebu Fountain · Pilot",
+      workspace: "generic AquaFlow project",
       controllerLabels: ["BENCH VERIFIED", "SIMULATED", "UNSUPPORTED"],
       startupResourceHosts: resourceHosts,
       screenshot,

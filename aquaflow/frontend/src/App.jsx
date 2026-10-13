@@ -248,8 +248,6 @@ function StudioApp() {
       <StatusBar onToggleLogs={() => setShowLogs((v) => !v)} lastSaved={lastSaved} />
       {guided.startOpen && (
         <StartCard
-          pilotState={guided.pilotState}
-          onOpenPilot={guided.openPilot}
           onImportCad={() => { guided.setStartOpen(false); guided.selectWorkspace("design"); guided.open({ panel: "geometry", action: "cad-import" }); }}
           onOpenProject={() => { guided.setStartOpen(false); setShowBrowser("open"); }}
           onClose={() => guided.setStartOpen(false)}

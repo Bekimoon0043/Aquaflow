@@ -1,5 +1,11 @@
 # Session Handover — LuxuryCon Platforms
 
+> **AF-NEXT-016 release (2026-10-13):** AquaFlow Studio 1.2.33 is installed and passed
+> its generic installed-app smoke with the existing `VALID` / `STUDIO` license. The Start
+> screen offers CAD import and project open; the Lebu project remains a repository test
+> fixture and is not packaged. Frontend: 1,104/1,104 passed. Installer SHA-256:
+> `152933742F2B131E09CD7910791124C561ACB2E4B7AE224E52A0C337B2909CAF`.
+
 > **AF-NEXT-015 update (2026-10-13):** controller support and physical evidence are now
 > separate in Device Discovery. Every catalog/device class is labeled **simulated**,
 > **bench verified**, **site commissioned**, or **unsupported**, with its evidence scope.

@@ -1,9 +1,9 @@
-// AF-NEXT-014 — Start card: open the Lebu pilot, import a CAD drawing, open a project
-// file, or continue. Shown on first run and from the top-bar "Start" button.
+// AF-NEXT-014 — Start card: import a CAD drawing, open a project file, or continue.
+// Project-specific pilots stay in the test fixtures rather than the production product.
 import { useEffect } from "react";
 import "./workspace.css";
 
-export default function StartCard({ onOpenPilot, onImportCad, onOpenProject, onClose, pilotState = {} }) {
+export default function StartCard({ onImportCad, onOpenProject, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
     window.addEventListener("keydown", onKey);
@@ -22,18 +22,9 @@ export default function StartCard({ onOpenPilot, onImportCad, onOpenProject, onC
         </p>
         <div className="ws-start-grid">
           <div className="ws-start-option">
-            <h3>Lebu fountain pilot</h3>
-            <p>A complete sample: DWG-derived basin, 39 fixtures, groups and a 60 s pattern show. Its hardware is
-              <b> unmapped</b> — it is a design and programming sample, not a commissioned site.</p>
-            <button type="button" className="btn primary" disabled={pilotState.busy} onClick={onOpenPilot}>
-              {pilotState.busy ? "Opening…" : "Open the pilot"}
-            </button>
-            {pilotState.error && <div className="ws-guidance-error" role="alert">Could not open the pilot: {pilotState.error}</div>}
-          </div>
-          <div className="ws-start-option">
             <h3>Import a CAD drawing</h3>
             <p>Bring in your site DWG/DXF. You confirm units, basins and fixture types before anything is applied.</p>
-            <button type="button" className="btn" onClick={onImportCad}>Import CAD…</button>
+            <button type="button" className="btn primary" onClick={onImportCad}>Import CAD…</button>
           </div>
           <div className="ws-start-option">
             <h3>Open a project</h3>
