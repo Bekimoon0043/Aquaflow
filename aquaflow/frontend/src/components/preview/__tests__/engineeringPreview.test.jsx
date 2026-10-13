@@ -31,12 +31,13 @@ describe("preview mode toggle", () => {
     const root = createRoot(host);
     act(() => root.render(<Harness />));
     const [creative, engineering] = host.querySelectorAll('[role="radio"]');
-    expect(creative.textContent).toBe("Creative (instant response)");
-    expect(engineering.textContent).toBe("Engineering preview");
+    expect(creative.textContent).toBe("Creative");
+    expect(creative.getAttribute("title")).toContain("respond instantly");
+    expect(engineering.textContent).toBe("Engineering");
     expect(creative.getAttribute("aria-checked")).toBe("true");
     act(() => engineering.click());
     expect(engineering.getAttribute("aria-checked")).toBe("true");
-    expect(host.textContent).toContain("pump curves, valve states, ramps and pipe fill");
+    expect(engineering.getAttribute("title")).toContain("pump curves, valve states, ramps and pipe fill");
     act(() => creative.click());
     expect(creative.getAttribute("aria-checked")).toBe("true");
     act(() => root.unmount());

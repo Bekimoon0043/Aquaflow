@@ -162,8 +162,10 @@ function StudioApp() {
           </div>
         )}
         <div className="standard-workspace-content" hidden={activePanel === "geometry" || activePanel === "show_programmer"} aria-hidden={activePanel === "geometry" || activePanel === "show_programmer"}>
-        <DevicePanel width={layout.leftWidth} />
-        <ResizeHandle
+        {/* The 3D preview carries its own inspector sidebar, so the device list and the
+            general inspector are hidden there to give the viewport the room. */}
+        {activePanel !== "preview" && <DevicePanel width={layout.leftWidth} />}
+        {activePanel !== "preview" && <ResizeHandle
           axis="x"
           title="Drag to resize the device panel · double-click to reset"
           onStart={() => beginDrag("leftWidth")}
@@ -172,7 +174,7 @@ function StudioApp() {
           onResize={(d) => resize("leftWidth", d, {
             containerPx: workspacePx(), otherPanelsPx: layout.rightWidth,
           })}
-        />
+        />}
         <div className="center-stack" ref={centerRef}>
           <div className="editor-area">
            <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
@@ -228,7 +230,7 @@ function StudioApp() {
             : <Timeline height={layout.timelineHeight} />}
           </div>
         </div>
-        <ResizeHandle
+        {activePanel !== "preview" && <ResizeHandle
           axis="x"
           title="Drag to resize the inspector · double-click to reset"
           onStart={() => beginDrag("rightWidth")}
@@ -238,8 +240,8 @@ function StudioApp() {
           onResize={(d) => resize("rightWidth", d, {
             invert: true, containerPx: workspacePx(), otherPanelsPx: layout.leftWidth,
           })}
-        />
-        <InspectorPanel width={layout.rightWidth} />
+        />}
+        {activePanel !== "preview" && <InspectorPanel width={layout.rightWidth} />}
         </div>
       </div>
       </div>

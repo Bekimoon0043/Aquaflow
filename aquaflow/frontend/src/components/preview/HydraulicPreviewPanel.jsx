@@ -129,8 +129,9 @@ export function useEngineeringPreview({ sceneRef, sitePreview, wind }) {
   };
 }
 
-const box = { border: "1px solid #12303a", borderRadius: 4, padding: "6px 7px", margin: "6px 0", background: "rgba(4,14,20,0.6)" };
+const box = { border: "1px solid #12303a", borderRadius: 4, padding: "6px 7px", margin: "0 0 8px", background: "rgba(4,14,20,0.6)" };
 const small = { fontSize: 9, color: "#7f97a6", fontFamily: "monospace" };
+const head = { ...small, color: "#b7c9d3", letterSpacing: "0.06em" };
 const sevColor = { error: "#ff6b6b", warning: "#ffcc55", info: "#7fb8d8" };
 const btn = (on) => ({ flex: 1, padding: "4px 6px", fontSize: 9, cursor: "pointer", fontFamily: "monospace", borderRadius: 3,
   border: `1px solid ${on ? "#3ddc84" : "#1f3a46"}`, background: on ? "rgba(61,220,132,0.14)" : "transparent", color: on ? "#9fffc1" : "#8aa0ad" });
@@ -141,80 +142,90 @@ export function fmtTime(ms) {
   return `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, "0")}`;
 }
 
+/** Compact water-response controls. Detail lives in tooltips and only shows when it matters:
+ *  status/diagnostics only in Engineering mode, splash detail only when the envelope is on. */
 export default function HydraulicPreviewPanel(props) {
-  const { mode, setMode, engineering, status, diagnostics, pumps, physics, splashOn, setSplashOn, gustFactor,
-    setGustFactor, uncertainty, setUncertainty, regions, assumptions, tMs, show, timeline } = props;
+  const { engineering, setMode, status, diagnostics, pumps, physics, splashOn, setSplashOn, gustFactor,
+    setGustFactor, uncertainty, setUncertainty, regions, assumptions, show, timeline } = props;
   const offending = regions.filter(r => r.outside);
+  const basis = `${engineering && timeline ? "ENGINEERING TIMELINE" : physics?.basis || "ESTIMATED"}`
+    + `${physics ? ` · solved nozzles ${physics.solvedNozzles}` : ""}`
+    + `${timeline ? ` · solver ${timeline.converged ? "converged" : "NOT converged"}` : ""}`;
   return (
     <section aria-label="Engineering preview" style={box} data-testid="hydraulic-preview-panel">
-      <div style={{ ...small, color: "#b7c9d3", marginBottom: 4 }}>WATER RESPONSE</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <span style={head}>WATER RESPONSE</span>
+        <span style={{ ...small, fontSize: 8, color: "#55707e" }} title="Simulated — not field calibrated">SIM</span>
+      </div>
       <div role="radiogroup" aria-label="Preview response mode" style={{ display: "flex", gap: 4 }}>
-        <button role="radio" aria-checked={!engineering} style={btn(!engineering)} onClick={() => setMode(PREVIEW_MODES.CREATIVE)}>
-          Creative (instant response)
+        <button role="radio" aria-checked={!engineering} style={btn(!engineering)} onClick={() => setMode(PREVIEW_MODES.CREATIVE)}
+          title="Jets respond instantly to the show; hydraulic limits are not applied.">
+          Creative
         </button>
-        <button role="radio" aria-checked={engineering} style={btn(engineering)} onClick={() => setMode(PREVIEW_MODES.ENGINEERING)}>
-          Engineering preview
+        <button role="radio" aria-checked={engineering} style={btn(engineering)} onClick={() => setMode(PREVIEW_MODES.ENGINEERING)}
+          title="Jets follow pump curves, valve states, ramps and pipe fill at the playhead (simulated).">
+          Engineering
         </button>
       </div>
-      <div style={{ ...small, marginTop: 4 }}>
-        {engineering
-          ? "Jets follow pump curves, valve states, ramps and pipe fill at the playhead (simulated)."
-          : "Jets respond instantly to the show; hydraulic limits are not applied."}
-      </div>
-      {!show && <div style={{ ...small, color: "#ffcc55" }}>Open a show in the 3D preview to evaluate its hydraulics.</div>}
-      {status?.state === "loading" && <div style={small}>{status.message}</div>}
-      {status?.state === "error" && <div style={{ ...small, color: "#ff6b6b" }}>Hydraulics unavailable: {status.message}</div>}
 
-      <div style={{ ...small, marginTop: 6, color: "#b7c9d3" }}>HYDRAULIC STATUS @ {fmtTime(tMs)}</div>
-      <div style={small} data-testid="physics-basis">
-        Basis: {engineering && timeline ? "ENGINEERING TIMELINE" : physics?.basis || "ESTIMATED"}
-        {physics ? ` · solved nozzles ${physics.solvedNozzles}` : ""}
-        {timeline ? ` · solver ${timeline.converged ? "converged" : "NOT converged"}` : ""}
-      </div>
-      {pumps && Object.entries(pumps).map(([id, p]) => (
-        <div key={id} style={small}>{id}: {Math.round((p.speedEff || 0) * 100)}% ({p.drive}) · {p.flowLpm ?? 0} L/min @ {p.headM ?? 0} m</div>
-      ))}
-      {(physics?.overDemand || []).slice(0, 4).map(o => (
-        <div key={o.nozzleId} style={{ ...small, color: "#ffcc55" }}>{o.message}</div>
-      ))}
-      <ul style={{ listStyle: "none", padding: 0, margin: "4px 0" }} data-testid="hydraulic-diagnostics">
-        {diagnostics.slice(0, 8).map((d, i) => (
-          <li key={`${d.code}-${d.fixtureId}-${i}`} style={{ ...small, color: sevColor[d.severity] || "#ccc", margin: "2px 0" }}>
-            <strong>{d.code}</strong> {fmtTime(d.timeMs)}{d.endMs != null ? `–${fmtTime(d.endMs)}` : ""}: {d.message}
-          </li>
-        ))}
-        {engineering && timeline && !diagnostics.length && <li style={small}>No hydraulic findings at this time.</li>}
-      </ul>
-
-      <div style={{ ...small, marginTop: 6, color: "#b7c9d3", display: "flex", alignItems: "center", gap: 6 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-          <input type="checkbox" checked={splashOn} onChange={e => setSplashOn(e.target.checked)} aria-label="Show splash envelope" />
-          SPLASH ENVELOPE
-        </label>
-      </div>
-      {splashOn && (
-        <div>
-          <div style={{ ...small, color: "#ffcc55" }} data-testid="splash-advisory">{ADVISORY_LABEL}</div>
-          <div style={{ display: "flex", gap: 6, ...small }}>
-            <label>Gust ×<input type="number" min="1" max="3" step="0.1" value={gustFactor} aria-label="Gust factor"
-              onChange={e => setGustFactor(Math.max(1, Number(e.target.value) || 1))} style={{ width: 42, marginLeft: 3 }} /></label>
-            <label>Nozzle ±%<input type="number" min="0" max="50" step="1" value={Math.round(uncertainty * 100)} aria-label="Nozzle uncertainty"
-              onChange={e => setUncertainty(Math.max(0, Number(e.target.value) || 0) / 100)} style={{ width: 38, marginLeft: 3 }} /></label>
-          </div>
-          <ul style={{ listStyle: "none", padding: 0, margin: "4px 0" }} data-testid="splash-assumptions">
-            {assumptions.map(a => <li key={a.key} style={small}>{a.label}: {String(a.value)} <em>({a.source})</em></li>)}
-          </ul>
-          <div style={{ ...small, color: offending.length ? "#ff6b6b" : "#3ddc84" }}>
-            {offending.length ? `${offending.length} jet(s) land outside the basin now:` : "All active jets land in the water now."}
-          </div>
-          {offending.slice(0, 6).map(r => (
-            <div key={r.id} style={{ ...small, color: "#ff9b9b" }}>
-              {r.id}{r.clipId ? ` (clip ${r.clipId})` : ""}: {r.distanceOutsideM.toFixed(2)} m outside · {r.heightM.toFixed(2)} m {r.basis}
+      {engineering && (
+        <div style={{ marginTop: 6 }}>
+          {!show && <div style={{ ...small, color: "#ffcc55" }}>Play a show to evaluate hydraulics.</div>}
+          {status?.state === "loading" && <div style={small}>Solving…</div>}
+          {status?.state === "error" && <div style={{ ...small, color: "#ff6b6b" }} title={status.message}>Hydraulics unavailable</div>}
+          {timeline && (
+            <div style={{ ...small, color: timeline.converged ? "#3ddc84" : "#ff6b6b" }} title={basis} data-testid="physics-basis">
+              {timeline.converged ? "● Solved" : "● Not converged"}
+              {pumps ? ` · ${Object.keys(pumps).length} pump${Object.keys(pumps).length === 1 ? "" : "s"}` : ""}
+            </div>
+          )}
+          {pumps && Object.entries(pumps).map(([id, p]) => (
+            <div key={id} style={small} title={`Drive: ${p.drive}`}>
+              {id} {Math.round((p.speedEff || 0) * 100)}% · {p.flowLpm ?? 0} L/min @ {p.headM ?? 0} m
             </div>
           ))}
+          <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 0" }} data-testid="hydraulic-diagnostics">
+            {diagnostics.slice(0, 3).map((d, i) => (
+              <li key={`${d.code}-${d.fixtureId}-${i}`} title={d.message}
+                style={{ ...small, color: sevColor[d.severity] || "#ccc", margin: "2px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                ▲ {d.code} · {fmtTime(d.timeMs)}{d.endMs != null ? `–${fmtTime(d.endMs)}` : ""}
+              </li>
+            ))}
+            {diagnostics.length > 3 && <li style={small}>+{diagnostics.length - 3} more in Preflight</li>}
+          </ul>
         </div>
       )}
-      <div style={{ ...small, marginTop: 4 }}>Mode: {mode} · simulated, not field calibrated.</div>
+
+      <label style={{ ...head, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", marginTop: 7 }}
+        title="Show where active jets land (advisory — not field calibrated)">
+        <input type="checkbox" checked={splashOn} onChange={e => setSplashOn(e.target.checked)} aria-label="Show splash envelope" />
+        Splash envelope
+      </label>
+      {splashOn && (
+        <div style={{ marginTop: 3 }}>
+          <div style={{ ...small, color: offending.length ? "#ff6b6b" : "#3ddc84" }}>
+            {offending.length ? `${offending.length} jet(s) land outside the basin` : "All jets land in the water"}
+          </div>
+          {offending.slice(0, 3).map(r => (
+            <div key={r.id} style={{ ...small, color: "#ff9b9b" }} title={`${r.clipId ? `Clip ${r.clipId} · ` : ""}${r.heightM.toFixed(2)} m ${r.basis}`}>
+              {r.id}: {r.distanceOutsideM.toFixed(2)} m out
+            </div>
+          ))}
+          <details style={{ marginTop: 4 }}>
+            <summary style={{ ...small, cursor: "pointer" }}>Assumptions</summary>
+            <div style={{ ...small, color: "#ffcc55", margin: "3px 0" }} data-testid="splash-advisory">{ADVISORY_LABEL}</div>
+            <div style={{ display: "flex", gap: 6, ...small }}>
+              <label>Gust ×<input type="number" min="1" max="3" step="0.1" value={gustFactor} aria-label="Gust factor"
+                onChange={e => setGustFactor(Math.max(1, Number(e.target.value) || 1))} style={{ width: 42, marginLeft: 3 }} /></label>
+              <label>Nozzle ±%<input type="number" min="0" max="50" step="1" value={Math.round(uncertainty * 100)} aria-label="Nozzle uncertainty"
+                onChange={e => setUncertainty(Math.max(0, Number(e.target.value) || 0) / 100)} style={{ width: 38, marginLeft: 3 }} /></label>
+            </div>
+            <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 0" }} data-testid="splash-assumptions">
+              {assumptions.map(a => <li key={a.key} style={small}>{a.label}: {String(a.value)}</li>)}
+            </ul>
+          </details>
+        </div>
+      )}
     </section>
   );
 }

@@ -738,6 +738,7 @@ if (sitePreview.active && sitePreview.plan) {
 
   const sectionLabel = { color:"#334455", fontSize:9, letterSpacing:"0.06em",
     textTransform:"uppercase", marginBottom:5, fontFamily:"monospace" };
+  const subLabel = { color:"#4f6474", fontSize:9, marginBottom:4 };
 
   return (
     <div ref={containerRef}
@@ -757,25 +758,20 @@ if (sitePreview.active && sitePreview.plan) {
         backdropFilter:"blur(8px)", fontFamily:"var(--font-mono)",
       }}>
         <button onClick={() => setEditMode(v => !v)} title={editMode ? "Return to review mode" : "Edit objects in the viewport"} style={{
-          ...btnSm(editMode, "#c9a227"), minWidth:76, padding:"4px 8px", color:editMode?"#e8d5a0":"#9aaa96",
-        }}>{editMode ? "EDIT MODE" : "OBJECT MODE"}</button>
+          ...btnSm(editMode, "#c9a227"), minWidth:52, padding:"4px 8px", color:editMode?"#e8d5a0":"#9aaa96",
+        }}>{editMode ? "Edit" : "Object"}</button>
         <button onClick={() => { setEditMode(true); setAddMenuOpen(v => !v); }}
           aria-expanded={addMenuOpen} title="Add fixtures and 3D models"
           style={{ ...btnSm(addMenuOpen, "#3ddc84"), padding:"4px 9px", color:addMenuOpen?"#9fffc1":"#9aaa96", fontWeight:800 }}>
-          ＋ ADD
+          ＋ Add
         </button>
         <span style={{ width:1, height:16, background:"rgba(26,107,58,0.35)" }} />
-        <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} title="Frame all objects" style={{ ...btnSm(false), padding:"4px 7px", color:"#9aaa96" }}>Frame All</button>
-        <span style={{ color:"#607264", fontSize:9, padding:"0 4px" }}>{cam === NAMED_CAMERA_MODE ? (cameraViews.find(view => view.id === activeCameraView)?.name || "Saved view") : (CAMS.find(item => item.key === cam)?.label || cam)}</span>
-        <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 6px", borderRadius:9,
-          background:sitePreview.active?"rgba(16,185,129,0.14)":"rgba(201,162,39,0.10)",
-          color:sitePreview.active?"#34d399":"#c9a227", fontSize:9 }}>
-          <span style={{ width:5, height:5, borderRadius:"50%", background:"currentColor" }} />
-          {sitePreview.active ? "SIMULATION" : String(engineSignals?.source || "preview").toUpperCase()}
-        </span>
+        <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} title="Frame all objects" style={{ ...btnSm(false), padding:"4px 7px", color:"#9aaa96" }}>⤢</button>
+        <span title={sitePreview.active ? "Simulation running — no hardware output" : `Signal source: ${engineSignals?.source || "preview"}`}
+          style={{ width:7, height:7, borderRadius:"50%", margin:"0 4px", background:sitePreview.active ? "#34d399" : "#c9a227" }} />
         <button onClick={() => setSidebarOpen(v => !v)} title={sidebarOpen ? "Hide properties sidebar" : "Show properties sidebar"}
           aria-expanded={sidebarOpen} style={{ ...btnSm(sidebarOpen), padding:"4px 7px", color:sidebarOpen?"#58c7ff":"#607264" }}>
-          {sidebarOpen ? "Hide Inspector" : "Show Inspector"}
+          ◧
         </button>
       </div>
 
@@ -802,23 +798,12 @@ if (sitePreview.active && sitePreview.plan) {
       {reviewMode && (
         <div style={{
           position:"absolute", top:54, left:12, zIndex:14, pointerEvents:"none",
-          minWidth:190, padding:"10px 12px", borderRadius:6,
-          background:"rgba(4,10,16,0.76)", border:"1px solid rgba(215,185,87,0.34)",
-          boxShadow:"0 12px 34px rgba(0,0,0,0.34)", backdropFilter:"blur(6px)",
+          padding:"7px 10px", borderRadius:6, background:"rgba(4,10,16,0.72)",
+          border:"1px solid rgba(215,185,87,0.28)", backdropFilter:"blur(6px)",
         }}>
-          <div style={{ color:"#d7b957", fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>
-            3D Review
-          </div>
-          <div style={{ color:"#e8eef6", fontSize:13, fontWeight:700, lineHeight:1.2, marginBottom:6 }}>
-            {projectName || "AquaFlow Scene"}
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, fontFamily:"monospace", fontSize:10 }}>
-            <div style={{ color:"#8ea4b8" }}>Fixtures <span style={{ color:"#58c7ff" }}>{fixtureCount}</span></div>
-            <div style={{ color:"#8ea4b8" }}>Pool <span style={{ color:"#58c7ff" }}>{poolDesc}</span></div>
-            {siteWaterCount > 0 && <div style={{ color:"#8ea4b8" }}>Water outlets <span style={{ color:"#3ddc84" }}>{siteWaterCount}</span></div>}
-            {sitePumpCount > 0 && <div style={{ color:"#8ea4b8" }}>Pumps <span style={{ color:"#ffcc55" }}>{sitePumpCount}</span></div>}
-            <div style={{ color:"#8ea4b8" }}>Signal <span style={{ color:"#58c7ff" }}>{engineSignals?.source || "manual"}</span></div>
-            <div style={{ color:"#8ea4b8" }}>Flow <span style={{ color:"#58c7ff" }}>{(hydraulics?.totalFlowM3Hr||0).toFixed(1)} m3/h</span></div>
+          <div style={{ color:"#e8eef6", fontSize:12, fontWeight:700, lineHeight:1.2 }}>{projectName || "AquaFlow Scene"}</div>
+          <div style={{ color:"#8ea4b8", fontSize:10, fontFamily:"monospace", marginTop:3 }}>
+            {fixtureCount} fixtures · {poolDesc} · {(hydraulics?.totalFlowM3Hr||0).toFixed(1)} m³/h
           </div>
         </div>
       )}
@@ -829,59 +814,23 @@ if (sitePreview.active && sitePreview.plan) {
           4 Hz — the scene already averages over a one-second window, and re-rendering
           this overlay every frame would itself cost frames. */}
       {showPerf && perfStats && (
-        <div style={{
-          position:"absolute", top:12, right:(sidebarOpen ? layout.previewSidebar : 0) + 20, zIndex:15, pointerEvents:"none",
-          minWidth:168, padding:"8px 10px", borderRadius:6, fontFamily:"monospace",
-          background:"rgba(4,10,16,0.82)", border:"1px solid rgba(88,199,255,0.28)",
-          backdropFilter:"blur(6px)",
-        }}>
-          <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:6 }}>
-            <span style={{
-              fontSize:22, fontWeight:700, lineHeight:1,
-              // Green at 55+, amber through 30, red below: the thresholds a designer
-              // actually cares about — smooth, usable, and struggling.
-              color: perfStats.fps >= 55 ? "#3ddc84" : perfStats.fps >= 30 ? "#ffcc00" : "#ff5544",
-            }}>{perfStats.fps}</span>
-            <span style={{ fontSize:9, color:"#8ea4b8" }}>FPS</span>
-            <span style={{ fontSize:9, color:"#556677", marginLeft:"auto" }}>
-              {perfStats.ms}ms · peak {perfStats.worstMs}
-            </span>
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:"2px 8px", fontSize:9 }}>
-            <span style={{ color:"#556677" }}>Tier</span>
-            <span style={{ color:"#58c7ff", textTransform:"capitalize" }}>
-              {perfStats.quality} · {perfStats.backend}
-              {" "}· {adaptiveQuality ? (quality === "auto" ? "auto" : "adaptive") : "fixed"}
-            </span>
-            <span style={{ color:"#556677" }}>Scale</span>
-            <span style={{ color: perfStats.renderScale < 1 ? "#ffcc00" : "#8ea4b8" }}>
-              {Math.round((perfStats.renderScale ?? 1) * 100)}%
-            </span>
-            <span style={{ color:"#556677" }}>Particles</span>
-            <span style={{ color:"#58c7ff" }}>{perfStats.particles.toLocaleString()}</span>
-            <span style={{ color:"#556677" }}>Draws</span>
-            <span style={{ color:"#8ea4b8" }}>
-              {perfStats.drawCalls} · {Math.round(perfStats.triangles / 1000)}k tris
-            </span>
-            <span style={{ color:"#556677" }}>Res</span>
-            <span style={{ color:"#8ea4b8" }}>{perfStats.features.pixelRatio.toFixed(1)}x</span>
-          </div>
-          <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:3 }}>
-            {[
-              ["soft", perfStats.features.softParticles],
-              ["beams", perfStats.features.lightCones],
-              ["reflect", perfStats.features.reflection],
-              ["post", perfStats.features.postfx],
-              ["shadow", perfStats.features.shadows],
-              ["AO", perfStats.features.ao],
-            ].map(([label, on]) => (
-              <span key={label} style={{
-                fontSize:8, padding:"1px 4px", borderRadius:2,
-                background: on ? "rgba(61,220,132,0.14)" : "rgba(80,90,100,0.12)",
-                color: on ? "#3ddc84" : "#445566",
-              }}>{label}</span>
-            ))}
-          </div>
+        <div title={[
+            `${perfStats.ms} ms · peak ${perfStats.worstMs} ms`,
+            `Tier: ${perfStats.quality} · ${perfStats.backend} · ${adaptiveQuality ? "adaptive" : "fixed"}`,
+            `Particles: ${perfStats.particles.toLocaleString()}`,
+            `Draws: ${perfStats.drawCalls} · ${Math.round(perfStats.triangles / 1000)}k tris`,
+            `Pixel ratio: ${perfStats.features.pixelRatio.toFixed(1)}x`,
+          ].join("\n")}
+          style={{
+            position:"absolute", top:12, right:(sidebarOpen ? layout.previewSidebar : 0) + 20, zIndex:15,
+            display:"flex", alignItems:"baseline", gap:6, padding:"4px 9px", borderRadius:6, fontFamily:"monospace",
+            background:"rgba(4,10,16,0.72)", border:"1px solid rgba(88,199,255,0.22)", backdropFilter:"blur(6px)",
+          }}>
+          <span style={{ fontSize:14, fontWeight:700,
+            color: perfStats.fps >= 55 ? "#3ddc84" : perfStats.fps >= 30 ? "#ffcc00" : "#ff5544" }}>{perfStats.fps}</span>
+          <span style={{ fontSize:9, color:"#8ea4b8" }}>fps</span>
+          <span style={{ fontSize:9, color:"#58c7ff", textTransform:"capitalize" }}>{perfStats.quality}</span>
+          {perfStats.renderScale < 1 && <span style={{ fontSize:9, color:"#ffcc00" }}>{Math.round(perfStats.renderScale * 100)}%</span>}
         </div>
       )}
 
@@ -914,38 +863,30 @@ if (sitePreview.active && sitePreview.plan) {
 
         {/* Tabs */}
         <div style={{ display:"flex", borderBottom:"1px solid #0a2030" }}>
-          {[["render","◈ Render"],["design","✥ Design"],["signals","▥ Live"],["info","◇ Eng"]].map(([key,label])=>(
-            <button key={key} onClick={()=>setTab(key)} style={{
-              flex:1, padding:"6px 0", background:"transparent", border:"none",
+          {[["render","Render"],["design","Edit"],["signals","Live"],["info","Eng"]].map(([key,label])=>(
+            <button key={key} onClick={()=>setTab(key)} title={key==="info" ? "Engineering" : undefined} style={{
+              flex:1, minWidth:0, padding:"6px 0", background:"transparent", border:"none",
               borderBottom: tab===key ? "2px solid #c9a227" : "2px solid transparent",
               color: tab===key ? "#d4ac3a" : "#607264",
-              fontSize:9, cursor:"pointer", fontFamily:"monospace",
+              fontSize:10, cursor:"pointer",
             }}>{label}</button>
           ))}
         </div>
 
         <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"8px 10px" }}>
           <ICANPreviewControls />
-          <HydraulicPreviewPanel {...engineeringPreview} />
 
           {/* ── DESIGN TAB — the 3D editing workspace ── */}
           {tab==="design" && (<>
             <button
               onClick={() => setEditMode(v => !v)}
+              title="Select fixtures, move or rotate them with the gizmo, drag in new fixtures and type exact coordinates"
               style={{
                 ...btnSm(editMode), width:"100%", textAlign:"center",
                 padding:"6px 0", marginBottom:8, fontSize:11,
               }}>
-              {editMode ? "◼ Exit Edit Mode" : "✥ Enter Edit Mode"}
+              {editMode ? "Exit edit mode" : "Edit objects"}
             </button>
-
-            {!editMode && (
-              <div style={{ color:"#334455", fontSize:10, fontFamily:"monospace", lineHeight:1.5, marginBottom:10 }}>
-                Edit mode makes the viewport a workspace: click a fixture to select it,
-                drag the gizmo to move or rotate it, drag new fixtures in from the
-                library, and type exact coordinates.
-              </div>
-            )}
 
             {editMode && editorRef.current && (<>
               <div style={{ marginBottom:10 }}><LibraryPalette editor={editorRef.current} /></div>
@@ -957,7 +898,7 @@ if (sitePreview.active && sitePreview.plan) {
 
           {/* ── RENDER TAB ── */}
           {tab==="render" && (<>
-            <div style={sectionLabel}>Environment</div>
+            <Section title="View" defaultOpen>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:3, marginBottom:10 }}>
               {ENVS.map(e=>(
                 <button key={e.key} onClick={()=>setEnv(e.key)} style={{
@@ -967,20 +908,20 @@ if (sitePreview.active && sitePreview.plan) {
               ))}
             </div>
 
-            <div style={sectionLabel}>Camera</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:10 }}>
+            <div style={subLabel}>Camera</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:3, marginBottom:8 }}>
               <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} style={{
                 ...btnSm(false,"#00ff88"), textAlign:"left", padding:"4px 6px",
               }}>Fit design</button>
               {CAMS.map(c=>(
-                <button key={c.key} onClick={()=>setCam(c.key)} style={{
+                <button key={c.key} onClick={()=>setCam(c.key)} title={c.key==="orbit" ? "Drag to orbit · scroll to zoom · right-drag to pan" : c.label} style={{
                   ...btnSm(cam===c.key), textAlign:"left", padding:"4px 6px",
                 }}>{c.icon} {c.label}</button>
               ))}
             </div>
             {cameraViews.length > 0 && (
               <>
-                <div style={sectionLabel}>Saved views</div>
+                <div style={subLabel}>Saved views</div>
                 <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:10 }} data-testid="saved-camera-views">
                   {cameraViews.map(view => (
                     <button key={view.id} onClick={() => selectCameraView(view.id)} title={view.note || view.name} style={{
@@ -991,48 +932,23 @@ if (sitePreview.active && sitePreview.plan) {
               </>
             )}
 
-            <div style={sectionLabel}>Review</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:3, marginBottom:10 }}>
-              <button onClick={() => setReviewMode(v => !v)} style={{
-                ...btnSm(reviewMode,"#d7b957"), textAlign:"left", padding:"4px 6px",
-              }}>{reviewMode ? "Review UI on" : "Review UI off"}</button>
-              <button onClick={() => setReviewOverlays(v => !v)} style={{
-                ...btnSm(reviewOverlays,"#58c7ff"), textAlign:"left", padding:"4px 6px",
-              }}>{reviewOverlays ? "Scale overlays on" : "Scale overlays off"}</button>
-            <button onClick={() => setShowPerf(v => !v)} style={{
-                ...btnSm(showPerf,"#3ddc84"), textAlign:"left", padding:"4px 6px",
-                width:"100%", marginTop:4,
-              }}>{showPerf ? "Performance HUD on" : "Performance HUD off"}</button>
-            </div>
-
-            <div style={sectionLabel}>Walkthrough</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:3, marginBottom:10 }}>
-              <button onClick={togglePresentation} style={{ ...btnSm(presenting), textAlign:"left", padding:"4px 6px" }}>
-                {presenting ? "■ Stop presentation" : "▶ Present to client"}
-              </button>
-              <button onClick={enterVR} disabled={!vrSupported} title={vrSupported ? "Enter immersive VR" : "No VR headset detected"} style={{
-                ...btnSm(false), textAlign:"left", padding:"4px 6px",
-                opacity: vrSupported ? 1 : 0.5, cursor: vrSupported ? "pointer" : "not-allowed",
-              }}>🥽 Enter VR {vrSupported ? "" : "(unavailable)"}</button>
-            </div>
-
-            <div style={sectionLabel}>Quality</div>
+            </Section>
+            <Section title="Quality" defaultOpen>
             <div style={{ display:"flex", gap:3, marginBottom:10 }}>
               {["auto","eco","low","medium","high"].map(q=>(
                 <button key={q} onClick={()=>setQuality(q)} title={q==="auto" ? `Detected for this GPU: ${gpuProfile.tier}` : q==="eco" ? "Entry GPUs: small particle budget, no shadows/reflection" : undefined}
-                  style={{ ...btnSm((quality || "auto")===q), flex:1, textAlign:"center", textTransform:"capitalize" }}>{q}</button>
+                  style={{ ...btnSm((quality || "auto")===q), flex:1, flexShrink:1, minWidth:0, padding:"3px 0", textAlign:"center", textTransform:"capitalize" }}>{q}</button>
               ))}
             </div>
-            <label style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, color:"#71869a", fontSize:9 }}>
+            <label title={`Lowers resolution, then quality, when below 30 fps.\nGPU: ${gpuProfile.renderer || "unknown"} (${gpuProfile.gpuClass}) · rendering ${effectiveQuality}${renderScale < 1 ? ` at ${Math.round(renderScale * 100)}%` : ""}`}
+              style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, color:"#71869a", fontSize:9 }}>
               <input type="checkbox" checked={adaptiveQuality} onChange={e=>setAdaptiveQuality(e.target.checked)} />
-              Adaptive quality (lower resolution, then tier, below 30 fps)
+              Adaptive
             </label>
-            <div style={{ color:"#556677", fontSize:8, marginBottom:10, lineHeight:1.4 }}>
-              GPU: {gpuProfile.renderer || "unknown"} ({gpuProfile.gpuClass}) · rendering {effectiveQuality}
-              {renderScale < 1 ? ` at ${Math.round(renderScale * 100)}%` : ""}
-            </div>
 
-            <div style={sectionLabel}>Tone Mapping</div>
+            </Section>
+            <Section title="Look">
+            <div style={subLabel}>Tone mapping</div>
             <div style={{ display:"flex", gap:3, marginBottom:6 }}>
               {[["aces","ACES"],["agx","AgX"],["neutral","Neutral"]].map(([id,label])=>(
                 <button key={id} onClick={()=>setToneMapping(id)} title={id==="aces" ? "Default look" : id==="agx" ? "Saturated night LED colour without hue skew" : "Hue-preserving daytime colour"}
@@ -1042,11 +958,30 @@ if (sitePreview.active && sitePreview.plan) {
             {effectiveQuality === "medium" && (
               <label style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, color:"#71869a", fontSize:9 }}>
                 <input type="checkbox" checked={halfResSpray} onChange={e=>setHalfResSpray(e.target.checked)} />
-                Half-resolution spray &amp; mist (faster)
+                Half-res spray
               </label>
             )}
 
-            <div style={sectionLabel}>Water Interaction</div>
+            <div style={subLabel}>Light colour</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:3, marginBottom:6 }}>
+              {LIGHT_PRESETS.map(lp=>(
+                <div key={lp.color} onClick={()=>setLightCol(lp.color)} title={lp.label} style={{
+                  width:"100%", paddingBottom:"100%", background:lp.color, borderRadius:3,
+                  cursor:"pointer", border:lightCol===lp.color?"2px solid #fff":"1px solid #222",
+                  position:"relative",
+                }}/>
+              ))}
+            </div>
+            <input type="color" value={lightCol} onChange={e=>setLightCol(e.target.value)}
+              style={{ width:"100%", height:22, cursor:"pointer", border:"none", background:"none", marginBottom:10 }}/>
+
+            <div style={subLabel}>Pattern</div>
+            <select value={pattern} onChange={e => setPattern(e.target.value)}
+              style={{ width:"100%", fontSize:10, padding:"3px 4px", marginBottom:6, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4, textTransform:"capitalize" }}>
+              {PATTERNS.map(p => <option key={p} value={p}>{p === "none" ? "Manual" : p}</option>)}
+            </select>
+            </Section>
+            <Section title="Water">
             {[
               ["Impact response", waveResponse, setWaveResponse, 0, 2, 0.05, value => `${value.toFixed(2)}×`],
               ["Surface damping", waveDamping, setWaveDamping, 0.94, 0.999, 0.001, value => value.toFixed(3)],
@@ -1062,29 +997,7 @@ if (sitePreview.active && sitePreview.plan) {
               </label>
             ))}
 
-            <div style={sectionLabel}>Light Color</div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:3, marginBottom:6 }}>
-              {LIGHT_PRESETS.map(lp=>(
-                <div key={lp.color} onClick={()=>setLightCol(lp.color)} title={lp.label} style={{
-                  width:"100%", paddingBottom:"100%", background:lp.color, borderRadius:3,
-                  cursor:"pointer", border:lightCol===lp.color?"2px solid #fff":"1px solid #222",
-                  position:"relative",
-                }}/>
-              ))}
-            </div>
-            <input type="color" value={lightCol} onChange={e=>setLightCol(e.target.value)}
-              style={{ width:"100%", height:22, cursor:"pointer", border:"none", background:"none", marginBottom:10 }}/>
-
-            <div style={sectionLabel}>Patterns</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:10 }}>
-              {PATTERNS.map(p=>(
-                <button key={p} onClick={()=>setPattern(p)} style={{
-                  ...btnSm(pattern===p,"#aa88ff"), textAlign:"left", padding:"3px 6px", textTransform:"capitalize",
-                }}>{p==="none"?"▐ Manual":p}</button>
-              ))}
-            </div>
-
-            <div style={sectionLabel}>Wind</div>
+            <div style={subLabel}>Wind</div>
             {[["X",windX,setWindX],["Z",windZ,setWindZ]].map(([axis,val,setter])=>(
               <div key={axis} style={{ marginBottom:6 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
@@ -1096,13 +1009,34 @@ if (sitePreview.active && sitePreview.plan) {
                   style={{ width:"100%", accentColor:"#00aaff" }}/>
               </div>
             ))}
+            </Section>
+            <Section title="Overlays">
+            {[
+              ["Info card", reviewMode, setReviewMode],
+              ["Scale overlays", reviewOverlays, setReviewOverlays],
+              ["Performance", showPerf, setShowPerf],
+            ].map(([label, on, setter]) => (
+              <label key={label} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, color:"#71869a", fontSize:9 }}>
+                <input type="checkbox" checked={!!on} onChange={e => setter(e.target.checked)} />{label}
+              </label>
+            ))}
+            </Section>
+            <Section title="Present">
+            <div style={{ display:"flex", flexDirection:"column", gap:3, marginBottom:10 }}>
+              <button onClick={togglePresentation} style={{ ...btnSm(presenting), textAlign:"left", padding:"4px 6px" }}>
+                {presenting ? "■ Stop presentation" : "▶ Present to client"}
+              </button>
+              <button onClick={enterVR} disabled={!vrSupported} title={vrSupported ? "Enter immersive VR" : "No VR headset detected"} style={{
+                ...btnSm(false), textAlign:"left", padding:"4px 6px",
+                opacity: vrSupported ? 1 : 0.5, cursor: vrSupported ? "pointer" : "not-allowed",
+              }}>🥽 Enter VR {vrSupported ? "" : "(unavailable)"}</button>
+            </div>
+
+            </Section>
           </>)}
 
           {/* ── SIGNALS TAB ── */}
           {tab==="signals" && (<>
-            <div style={{ color:"#334455", fontSize:9, marginBottom:8, lineHeight:1.5 }}>
-  Live engine signals from timeline/manual preview.
-</div>
 
 <div style={{ color:"#00aaff", fontSize:9, marginBottom:8, fontFamily:"monospace" }}>
   Source: {engineSignals?.source || "—"} · Active clips: {engineSignals?.activeClips?.length || 0}
@@ -1196,6 +1130,7 @@ if (sitePreview.active && sitePreview.plan) {
 
           {/* ── ENGINEERING INFO TAB ── */}
           {tab==="info" && (<>
+            <HydraulicPreviewPanel {...engineeringPreview} />
             <div style={{ color: hasData?"#00ff88":"#334455", fontSize:9, marginBottom:6 }}>
               {hasData ? "● Live sync active" : "○ No project loaded"}
             </div>
@@ -1220,7 +1155,7 @@ if (sitePreview.active && sitePreview.plan) {
             ))}
             {!hasData && (
               <div style={{ marginTop:8, color:"#223344", fontSize:9, lineHeight:1.5 }}>
-                Open Design → Engineering Designer, draw a pool and place fixtures to see them here
+                No design loaded
               </div>
             )}
           </>)}
@@ -1230,13 +1165,18 @@ if (sitePreview.active && sitePreview.plan) {
         <div style={{ flexShrink:0, borderTop:"1px solid #0a2030", padding:"6px 8px", display:"flex", flexDirection:"column", gap:4 }}>
           {/* The old "Dry-Run Preview" toggle was removed: its session producer lived in the
               retired ShowProgrammerPanel, so it could never receive data. */}
-          {!sitePreview.active && <div style={{ color:"#557788", fontSize:9, lineHeight:1.5, textAlign:"center" }}>
-            To preview a programmed show, use Show Programming → Play preview / Play on PLC.
-          </div>}
-
-          <button onClick={screenshot} style={{ ...btnSm(false,"#00ff88"), color:"#00ff88", textAlign:"center" }}>
-            📷 Screenshot PNG
-          </button>
+          <div style={{ display:"flex", gap:4 }}>
+            <button onClick={screenshot} title="Save a PNG screenshot" style={{ ...btnSm(false,"#00ff88"), color:"#00ff88", flex:1, textAlign:"center" }}>
+              Screenshot
+            </button>
+            <button onClick={toggleRecord} disabled={!!bake} title={`Live screen capture at ${exportRes==="4k"?"4K":exportRes} · ${exportFps} fps (real time — may stutter on heavy scenes)`}
+              style={{ ...btnSm(recording,"#ff4444"), color:recording?"#ff4444":"#ff8866", flex:1, textAlign:"center" }}>
+              {recording ? "⏹ Stop" : "⏺ Record"}
+            </button>
+          </div>
+          <details>
+            <summary style={{ color:"#71869a", fontSize:9, cursor:"pointer", padding:"2px 0" }}>Video export</summary>
+            <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:4 }}>
           {!recording && (
             <div style={{ display:"flex", gap:3 }}>
               <select value={exportRes} onChange={e=>setExportRes(e.target.value)} title="Export resolution"
@@ -1255,7 +1195,6 @@ if (sitePreview.active && sitePreview.plan) {
             </div>
           )}
           <div style={{ border:"1px solid #1d4d3a", borderRadius:4, padding:6, display:"flex", flexDirection:"column", gap:4 }}>
-            <div style={{ color:"#3ddc84", fontSize:9, fontFamily:"monospace", letterSpacing:"0.06em" }}>SMOOTH VIDEO (BAKED)</div>
             {!bake && (
               <div style={{ display:"flex", gap:3, fontSize:10, color:"#8ea4b8", alignItems:"center" }}>
                 <span>from</span>
@@ -1284,24 +1223,33 @@ if (sitePreview.active && sitePreview.plan) {
               <button onClick={renderSmoothVideo} disabled={recording}
                 title="Renders every frame at exact show time, then encodes. Smooth at any resolution; takes longer than real time on slow GPUs."
                 style={{ ...btnSm(false,"#3ddc84"), color:"#3ddc84", textAlign:"center" }}>
-                ▶ Render smooth {exportRes==="4k"?"4K":exportRes} · {exportFps}fps
+                Render video
               </button>
             )}
             {bakeMsg && <div style={{ fontSize:9, color: bakeMsg.startsWith("Render failed") ? "#ff8866" : "#8ea4b8" }}>{bakeMsg}</div>}
           </div>
-          <button onClick={toggleRecord} disabled={!!bake} title="Live screen capture (real time - may stutter on heavy scenes)" style={{ ...btnSm(recording,"#ff4444"), color:recording?"#ff4444":"#ff8866", textAlign:"center" }}>
-            {recording ? "⏹ Stop & Save" : `⏺ Record ${exportRes==="4k"?"4K":exportRes} · ${exportFps}fps`}
-          </button>
+            </div>
+          </details>
         </div>
       </div>}
 
-      {/* ── Camera mode indicator ── */}
-      <div style={{ position:"absolute", bottom:8, left:8, background:"rgba(0,0,0,0.7)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#334455", fontFamily:"monospace", pointerEvents:"none" }}>
-        {cam==="orbit" ? "Drag to orbit · Scroll to zoom · Right-drag to pan" :
-         cam==="top"   ? "Top-down view" :
-         cam==="front" ? "Front view" :
-         "Cinematic — auto-animating"}
-      </div>
+    </div>
+  );
+}
+
+/** Collapsible sidebar group — keeps the inspector short; detail is one click away. */
+function Section({ title, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ borderBottom:"1px solid #0c1c26", marginBottom:6 }}>
+      <button onClick={() => setOpen(v => !v)} aria-expanded={open} style={{
+        display:"flex", width:"100%", alignItems:"center", justifyContent:"space-between", padding:"5px 0",
+        background:"transparent", border:"none", cursor:"pointer", color: open ? "#9fb3c4" : "#5f7384",
+        fontSize:10, fontWeight:600, letterSpacing:"0.04em",
+      }}>
+        <span>{title}</span><span style={{ fontSize:8 }}>{open ? "▾" : "▸"}</span>
+      </button>
+      {open && <div style={{ paddingBottom:6 }}>{children}</div>}
     </div>
   );
 }
