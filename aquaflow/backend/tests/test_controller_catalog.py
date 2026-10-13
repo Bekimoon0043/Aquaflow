@@ -21,6 +21,7 @@ import pytest
 
 from engine.controller_catalog import (
     CATALOG,
+    VERIFICATION_LEVELS,
     all_entries,
     catalog_dict,
     entries_for_tcp_port,
@@ -66,6 +67,23 @@ def test_real_entries_are_actionable():
             assert e.default_config, f"{e.id} is drivable but has no config prefill"
 
 
+def test_every_entry_has_honest_commissioning_evidence_level():
+    for e in CATALOG:
+        assert e.verification_level in VERIFICATION_LEVELS, e.id
+        assert e.verification_summary, e.id
+        if e.tier != "REAL":
+            assert e.verification_level == "unsupported", e.id
+
+    # Physical evidence exists for this one specific gateway/path, but the
+    # unsigned/incomplete channel map must not be promoted to site commissioned.
+    assert get_entry("ican-music-fountain").verification_level == "bench_verified"
+    assert not any(e.verification_level == "site_commissioned" for e in CATALOG)
+
+    for entry_id in ("siemens-s7-1200", "modbus-generic", "artnet-node",
+                     "sacn-node", "allen-bradley-logix", "opcua-server"):
+        assert get_entry(entry_id).verification_level == "simulated", entry_id
+
+
 def test_site_ican_profile_is_the_reverse_engineered_truth():
     e = get_entry("ican-music-fountain")
     assert e is not None and e.tier == "REAL"
@@ -90,6 +108,9 @@ def test_port_index_and_dict_shape():
     assert "allen-bradley-logix" in d["drivable"]          # pycomm3 bundled (1.2.5)
     assert "opcua-server" in d["drivable"]                 # asyncua bundled (1.2.5)
     assert "beckhoff-ads" not in d["drivable"]
+    assert sum(d["by_verification"].values()) == len(CATALOG)
+    assert d["by_verification"]["bench_verified"] == 1
+    assert d["by_verification"].get("site_commissioned", 0) == 0
 
 
 # ── identification (protocol-level, against the fakes) ─────────────────────────
@@ -107,6 +128,8 @@ def test_s7_handshake_identifies_siemens():
     assert d.catalog_id == "siemens-s7-1200"
     assert d.confidence == "confirmed"
     assert d.drivable is True
+    assert d.verification_level == "simulated"
+    assert "Physical CPU" in d.verification_summary
     assert d.suggested_config["ip"] == "127.0.0.1"
 
 
@@ -123,6 +146,7 @@ def test_modbus_without_fc43_is_generic_modbus():
     assert found[0].catalog_id == "modbus-generic"
     assert found[0].confidence == "confirmed"
     assert found[0].drivable is True
+    assert found[0].verification_level == "simulated"
 
 
 def test_fc43_vendor_string_maps_to_specific_entry():

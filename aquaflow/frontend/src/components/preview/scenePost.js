@@ -53,6 +53,26 @@ export function buildEnvironmentIBL(scene) {
   }
 }
 
+/**
+ * AF-NEXT-013: OutputPass whose input is clamped to [0, 6e4] before tone mapping.
+ * Stacked additive HDR (fp16 overflow to +Inf) made NeutralToneMapping return NaN
+ * (Inf/Inf), and the bloom blur after it spread that NaN over the whole frame — the
+ * Neutral operator rendered a black screen. clamp() also maps NaN to 0 on D3D/ANGLE
+ * (min/max return the non-NaN operand). OutputShader is GLSL ES 1.0, so no isnan().
+ */
+const OUTPUT_READ = "gl_FragColor = texture2D( tDiffuse, vUv );";
+export function sanitizedOutputPass() {
+  const pass = new OutputPass();
+  const m = pass.material;
+  if (m?.fragmentShader?.includes(OUTPUT_READ)) {
+    m.fragmentShader = m.fragmentShader.replace(OUTPUT_READ,
+      `${OUTPUT_READ}
+			gl_FragColor.rgb = clamp( gl_FragColor.rgb, 0.0, 6.0e4 );`);
+    m.needsUpdate = true;
+  }
+  return pass;
+}
+
 // ── Post-processing chain ───────────────────────────────────────────────────
 export function buildPostFX(scene) {
   const T = scene.THREE;
@@ -65,7 +85,9 @@ export function buildPostFX(scene) {
     // Multisample the scene itself so thin streams survive at export resolution.
     const target = new T.WebGLRenderTarget(W, H, {
       type: T.HalfFloatType,
-      samples: Math.min(4, scene.renderer.capabilities.maxSamples || 0),
+      // AF-NEXT-013: a tier may set `msaa` (eco: 0). On an entry GPU the 4x fp16
+      // multisampled target was the single largest cost (docs/evidence/AF-NEXT-013.md).
+      samples: Math.min(Number.isFinite(q.msaa) ? q.msaa : 4, scene.renderer.capabilities.maxSamples || 0),
     });
     const composer = new EffectComposer(scene.renderer, target);
     composer.setPixelRatio?.(scene._pr);
@@ -110,7 +132,7 @@ export function buildPostFX(scene) {
     // night scene washed out into white fog. Tone-mapping first means bloom sees
     // exactly the image the user sees, and the threshold below reliably selects
     // only genuinely bright screen content — jet cores, fixtures, flame.
-    composer.addPass(new OutputPass());
+    composer.addPass(sanitizedOutputPass());
 
     // Display-referred bloom: threshold 0.82 catches only near-white pixels.
     const bloom = new UnrealBloomPass(
@@ -119,6 +141,12 @@ export function buildPostFX(scene) {
       0.42,           // radius — tight halo; wider smears the dense jet core
       0.86            // threshold — display-referred, only true highlights
     );
+    if (q.bloomScale && q.bloomScale < 1) {
+      // AF-NEXT-013: run the bloom mip chain at a fraction of its usual size (eco).
+      const setSize = bloom.setSize.bind(bloom);
+      bloom.setSize = (w, h) => setSize(Math.max(1, Math.round(w * q.bloomScale)), Math.max(1, Math.round(h * q.bloomScale)));
+      bloom.setSize(W, H);
+    }
     composer.addPass(bloom);
     scene._bloomPass = bloom;
 

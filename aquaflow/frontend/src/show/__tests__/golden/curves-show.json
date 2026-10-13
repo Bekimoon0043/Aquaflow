@@ -1,0 +1,26 @@
+{
+  "contract": "aquaflow-golden-show",
+  "version": 1,
+  "description": "AF-NEXT-005 curves / tempo / sections show. Fade curves (linear, ease-in, ease-out, ease-in-out, step), a beat-timed clip through a tempo change (120 BPM to 60 BPM at 4 s), RGB channel colour and named sections. Shared with backend tests/test_show_frame.py via frame-trace.json.",
+  "fixtures": [
+    { "id": "W1", "type": "nozzle_jet" },
+    { "id": "W2", "type": "nozzle_jet" },
+    { "id": "W3", "type": "nozzle_jet" },
+    { "id": "W4", "type": "nozzle_jet" },
+    { "id": "W5", "type": "nozzle_jet" },
+    { "id": "W6", "type": "nozzle_geyser" },
+    { "id": "L3", "type": "light_rgb" }
+  ],
+  "tempo": [{ "time": 0, "bpm": 120 }, { "time": 4, "bpm": 60 }],
+  "sections": [{ "id": "intro", "name": "Intro", "start": 0, "end": 4 }, { "id": "main", "name": "Main", "start": 4, "end": 12 }],
+  "clips": [
+    { "id": "k1", "fixtureId": "W1", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "linear" },
+    { "id": "k2", "fixtureId": "W2", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "ease-in" },
+    { "id": "k3", "fixtureId": "W3", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "ease-out" },
+    { "id": "k4", "fixtureId": "W4", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "ease-in-out" },
+    { "id": "k5", "fixtureId": "W5", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "step" },
+    { "id": "k6", "fixtureId": "W6", "type": "device_intensity", "startBeat": 8, "durationBeats": 8, "value": 70, "fadeIn": 1, "fadeOut": 0 },
+    { "id": "k7", "fixtureId": "L3", "type": "lighting_master", "startTime": 0, "duration": 12, "value": 50, "color": "#ffffff" },
+    { "id": "k8", "fixtureId": "L3", "type": "lighting_green", "startTime": 0, "duration": 6, "value": 100, "fadeIn": 3, "curveType": "ease-in-out" }
+  ]
+}

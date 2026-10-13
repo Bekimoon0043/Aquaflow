@@ -95,12 +95,14 @@ def _bom_model(design: dict) -> dict:
         if not isinstance(fx, dict):
             continue
         ftype = fx.get("type") or fx.get("fixtureType") or "equipment"
+        # AF-NEXT-012: carry the fixture's provenance so each BOM line cites it.
+        trust = {k: fx[k] for k in ("provenance", "equipment_model_id") if fx.get(k)}
         if _is_nozzle(ftype):
-            nozzles.append({"model": ftype, "quantity": 1})
+            nozzles.append({"model": ftype, "quantity": 1, **trust})
         else:
             equipment.append({"type": ftype, "label": fx.get("label") or fx.get("id"),
                               "part_number": (fx.get("engineering") or {}).get("partNumber", ""),
-                              "quantity": 1})
+                              "quantity": 1, **trust})
     return {"project": design.get("name") or design.get("projectName") or "AquaFlow Project",
             "equipment": equipment, "nozzles": nozzles,
             "pipes": design.get("pipes_spec") or []}
@@ -185,6 +187,17 @@ def build_documents(design: dict) -> tuple[dict, list[str]]:
         if total is not None:
             summary_lines.append(f"BOM estimated total: {total}")
         summary_lines.append(f"BOM line items: {bom_summary.get('line_count', '-')}")
+        prov = bom_summary.get("data_provenance") or {}
+        if prov:
+            by = prov.get("by_source", {})
+            summary_lines.append(
+                "Equipment data: "
+                f"{by.get('manufacturer_datasheet', 0)} datasheet, "
+                f"{by.get('user_measured', 0)} measured, "
+                f"{by.get('generic_estimate', 0)} generic estimate line(s)")
+            if prov.get("generic_items"):
+                summary_lines.append("Generic estimate - verify with supplier datasheet "
+                                     "(see Data Source column in bill_of_materials.xlsx)")
     summary_lines += [
         "",
         "DOCUMENTS",

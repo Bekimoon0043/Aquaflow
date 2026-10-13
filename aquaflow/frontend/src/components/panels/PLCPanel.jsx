@@ -5,6 +5,7 @@ import { apiGet, apiPost } from "../../utils/apiClient";
 import SiemensSitePanel from "./SiemensSitePanel";
 import SiemensSetupWizard from "./siemens/SiemensSetupWizard";
 import SiemensIOMapTab from "./siemens/SiemensIOMapTab";
+import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
 import {
   PREFILL_KEY, PREFILL_EVENT, applyPlcPrefill, buildConnectBody, profileGateSatisfied,
   parseModbusPoints, verifyOutcomeStyle, verifySummary,
@@ -45,6 +46,10 @@ export function plcTypeSubLabel(t) {
 export default function PLCPanel() {
   const [tab, setTab] = useState("setup");
   const { devices, addServerLog } = useShowStore();
+  // AF-NEXT-014: workspace guidance can open a tab (navigation only — nothing connects).
+  usePanelAction("plc", ({ action, detail }) => {
+    if (action === "tab" && ["setup", "map", "site", "connect", "tags", "monitor", "fieldio"].includes(detail?.tab)) setTab(detail.tab);
+  });
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-panel)" }}>

@@ -1,7 +1,8 @@
 import DxfParser from "dxf-parser";
 import { CAD_DXF_HEADER, CAD_DXF_FOOTER, CAD_MODEL_SPACE_HANDLE } from "./cadDxfTemplate";
 import { createDefaultEngineeringProject } from "./engineeringProject";
-import { geometryForPoolType, polygonArea } from "./poolGeometry";
+import { geometryForPoolType, polygonArea, pointInGeometry } from "./poolGeometry";
+import { basinToGeometry, legacyFromBasins, reconcileBasins, scopeDepthZones, tessellateGeometry } from "./basins";
 import { getDefaultEngineering, FIXTURE_LIBRARY } from "../data/fixtureLibrary";
 import { resolveFixtureGroup } from "../hooks/fixtureTypeMap";
 import { cadFrame, cadToPlan, planToCad, cadRotationToPlan } from "./geometryContract";
@@ -57,9 +58,9 @@ function readMetadata(lines) {
         if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)
           || !["pool","island","fixture","label","pipe","depth"].includes(decoded.kind)) return;
         const meta = {kind:decoded.kind};
-        for (const key of ["id","type","label","fixtureId","pipeType","zone"])
+        for (const key of ["id","type","label","fixtureId","pipeType","zone","name","basinId"])
           if (typeof decoded[key] === "string" && decoded[key].length <= 4096) meta[key] = decoded[key];
-        for (const key of ["rotation","depth","diameterMm"])
+        for (const key of ["rotation","depth","diameterMm","floorLevel","wallHeight"])
           if (typeof decoded[key] === "number" && Number.isFinite(decoded[key])) meta[key] = decoded[key];
         result.set(handle,meta);
       } catch { /* Unrecognized or damaged metadata never supplies control settings. */ }
@@ -305,8 +306,22 @@ export function previewCadImport(parsed, options = {}) {
     return { id: e.key, layer: e.layer, geometry: native || { type: "freeform", points, closed: true }, points,
       area: polygonArea(points), meta: e.meta };
   }).sort((a,b) => b.area-a.area);
-  const selected = options.boundaryId ? candidates.find(e => e.id === options.boundaryId) : (candidates.length === 1 ? candidates[0] : null);
-  const islands = poolPaths.filter(isIsland).map(e => e.points.map(convert));
+  // AF-NEXT-010: basins written by AquaFlow (XDATA kind "pool") all come back as basins; any
+  // other drawing chooses its primary basin (boundaryId) and, optionally, more (basinIds).
+  const aquaBasins = candidates.filter(c => c.meta?.kind === "pool");
+  const selected = options.boundaryId ? candidates.find(e => e.id === options.boundaryId)
+    : (candidates.length === 1 || (aquaBasins.length && aquaBasins.length === candidates.length) ? candidates[0] : null);
+  const basinIds = Array.isArray(options.basinIds) ? options.basinIds.map(String)
+    : (selected ? [selected.id, ...aquaBasins.filter(c => c !== selected).map(c => c.id)] : []);
+  const chosen = basinIds.map(id => candidates.find(c => c.id === id)).filter(Boolean);
+  if (selected && !chosen.includes(selected)) chosen.unshift(selected);
+  const islandPaths = poolPaths.filter(isIsland);
+  const islands = islandPaths.map(e => e.points.map(convert));
+  const clientLevels = meta => (meta?.kind === "pool" && (Number.isFinite(meta.floorLevel) || Number.isFinite(meta.wallHeight))
+    ? { floorLevel: Number.isFinite(meta.floorLevel) ? meta.floorLevel : undefined, wallHeight: Number.isFinite(meta.wallHeight) ? meta.wallHeight : undefined,
+      provenance: { floorLevel: "AQUAFLOW XDATA", wallHeight: "AQUAFLOW XDATA" } } : null);
+  const basins = buildPreviewBasins(chosen.map(c => ({ handle: c.id, layer: c.layer, candidate: c, meta: c.meta, levels: clientLevels(c.meta) })),
+    islandPaths.map(e => ({ handle: e.key, parent: null, points: e.points.map(convert) })), warnings);
   const labels = flat.filter(e => ["TEXT", "MTEXT"].includes(e.e.type) && e.anchor);
   const fixtures = [];
   for (const e of flat.filter(e => ["nozzle", "light", "equipment"].includes(e.role))) {
@@ -347,7 +362,8 @@ export function previewCadImport(parsed, options = {}) {
   const allPoints = [...(selected?.points || []), ...fixtures];
   const bounds = allPoints.length ? { minX: Math.min(...allPoints.map(p => p.x)), maxX: Math.max(...allPoints.map(p => p.x)),
     minY: Math.min(...allPoints.map(p => p.y)), maxY: Math.max(...allPoints.map(p => p.y)) } : null;
-  return { candidates, boundary: selected, islands, fixtures, pipes, depthZones, measurements, bounds, warnings: [...warnings], units, flipY, frame, source: "client" };
+  return { candidates, boundary: selected, islands, basins, levels: basins[0]?.levels || null, fixtures, pipes, depthZones, measurements, bounds,
+    warnings: [...warnings], units, flipY, frame, source: "client" };
 }
 
 /**
@@ -386,8 +402,9 @@ export function applyCadImport(current, preview, options = {}) {
   const updateExisting = options.mode === "update";
   // A fixtures-only drawing (e.g. the AutoLISP export: block references, no outlines) may
   // update a design that already has a basin; everything else needs a basin.
-  const keepGeometry = !preview.boundary && updateExisting && !!current?.geometry;
-  if (!preview.boundary && !keepGeometry) throw new Error("Choose one closed pool boundary before applying the drawing.");
+  const previewBasins = Array.isArray(preview.basins) && preview.basins.length ? preview.basins : null;
+  const keepGeometry = !preview.boundary && !previewBasins && updateExisting && !!current?.geometry;
+  if (!preview.boundary && !previewBasins && !keepGeometry) throw new Error("Choose one closed pool boundary before applying the drawing.");
   const base = updateExisting ? structuredClone(current) : createDefaultEngineeringProject();
   const matches = new Map((current.fixtures || []).map(f => [String(f.id), f]));
   const importedIds = new Set();
@@ -412,10 +429,13 @@ export function applyCadImport(current, preview, options = {}) {
   // Updating a site never deletes hardware records that were omitted from a CAD drawing.
   base.fixtures = updateExisting ? [...(current.fixtures || []).filter(f => !importedIds.has(String(f.id))), ...imported] : imported;
   if (new Set(base.fixtures.map(f => f.id)).size !== base.fixtures.length) throw new Error("Imported fixture identities conflict with this project.");
-  const depth = Number(options.depth ?? preview.boundary?.meta?.depth ?? base.params.depth);
+  const primaryMeta = preview.boundary?.meta || null;
+  const depth = Number(options.depth ?? primaryMeta?.depth ?? base.params.depth);
   if (!Number.isFinite(depth) || depth < .05 || depth > 100) throw new Error("Enter a pool depth between 0.05 and 100 meters.");
   if (keepGeometry) {
     base.params = { ...base.params, depth };
+  } else if (previewBasins) {
+    applyPreviewBasins(base, previewBasins, { depth, current: updateExisting ? current : null });
   } else {
     const geometry = structuredClone(preview.boundary.geometry);
     const xs = preview.boundary.points.map(p => p.x), ys = preview.boundary.points.map(p => p.y);
@@ -434,6 +454,11 @@ export function applyCadImport(current, preview, options = {}) {
       ...(levels && Number.isFinite(levels.wallHeight) ? { wallHeight: levels.wallHeight } : {}),
       ...(levels && Number.isFinite(levels.floorLevel) ? { floorLevel: levels.floorLevel } : {}) };
   }
+  if (!previewBasins) {
+    // Legacy single-boundary previews and fixtures-only updates: basins follow the geometry.
+    base.basins = reconcileBasins({ basins: keepGeometry ? current.basins : [], geometry: base.geometry,
+      poolType: base.pool_type, params: base.params });
+  }
   if (Array.isArray(preview.landSurfaces)) {
     // Re-import replaces only CAD-derived land; hand-drawn surfaces are kept when updating.
     const kept = updateExisting ? (current.site_surfaces || current.siteSurfaces || []).filter(s => !s.cadHandle) : [];
@@ -445,10 +470,50 @@ export function applyCadImport(current, preview, options = {}) {
   base.id = updateExisting ? current.id : null;
   const pipes = structuredClone(preview.pipes || []);
   base.manualPipes = pipes; base.pipes = pipes;
-  base.depth_zones = preview.depthZones; base.measurements = preview.measurements;
+  // Depth zones are scoped to the basin that contains them (zone.basinId / basin.depthZones).
+  const scoped = scopeDepthZones(base.basins || [], preview.depthZones || []);
+  base.depth_zones = scoped.depthZones; base.measurements = preview.measurements;
+  if (base.basins?.length) base.basins = scoped.basins;
   base.solved_hydraulics = null; base.hydraulics = null; base.bom = [];
   applyCadHydraulicGroups(base, options.hydraulicGroups, idByCandidate);
   return base;
+}
+
+/**
+ * AF-NEXT-010: preview basins → project.basins (+ the legacy geometry / pool_type / params of
+ * basins[0]). Islands become that basin's holes; per-basin floor level / wall height come from
+ * the preview levels. Re-importing keeps the name of a basin whose id (AQUAFLOW XDATA) matches.
+ */
+function applyPreviewBasins(base, previewBasins, { depth, current }) {
+  const oldById = new Map((current?.basins || []).map(b => [String(b.id), b]));
+  const basins = previewBasins.map((pb, i) => {
+    const geometry = structuredClone(pb.geometry);
+    const holes = (pb.islands || []).filter(h => h?.length >= 3).map(h => h.map(p => ({ x: p.x, y: p.y })));
+    if (holes.length) geometry.holes = holes; else delete geometry.holes;
+    const lv = pb.levels || null;
+    if (lv && Number.isFinite(lv.floorLevel)) geometry.floorLevel = lv.floorLevel;
+    if (lv && Number.isFinite(lv.wallHeight)) geometry.wallHeight = lv.wallHeight;
+    const pts = geometry.type === "circle" || geometry.type === "ellipse" ? tessellateGeometry(geometry) : (geometry.points || pb.points);
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const poolType = geometry.type === "circle" ? "circular" : geometry.type === "ellipse" ? "elliptical" : "freeform";
+    const params = { width: Math.max(.1, Math.max(...xs) - Math.min(...xs)), length: Math.max(.1, Math.max(...ys) - Math.min(...ys)),
+      depth: i === 0 ? depth : (Number(pb.depth) || depth), ...(geometry.radius ? { radius: geometry.radius } : {}),
+      ...(lv && Number.isFinite(lv.wallHeight) ? { wallHeight: lv.wallHeight } : {}),
+      ...(lv && Number.isFinite(lv.floorLevel) ? { floorLevel: lv.floorLevel } : {}) };
+    const old = oldById.get(String(pb.id));
+    return { geometry, poolType, params, id: pb.id, name: old?.name || pb.name || `Basin ${i + 1}` };
+  });
+  const primary = basins[0];
+  base.pool_type = primary.poolType;
+  base.params = { ...base.params, ...primary.params };
+  base.geometry = primary.geometry;
+  base.basins = reconcileBasins({
+    basins: basins.map(b => ({ ...b.geometry, id: b.id, name: b.name, outer: b.geometry.points || tessellateGeometry(b.geometry),
+      holes: b.geometry.holes || [], poolType: b.poolType, params: b.params })),
+    geometry: primary.geometry, poolType: base.pool_type, params: base.params,
+  });
+  const legacy = legacyFromBasins(base.basins);
+  base.geometry = legacy.geometry || base.geometry;
 }
 
 /** Write confirmed topology groups onto fixtures (engineering.pumpId/valveId) and pipes (pumpId). */
@@ -496,18 +561,35 @@ export function exportCadDxf(project) {
     entity("CIRCLE",layer,"AcDbCircle",[10,x,20,y,30,0,40,number(radius)],meta); };
   const label = (pos,text,layer="ANNOTATIONS",meta) => { const [x,y] = xy(pos);
     entity("TEXT",layer,"AcDbText",[10,x,20,y,30,0,40,.18,1,textValue(text),50,0,7,"STANDARD",100,"AcDbText",73,0],meta); };
-  const g = project.geometry || geometryForPoolType(project.pool_type || project.poolType,project.params);
-  const poolMeta = { kind: "pool", depth: project.params?.depth ?? .8 };
-  if (g.type === "circle") circle(g.center,g.radius,"POOL_OUTLINE",poolMeta);
-  else if (g.type === "ellipse") {
-    const vertical = g.ry > g.rx;
-    const [ex,ey] = xy(g.center), axis = planToCad(vertical ? { x: 0, y: g.ry } : { x: g.rx, y: 0 });
-    entity("ELLIPSE","POOL_OUTLINE","AcDbEllipse",[10,ex,20,ey,30,0,
-      11,number(axis.x),21,number(axis.y),31,0,40,Math.min(g.rx,g.ry)/Math.max(g.rx,g.ry),41,0,42,2*Math.PI],poolMeta);
-  } else if (g.points?.length >= 3) poly(g.points,"POOL_OUTLINE",g.closed !== false,poolMeta);
-  else throw new Error("Draw a valid pool outline before exporting.");
-  // Same layer set / XDATA as the backend writer (services/cad_export.py, AF-CAD-003).
-  (g.holes || []).forEach((h,i) => { if (h?.length >= 3) poly(h,"POOL_ISLANDS",true,{ kind: "island", id: `island-${i+1}` }); });
+  const writePool = (g, poolMeta) => {
+    if (g.type === "circle") circle(g.center,g.radius,"POOL_OUTLINE",poolMeta);
+    else if (g.type === "ellipse") {
+      const vertical = g.ry > g.rx;
+      const [ex,ey] = xy(g.center), axis = planToCad(vertical ? { x: 0, y: g.ry } : { x: g.rx, y: 0 });
+      entity("ELLIPSE","POOL_OUTLINE","AcDbEllipse",[10,ex,20,ey,30,0,
+        11,number(axis.x),21,number(axis.y),31,0,40,Math.min(g.rx,g.ry)/Math.max(g.rx,g.ry),41,0,42,2*Math.PI],poolMeta);
+    } else if (g.points?.length >= 3) poly(g.points,"POOL_OUTLINE",g.closed !== false,poolMeta);
+    else throw new Error("Draw a valid pool outline before exporting.");
+  };
+  const projectDepth = project.params?.depth ?? .8;
+  // AF-NEXT-010: every basin (geometry wins for basins[0] if a legacy writer changed only it).
+  const basins = Array.isArray(project.basins) && project.basins.length
+    ? reconcileBasins({ basins: project.basins, geometry: project.geometry, poolType: project.pool_type, params: project.params }) : null;
+  if (basins?.length) {
+    basins.forEach((b, bi) => {
+      const meta = { kind: "pool", id: String(b.id), name: String(b.name || b.id),
+        depth: Number(bi === 0 ? projectDepth : (b.params?.depth ?? projectDepth)) || .8,
+        ...(Number.isFinite(Number(b.floorLevel)) && b.floorLevel !== null ? { floorLevel: Number(b.floorLevel) } : {}),
+        ...(Number.isFinite(Number(b.wallHeight)) && b.wallHeight !== null ? { wallHeight: Number(b.wallHeight) } : {}) };
+      writePool(basinToGeometry(b), meta);
+      (b.holes || []).forEach((h,j) => { if (h?.length >= 3) poly(h,"POOL_ISLANDS",true,{ kind: "island", id: `${b.id}-island-${j+1}`, basinId: String(b.id) }); });
+    });
+  } else {
+    const g = project.geometry || geometryForPoolType(project.pool_type || project.poolType,project.params);
+    writePool(g, { kind: "pool", depth: projectDepth });
+    // Same layer set / XDATA as the backend writer (services/cad_export.py, AF-CAD-003).
+    (g.holes || []).forEach((h,i) => { if (h?.length >= 3) poly(h,"POOL_ISLANDS",true,{ kind: "island", id: `island-${i+1}` }); });
+  }
   const ids = new Set();
   (project.fixtures || []).forEach((f,i) => {
     const id = String(f.id || "");
@@ -812,6 +894,46 @@ export function deriveCadLevels(response, basinHandle, { depth, wallHeight, floo
   return { copingLevel: coping, floorLevel: floor, wallHeight: wall, provenance: prov };
 }
 
+/** deriveCadLevels + the per-basin levels AquaFlow wrote into the outline's XDATA (round trip). */
+function deriveBasinLevels(response, handle, options = {}, meta = null) {
+  const lv = deriveCadLevels(response, handle, options);
+  if (meta?.kind !== "pool") return lv;
+  for (const key of ["floorLevel", "wallHeight"]) {
+    if (numOrNull(options[key]) == null && numOrNull(meta[key]) != null) { lv[key] = Number(meta[key]); lv.provenance[key] = "AQUAFLOW XDATA"; }
+  }
+  return lv;
+}
+
+/**
+ * AF-NEXT-010: chosen basin outlines → preview basins, each with its islands attached:
+ * parent_handle first (contract: the smallest containing outline), else the smallest basin
+ * that contains the island. items: [{handle, layer, candidate:{points, geometry}, meta, levels}].
+ */
+function buildPreviewBasins(items, islandRings, warnings) {
+  const used = new Set();
+  const basins = items.map((b, i) => {
+    let id = b.meta?.kind === "pool" && b.meta.id ? String(b.meta.id) : `basin-${String(b.handle ?? i + 1).replace(/[^a-z\d-]/gi, "-")}`;
+    if (used.has(id)) id = `${id}-${i + 1}`;
+    used.add(id);
+    return { id, name: b.meta?.kind === "pool" && b.meta.name ? String(b.meta.name) : `Basin ${i + 1}`, handle: b.handle ?? null,
+      layer: b.layer || "", geometry: b.candidate.geometry, points: b.candidate.points, islands: [], islandHandles: [], levels: b.levels || null,
+      area: polygonArea(b.candidate.points) };
+  });
+  for (const r of islandRings) {
+    if (!basins.length || !(r.points?.length >= 3)) continue;
+    let target = r.parent != null ? basins.find(b => b.handle != null && String(b.handle) === String(r.parent)) : null;
+    if (!target) {
+      const c = { x: r.points.reduce((t, p) => t + p.x, 0) / r.points.length, y: r.points.reduce((t, p) => t + p.y, 0) / r.points.length };
+      target = basins.filter(b => pointInGeometry(c, { points: b.points }) || pointInGeometry(r.points[0], { points: b.points }))
+        .sort((a, b) => a.area - b.area)[0] || null;
+    }
+    if (!target) { warnings.add("An island outside every chosen basin was not imported. Choose its basin, or mark it as reference only."); continue; }
+    target.islands.push(r.points);
+    target.islandHandles.push(r.handle ?? null);
+  }
+  return basins;
+}
+
 // Fields copied from recognition into fixture metadata. Addresses (dmx_address, pump_id,
 // channels) are deliberately absent: CAD import never assigns hardware.
 const SAFE_FIELDS = ["model", "flow_lpm", "height_m", "head_m", "dn", "power_w"];
@@ -870,14 +992,17 @@ export function cadOutlineChoices(response) {
   return list;
 }
 
-/** Sensible defaults: recognised basin, else largest outline on a pool layer, else the largest (never an excluded one). */
+/**
+ * Sensible defaults: every recognised basin (AF-NEXT-010 — a drawing may hold several), else the
+ * largest outline on a pool layer, else the largest (never an excluded one).
+ */
 export function defaultCadOutlineRoles(outlines) {
   const roles = Object.fromEntries(outlines.map(o => [o.handle, !o.excluded && o.recognizedRole === "island" ? "island" : "ignore"]));
   const usable = outlines.filter(o => !o.excluded);
   const recognized = usable.filter(o => o.recognizedRole === "basin");
   const poolLayer = usable.filter(o => defaultCadRole(o.layer) === "pool");
-  const basin = recognized[0] || poolLayer[0] || usable[0];
-  if (basin) roles[basin.handle] = "basin";
+  if (recognized.length) recognized.forEach(o => { roles[o.handle] = "basin"; });
+  else { const basin = poolLayer[0] || usable[0]; if (basin) roles[basin.handle] = "basin"; }
   usable.filter(o => defaultCadRole(o.layer) === "island").forEach(o => { roles[o.handle] = "island"; });
   return roles;
 }
@@ -885,17 +1010,18 @@ export function defaultCadOutlineRoles(outlines) {
 /**
  * Effective outline roles: defaults ← user overrides, then
  *   - excluded outlines are forced to "ignore" (reference only, whatever was asked),
- *   - the chosen basin's holes (hole_handles) default to "island" unless the user chose otherwise.
+ *   - every chosen basin's holes (hole_handles) default to "island" unless the user chose otherwise.
  * Each island is therefore listed ONCE — by handle — never again from `basin.holes`.
  */
 export function resolveCadOutlineRoles(outlines, overrides = {}) {
   const roles = { ...defaultCadOutlineRoles(outlines), ...overrides };
   const byHandle = new Map(outlines.map(o => [o.handle, o]));
   for (const o of outlines) if (o.excluded) roles[o.handle] = "ignore";
-  const basin = outlines.find(o => roles[o.handle] === "basin");
-  for (const h of basin?.holeHandles || []) {
-    const hole = byHandle.get(h);
-    if (hole && !hole.excluded && !(h in overrides) && roles[h] !== "basin") roles[h] = "island";
+  for (const basin of outlines.filter(o => roles[o.handle] === "basin")) {
+    for (const h of basin.holeHandles || []) {
+      const hole = byHandle.get(h);
+      if (hole && !hole.excluded && !(h in overrides) && roles[h] !== "basin") roles[h] = "island";
+    }
   }
   return roles;
 }
@@ -924,29 +1050,36 @@ export function previewCadImportResponse(rawResponse, options = {}) {
   // Basin / islands
   const outlines = cadOutlineChoices(response);
   const roles = resolveCadOutlineRoles(outlines, options.outlineRoles || {});
-  const basins = outlines.filter(o => roles[o.handle] === "basin");
-  if (basins.length > 1) warnings.add("Only one basin per design is supported today; the largest selected basin is used and the others stay in the CAD underlay.");
-  const basinOutline = basins[0] || null;
+  // AF-NEXT-010: EVERY outline chosen as "basin" becomes a basin (largest first = primary).
+  const basinOutlines = outlines.filter(o => roles[o.handle] === "basin");
+  const basinOutline = basinOutlines[0] || null;
+  const xdataOf = handle => { const x = entityByHandle.get(handle)?.xdata?.AQUAFLOW
+    || (response.closed_outlines || []).find(o => o.handle === handle)?.xdata?.AQUAFLOW; return x && typeof x === "object" ? x : null; };
   const candidates = outlines.map(o => {
     const points = o.points.map(toPlan);
     return { id: o.handle, layer: o.layer, role: roles[o.handle] || "ignore", points, area: o.area, confidence: o.confidence, reasons: o.reasons,
-      excluded: o.excluded, parentHandle: o.parentHandle, geometry: { type: "freeform", points, closed: true }, meta: null };
+      excluded: o.excluded, parentHandle: o.parentHandle, geometry: { type: "freeform", points, closed: true }, meta: xdataOf(o.handle) };
   });
-  let boundary = null;
-  if (basinOutline) {
-    boundary = candidates.find(c => c.id === basinOutline.handle);
-    const ent = entityByHandle.get(basinOutline.handle);
+  const basinCandidate = o => {
+    const c = candidates.find(x => x.id === o.handle);
+    const ent = entityByHandle.get(o.handle);
     if (ent?.kind === "circle" && Array.isArray(ent.center) && ent.radius > 0)
-      boundary = { ...boundary, geometry: { type: "circle", center: toPlan(ent.center), radius: Number(ent.radius) } };
-  }
-  const islands = outlines.filter(o => roles[o.handle] === "island").map(o => o.points.map(toPlan));
+      return { ...c, geometry: { type: "circle", center: toPlan(ent.center), radius: Number(ent.radius) } };
+    return c;
+  };
+  const boundary = basinOutline ? basinCandidate(basinOutline) : null;
+  // Islands: each attaches to its parent basin (parent_handle), else the basin containing it.
+  const islandRings = outlines.filter(o => roles[o.handle] === "island").map(o => ({ handle: o.handle, parent: o.parentHandle, points: o.points.map(toPlan) }));
   // Holes the backend reported without a matching outline handle (older payloads) are added
   // once; holes that ARE outlines were resolved to roles above (no double islands).
   const listed = new Set(outlines.map(o => o.handle));
-  (basinOutline?.holes || []).forEach((h, i) => {
-    const handle = basinOutline.holeHandles?.[i];
-    if ((handle == null || !listed.has(handle)) && h?.length >= 3) islands.push(dropClosingPoint(h).map(toPlan));
-  });
+  basinOutlines.forEach(b => (b.holes || []).forEach((h, i) => {
+    const handle = b.holeHandles?.[i];
+    if ((handle == null || !listed.has(handle)) && h?.length >= 3) islandRings.push({ handle: null, parent: b.handle, points: dropClosingPoint(h).map(toPlan) });
+  }));
+  const islands = islandRings.map(r => r.points);
+  const previewBasins = buildPreviewBasins(basinOutlines.map(o => ({ handle: o.handle, layer: o.layer, candidate: basinCandidate(o),
+    meta: xdataOf(o.handle), levels: deriveBasinLevels(response, o.handle, options, xdataOf(o.handle)) })), islandRings, warnings);
 
   // Fixtures (review candidates → fixtures)
   const current = options.currentFixtures || [];
@@ -1003,8 +1136,9 @@ export function previewCadImportResponse(rawResponse, options = {}) {
     ...(p.source_handle ? { cadHandle: p.source_handle } : {}),
   }));
   const depthZones = response.entities.filter(e => e.kind === "polyline" && e.closed && defaultCadRole(e.layer) === "depth" && e.points?.length >= 3)
-    .map(e => ({ id: `cad-depth-${e.handle}`, zone: "medium", label: "Imported depth zone",
-      depth: Math.max(.05, Number(options.depth) || .8), color: "#0077b6", points: e.points.map(toPlan) }));
+    .map(e => { const x = e.xdata?.AQUAFLOW?.kind === "depth" ? e.xdata.AQUAFLOW : null;
+      return { id: x?.id ? String(x.id) : `cad-depth-${e.handle}`, zone: x?.zone || "medium", label: x?.label || "Imported depth zone",
+        depth: Math.max(.05, Number(x?.depth) || Number(options.depth) || .8), color: "#0077b6", points: e.points.map(toPlan) }; });
   const measurements = response.entities.filter(e => e.kind === "polyline" && e.points?.length === 2 && defaultCadRole(e.layer) === "measurement")
     .map(e => { const [a, b] = e.points.map(toPlan); return { x1: a.x, y1: a.y, x2: b.x, y2: b.y }; });
 
@@ -1026,7 +1160,7 @@ export function previewCadImportResponse(rawResponse, options = {}) {
     });
   }
 
-  const levels = basinOutline ? deriveCadLevels(response, basinOutline.handle, options) : null;
+  const levels = previewBasins[0]?.levels || null;
   const underlay = options.includeUnderlay === false ? null : createCadUnderlay(response, { frame, filename: options.filename || response.filename });
   const allPoints = [...(boundary?.points || []), ...fixtures];
   const bounds = allPoints.length ? { minX: Math.min(...allPoints.map(p => p.x)), maxX: Math.max(...allPoints.map(p => p.x)),
@@ -1034,7 +1168,7 @@ export function previewCadImportResponse(rawResponse, options = {}) {
   return {
     source: "backend", frame, flipY: frame.flipY, units: CAD_CONTRACT_UNITS[response.units?.name] || response.units?.name || "meters",
     unitless: !!response.units?.unitless, suggestedUnits: CAD_CONTRACT_UNITS[response.units?.suggested] || null,
-    candidates, outlines: candidates, boundary, islands, fixtures, pipes, depthZones, measurements, landSurfaces, levels,
+    candidates, outlines: candidates, boundary, islands, basins: previewBasins, fixtures, pipes, depthZones, measurements, landSurfaces, levels,
     reviewCandidates, groups, underlay, recognition: response.recognition || null, bounds, warnings: [...warnings],
     stats: response.stats || null,
   };

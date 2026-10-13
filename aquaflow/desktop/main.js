@@ -18,6 +18,8 @@ const { buildMenu, setCheckForUpdatesHook } = require("./menu");
 const { initAutoUpdate, checkForUpdates } = require("./updater");
 const { startUiServer } = require("./ui-server");
 const { registerCadIpc } = require("./cad-native");
+// AF-NEXT-006 — atomic project save/open, autosave snapshots, unclean-exit detection.
+const { registerProjectIpc, acquireSessionLock, releaseSessionLock } = require("./project-files");
 
 const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
 
@@ -74,11 +76,13 @@ let enginePort = 0;
 let ui = null;       // loopback UI server { server, port, url, close }
 let shuttingDown = false;
 let pendingOpenPath = null; // AF-PKG-006 — .aquashow path awaiting the ready window
+let sessionInfo = null;     // AF-NEXT-006 — { uncleanExit, previous } from the session lock
+const recoveryDir = () => path.join(app.getPath("userData"), "project-recovery");
 
 // AF-PKG-006 — extract a .aquashow path from a launch/second-instance argv.
 function showPathFromArgv(argv) {
   const arg = (argv || []).find(
-    (a) => typeof a === "string" && a.toLowerCase().endsWith(".aquashow")
+    (a) => typeof a === "string" && /\.(aquashow|aqua|aquapkg)$/i.test(a)
   );
   return arg && fs.existsSync(arg) ? arg : null;
 }
@@ -304,6 +308,11 @@ function installDownloadHandler() {
 async function boot() {
   registerLicenseIpc();
   registerCadIpc({ipcMain,dialog,getMainWindow});
+  // AF-NEXT-006 — a lock left over from the previous run means it never quit cleanly; the
+  // renderer then offers crash recovery from the newest autosave snapshot.
+  try { sessionInfo = acquireSessionLock(recoveryDir()); dbg(`session lock acquired (previous unclean: ${sessionInfo.uncleanExit})`); }
+  catch (e) { sessionInfo = { uncleanExit: false, previous: null, error: e.message }; dbg(`session lock failed: ${e && e.message}`); }
+  registerProjectIpc({ ipcMain, dialog, getMainWindow, userDataDir: app.getPath("userData"), sessionInfo });
   installDownloadHandler();
   // AF-PKG-006 — capture a .aquashow passed on the initial launch command line.
   pendingOpenPath = showPathFromArgv(process.argv.slice(1));
@@ -392,6 +401,7 @@ function fatal(message) {
 async function cleanupAndQuit() {
   if (shuttingDown) return;
   shuttingDown = true;
+  releaseSessionLock(recoveryDir()); // AF-NEXT-006 — clean quit: no recovery prompt next launch
   try { if (ui && ui.close) await ui.close(); } catch { /* ignore */ }
   try { if (engine && engine.child) await stopEngine(engine.child); } catch { /* ignore */ }
   if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();

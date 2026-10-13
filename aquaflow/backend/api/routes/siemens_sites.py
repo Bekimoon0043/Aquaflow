@@ -17,6 +17,7 @@ from services.siemens_readiness import commissioning_readiness
 from services.siemens_acceptance import AcceptanceRunner, AcceptanceStore
 from engine import siemens_devices as devices_model
 from safety.safety_kernel import get_safety_kernel
+from services.preflight import run_preflight, siemens_target
 
 router = APIRouter()
 store = SiteStore(Path(os.getenv("AQUAFLOW_DATA_DIR", Path.home() / ".aquaflow")) / "siemens_sites.json")
@@ -121,6 +122,13 @@ class DownloadRequest(EngineeringRequest):
 
 
 def failure(exc):
+    # AF-NEXT-009: a refused preflight carries the full Diagnostic list (clip/fixture IDs and
+    # fix targets) so the UI can list every problem, not just the first.
+    issues = getattr(exc, "issues", None)
+    if isinstance(issues, list):
+        return HTTPException(400, detail={"message": str(exc), "issues": issues,
+                                          "summary": getattr(exc, "summary", None),
+                                          "resolved_revision": getattr(exc, "resolved_revision", None)})
     return HTTPException(404 if isinstance(exc, KeyError) else 400, detail=str(exc))
 
 
@@ -295,6 +303,11 @@ async def compile_site_show(sid: str, request: CompileRequest):
                     "Open the design this site was created from, or create a Siemens site from the open design "
                     "(Devices → PLC → Siemens Setup → New site from my design).")
         show = store.save_show(sid, clips, request.revision)
+        # Warnings/info from the same preflight the compile just passed (errors would have raised).
+        preflight = run_preflight({"clips": clips}, siemens_target(store.get(sid)))
+        show = {**show, "preflight": {"ok": preflight["ok"], "issues": preflight["issues"],
+                                      "summary": preflight["summary"],
+                                      "resolved_revision": preflight["resolved_revision"]}}
         return {**show, "translation": report} if report else show
     except (ValueError, KeyError, TypeError) as exc:
         raise failure(exc)

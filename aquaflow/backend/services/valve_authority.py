@@ -32,6 +32,33 @@ from dataclasses import dataclass
 from typing import Optional
 
 from services.hydraulic_solver import solve_network, GRAVITY
+from services.equipment_provenance import cite, normalize_provenance, summarize
+
+VALVE_UNITS = {"kv": "m3/h/sqrt(bar)", "flow": "m3/h", "pressure_drop": "bar"}
+
+
+def valve_citation(payload: dict) -> tuple[dict, Optional[float]]:
+    """AF-NEXT-012 — which valve data the result rests on.
+
+    ``valve_model`` names a verified model in the equipment registry (its Kv is used
+    when the payload gives none). Otherwise the Kv / pressure drop is a manually
+    entered value: cited as a generic estimate unless the payload carries a
+    provenance block that meets the trust rules."""
+    model_id = payload.get("valve_model")
+    if model_id:
+        try:
+            from services.equipment_registry import get_equipment_registry
+            rec = get_equipment_registry().get("valve", str(model_id))
+        except Exception:
+            rec = None
+        if rec is None:
+            raise KeyError(f"unknown valve model '{model_id}'")
+        kv = float((rec.get("data") or {}).get("kv") or 0) or None
+        return cite(rec["provenance"], equipment_model=rec["id"], kind="valve",
+                    units=VALVE_UNITS), kv
+    label = str(payload.get("valve_label") or "unspecified valve (manual Kv / ΔP)")
+    prov = normalize_provenance(payload.get("provenance"), kind="valve", model=label)
+    return cite(prov, equipment_model=label, kind="valve", units=VALVE_UNITS), None
 
 BAR_TO_M = 10.19716          # 1 bar of water column ≈ 10.197 m head
 M3H_PER_M3S = 3600.0
@@ -236,6 +263,9 @@ def analyze(payload: dict) -> dict:
     sg = float(payload.get("sg", 1.0))
     flow = float(payload.get("flow_m3h", 0.0))
     dp_rest = float(payload.get("dp_rest_bar", 0.0))
+    citation, model_kv = valve_citation(payload)
+    if model_kv and "kv" not in payload and "dp_valve_bar" not in payload:
+        payload = {**payload, "kv": model_kv}
 
     if "dp_valve_bar" in payload:
         dp_valve = float(payload["dp_valve_bar"])
@@ -251,4 +281,6 @@ def analyze(payload: dict) -> dict:
     rec["dp_rest_bar"] = round(dp_rest, 5)
     rec["installed_characteristic"] = installed_characteristic(
         rec["authority"], rec["recommended_characteristic"])
+    rec["equipment"] = citation
+    rec["data_provenance"] = summarize([citation])
     return rec

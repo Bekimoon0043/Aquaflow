@@ -11,6 +11,8 @@ import socket
 import struct
 import uuid
 import time
+
+from protocols.frame_pacing import paced_loop
 import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -239,12 +241,9 @@ class SACNDriver:
             self._sock = None
 
     async def _loop(self):
-        interval = 1.0 / self.MAX_HZ
-        while self._running:
-            t0 = time.monotonic()
-            await self._send_tick()
-            elapsed = time.monotonic() - t0
-            await asyncio.sleep(max(0, interval - elapsed))
+        # AF-NEXT-001: pace on perf_counter so the 44 Hz ceiling holds on Windows,
+        # where asyncio.sleep wakes up to one 15.6 ms clock tick early.
+        await paced_loop(lambda: self._running, self._send_tick, self.MAX_HZ)
 
     async def _send_tick(self):
         if not self._sock:

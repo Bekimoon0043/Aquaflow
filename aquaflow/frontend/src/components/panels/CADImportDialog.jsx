@@ -375,7 +375,7 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
   };
 
   // Fixtures-only drawings (AutoLISP export) may update a design that already has a basin.
-  const canApply = (!!preview?.boundary || (mode === "update" && !!currentProject.geometry)) && !loading && !result.error && !needsUnits;
+  const canApply = (!!preview?.boundary || !!preview?.basins?.length || (mode === "update" && !!currentProject.geometry)) && !loading && !result.error && !needsUnits;
   const counts = preview ? {
     fixtures: preview.fixtures.length, pipes: preview.pipes.length, islands: preview.islands?.length || 0,
     land: preview.landSurfaces?.length || 0, layers: preview.underlay?.layers?.length || 0,
@@ -458,7 +458,7 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
 
           <div style={{ minWidth: 0 }}>
             {source === "backend" && preview && <>
-              <Section title="Basin and islands" badge={`${outlineList.length} closed outlines`}>
+              <Section title="Basin and islands" badge={`${preview.basins?.length || 0} basin${preview.basins?.length === 1 ? "" : "s"} · ${outlineList.length} closed outlines`}>
                 {!outlineList.length && <p style={{ color: "#ffb39d" }}>No closed outline found. Close the basin boundary in AutoCAD and import again.</p>}
                 {outlineList.map(o => <div key={o.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6, alignItems: "center", padding: "3px 0" }}>
                   <span title={(o.excluded ? [o.excluded] : o.reasons || []).join("; ")} style={{ fontSize: 12, wordBreak: "break-word", color: o.excluded ? "#91adc0" : undefined }}>{o.layer || "0"} · {Number(o.area).toFixed(1)} m²{o.excluded
@@ -467,7 +467,7 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
                   {o.excluded
                     // Depth zones, dimensions, annotations … are never basins or islands (contract `excluded`).
                     ? <select aria-label={`Use outline ${o.id} as`} value="ignore" disabled title={o.excluded} style={{ ...small, opacity: 0.6 }}><option value="ignore">Reference only</option></select>
-                    : <select aria-label={`Use outline ${o.id} as`} value={o.role} onChange={e => setOutlineRoles(r => ({ ...r, ...(e.target.value === "basin" ? Object.fromEntries(outlineList.filter(x => x.role === "basin").map(x => [x.id, "ignore"])) : {}), [o.id]: e.target.value }))} style={small}>
+                    : <select aria-label={`Use outline ${o.id} as`} value={o.role} onChange={e => setOutlineRoles(r => ({ ...r, [o.id]: e.target.value }))} style={small}>
                       <option value="basin">Basin</option><option value="island">Island</option><option value="ignore">Reference only</option>
                     </select>}
                 </div>)}

@@ -173,7 +173,7 @@ export default function SiemensSetupWizard({ onOpenAdvanced }) {
       </div>
       <div className="s7-card">
         <div className="s7-row"><button className="btn primary" disabled={busy} onClick={verify}>Verify connection (read-only)</button>
-          {status?.hardware_verified ? <span className="s7-badge s7-badge--ok">PLC VERIFIED</span> : status?.verified ? <span className="s7-badge s7-badge--warn">PREVIEW ONLY</span> : <span className="s7-badge s7-badge--muted">NOT VERIFIED</span>}</div>
+          {status?.hardware_verified ? <span className="s7-badge s7-badge--ok">PLC VERIFIED</span> : status?.verified ? <span className="s7-badge s7-badge--warn">PREVIEW ONLY — not sent to hardware</span> : <span className="s7-badge s7-badge--muted">NOT VERIFIED</span>}</div>
         <p>Verify only reads. It checks that the PLC runs the AquaFlow program made for this site and that its <SiemensTerm k="heartbeat">heartbeat</SiemensTerm> is moving. Nothing moves.</p>
         {status?.error && <div className="s7-msg s7-msg--bad">{explainS7Error(status.error, site) || status.error}</div>}
       </div>

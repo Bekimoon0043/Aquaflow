@@ -12,6 +12,10 @@
  *     and records getPerfStats() (fps, frame ms, draw calls, triangles, features).
  *     Call it from the dev console:  import("/src/components/preview/__bench__/largeShowBench.js")
  *       .then(m => m.runLargeShowBenchmark(FountainSceneClass, canvas)).then(console.table)
+ *
+ * AF-NEXT-013 adds the 20/100/300-fixture variants (siteForFixtureCount), a fixed camera
+ * path and frame-time statistics. The real-GPU runner is `aquaflow/tools/gpu-bench/run.mjs`
+ * (Electron, hardware acceleration, 1920x1080) driving `gpuBench.html` in this folder.
  */
 
 export const SITE_SCALE = Object.freeze({ valves: 64, pumps: 7, fixtures: 300 });
@@ -80,6 +84,63 @@ export function estimateDrawCalls(deps, site, { legacyLightMarkers = null } = {}
   });
   draws += lightDraws + Math.min(maxCones, site.lights.length);
   return { draws, meshes, nozzles: site.nozzles.length, lights: site.lights.length, types: site.types };
+}
+
+// ─── AF-NEXT-013: 20 / 100 / 300-fixture variants and frame-time statistics ──────────
+
+/** The three benchmark sizes (fixtures). 300 is the real site scale (SITE_SCALE). */
+export const BENCH_SIZES = Object.freeze([20, 100, 300]);
+
+/**
+ * Synthetic site with `fixtures` fixtures. Valves and pumps scale with the fixture
+ * count (64 valves / 7 pumps at 300) so the 20- and 100-fixture variants keep the same
+ * nozzle:light mix (~64 % nozzles) on the same 40 x 22 m basin. Light density therefore
+ * grows with size, which is exactly what the dense all-on exposure case needs.
+ */
+export function siteForFixtureCount(fixtures = SITE_SCALE.fixtures) {
+  const n = Math.max(3, Math.round(Number(fixtures) || SITE_SCALE.fixtures));
+  const valves = Math.max(1, Math.round((SITE_SCALE.valves * n) / SITE_SCALE.fixtures));
+  const pumps = Math.max(1, Math.round((SITE_SCALE.pumps * n) / SITE_SCALE.fixtures));
+  return buildSyntheticSite({ valves, pumps, fixtures: n });
+}
+
+/**
+ * The fixed benchmark camera path at time t (seconds since sampling started): a slow
+ * elevated orbit (one revolution per 60 s) around the basin centre. Pure, so every run
+ * and every machine sees the same views for the same time window.
+ */
+export function benchCameraAt(t, { radius = 30, height = 13, period = 60, start = 0.4 } = {}) {
+  const a = start + (2 * Math.PI * (Number(t) || 0)) / period;
+  return {
+    position: { x: Math.cos(a) * radius, y: height + Math.sin(a * 2) * 1.5, z: Math.sin(a) * radius },
+    target: { x: 0, y: 1.5, z: 0 },
+  };
+}
+
+/** Nearest-rank percentile of a numeric array (p in 0..100). */
+export function percentile(values, p) {
+  const v = (values || []).filter(Number.isFinite).slice().sort((a, b) => a - b);
+  if (!v.length) return null;
+  const rank = Math.min(v.length, Math.max(1, Math.ceil((p / 100) * v.length)));
+  return v[rank - 1];
+}
+
+/** Frame-interval summary (ms in, ms + fps out). */
+export function frameTimeStats(frameMs) {
+  const v = (frameMs || []).filter(x => Number.isFinite(x) && x > 0);
+  if (!v.length) return { frames: 0, medianMs: null, p95Ms: null, p99Ms: null, maxMs: null, meanMs: null, meanFps: null, medianFps: null };
+  const mean = v.reduce((a, b) => a + b, 0) / v.length;
+  const median = percentile(v, 50);
+  const r = x => (x == null ? null : Number(x.toFixed(2)));
+  return {
+    frames: v.length,
+    medianMs: r(median), p95Ms: r(percentile(v, 95)), p99Ms: r(percentile(v, 99)),
+    maxMs: r(Math.max(...v)), meanMs: r(mean),
+    // Throughput: with vsync off, intervals on a GPU-bound machine are bimodal (the CPU
+    // runs ahead, then blocks on the GPU queue), so the MEAN is the honest frame rate.
+    meanFps: r(1000 / mean),
+    medianFps: r(1000 / median),
+  };
 }
 
 /** Browser: run the synthetic site per tier and collect getPerfStats(). */

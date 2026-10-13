@@ -14,6 +14,7 @@ export const MENU_ITEMS = {
     ["Import Audio", "action", "Import Audio"],
     ["Import Show (.aqua file)...", "action", "Import Show"],
     ["Export Show (.aqua file)", "action", "Export Show"],
+    ["Package Project (.aquapkg)...", "action", "Package Project"],
     ["---", "separator"],
     ["Preferences...", "action", "Preferences"],
   ],
@@ -91,6 +92,25 @@ export const MENU_ITEMS = {
   ],
 };
 
+// AF-NEXT-014 — with the Design/Program/Commission/Operate workspace switcher in the top
+// bar, the panel menus move into one "All tools" menu so every existing panel and action
+// stays reachable (nothing is removed). File, Edit and Help stay as menus of their own.
+export const ALL_TOOLS_MENU = "All tools";
+export const ALL_TOOLS_GROUPS = ["Design", "Devices", "Runtime", "AI", "Help"];
+export const WORKSPACE_TOP_MENUS = ["File", "Edit", ALL_TOOLS_MENU, "Help"];
+
+/** "All tools" entries: a ["<group>", "header"] row, then that group's entries. */
+export function allToolsEntries(menu = MENU_ITEMS) {
+  const out = [];
+  for (const group of ALL_TOOLS_GROUPS) {
+    const entries = (menu[group] || []).filter(([, type]) => type !== "separator");
+    if (!entries.length) continue;
+    out.push([group, "header"]);
+    out.push(...entries);
+  }
+  return out;
+}
+
 /** Every action id used by MENU_ITEMS (deduplicated, in menu order). */
 export function menuActionIds(menu = MENU_ITEMS) {
   const ids = [];
@@ -167,8 +187,11 @@ export function createMenuActionHandlers(deps) {
   return {
     "New Show": () => d.openBrowser("new"),
     "Open Show...": () => d.openBrowser("open"),
-    "Save": () => d.openBrowser("save"),
-    "Save As...": () => d.openBrowser("save"),
+    // AF-NEXT-006: Save overwrites the current project file atomically (desktop) or downloads
+    // it (browser); Save As always asks for a path. Package embeds assets into an .aquapkg.
+    "Save": () => d.saveProject({ saveAs: false }),
+    "Save As...": () => d.saveProject({ saveAs: true }),
+    "Package Project": () => d.packageProject(),
     "Import Audio": () => d.setActivePanel("audio"),
     "Import Show": () => d.importShow(),
     "Export Show": () => d.exportShow(),

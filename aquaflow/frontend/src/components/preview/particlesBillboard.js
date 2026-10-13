@@ -29,7 +29,7 @@
  * the clustered light texture (fixtureLightField.js) and handed to the fragment
  * stage as `vFieldLight` — no fixture cap, and no per-pixel light loop.
  */
-import { FIELD_LIGHT_GLSL, HG_G } from "./fixtureLightField";
+import { FIELD_LIGHT_GLSL, HG_G, CLUSTER_K } from "./fixtureLightField";
 
 /** Uniform placeholders; the scene re-points them at its shared FixtureLightField. */
 export function fieldLightUniformStubs(T) {
@@ -39,6 +39,8 @@ export function fieldLightUniformStubs(T) {
     uClusterBounds: { value: new T.Vector4(0, 0, 1, 1) },
     uClusterDim: { value: 1 },
     uFieldCount: { value: 0 },
+    uFieldDensityNormOff: { value: 0 },
+    uFieldMaxGroups: { value: CLUSTER_K / 4 },
   };
 }
 
@@ -47,7 +49,8 @@ export const FIELD_LIGHT_VARYING = /* glsl */ `
 varying vec3 vFieldLight;
 ${FIELD_LIGHT_GLSL}
 vec3 particleFieldLight(vec3 wp){
-  return fieldLight(wp, normalize(cameraPosition - wp), ${HG_G.toFixed(2)}, 1.0);
+  // AF-NEXT-013: energy-normalised by the local fixture overlap (identity for 1-2).
+  return flDensityNormalize(fieldLightN(wp, normalize(cameraPosition - wp), ${HG_G.toFixed(2)}, 1.0, uFieldMaxGroups));
 }
 `;
 

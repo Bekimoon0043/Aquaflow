@@ -1,0 +1,33 @@
+{
+  "schema": "aquaflow.equipment-models/1",
+  "kind": "nozzle",
+  "_comment": "EXAMPLE ONLY — never loaded (files ending .example.json are skipped). The numbers below are illustrative, not a real product or a real measurement. Copy the shape into nozzle.json once you have your own measured data.",
+  "models": [
+    {
+      "id": "EXAMPLE-measured-jet-dn25",
+      "kind": "nozzle",
+      "label": "EXAMPLE measured jet DN25 (illustrative)",
+      "fixture_key": "nozzle_straight_dn25",
+      "example": true,
+      "provenance": {
+        "source": "user_measured",
+        "manufacturer": "",
+        "model": "EXAMPLE measured jet DN25",
+        "document": {"title": "Site test sheet (example)", "url": "", "file": "tests/site-jet-dn25.pdf"},
+        "revision": "run-1",
+        "date": "2026-01-01",
+        "units": {"pressure": "bar", "flow": "L/min", "jet_height": "m"},
+        "confidence": "medium",
+        "licence": "Own measurement — free to use within this project",
+        "notes": "Illustrative values only."
+      },
+      "data": {
+        "nozzle_type": "jet",
+        "pressure_flow_points": [
+          {"pressure": 0.5, "flow": 50.0, "jet_height": 4.0},
+          {"pressure": 1.0, "flow": 71.0, "jet_height": 7.5}
+        ]
+      }
+    }
+  ]
+}

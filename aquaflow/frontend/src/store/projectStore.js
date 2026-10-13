@@ -1,11 +1,15 @@
 import { create } from "zustand";
+import { rememberAssetFile } from "../utils/assetManifest.js";
 
 export const AQUAFLOW_PROJECT_SCHEMA_VERSION = 2;
 
 export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   environment: "night",
   cameraMode: "orbit",
-  quality: "medium",
+  // AF-NEXT-013: "auto" = the tier detected for this PC's GPU (gpuTier.js); an explicit
+  // eco/low/medium/high is honoured (and is a hard override when adaptiveQuality is off).
+  quality: "auto",
+  adaptiveQuality: true,
   // AF-3D-024: ACES stays the default so saved shows look unchanged.
   toneMapping: "aces",
   // AF-3D-008: half-resolution spray/mist pass. Always on for high; opt-in on medium.
@@ -38,6 +42,15 @@ const serializable = (value, fallback) => {
   }
 };
 
+// AF-NEXT-006: the absolute path of a chosen audio file (desktop only) feeds the asset
+// manifest; synthetic Files created on relink/package-open carry it as `aquaflowPath`.
+const audioFilePath = (file, previous) => {
+  let p = null;
+  try { p = file.aquaflowPath || globalThis.window?.aquaflow?.getPathForFile?.(file) || null; } catch { p = null; }
+  if (!p && previous?.path && previous.name === file.name) p = previous.path;
+  return p || null;
+};
+
 const serializableProgrammer = (value) => {
   if (!value) return null;
   const audioFileReference = value.audioFile && typeof value.audioFile === "object"
@@ -46,8 +59,10 @@ const serializableProgrammer = (value) => {
         size: Number(value.audioFile.size) || 0,
         type: value.audioFile.type || "",
         lastModified: Number(value.audioFile.lastModified) || 0,
+        path: audioFilePath(value.audioFile, value.audioFileReference),
       }
     : (value.audioFileReference || null);
+  if (value.audioFile && typeof value.audioFile === "object") rememberAssetFile("audio:programmer", value.audioFile);
   // AudioBuffer and File contents are intentionally excluded. The project retains
   // choreography, beat markers and file identity; the user can relink audio without
   // producing a corrupt or multi-hundred-megabyte JSON document.

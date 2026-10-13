@@ -45,7 +45,9 @@ class SiemensRuntime:
                               "PLCSIM_S7COMM_UNVERIFIED" if site["mode"] == "plcsim" else
                               "S7COMM_CONTRACT_VERIFIED" if state.get("hardware_verified") else
                               "S7COMM_RUNTIME_HARDWARE_UNVERIFIED"),
-                     running=sid in self.tasks and not self.tasks[sid].done())
+                     running=sid in self.tasks and not self.tasks[sid].done(),
+                     # AF-NEXT-009: internal simulation is a preview path, never hardware output.
+                     output_label=("PREVIEW ONLY — not sent to hardware" if site["mode"] == "simulated" else None))
         return state
 
     def diagnostics(self, sid):
@@ -408,6 +410,12 @@ class SiemensRuntime:
         show = site.get("show")
         if not state.get("armed") or not show or show["revision"] != site["revision"]:
             raise ValueError("Compile the show and explicitly arm this saved site first")
+        # AF-NEXT-009 fail-closed gate: re-run the preflight on the saved show for the current
+        # site revision (a show saved by an older compiler gets the current rules too).
+        # Internal simulation never writes S7 and stays available as a labelled preview.
+        if site["mode"] != "simulated":
+            from services.preflight import assert_preflight_ok, siemens_target
+            assert_preflight_ok({"clips": show["clips"]}, siemens_target(site))
         if site["mode"] != "simulated" and not self._allowed():
             raise ValueError("Safety permit is off")
         self._assert_owner(sid, site)

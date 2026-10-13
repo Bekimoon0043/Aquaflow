@@ -1,10 +1,10 @@
 import { classifyFixtureType } from "../hooks/fixtureTypeMap";
+import { evaluateShowFrameAt, lightViewState, normalizeCurve } from "../show/evaluateShowFrame";
 
 const WATER_TYPES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity"]);
 const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
 const LIGHT_TYPES = new Set(["lighting_master", "lighting_red", "lighting_green", "lighting_blue"]);
 const PUMP_TYPES = new Set(["pump_speed"]);
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const hexColor = value => /^#[0-9a-f]{6}$/i.test(value || "") ? value : "#ffffff";
 
 /** Convert editable Show Programmer clips to an isolated 3D visualization. */
@@ -28,12 +28,13 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
       || (MOTION_TYPES.has(type) ? Math.abs(value) > 60 : value < 0 || value > 100)) {
       throw new Error(`${clip.name || clip.id}: invalid timing, value, or fade.`);
     }
-    if ((clip.curveType && clip.curveType !== "linear")
+    // Fade curves are evaluated by the canonical show frame (linear/ease/step).
+    if ((clip.curveType && normalizeCurve(clip.curveType) === null)
       || (clip.effects || []).some(effect => effect.type !== "basic")) {
       throw new Error(`${clip.name || clip.id}: convert complex effects to timed clips before the 3D preview.`);
     }
-    return { fixtureId: fixture.id, type, start, end: start + duration, value, fadeIn, fadeOut,
-      color: hexColor(clip.color), pan: Number.isFinite(Number(clip.pan)) ? Number(clip.pan) : 0,
+    return { id: clip.id, fixtureId: fixture.id, type, start, end: start + duration, value, fadeIn, fadeOut,
+      curveType: normalizeCurve(clip.curveType) || "linear", color: hexColor(clip.color), pan: Number.isFinite(Number(clip.pan)) ? Number(clip.pan) : 0,
       tilt: Number.isFinite(Number(clip.tilt)) ? Number(clip.tilt) : 0 };
   });
   const duration = Math.max(...visualClips.map(clip => clip.end));
@@ -46,12 +47,34 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
   return { id: "full-show-design-preview", name, steps, visualClips };
 }
 
-/** Pure frame evaluation; all values are visual and never reach a hardware driver. */
-export function evaluateFullShowPreview(plan, position, fixtures = [], stopped = false) {
+// Canonical project for a preview plan, cached per (visualClips, fixtures) pair so a
+// 60 fps render loop indexes the show once.
+const EMPTY = Object.freeze([]);
+const planProjects = new WeakMap();
+export function previewPlanProject(plan, fixtures = EMPTY) {
+  const clips = plan.visualClips || EMPTY;
+  let byFixtures = planProjects.get(clips);
+  if (!byFixtures) { byFixtures = new WeakMap(); planProjects.set(clips, byFixtures); }
+  let project = byFixtures.get(fixtures);
+  if (!project) {
+    project = { fixtures, clips: clips.map(clip => ({ id: clip.id, fixtureId: clip.fixtureId, type: clip.type,
+      start: clip.start, end: clip.end, value: clip.value, fadeIn: clip.fadeIn, fadeOut: clip.fadeOut,
+      curveType: clip.curveType, color: clip.color, pan: clip.pan, tilt: clip.tilt })) };
+    byFixtures.set(fixtures, project);
+  }
+  return project;
+}
+
+/**
+ * Pure frame evaluation; all values are visual and never reach a hardware driver.
+ * AF-NEXT-004: levels, fades, colour and overlap come from the canonical show frame;
+ * this adapter only maps the frame onto the renderer's legacy signal shape.
+ */
+export function evaluateFullShowPreview(plan, position, fixtures = EMPTY, stopped = false) {
   const ended = Number(position) >= plan.duration;
-  const time = ((Math.max(0, Number(position) || 0) * 1000) % plan.passMs) / 1000;
+  const frame = evaluateShowFrameAt(previewPlanProject(plan, fixtures), Math.max(0, Number(position) || 0),
+    { loop: { startMs: 0, endMs: plan.passMs }, stopped: stopped || ended });
   const fixtureIntensities = {}, fixtureLightStates = {}, fixtureMotion = {};
-  const byId = new Map(fixtures.map(fixture => [fixture.id, fixture]));
   fixtures.forEach(fixture => {
     const category = classifyFixtureType(fixture.type);
     if (category === "light") fixtureLightStates[fixture.id] = { intensity: 0, color: "#ffffff" };
@@ -59,33 +82,12 @@ export function evaluateFullShowPreview(plan, position, fixtures = [], stopped =
     if (String(fixture.type).startsWith("motion")) fixtureMotion[fixture.id] = { pan: 0, tilt: 0 };
   });
   let pump = 0;
-  const rgb = new Map();
-  if (!stopped && !ended) for (const clip of plan.visualClips) {
-    if (clip.start > time || time >= clip.end) continue;
-    const fraction = Math.min(1, clip.fadeIn ? (time - clip.start) / clip.fadeIn : 1,
-      clip.fadeOut ? (clip.end - time) / clip.fadeOut : 1);
-    const level = clamp(clip.value / 100 * fraction, 0, 1);
-    if (WATER_TYPES.has(clip.type) || (clip.type === "pump_speed" && String(byId.get(clip.fixtureId)?.type).startsWith("nozzle_"))) {
-      fixtureIntensities[clip.fixtureId] = Math.max(fixtureIntensities[clip.fixtureId] || 0, level);
-      if (fixtureMotion[clip.fixtureId]) fixtureMotion[clip.fixtureId] = { pan: clamp(clip.pan, -45, 45), tilt: clamp(clip.tilt, -45, 45) };
-    } else if (clip.type === "lighting_master") {
-      const current = fixtureLightStates[clip.fixtureId];
-      if (current && level >= current.intensity) fixtureLightStates[clip.fixtureId] = { intensity: level, color: clip.color };
-    } else if (LIGHT_TYPES.has(clip.type)) {
-      const channels = rgb.get(clip.fixtureId) || { r: 0, g: 0, b: 0 };
-      channels[clip.type.slice("lighting_".length)[0]] = level;
-      rgb.set(clip.fixtureId, channels);
-    } else if (clip.type === "pump_speed") pump = Math.max(pump, level);
-    else if (fixtureMotion[clip.fixtureId]) {
-      const axis = clip.type === "motion_tilt" ? "tilt" : "pan";
-      fixtureMotion[clip.fixtureId][axis] = clamp(clip.value, -45, 45);
-    }
+  for (const [id, record] of Object.entries(frame.fixtures)) {
+    if (record.kind === "light") fixtureLightStates[id] = lightViewState(record);
+    else if (record.kind === "pump") pump = Math.max(pump, record.level);
+    else if (record.kind !== "valve" && record.kind !== "equipment") fixtureIntensities[id] = record.level;
+    if (fixtureMotion[id] && record.motion) fixtureMotion[id] = { ...record.motion };
   }
-  rgb.forEach((channels, id) => {
-    const intensity = Math.max(channels.r, channels.g, channels.b);
-    fixtureLightStates[id] = { intensity, color: `#${[channels.r, channels.g, channels.b]
-      .map(value => Math.round(value * 255).toString(16).padStart(2, "0")).join("")}` };
-  });
   const active = Object.values(fixtureIntensities).filter(value => value > 0).length;
   const lightsActive = Object.values(fixtureLightStates).filter(state => state.intensity > 0).length;
   const representative = Object.values(fixtureLightStates).find(state => state.intensity > 0);
@@ -95,5 +97,6 @@ export function evaluateFullShowPreview(plan, position, fixtures = [], stopped =
       b: parseInt(color.slice(5, 7), 16) / 255, w: 0 },
     flame: 0, fog: 0, laser: 0, groups: {}, fixtureIntensities, fixtureLightStates, fixtureMotion,
     active, lightsActive, mapped: 0, unmapped: 0, supportSelected: false, protectedSelected: false,
-    stepIndex: 0, passIndex: Math.min(plan.repeat, Math.floor(Math.max(0, Number(position) || 0) * 1000 / plan.passMs) + 1), ended };
+    stepIndex: 0, passIndex: Math.min(plan.repeat, Math.floor(Math.max(0, Number(position) || 0) * 1000 / plan.passMs) + 1), ended,
+    showFrame: frame };
 }

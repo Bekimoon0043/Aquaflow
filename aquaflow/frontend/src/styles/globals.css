@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Rajdhani:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
-
 :root {
   /* ── LuxuryCon Brand Colors ─────────────────────────────── */
   --brand-green:      #0a3320;
@@ -53,9 +51,11 @@
   --border-accent: rgba(201,162,39,0.30);
 
   /* Typography */
-  --font-display: 'Rajdhani', sans-serif;
-  --font-mono:    'JetBrains Mono', monospace;
-  --font-body:    'Inter', sans-serif;
+  /* Release builds must start fully offline. Use fonts included with Windows
+     instead of fetching Google Fonts at runtime. */
+  --font-display: 'Bahnschrift', 'Segoe UI Semibold', 'Segoe UI', sans-serif;
+  --font-mono:    'Cascadia Mono', 'Consolas', 'Courier New', monospace;
+  --font-body:    'Segoe UI', 'Arial', sans-serif;
 
   /* Layout */
   --topbar-h: 48px;

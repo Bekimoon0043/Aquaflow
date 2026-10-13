@@ -1,0 +1,1583 @@
+{
+ "closed_outlines": [
+  {
+   "area_m2": 200.0,
+   "block_path": [],
+   "excluded": null,
+   "handle": "97",
+   "hole_handles": [
+    "98"
+   ],
+   "holes": [
+    [
+     [
+      8.0,
+      3.0
+     ],
+     [
+      12.0,
+      3.0
+     ],
+     [
+      12.0,
+      7.0
+     ],
+     [
+      8.0,
+      7.0
+     ]
+    ]
+   ],
+   "layer": "POOL_OUTLINE",
+   "parent_handle": null,
+   "points": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     20.0,
+     0.0
+    ],
+    [
+     20.0,
+     10.0
+    ],
+    [
+     0.0,
+     10.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "xdata": {
+    "AQUAFLOW": {
+     "depth": 0.8,
+     "floorLevel": -0.8,
+     "id": "basin-33",
+     "kind": "pool",
+     "name": "Basin 1",
+     "wallHeight": 0.8
+    }
+   }
+  },
+  {
+   "area_m2": 16.0,
+   "block_path": [],
+   "excluded": null,
+   "handle": "98",
+   "hole_handles": [],
+   "holes": [],
+   "layer": "POOL_ISLANDS",
+   "parent_handle": "97",
+   "points": [
+    [
+     8.0,
+     3.0
+    ],
+    [
+     12.0,
+     3.0
+    ],
+    [
+     12.0,
+     7.0
+    ],
+    [
+     8.0,
+     7.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "xdata": {
+    "AQUAFLOW": {
+     "basinId": "basin-33",
+     "id": "basin-33-island-1",
+     "kind": "island"
+    }
+   }
+  },
+  {
+   "area_m2": 80.0,
+   "block_path": [],
+   "excluded": null,
+   "handle": "99",
+   "hole_handles": [],
+   "holes": [],
+   "layer": "POOL_OUTLINE",
+   "parent_handle": null,
+   "points": [
+    [
+     26.0,
+     0.0
+    ],
+    [
+     36.0,
+     0.0
+    ],
+    [
+     36.0,
+     8.0
+    ],
+    [
+     26.0,
+     8.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "xdata": {
+    "AQUAFLOW": {
+     "depth": 0.8,
+     "floorLevel": -0.8,
+     "id": "basin-35",
+     "kind": "pool",
+     "name": "Basin 2",
+     "wallHeight": 0.8
+    }
+   }
+  }
+ ],
+ "dxf_version": "AC1027",
+ "entities": [
+  {
+   "block_path": [],
+   "closed": true,
+   "color": 5,
+   "handle": "97",
+   "kind": "polyline",
+   "layer": "POOL_OUTLINE",
+   "points": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     20.0,
+     0.0
+    ],
+    [
+     20.0,
+     10.0
+    ],
+    [
+     0.0,
+     10.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "xdata": {
+    "AQUAFLOW": {
+     "depth": 0.8,
+     "floorLevel": -0.8,
+     "id": "basin-33",
+     "kind": "pool",
+     "name": "Basin 1",
+     "wallHeight": 0.8
+    }
+   },
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "closed": true,
+   "color": 5,
+   "handle": "98",
+   "kind": "polyline",
+   "layer": "POOL_ISLANDS",
+   "points": [
+    [
+     8.0,
+     3.0
+    ],
+    [
+     12.0,
+     3.0
+    ],
+    [
+     12.0,
+     7.0
+    ],
+    [
+     8.0,
+     7.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "xdata": {
+    "AQUAFLOW": {
+     "basinId": "basin-33",
+     "id": "basin-33-island-1",
+     "kind": "island"
+    }
+   },
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "closed": true,
+   "color": 5,
+   "handle": "99",
+   "kind": "polyline",
+   "layer": "POOL_OUTLINE",
+   "points": [
+    [
+     26.0,
+     0.0
+    ],
+    [
+     36.0,
+     0.0
+    ],
+    [
+     36.0,
+     8.0
+    ],
+    [
+     26.0,
+     8.0
+    ]
+   ],
+   "source": "LWPOLYLINE",
+   "xdata": {
+    "AQUAFLOW": {
+     "depth": 0.8,
+     "floorLevel": -0.8,
+     "id": "basin-35",
+     "kind": "pool",
+     "name": "Basin 2",
+     "wallHeight": 0.8
+    }
+   },
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "A6",
+   "height": 0.18,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "A4",
+   "position": [
+    3.2,
+    1.91
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-01",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "A4"
+   ],
+   "center": [
+    3.0,
+    2.0
+   ],
+   "color": 4,
+   "handle": "9D",
+   "kind": "circle",
+   "layer": "NOZZLES",
+   "radius": 0.15,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "A4"
+   ],
+   "closed": false,
+   "color": 4,
+   "handle": "9E",
+   "kind": "polyline",
+   "layer": "NOZZLES",
+   "points": [
+    [
+     3.0,
+     2.0
+    ],
+    [
+     3.15,
+     2.0
+    ]
+   ],
+   "source": "LINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "A4"
+   ],
+   "color": 4,
+   "handle": "9F",
+   "kind": "point",
+   "layer": "NOZZLES",
+   "position": [
+    3.0,
+    2.0
+   ],
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "AC",
+   "height": 0.18,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "AA",
+   "position": [
+    5.7,
+    1.66
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-02",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "AA"
+   ],
+   "center": [
+    5.5,
+    1.75
+   ],
+   "color": 4,
+   "handle": "9D",
+   "kind": "circle",
+   "layer": "NOZZLES",
+   "radius": 0.15,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "AA"
+   ],
+   "closed": false,
+   "color": 4,
+   "handle": "9E",
+   "kind": "polyline",
+   "layer": "NOZZLES",
+   "points": [
+    [
+     5.5,
+     1.75
+    ],
+    [
+     5.65,
+     1.75
+    ]
+   ],
+   "source": "LINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "AA"
+   ],
+   "color": 4,
+   "handle": "9F",
+   "kind": "point",
+   "layer": "NOZZLES",
+   "position": [
+    5.5,
+    1.75
+   ],
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "B2",
+   "height": 0.18,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "B0",
+   "position": [
+    15.2,
+    7.91
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-03",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "B0"
+   ],
+   "center": [
+    15.0,
+    8.0
+   ],
+   "color": 4,
+   "handle": "9D",
+   "kind": "circle",
+   "layer": "NOZZLES",
+   "radius": 0.15,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "B0"
+   ],
+   "closed": false,
+   "color": 4,
+   "handle": "9E",
+   "kind": "polyline",
+   "layer": "NOZZLES",
+   "points": [
+    [
+     15.0,
+     8.0
+    ],
+    [
+     15.15,
+     8.0
+    ]
+   ],
+   "source": "LINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "B0"
+   ],
+   "color": 4,
+   "handle": "9F",
+   "kind": "point",
+   "layer": "NOZZLES",
+   "position": [
+    15.0,
+    8.0
+   ],
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "B8",
+   "height": 0.18,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "B6",
+   "position": [
+    29.2,
+    3.91
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-11",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "B6"
+   ],
+   "center": [
+    29.0,
+    4.0
+   ],
+   "color": 4,
+   "handle": "9D",
+   "kind": "circle",
+   "layer": "NOZZLES",
+   "radius": 0.15,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "B6"
+   ],
+   "closed": false,
+   "color": 4,
+   "handle": "9E",
+   "kind": "polyline",
+   "layer": "NOZZLES",
+   "points": [
+    [
+     29.0,
+     4.0
+    ],
+    [
+     29.15,
+     4.0
+    ]
+   ],
+   "source": "LINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "B6"
+   ],
+   "color": 4,
+   "handle": "9F",
+   "kind": "point",
+   "layer": "NOZZLES",
+   "position": [
+    29.0,
+    4.0
+   ],
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "BE",
+   "height": 0.18,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "BC",
+   "position": [
+    33.2,
+    3.91
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "N-12",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "BC"
+   ],
+   "center": [
+    33.0,
+    4.0
+   ],
+   "color": 4,
+   "handle": "9D",
+   "kind": "circle",
+   "layer": "NOZZLES",
+   "radius": 0.15,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "BC"
+   ],
+   "closed": false,
+   "color": 4,
+   "handle": "9E",
+   "kind": "polyline",
+   "layer": "NOZZLES",
+   "points": [
+    [
+     33.0,
+     4.0
+    ],
+    [
+     33.15,
+     4.0
+    ]
+   ],
+   "source": "LINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "BC"
+   ],
+   "color": 4,
+   "handle": "9F",
+   "kind": "point",
+   "layer": "NOZZLES",
+   "position": [
+    33.0,
+    4.0
+   ],
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "CE",
+   "height": 0.18,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "CC",
+   "position": [
+    2.17,
+    8.91
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "L-01",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "CC"
+   ],
+   "center": [
+    2.0,
+    9.0
+   ],
+   "color": 2,
+   "handle": "C5",
+   "kind": "circle",
+   "layer": "LIGHTS",
+   "radius": 0.12,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "CC"
+   ],
+   "closed": false,
+   "color": 2,
+   "handle": "C6",
+   "kind": "polyline",
+   "layer": "LIGHTS",
+   "points": [
+    [
+     2.0,
+     9.0
+    ],
+    [
+     2.12,
+     9.0
+    ]
+   ],
+   "source": "LINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "CC"
+   ],
+   "color": 2,
+   "handle": "C7",
+   "kind": "point",
+   "layer": "LIGHTS",
+   "position": [
+    2.0,
+    9.0
+   ],
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "D4",
+   "height": 0.18,
+   "kind": "text",
+   "layer": "0",
+   "owner_handle": "D2",
+   "position": [
+    35.17,
+    6.91
+   ],
+   "rotation_deg": 0.0,
+   "source": "ATTRIB",
+   "tag": "ID",
+   "text": "L-11",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "D2"
+   ],
+   "center": [
+    35.0,
+    7.0
+   ],
+   "color": 2,
+   "handle": "C5",
+   "kind": "circle",
+   "layer": "LIGHTS",
+   "radius": 0.12,
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "D2"
+   ],
+   "closed": false,
+   "color": 2,
+   "handle": "C6",
+   "kind": "polyline",
+   "layer": "LIGHTS",
+   "points": [
+    [
+     35.0,
+     7.0
+    ],
+    [
+     35.12,
+     7.0
+    ]
+   ],
+   "source": "LINE",
+   "z": 0.0
+  },
+  {
+   "block_path": [
+    "D2"
+   ],
+   "color": 2,
+   "handle": "C7",
+   "kind": "point",
+   "layer": "LIGHTS",
+   "position": [
+    35.0,
+    7.0
+   ],
+   "z": 0.0
+  },
+  {
+   "block_path": [],
+   "color": 7,
+   "handle": "D8",
+   "height": 0.3,
+   "kind": "text",
+   "layer": "ANNOTATIONS",
+   "position": [
+    0.0,
+    10.6
+   ],
+   "rotation_deg": 0.0,
+   "source": "TEXT",
+   "text": "Two basin plaza",
+   "z": 0.0
+  }
+ ],
+ "extents": {
+  "max": [
+   36.0,
+   10.6
+  ],
+  "min": [
+   0.0,
+   0.0
+  ]
+ },
+ "filename": "two_basins_roundtrip.dxf",
+ "inserts": [
+  {
+   "attribs": {
+    "CHANNEL": "",
+    "HEIGHT": "",
+    "ID": "N-01",
+    "MODEL": "nozzle_geyser"
+   },
+   "block": "AQF_NOZZLE_GEYSER",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "AQF_NOZZLE_GEYSER",
+   "handle": "A4",
+   "instance_id": "A4",
+   "layer": "NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    3.0,
+    2.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {
+    "AQUAFLOW": {
+     "id": "cad-3B",
+     "kind": "fixture",
+     "label": "N-01",
+     "rotation": 0.0,
+     "type": "nozzle_geyser"
+    }
+   }
+  },
+  {
+   "attribs": {
+    "CHANNEL": "",
+    "HEIGHT": "",
+    "ID": "N-02",
+    "MODEL": "nozzle_geyser"
+   },
+   "block": "AQF_NOZZLE_GEYSER",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "AQF_NOZZLE_GEYSER",
+   "handle": "AA",
+   "instance_id": "AA",
+   "layer": "NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    5.5,
+    1.75,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {
+    "AQUAFLOW": {
+     "id": "cad-3E",
+     "kind": "fixture",
+     "label": "N-02",
+     "rotation": 0.0,
+     "type": "nozzle_geyser"
+    }
+   }
+  },
+  {
+   "attribs": {
+    "CHANNEL": "",
+    "HEIGHT": "",
+    "ID": "N-03",
+    "MODEL": "nozzle_geyser"
+   },
+   "block": "AQF_NOZZLE_GEYSER",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "AQF_NOZZLE_GEYSER",
+   "handle": "B0",
+   "instance_id": "B0",
+   "layer": "NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    15.0,
+    8.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {
+    "AQUAFLOW": {
+     "id": "cad-41",
+     "kind": "fixture",
+     "label": "N-03",
+     "rotation": 0.0,
+     "type": "nozzle_geyser"
+    }
+   }
+  },
+  {
+   "attribs": {
+    "CHANNEL": "",
+    "HEIGHT": "",
+    "ID": "N-11",
+    "MODEL": "nozzle_geyser"
+   },
+   "block": "AQF_NOZZLE_GEYSER",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "AQF_NOZZLE_GEYSER",
+   "handle": "B6",
+   "instance_id": "B6",
+   "layer": "NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    29.0,
+    4.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {
+    "AQUAFLOW": {
+     "id": "cad-44",
+     "kind": "fixture",
+     "label": "N-11",
+     "rotation": 0.0,
+     "type": "nozzle_geyser"
+    }
+   }
+  },
+  {
+   "attribs": {
+    "CHANNEL": "",
+    "HEIGHT": "",
+    "ID": "N-12",
+    "MODEL": "nozzle_geyser"
+   },
+   "block": "AQF_NOZZLE_GEYSER",
+   "block_path": [],
+   "color": 4,
+   "depth": 0,
+   "effective_name": "AQF_NOZZLE_GEYSER",
+   "handle": "BC",
+   "instance_id": "BC",
+   "layer": "NOZZLES",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    33.0,
+    4.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {
+    "AQUAFLOW": {
+     "id": "cad-47",
+     "kind": "fixture",
+     "label": "N-12",
+     "rotation": 0.0,
+     "type": "nozzle_geyser"
+    }
+   }
+  },
+  {
+   "attribs": {
+    "CHANNEL": "205",
+    "HEIGHT": "",
+    "ID": "L-01",
+    "MODEL": "light_rgb"
+   },
+   "block": "AQF_LIGHT_RGB",
+   "block_path": [],
+   "color": 2,
+   "depth": 0,
+   "effective_name": "AQF_LIGHT_RGB",
+   "handle": "CC",
+   "instance_id": "CC",
+   "layer": "LIGHTS",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    2.0,
+    9.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {
+    "AQUAFLOW": {
+     "id": "cad-4F",
+     "kind": "fixture",
+     "label": "L-01",
+     "rotation": 0.0,
+     "type": "light_rgb"
+    }
+   }
+  },
+  {
+   "attribs": {
+    "CHANNEL": "",
+    "HEIGHT": "",
+    "ID": "L-11",
+    "MODEL": "light_rgb"
+   },
+   "block": "AQF_LIGHT_RGB",
+   "block_path": [],
+   "color": 2,
+   "depth": 0,
+   "effective_name": "AQF_LIGHT_RGB",
+   "handle": "D2",
+   "instance_id": "D2",
+   "layer": "LIGHTS",
+   "mirrored": false,
+   "parent_handle": null,
+   "position": [
+    35.0,
+    7.0,
+    0.0
+   ],
+   "rotation_deg": 0.0,
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "xdata": {
+    "AQUAFLOW": {
+     "id": "cad-52",
+     "kind": "fixture",
+     "label": "L-11",
+     "rotation": 0.0,
+     "type": "light_rgb"
+    }
+   }
+  }
+ ],
+ "layers": [
+  {
+   "color": 7,
+   "entity_count": 7,
+   "frozen": false,
+   "name": "0",
+   "off": false
+  },
+  {
+   "color": 7,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "Defpoints",
+   "off": false
+  },
+  {
+   "color": 5,
+   "entity_count": 2,
+   "frozen": false,
+   "name": "POOL_OUTLINE",
+   "off": false
+  },
+  {
+   "color": 141,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "WATER_SURFACE",
+   "off": false
+  },
+  {
+   "color": 4,
+   "entity_count": 20,
+   "frozen": false,
+   "name": "NOZZLES",
+   "off": false
+  },
+  {
+   "color": 2,
+   "entity_count": 8,
+   "frozen": false,
+   "name": "LIGHTS",
+   "off": false
+  },
+  {
+   "color": 30,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "PIPEWORK",
+   "off": false
+  },
+  {
+   "color": 8,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "EQUIPMENT",
+   "off": false
+  },
+  {
+   "color": 2,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "MEASUREMENTS",
+   "off": false
+  },
+  {
+   "color": 7,
+   "entity_count": 1,
+   "frozen": false,
+   "name": "ANNOTATIONS",
+   "off": false
+  },
+  {
+   "color": 150,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "DEPTH_ZONES",
+   "off": false
+  },
+  {
+   "color": 5,
+   "entity_count": 1,
+   "frozen": false,
+   "name": "POOL_ISLANDS",
+   "off": false
+  },
+  {
+   "color": 82,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "LANDSCAPE",
+   "off": false
+  },
+  {
+   "color": 1,
+   "entity_count": 0,
+   "frozen": false,
+   "name": "DIMENSIONS",
+   "off": false
+  }
+ ],
+ "recognition": {
+  "basins": [
+   {
+    "area_m2": 200.0,
+    "confidence": 0.99,
+    "hole_handles": [
+     "98"
+    ],
+    "holes": [
+     [
+      [
+       8.0,
+       3.0
+      ],
+      [
+       12.0,
+       3.0
+      ],
+      [
+       12.0,
+       7.0
+      ],
+      [
+       8.0,
+       7.0
+      ]
+     ]
+    ],
+    "layer": "POOL_OUTLINE",
+    "points": [
+     [
+      0.0,
+      0.0
+     ],
+     [
+      20.0,
+      0.0
+     ],
+     [
+      20.0,
+      10.0
+     ],
+     [
+      0.0,
+      10.0
+     ]
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA kind=pool"
+    ],
+    "role": "basin",
+    "source_handle": "97"
+   },
+   {
+    "area_m2": 80.0,
+    "confidence": 0.99,
+    "hole_handles": [],
+    "holes": [],
+    "layer": "POOL_OUTLINE",
+    "points": [
+     [
+      26.0,
+      0.0
+     ],
+     [
+      36.0,
+      0.0
+     ],
+     [
+      36.0,
+      8.0
+     ],
+     [
+      26.0,
+      8.0
+     ]
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA kind=pool"
+    ],
+    "role": "basin",
+    "source_handle": "99"
+   },
+   {
+    "area_m2": 16.0,
+    "confidence": 0.99,
+    "hole_handles": [],
+    "holes": [],
+    "layer": "POOL_ISLANDS",
+    "points": [
+     [
+      8.0,
+      3.0
+     ],
+     [
+      12.0,
+      3.0
+     ],
+     [
+      12.0,
+      7.0
+     ],
+     [
+      8.0,
+      7.0
+     ]
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA kind=island",
+     "closed outline inside basin 97"
+    ],
+    "role": "island",
+    "source_handle": "98"
+   }
+  ],
+  "candidates": [
+   {
+    "aquaflow_id": "cad-3B",
+    "attribs": {
+     "CHANNEL": "",
+     "HEIGHT": "",
+     "ID": "N-01",
+     "MODEL": "nozzle_geyser"
+    },
+    "block": "AQF_NOZZLE_GEYSER",
+    "confidence": 0.98,
+    "field_provenance": {
+     "aquaflow_type": "AQUAFLOW XDATA",
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "aquaflow_type": "nozzle_geyser",
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "nozzle_geyser",
+     "pump_id": null
+    },
+    "group": "block:AQF_NOZZLE_GEYSER",
+    "id": "cand_0",
+    "layer": "NOZZLES",
+    "position": [
+     3.0,
+     2.0
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA type=nozzle_geyser",
+     "attributes ID=N-01, MODEL=nozzle_geyser, HEIGHT=, CHANNEL=",
+     "block name matches NOZZLE",
+     "layer NOZZLES matches NOZZLE"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "A4",
+    "tag": "N-01",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": "cad-3E",
+    "attribs": {
+     "CHANNEL": "",
+     "HEIGHT": "",
+     "ID": "N-02",
+     "MODEL": "nozzle_geyser"
+    },
+    "block": "AQF_NOZZLE_GEYSER",
+    "confidence": 0.98,
+    "field_provenance": {
+     "aquaflow_type": "AQUAFLOW XDATA",
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "aquaflow_type": "nozzle_geyser",
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "nozzle_geyser",
+     "pump_id": null
+    },
+    "group": "block:AQF_NOZZLE_GEYSER",
+    "id": "cand_1",
+    "layer": "NOZZLES",
+    "position": [
+     5.5,
+     1.75
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA type=nozzle_geyser",
+     "attributes ID=N-02, MODEL=nozzle_geyser, HEIGHT=, CHANNEL=",
+     "block name matches NOZZLE",
+     "layer NOZZLES matches NOZZLE"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "AA",
+    "tag": "N-02",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": "cad-41",
+    "attribs": {
+     "CHANNEL": "",
+     "HEIGHT": "",
+     "ID": "N-03",
+     "MODEL": "nozzle_geyser"
+    },
+    "block": "AQF_NOZZLE_GEYSER",
+    "confidence": 0.98,
+    "field_provenance": {
+     "aquaflow_type": "AQUAFLOW XDATA",
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "aquaflow_type": "nozzle_geyser",
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "nozzle_geyser",
+     "pump_id": null
+    },
+    "group": "block:AQF_NOZZLE_GEYSER",
+    "id": "cand_2",
+    "layer": "NOZZLES",
+    "position": [
+     15.0,
+     8.0
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA type=nozzle_geyser",
+     "attributes ID=N-03, MODEL=nozzle_geyser, HEIGHT=, CHANNEL=",
+     "block name matches NOZZLE",
+     "layer NOZZLES matches NOZZLE"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "B0",
+    "tag": "N-03",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": "cad-44",
+    "attribs": {
+     "CHANNEL": "",
+     "HEIGHT": "",
+     "ID": "N-11",
+     "MODEL": "nozzle_geyser"
+    },
+    "block": "AQF_NOZZLE_GEYSER",
+    "confidence": 0.98,
+    "field_provenance": {
+     "aquaflow_type": "AQUAFLOW XDATA",
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "aquaflow_type": "nozzle_geyser",
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "nozzle_geyser",
+     "pump_id": null
+    },
+    "group": "block:AQF_NOZZLE_GEYSER",
+    "id": "cand_3",
+    "layer": "NOZZLES",
+    "position": [
+     29.0,
+     4.0
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA type=nozzle_geyser",
+     "attributes ID=N-11, MODEL=nozzle_geyser, HEIGHT=, CHANNEL=",
+     "block name matches NOZZLE",
+     "layer NOZZLES matches NOZZLE"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "B6",
+    "tag": "N-11",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": "cad-47",
+    "attribs": {
+     "CHANNEL": "",
+     "HEIGHT": "",
+     "ID": "N-12",
+     "MODEL": "nozzle_geyser"
+    },
+    "block": "AQF_NOZZLE_GEYSER",
+    "confidence": 0.98,
+    "field_provenance": {
+     "aquaflow_type": "AQUAFLOW XDATA",
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "aquaflow_type": "nozzle_geyser",
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "nozzle_geyser",
+     "pump_id": null
+    },
+    "group": "block:AQF_NOZZLE_GEYSER",
+    "id": "cand_4",
+    "layer": "NOZZLES",
+    "position": [
+     33.0,
+     4.0
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA type=nozzle_geyser",
+     "attributes ID=N-12, MODEL=nozzle_geyser, HEIGHT=, CHANNEL=",
+     "block name matches NOZZLE",
+     "layer NOZZLES matches NOZZLE"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "BC",
+    "tag": "N-12",
+    "type": "nozzle",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": "cad-4F",
+    "attribs": {
+     "CHANNEL": "205",
+     "HEIGHT": "",
+     "ID": "L-01",
+     "MODEL": "light_rgb"
+    },
+    "block": "AQF_LIGHT_RGB",
+    "confidence": 0.98,
+    "field_provenance": {
+     "aquaflow_type": "AQUAFLOW XDATA",
+     "channel": "attribute CHANNEL (verbatim from drawing)",
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "aquaflow_type": "light_rgb",
+     "channel": "205",
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "light_rgb",
+     "pump_id": null
+    },
+    "group": "block:AQF_LIGHT_RGB",
+    "id": "cand_5",
+    "layer": "LIGHTS",
+    "position": [
+     2.0,
+     9.0
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA type=light_rgb",
+     "attributes ID=L-01, MODEL=light_rgb, HEIGHT=, CHANNEL=205",
+     "block name matches LIGHT",
+     "layer LIGHTS matches LIGHT"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "CC",
+    "tag": "L-01",
+    "type": "light",
+    "z": 0.0
+   },
+   {
+    "aquaflow_id": "cad-52",
+    "attribs": {
+     "CHANNEL": "",
+     "HEIGHT": "",
+     "ID": "L-11",
+     "MODEL": "light_rgb"
+    },
+    "block": "AQF_LIGHT_RGB",
+    "confidence": 0.98,
+    "field_provenance": {
+     "aquaflow_type": "AQUAFLOW XDATA",
+     "model": "attribute MODEL",
+     "tag": "attribute ID"
+    },
+    "fields": {
+     "aquaflow_type": "light_rgb",
+     "dmx_address": null,
+     "flow_lpm": null,
+     "height_m": null,
+     "model": "light_rgb",
+     "pump_id": null
+    },
+    "group": "block:AQF_LIGHT_RGB",
+    "id": "cand_6",
+    "layer": "LIGHTS",
+    "position": [
+     35.0,
+     7.0
+    ],
+    "reasons": [
+     "AQUAFLOW XDATA type=light_rgb",
+     "attributes ID=L-11, MODEL=light_rgb, HEIGHT=, CHANNEL=",
+     "block name matches LIGHT",
+     "layer LIGHTS matches LIGHT"
+    ],
+    "rotation_deg": 0.0,
+    "source_handle": "D2",
+    "tag": "L-11",
+    "type": "light",
+    "z": 0.0
+   }
+  ],
+  "groups": [
+   {
+    "count": 2,
+    "key": "block:AQF_LIGHT_RGB",
+    "mean_confidence": 0.98,
+    "type": "light"
+   },
+   {
+    "count": 5,
+    "key": "block:AQF_NOZZLE_GEYSER",
+    "mean_confidence": 0.98,
+    "type": "nozzle"
+   }
+  ],
+  "land": [],
+  "pipes": [],
+  "template_used": null
+ },
+ "stats": {
+  "entities": 32,
+  "inserts": 7,
+  "parse_ms": 0,
+  "skipped": {
+   "ATTDEF": 28,
+   "DIMENSION": 2
+  },
+  "truncated": false
+ },
+ "tables": [],
+ "units": {
+  "insunits": 6,
+  "name": "m",
+  "suggested": null,
+  "to_m": 1.0,
+  "unitless": false
+ },
+ "version": 1,
+ "warnings": [],
+ "xrefs": []
+}

@@ -227,8 +227,21 @@ def size_network(payload: dict) -> dict:
     }
 
 
+def _pipe_citation(r: PipeSizingResult) -> dict:
+    """AF-NEXT-012 — the sizing rests on nominal standard bore sizes and velocity
+    guidance (generic design data), cited with its units and revision."""
+    from services.equipment_provenance import cite, generic_provenance
+    model = f"pipe {r.pipe_id}" + (f" (suggested {r.suggested_size})" if r.suggested_size else "")
+    prov = generic_provenance("pipe", model=model,
+                              notes="Nominal bore table + velocity guidance; confirm pipe ID "
+                                    "with the pipe manufacturer's dimension table.")
+    return cite(prov, equipment_model=model, kind="pipe",
+                units={"flow": "m3/s", "diameter": "m", "velocity": "m/s"})
+
+
 def _result_to_dict(r: PipeSizingResult) -> dict:
     return {
+        "equipment": _pipe_citation(r),
         "pipe_id": r.pipe_id,
         "flow_m3s": round(r.flow_m3s, 8),
         "flow_lpm": round(r.flow_m3s * 60000.0, 3),
@@ -249,7 +262,9 @@ def _summarize(results: list[dict]) -> dict:
     counts = {"ok": 0, "undersized": 0, "oversized": 0, "no_flow": 0}
     for r in results:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
+    from services.equipment_provenance import summarize
     return {
+        "data_provenance": summarize([r["equipment"] for r in results if r.get("equipment")]),
         "total": len(results),
         **counts,
         "issues": counts.get("undersized", 0) + counts.get("oversized", 0),

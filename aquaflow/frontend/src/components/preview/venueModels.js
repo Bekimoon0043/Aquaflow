@@ -1,5 +1,5 @@
 /** Lightweight site context for the fountain preview. All repeated forms are instanced. */
-import { basinOpening } from './basinGeometry';
+import { basinOpenings } from './basinGeometry';
 
 const noise = (n, salt = 0) => {
   const v = Math.sin(n * 127.1 + salt * 311.7) * 43758.5453;
@@ -22,7 +22,7 @@ export function buildVenue(T, { quality = "medium", environment = "night", ...po
   const layout = venueLayout(pool);
   const day = environment === "day";
   const dusk = environment === "dusk";
-  const low = quality === "low";
+  const low = quality === "low" || quality === "eco";   // eco (AF-NEXT-013) is lighter still
   const dummy = new T.Object3D();
   const color = new T.Color();
   // The fountain owns the scene lighting. Keep distant context legible at night
@@ -49,7 +49,7 @@ export function buildVenue(T, { quality = "medium", environment = "night", ...po
   // A dry, slightly raised promenade keeps the crowd off the wet basin edge.
   const promenadeShape = new T.Shape();
   promenadeShape.absarc(0, 0, layout.stage, 0, Math.PI * 2, false);
-  promenadeShape.holes.push(basinOpening(T, pool));
+  promenadeShape.holes.push(...basinOpenings(T, pool));   // every basin (AF-NEXT-010)
   const promenade = new T.Mesh(
     new T.ShapeGeometry(promenadeShape, 96),
     material(day ? 0x777a72 : 0x252b31, 0.88),

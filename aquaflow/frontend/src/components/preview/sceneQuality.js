@@ -14,7 +14,20 @@
 // canvas resolution); `cones` draws the volumetric fixture beams; `stars` puts the
 // starfield in the night sky dome. `low` keeps all three off — it exists for weak GPUs
 // and its frame budget is already spoken for.
+// AF-NEXT-013 `eco`: entry GPUs (GT 7xx/10xx, Intel HD/UHD, ...) measured fill-rate
+// bound — see docs/evidence/AF-NEXT-013.md. A ~25k shared GPU particle budget drawn as
+// fewer, larger droplets (sceneAdaptive.applyEcoParticles), pixel ratio 1, no
+// shadows/AO/reflection/cones/IBL, post chain WITHOUT MSAA (`msaa: 0`) and with bloom at
+// half resolution (`bloomScale`), half-res spray, and the eco water shader (`eco`).
+// `msaa`/`bloomScale` are optional: tiers that omit them keep the previous behaviour.
 export const QUALITY_CONFIG = {
+  eco:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
+            postfx: true,  bloom: 0.20, smaa: false, ibl: false, ao: false,
+            msaa: 0, bloomScale: 0.5,
+            reflect: 0,   reflectEvery: 1,
+            softDepth: true, softScale: 0.5, cones: false, stars: false,
+            gpuParticles: true, gpuWater: 16384, gpuSpray: 4096,
+            halfResSpray: true, eco: true, cpuParticleBudget: 24000 },
   low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
             postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false,
             reflect: 0,   reflectEvery: 1,
@@ -45,3 +58,7 @@ export const QUALITY_CONFIG = {
  * entirely would have silently zeroed a commissioning number.
  */
 export const CPU_SAMPLE_FRACTION = 1 / 16;
+
+/** Tiers from cheapest to richest — the order adaptive quality steps through. */
+export const TIER_ORDER = Object.freeze(["eco", "low", "medium", "high"]);
+export const isTier = name => TIER_ORDER.includes(name);

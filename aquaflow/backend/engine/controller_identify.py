@@ -18,8 +18,8 @@ Every probe is READ-ONLY by construction:
                        is itself proof a Modbus stack answered with a well-formed
                        exception)                            → engine/modbus_client
   enip_list_identity — EtherNet/IP ListIdentity (0x0063), strictly validated;
-                       identifies Allen-Bradley class devices we can NAME but not
-                       DRIVE (the result says so)            → engine/enip_identify
+                       identifies Allen-Bradley class devices and pre-fills the
+                       enabled pycomm3 driver                 → engine/enip_identify
   ican_probe         — the existing safe probe in engine/ican_discovery (never
                        the 0x08 output opcode); only an ACCEPTED (protocol-valid)
                        candidate becomes a controller
@@ -114,6 +114,8 @@ class DetectedController:
     health: Optional[float] = None   # never assigned by discovery
     configurable: bool = False
     plc_prefill: dict = field(default_factory=dict)
+    verification_level: str = "simulated"
+    verification_summary: str = ""
 
     def __post_init__(self):
         if not self.discovery_id:
@@ -151,6 +153,16 @@ def _from_entry(entry: ControllerEntry, ip: str, port: int, confidence: str,
     for key in ("ip", "gateway_ip"):
         if key in cfg:
             cfg[key] = ip
+    verification_level = entry.verification_level
+    verification_summary = entry.verification_summary
+    # The catalog's I-CAN bench evidence is for one exact site gateway. A valid
+    # probe at another address proves the protocol only, not that new hardware.
+    if entry.id == "ican-music-fountain" and ip != entry.default_config.get("gateway_ip"):
+        verification_level = "simulated"
+        verification_summary = (
+            "Protocol identification succeeded, but the recorded physical evidence belongs to "
+            f"the 192.168.5.2 site gateway, not {ip}; controlled verification is required."
+        )
     det = DetectedController(
         ip=ip, port=port, catalog_id=entry.id,
         label=f"{entry.vendor} {entry.model}",
@@ -159,6 +171,8 @@ def _from_entry(entry: ControllerEntry, ip: str, port: int, confidence: str,
         suggested_config=cfg, configure_in=entry.configure_in, notes=entry.notes,
         protocol=entry.protocol, vendor=entry.vendor, model=entry.model,
         stage=stage, evidence=list(evidence or []),
+        verification_level=verification_level,
+        verification_summary=verification_summary,
     )
     if entry.protocol in CONFIGURABLE_PROTOCOLS and entry.tier == "REAL":
         det.configurable = True

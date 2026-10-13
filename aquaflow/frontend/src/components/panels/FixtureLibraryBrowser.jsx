@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import ProvenanceBadge from "./ProvenanceBadge";
+import { GENERIC_LABEL, isVerifiedProvenance } from "../../data/fixtureProvenance";
 
 const PAGE_SIZE = 60;
 
@@ -35,12 +37,20 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
     [fixtures, tool, query, category]
   );
   const visible = filtered.slice(0, limit);
+  // AF-NEXT-012 — trust summary for the list (library items without a verified
+  // provenance are generic estimates and are labelled as such).
+  const verifiedCount = filtered.filter((fixture) => isVerifiedProvenance(fixture.provenance)).length;
 
   return (
     <div style={{ padding: "8px 10px", borderBottom: "1px solid #0a2030" }}>
       <div style={{ display: "flex", justifyContent: "space-between", color: "#7a96aa", fontSize: 10, marginBottom: 6 }}>
         <span>FIXTURE LIBRARY</span><span>{filtered.length}/{toolFixtures.length}</span>
       </div>
+      {filtered.length > verifiedCount && (
+        <div data-testid="library-generic-note" style={{ color: "#fbbf24", fontSize: 9, marginBottom: 5, lineHeight: 1.4 }}>
+          {verifiedCount === 0 ? "All items: " : `${filtered.length - verifiedCount} item(s): `}{GENERIC_LABEL}
+        </div>
+      )}
       <input
         aria-label="Search fixture library"
         value={query}
@@ -76,7 +86,13 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
             <span aria-hidden="true" style={{ color: fixture.color, fontSize: 13 }}>{fixture.icon}</span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fixture.label}</span>
-              <span style={{ display: "block", color: "#587286", fontSize: 9 }}>{fixture.category || "Other"}</span>
+              <span style={{ display: "flex", justifyContent: "space-between", gap: 4, color: "#587286", fontSize: 9 }}>
+                <span>{fixture.category || "Other"}</span>
+                <ProvenanceBadge provenance={fixture.provenance} compact />
+              </span>
+              {selectedKey === fixture.key && (
+                <span style={{ display: "block", marginTop: 3 }}><ProvenanceBadge provenance={fixture.provenance} /></span>
+              )}
             </span>
           </button>
         ))}

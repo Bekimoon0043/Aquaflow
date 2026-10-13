@@ -17,7 +17,14 @@
  *
  * Kept pure — no three.js, no DOM — so the rules are unit-testable and have exactly one
  * definition, the same discipline as jetPhysics.js and splashMap.js.
+ *
+ * AF-CAD-032: the grid rounding and object snapping now come from the ONE drafting snap
+ * engine (engineering/drafting/snap.js) shared with the 2D designer and pipe drawing.
+ * Ground-plane moves acquire Endpoint/Port/Intersection/Midpoint/Center/Insertion/
+ * Perpendicular/Nearest candidates inside a ~10 px aperture (when the editor supplies an
+ * `osnap` context); SHIFT still means "grid", ALT still suspends all snapping.
  */
+import { snapGridValue, findSnap } from "../../../engineering/drafting/snap";
 
 /** Translation grid, metres. Depence snaps to 10 cm. */
 export const GRID_SNAP_M = 0.10;
@@ -58,9 +65,20 @@ export function snapActive(mods) {
 
 /** Round a scalar to the nearest multiple of `step`. */
 export function snapScalar(value, step = GRID_SNAP_M) {
-  if (!Number.isFinite(value)) return value;
-  if (!Number.isFinite(step) || step <= 0) return value;
-  return Math.round(value / step) * step;
+  return snapGridValue(value, step);
+}
+
+/**
+ * AF-CAD-032 object snap for a ground-plane position. `osnap` = { scene, worldPerPx,
+ * aperturePx?, toPlan(pos)->{x,y}, toWorld({x,y})->{x,z} } built by the scene editor from
+ * the engineering design. Returns the snapped position (y kept) and the snap, or null.
+ */
+export function objectSnapPosition(pos, osnap) {
+  if (!pos || !osnap?.scene || typeof osnap.toPlan !== "function" || typeof osnap.toWorld !== "function") return null;
+  const hit = findSnap(osnap.toPlan(pos), osnap.scene, { worldPerPx: osnap.worldPerPx || 0.01, aperturePx: osnap.aperturePx || 10 });
+  if (!hit?.mode) return null;
+  const w = osnap.toWorld({ x: hit.x, y: hit.y });
+  return { position: { x: w.x, y: pos.y, z: w.z }, snap: hit };
 }
 
 /**
@@ -131,12 +149,18 @@ export function constrainToAxis(delta, axis) {
  * @param {object} delta     raw world-space movement
  * @param {object} opts      { axis, mods, orthographic, step }
  */
-export function resolveDrag(start, delta, { axis = null, mods = null, orthographic = false, step = GRID_SNAP_M } = {}) {
+export function resolveDrag(start, delta, { axis = null, mods = null, orthographic = false, step = GRID_SNAP_M, osnap = null } = {}) {
   const s = start || { x: 0, y: 0, z: 0 };
   let d = constrainToAxis(delta || { x: 0, y: 0, z: 0 }, axis);
   // The CAD-view axis lock only applies when the gizmo has not already picked an axis.
   if (!axis && orthographic && snapActive(mods)) d = lockDominantAxis(d);
   const moved = { x: (s.x || 0) + (d.x || 0), y: (s.y || 0) + (d.y || 0), z: (s.z || 0) + (d.z || 0) };
+  // Object snap on ground-plane moves (free/plane drags only, never while ALT suspends snapping).
+  const planar = !axis || axis === "xz";
+  if (osnap && planar && !(mods && mods.freeform)) {
+    const hit = objectSnapPosition(moved, osnap);
+    if (hit) return hit.position;
+  }
   return snapTranslation(moved, mods, step);
 }
 

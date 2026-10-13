@@ -327,6 +327,26 @@ async def run_manual_pattern(req: ManualPatternRunRequest):
             status_code=400,
             detail=f'manual hardware playback requires confirm="{MANUAL_RUN_CONFIRMATION}"',
         )
+    # AF-NEXT-009 preflight gate: fail closed before anything else is stopped or sent.
+    try:
+        from engine.ican_manual_patterns import normalize_pattern
+        from services.preflight import ican_pattern_project, run_preflight
+        try:
+            devices = _map().to_device_registry()
+        except Exception:
+            devices = []
+        preflight = run_preflight(ican_pattern_project(normalize_pattern(req.pattern), devices),
+                                  {"kind": "ican"})
+    except ManualPatternError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"preflight could not run; pattern not sent: {exc}") from exc
+    if not preflight["ok"]:
+        errors = [i["message"] for i in preflight["issues"] if i["severity"] == "error"]
+        raise HTTPException(status_code=409, detail={
+            "message": "Preflight refused hardware output: " + "; ".join(errors[:3]),
+            "issues": preflight["issues"], "summary": preflight["summary"],
+            "resolved_revision": preflight["resolved_revision"]})
     await _demo().stop("replaced")
     await _pump_test().stop("replaced")
     try:

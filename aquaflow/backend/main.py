@@ -53,7 +53,9 @@ from api.routes.cue_routes import router as cue_router
 from api.routes.fault_routes import router as fault_router
 from api.routes.pump_routes import router as pump_router
 from api.routes.valve_routes import router as valve_router
+from api.routes.equipment_routes import router as equipment_router  # AF-NEXT-012
 from api.routes.dependency_routes import router as dependency_router
+from api.routes.preflight_routes import router as preflight_router  # AF-NEXT-009
 from api.routes.cad_routes import router as cad_router
 from api.routes.cad_exchange_routes import router as cad_exchange_router
 from api.routes.engineering_routes import router as engineering_router
@@ -454,7 +456,9 @@ app.include_router(cue_router,              prefix="/api/cues",       tags=["Cue
 app.include_router(fault_router,            prefix="/api/faults",     tags=["Faults"])
 app.include_router(pump_router,             prefix="/api/pumps",      tags=["Pumps"])
 app.include_router(valve_router,            prefix="/api/valves",     tags=["Valves"])
+app.include_router(equipment_router,        prefix="/api/equipment",  tags=["Equipment"])  # AF-NEXT-012
 app.include_router(dependency_router,       prefix="/api/dependencies", tags=["Dependencies"])
+app.include_router(preflight_router,        prefix="/api/preflight",  tags=["Preflight"])  # AF-NEXT-009
 app.include_router(cad_router,              prefix="/api/cad",        tags=["CAD"])
 app.include_router(cad_exchange_router,     prefix="/api/cad",        tags=["CAD"])
 app.include_router(engineering_router,      prefix="/api/engineering", tags=["Engineering"])

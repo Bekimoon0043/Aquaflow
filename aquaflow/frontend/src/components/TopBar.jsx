@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useShowStore } from "../store/showStore";
 import { useICANPreviewStore } from "../store/icanPreviewStore";
 import useEngineeringStore from "../store/engineeringStore";
@@ -6,11 +6,15 @@ import useProjectStore from "../store/projectStore";
 import { useWS } from "../hooks/WebSocketContext";
 import { trackFeature, hasConsent, setConsent } from "../utils/analytics";
 import { apiGet } from "../utils/apiClient";
-import { downloadShowFile, readShowFile, saveToRecent } from "../utils/showFile";
+import { downloadShowFile } from "../utils/showFile";
+import { saveProject, packageProject, openProjectFile } from "../utils/projectPersistence"; // AF-NEXT-006
 import { setHelpContext } from "../docs/helpContext";
 import { version as FRONTEND_VERSION } from "../../package.json";
 import {
   MENU_ITEMS,
+  ALL_TOOLS_MENU,
+  WORKSPACE_TOP_MENUS,
+  allToolsEntries,
   createMenuActionHandlers,
   desktopVersionFromUserAgent,
   editCommandNotice,
@@ -63,7 +67,7 @@ const SHORTCUT_GROUPS = [
   ["3D Preview", [["Move", "G"], ["Rotate", "R"], ["Scale", "S"], ["Frame selected", "F"], ["Delete object", "Del"]]],
 ];
 
-export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOpenBrowser, isDirty }) {
+export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOpenBrowser, isDirty, workspaceSwitcher = null }) {
   const {
     currentShow,
     playbackState,
@@ -236,13 +240,12 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
   const handleImportFile = async (file) => {
     if (!file) return;
     try {
-      const { state, meta } = await readShowFile(file);
-      loadShow(state);
-      useEngineeringStore.getState().loadProject(state.engineeringProject);
-      useProjectStore.getState().loadProjectDocument(state.projectDocument, state.currentShow?.name);
-      saveToRecent({ name: meta.name, savedAt: meta.savedAt });
-      addServerLog({ level: "info", msg: `Imported show file: ${meta.name}` });
-      showNotice(`Imported ${meta.name}`, "info");
+      // AF-NEXT-006: .aqua or .aquapkg; files with an asset manifest are verified and the
+      // missing/changed-asset report is shown before playback. Legacy files load unchanged.
+      const { state } = await openProjectFile(file);
+      const name = state.currentShow?.name || file.name;
+      addServerLog({ level: "info", msg: `Imported show file: ${name}` });
+      showNotice(`Imported ${name}`, "info");
     } catch (e) {
       addServerLog({ level: "error", msg: `Import failed: ${e.message}` });
       showNotice(`Import failed: ${e.message}`, "error");
@@ -254,6 +257,9 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
     setActivePanel,
     importShow,
     exportShow,
+    // Failures are already reported by projectPersistence (toast + log).
+    saveProject: (options) => { saveProject(options).catch(() => {}); },
+    packageProject: () => { packageProject().catch(() => {}); },
     showPreferences: () => { setAnalyticsOn(hasConsent()); setShowPrefs(true); },
     showAbout: () => setShowAbout(true),
     showShortcuts: () => setShowShortcutHelp(true),
@@ -294,6 +300,9 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
 
   const connOk = connectionState === "connected";
   const activeGroup = PANEL_TO_GROUP[activePanel];
+  // AF-NEXT-014: with workspaces, the panel menus live in one "All tools" menu.
+  const topMenus = workspaceSwitcher ? WORKSPACE_TOP_MENUS : Object.keys(MENU_ITEMS);
+  const menuEntries = (menu) => (menu === ALL_TOOLS_MENU ? allToolsEntries() : MENU_ITEMS[menu]);
 
   return (
     <div
@@ -320,8 +329,10 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
 
       {/* Professional grouped menus */}
       <div style={{ display: "flex", height: "100%", flexShrink: 0 }}>
-        {Object.keys(MENU_ITEMS).map((menu) => (
-          <div key={menu} style={{ position: "relative" }}>
+        {topMenus.map((menu) => (
+          <Fragment key={menu}>
+          {menu === ALL_TOOLS_MENU && workspaceSwitcher}
+          <div style={{ position: "relative" }}>
             <button
               onClick={() => setOpenMenu(openMenu === menu ? null : menu)}
               onMouseEnter={() => {
@@ -330,9 +341,9 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
               style={{
                 height: "100%",
                 padding: "0 10px",
-                background: openMenu === menu || activeGroup === menu ? "rgba(201,162,39,0.12)" : "transparent",
+                background: openMenu === menu || (!workspaceSwitcher && activeGroup === menu) ? "rgba(201,162,39,0.12)" : "transparent",
                 border: "none",
-                borderBottom: activeGroup === menu ? "2px solid var(--border-accent)" : "2px solid transparent",
+                borderBottom: !workspaceSwitcher && activeGroup === menu ? "2px solid var(--border-accent)" : "2px solid transparent",
                 color: openMenu === menu || activeGroup === menu ? "var(--text-accent)" : "var(--text-secondary)",
                 fontSize: 11,
                 cursor: "pointer",
@@ -369,12 +380,18 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
                     zIndex: 700,
                     boxShadow: "0 10px 34px rgba(0,0,0,0.55)",
                     padding: "5px 0",
+                    ...(menu === ALL_TOOLS_MENU ? { maxHeight: "calc(100vh - var(--topbar-h) - 16px)", overflowY: "auto" } : {}),
                   }}
+                  role="menu"
+                  aria-label={menu}
                 >
-                  {MENU_ITEMS[menu].map((entry, i) => {
+                  {menuEntries(menu).map((entry, i) => {
                     const [label, type, value, shortcut] = entry;
                     if (type === "separator") {
                       return <div key={i} style={{ height: 1, background: "var(--border)", margin: "5px 0" }} />;
+                    }
+                    if (type === "header") {
+                      return <div key={i} style={{ padding: "7px 14px 3px", color: "var(--text-muted)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", borderTop: i ? "1px solid var(--border)" : "none", marginTop: i ? 4 : 0 }}>{label}</div>;
                     }
 
                     const isActivePanel = type === "panel" && activePanel === value;
@@ -382,6 +399,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
                     return (
                       <button
                         key={i}
+                        role="menuitem"
                         onClick={() => handleMenuItem(entry)}
                         style={{
                           display: "flex",
@@ -412,6 +430,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
               </>
             )}
           </div>
+          </Fragment>
         ))}
       </div>
 
@@ -494,7 +513,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
       <input
         ref={importInputRef}
         type="file"
-        accept=".aqua,application/json"
+        accept=".aqua,.aquapkg,application/json"
         aria-label="Import show file"
         style={{ display: "none" }}
         onChange={(e) => handleImportFile(e.target.files?.[0])}

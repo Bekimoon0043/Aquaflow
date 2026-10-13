@@ -15,6 +15,7 @@ import struct
 import uuid
 import zlib
 
+from engine.show_frame import evaluate_show_frame_at, valid_hex
 from engine.siemens_contract import (
     CONTRACT_VERSION, DB_SIZE, LIGHT_CAPACITY, LIGHT_COMMAND_OFFSET, PUMP_CAPACITY,
     PUMP_COMMAND_OFFSET, PUMP_MODE_OFFSET, VALVE_CAPACITY,
@@ -408,80 +409,80 @@ class SiteStore:
 
 
 def compile_show(site, clips):
+    """Compile Show Programmer clips into the Siemens absolute-address show.
+
+    AF-NEXT-009: validation runs through the preflight gate (services.preflight), which
+    resolves the show once and collects EVERY problem instead of stopping at the first.
+    For API compatibility a refused show still raises ValueError - a PreflightError whose
+    message names the error(s) and whose ``issues`` carry clip/fixture IDs and fix targets.
+    """
     if not clips or len(clips) > 20000:
         raise ValueError("Provide between 1 and 20000 clips")
+    from services.preflight import PreflightError, run_preflight, siemens_target
+    result = run_preflight({"clips": clips}, siemens_target(site))
+    if not result["ok"]:
+        raise PreflightError(result)
     channels = {c["id"]: c for c in site["channels"]}
-    output, windows = [], {}
+    output = []
     for clip in clips:
         if clip.get("muted") is True or clip.get("disabled") is True:
             continue
         cid = clip.get("fixtureId")
-        if cid not in channels:
-            raise ValueError(f"Unmapped fixture: {cid}; load this Siemens site's engineering layout")
         channel = channels[cid]
-        allowed = {"pump": {"pump_speed"}, "valve": {"solenoid_open"},
-                   "light": {"lighting_master", "lighting_red", "lighting_green", "lighting_blue"}}[channel["kind"]]
-        expected = clip.get("type")
-        if expected not in allowed:
-            raise ValueError(f"Unsupported track {expected} for {channel['name']}")
-        effects = clip.get("effects") or []
-        # The editor adds one redundant basic effect to ordinary manual clips.
-        # Timing/value/fades on the clip are authoritative, as in its timeline preview.
-        basic = (len(effects) == 1 and isinstance(effects[0], dict) and effects[0].get("type") == "basic"
-                 and set(effects[0].get("params", {})) <= {"value"})
-        if effects and not basic:
-            raise ValueError("Bake clip effects into ordinary clips before compiling for Siemens")
-        start = finite(clip.get("startTime", 0), "Clip start", 0, 1800)
         duration = finite(clip.get("duration"), "Clip duration", .1, 1800)
-        if start + duration > 1800:
-            raise ValueError("Shows must be at most 30 minutes")
-        value = finite(clip.get("value"), "Clip value", 0, 100)
-        fade_in = finite(clip.get("fadeIn", 0), "Fade in", 0, duration)
-        fade_out = finite(clip.get("fadeOut", 0), "Fade out", 0, duration)
-        if fade_in + fade_out > duration or clip.get("curveType", "linear") not in (None, "linear"):
-            raise ValueError("Siemens currently supports linear, non-overlapping fades")
-        if channel["kind"] == "pump" and value > channel["max_percent"]:
-            raise ValueError(f"{channel['name']} exceeds its commissioned speed ceiling")
-        if channel["kind"] == "valve" and (value not in (0, 100) or fade_in or fade_out or (value and duration * 1000 < channel["min_on_ms"])):
-            raise ValueError(f"{channel['name']} requires binary 0/100 clips without fades and its minimum on time")
-        output.append({"fixtureId": cid, "type": expected, "startTime": start, "duration": duration,
-                       "value": value, "fadeIn": fade_in, "fadeOut": fade_out})
-        windows.setdefault((cid, expected), []).append(output[-1])
-    for (cid, track_type), group in windows.items():
-        group.sort(key=lambda c: c["startTime"])
-        for previous, current in zip(group, group[1:]):
-            gap = current["startTime"] - previous["startTime"] - previous["duration"]
-            if gap < -1e-6:
-                raise ValueError("Overlapping clips on the same Siemens output")
-        if channels[cid]["kind"] == "valve":
-            on = [c for c in group if c["value"]]
-            for previous, current in zip(on, on[1:]):
-                gap = current["startTime"] - previous["startTime"] - previous["duration"]
-                if gap > 1e-6 and gap * 1000 < channels[cid]["min_off_ms"]:
-                    raise ValueError(f"{channels[cid]['name']} has a gap below its minimum off time")
-    if not output:
-        raise ValueError("The show has no enabled output clips")
+        compiled = {"fixtureId": cid, "type": clip.get("type"),
+                    "startTime": finite(clip.get("startTime", 0), "Clip start", 0, 1800),
+                    "duration": duration, "value": finite(clip.get("value"), "Clip value", 0, 100),
+                    "fadeIn": finite(clip.get("fadeIn", 0), "Fade in", 0, duration),
+                    "fadeOut": finite(clip.get("fadeOut", 0), "Fade out", 0, duration)}
+        # AF-NEXT-004: a light clip's programmed colour is part of the command. Earlier
+        # versions dropped it here, so Show Studio colours never reached the RGB bytes.
+        color = valid_hex(clip.get("color")) if channel["kind"] == "light" else None
+        if color:
+            compiled["color"] = color
+        if clip.get("id") is not None:
+            compiled["id"] = str(clip["id"])[:120]
+        output.append(compiled)
     return {"revision": site["revision"], "signature": signature(site), "clips": output,
             "duration": max(c["startTime"] + c["duration"] for c in output)}
 
 
-def frame_at(site, show, elapsed):
-    values = {c["id"]: ({"master": 100.0, "red": 0.0, "green": 0.0, "blue": 0.0}
-                              if c["kind"] == "light" else 0.0) for c in site["channels"]}
-    for clip in show["clips"]:
-        age = elapsed - clip["startTime"]
-        if 0 <= age < clip["duration"]:
-            factor = min(1, age / clip["fadeIn"]) if clip["fadeIn"] else 1
-            if clip["fadeOut"]:
-                factor = min(factor, (clip["duration"] - age) / clip["fadeOut"])
-            channel = next(c for c in site["channels"] if c["id"] == clip["fixtureId"])
-            value = clip["value"] * factor
-            if channel["kind"] == "light":
-                component = clip["type"].replace("lighting_", "")
-                values[clip["fixtureId"]][component] = value
-            else:
-                values[clip["fixtureId"]] = value
-    return frame_from_values(site, values)
+def show_project(site, show):
+    """The canonical show-frame project for a compiled Siemens show (channels are fixtures)."""
+    return {"fixtures": [{"id": c["id"], "kind": c["kind"]} for c in site["channels"]],
+            "clips": show["clips"], "duration": show.get("duration")}
+
+
+def evaluate_site_frame(site, show, elapsed, *, loop=False, blackout=False, stopped=False):
+    """Canonical frame (engine.show_frame) for a compiled show at `elapsed` seconds."""
+    return evaluate_show_frame_at(show_project(site, show), elapsed,
+                                  {"loop": loop, "blackout": blackout, "stopped": stopped})
+
+
+def frame_values(site, frame):
+    """Map a canonical frame onto Siemens channel values (0..100, light master + RGB)."""
+    values = {}
+    for channel in site["channels"]:
+        record = frame["fixtures"].get(channel["id"])
+        if channel["kind"] == "light":
+            srgb = record["color"]["srgb"] if record else {"r": 0.0, "g": 0.0, "b": 0.0}
+            values[channel["id"]] = {"master": (record["level"] if record else 0.0) * 100,
+                                     "red": srgb["r"] * 100, "green": srgb["g"] * 100, "blue": srgb["b"] * 100}
+        elif channel["kind"] == "valve":
+            values[channel["id"]] = 100.0 if frame["valves"].get(channel["id"], {}).get("open") else 0.0
+        else:
+            values[channel["id"]] = frame["pumps"].get(channel["id"], {}).get("speed", 0.0) * 100
+    return values
+
+
+def frame_at(site, show, elapsed, *, loop=False, blackout=False):
+    """Encode the PLC command bank for `elapsed` seconds of show time.
+
+    Evaluation is delegated to the canonical show frame so the PLC follows exactly what
+    the timeline and 3D preview show, including a light clip's programmed colour.
+    """
+    frame = evaluate_site_frame(site, show, elapsed, loop=loop, blackout=blackout)
+    return frame_from_values(site, frame_values(site, frame))
 
 
 def frame_from_values(site, values):

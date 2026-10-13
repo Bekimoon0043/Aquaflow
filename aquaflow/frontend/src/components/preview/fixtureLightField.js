@@ -43,6 +43,25 @@ export const PHASE_MIX = 0.7;
 /** Brightness gain carried over from the old uniform field (intensity x 1.8 x 0.95). */
 export const FIELD_GAIN = 1.71;
 
+/** AF-NEXT-013: overlapping fixtures that pass with no density normalisation. */
+export const DENSITY_FREE = 2.0;
+/** Exponent of the density normalisation (1 = hold total energy flat beyond FREE). */
+export const DENSITY_EXP = 0.85;
+/** Pool-surface soft knee: linear below KNEE, asymptote KNEE + ROOM (peak channel). */
+export const SURFACE_KNEE = 0.8;
+export const SURFACE_ROOM = 0.2;
+/**
+ * Dense-overlap cap on the pool surface's TOTAL fixture term (after the shader's
+ * reflection/caustic/specular gains): blended in from DENSE_FROM to DENSE_TO overlapping
+ * fixtures, linear below DENSE_KNEE, asymptote DENSE_MAX on the peak channel. 1.0 HDR
+ * keeps saturated LED colours chromatic through ACES at the night exposure (1.55); the
+ * old uncapped dense term reached 2.5-4 and ACES turned it white.
+ */
+export const DENSE_FROM = 2.0;
+export const DENSE_TO = 4.0;
+export const DENSE_KNEE = 0.6;
+export const DENSE_MAX = 1.0;
+
 const DEFAULT_HALF_ANGLE_DEG = 28;
 const DEFAULT_SOFTNESS_DEG = 10;
 
@@ -59,6 +78,8 @@ uniform sampler2D uClusterTex;
 uniform vec4  uClusterBounds;   // xy = origin (world xz), zw = 1 / size
 uniform float uClusterDim;
 uniform int   uFieldCount;
+uniform float uFieldDensityNormOff;   // AF-NEXT-013: 1 = pre-fix response ("before" screenshots only)
+uniform float uFieldMaxGroups;        // AF-NEXT-013: groups of 4 nearest fixtures evaluated (4 = all 16; eco 1)
 
 vec4 flTexel(float idx, float row){
   return texture2D(uLightTex, vec2((idx + 0.5) / ${MAX_FIXTURE_LIGHTS}.0, (row + 0.5) / ${LIGHT_ROWS}.0));
@@ -88,26 +109,77 @@ vec3 flContribution(float id, vec3 p, vec3 toCam, float g, float coneW){
   return r2.rgb * (cone * att * phase);
 }
 
-vec3 fieldLight(vec3 p, vec3 toCam, float g, float coneW){
-  if (uFieldCount <= 0) return vec3(0.0);
+// AF-NEXT-013: accumulate one fixture and track the density statistics.
+void flAccum(float id, vec3 p, vec3 toCam, float g, float coneW, inout vec3 acc, inout vec2 dens){
+  vec3 c = flContribution(id, p, toCam, g, coneW);
+  float e = max(max(c.r, c.g), c.b);
+  acc += c;
+  dens += vec2(e, 0.0);
+  dens.y = max(dens.y, e);
+}
+
+/**
+ * rgb = summed fixture light (linear HDR); a = effective number of overlapping fixtures
+ * at p, n = sum(e_i) / max(e_i) with e_i each fixture's peak channel here: 1 for a lone
+ * fixture however bright, ~N where N comparable fixtures overlap. maxGroups limits
+ * the loop to the first maxGroups x 4 (nearest) fixtures of the cell (eco tier).
+ */
+vec4 fieldLightN(vec3 p, vec3 toCam, float g, float coneW, float maxGroups){
+  if (uFieldCount <= 0) return vec4(0.0);
   vec2 cuv = (p.xz - uClusterBounds.xy) * uClusterBounds.zw;
-  if (cuv.x < 0.0 || cuv.y < 0.0 || cuv.x >= 1.0 || cuv.y >= 1.0) return vec3(0.0);
+  if (cuv.x < 0.0 || cuv.y < 0.0 || cuv.x >= 1.0 || cuv.y >= 1.0) return vec4(0.0);
   vec2 cell = min(floor(cuv * uClusterDim), vec2(uClusterDim - 1.0));
   float cells = uClusterDim * uClusterDim;
   float u = (cell.y * uClusterDim + cell.x + 0.5) / cells;
   vec3 acc = vec3(0.0);
+  vec2 dens = vec2(0.0);
   for (int k = 0; k < ${CLUSTER_K / 4}; k++) {
+    if (float(k) >= maxGroups) break;
     vec4 ids = texture2D(uClusterTex, vec2(u, (float(k) + 0.5) / ${CLUSTER_K / 4}.0));
     if (ids.x < 0.5) break;
-    acc += flContribution(ids.x - 1.0, p, toCam, g, coneW);
+    flAccum(ids.x - 1.0, p, toCam, g, coneW, acc, dens);
     if (ids.y < 0.5) break;
-    acc += flContribution(ids.y - 1.0, p, toCam, g, coneW);
+    flAccum(ids.y - 1.0, p, toCam, g, coneW, acc, dens);
     if (ids.z < 0.5) break;
-    acc += flContribution(ids.z - 1.0, p, toCam, g, coneW);
+    flAccum(ids.z - 1.0, p, toCam, g, coneW, acc, dens);
     if (ids.w < 0.5) break;
-    acc += flContribution(ids.w - 1.0, p, toCam, g, coneW);
+    flAccum(ids.w - 1.0, p, toCam, g, coneW, acc, dens);
   }
-  return acc;
+  return vec4(acc, dens.x / max(dens.y, 1e-6));
+}
+
+vec3 fieldLight(vec3 p, vec3 toCam, float g, float coneW){
+  return fieldLightN(p, toCam, g, coneW, uFieldMaxGroups).rgb;
+}
+
+/**
+ * AF-NEXT-013 energy normalisation for MANY overlapping fixtures. Up to
+ * DENSITY_FREE (2) fully overlapping fixtures pass unchanged — the 1-2 fixture look is
+ * bit-identical. Beyond that the sum is scaled by (FREE / n)^DENSITY_EXP, a uniform
+ * scale, so the hue/chroma of the mix is untouched and only its energy is held back.
+ */
+vec3 flDensityNormalize(vec4 f){
+  return (uFieldDensityNormOff > 0.5 || f.a <= ${DENSITY_FREE.toFixed(1)}) ? f.rgb : f.rgb * pow(${DENSITY_FREE.toFixed(1)} / f.a, ${DENSITY_EXP.toFixed(2)});
+}
+
+/**
+ * The pool-surface soft knee (moved here from the water shader so a test can evaluate
+ * it). Below SURFACE_KNEE the response is linear and unchanged; above, the peak channel
+ * approaches SURFACE_KNEE + SURFACE_ROOM asymptotically. Uniform scale: chroma kept.
+ */
+vec3 flDenseSurface(vec3 c, float n){
+  if (uFieldDensityNormOff > 0.5 || n <= ${DENSE_FROM.toFixed(1)}) return c;
+  float peak = max(max(c.r, c.g), c.b);
+  if (peak <= ${DENSE_KNEE.toFixed(2)}) return c;
+  float room = ${(DENSE_MAX - DENSE_KNEE).toFixed(3)};
+  vec3 capped = c * (${DENSE_KNEE.toFixed(2)} + room * (1.0 - exp(-(peak - ${DENSE_KNEE.toFixed(2)}) / room))) / peak;
+  return mix(c, capped, smoothstep(${DENSE_FROM.toFixed(1)}, ${DENSE_TO.toFixed(1)}, n));
+}
+
+vec3 flSurfaceKnee(vec3 c){
+  float peak = max(max(c.r, c.g), c.b);
+  if (peak <= ${SURFACE_KNEE.toFixed(2)}) return c;
+  return c * (${SURFACE_KNEE.toFixed(2)} + ${SURFACE_ROOM.toFixed(2)} * (1.0 - exp(-(peak - ${SURFACE_KNEE.toFixed(2)}) / ${SURFACE_ROOM.toFixed(2)}))) / peak;
 }
 `;
 
@@ -230,6 +302,54 @@ export function clusteredLight(encoded, clusters, p, toCam, g = HG_G, coneW = 1,
 }
 
 /**
+ * Like clusteredLight, plus the effective overlap count the shader's fieldLightN returns
+ * in .a. `maxGroups` mirrors the eco loop limit (groups of 4 nearest fixtures).
+ */
+export function clusteredLightN(encoded, clusters, p, toCam, g = HG_G, coneW = 1, K = CLUSTER_K, maxGroups = K / 4) {
+  const cell = clusterCellFor(clusters, p.x, p.z);
+  const acc = [0, 0, 0];
+  let eSum = 0, eMax = 0;
+  if (cell < 0) return { rgb: acc, n: 0 };
+  const limit = Math.min(K, maxGroups * 4);
+  for (let k = 0; k < limit; k++) {
+    const id = clusters.cells[cell * K + k];
+    if (id < 0.5) break;
+    const c = lightContribution(encoded[id - 1], p, toCam, g, coneW);
+    acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2];
+    const e = Math.max(c[0], c[1], c[2]);
+    eSum += e; eMax = Math.max(eMax, e);
+  }
+  return { rgb: acc, n: eSum / Math.max(eMax, 1e-6) };
+}
+
+/** JS mirror of flDensityNormalize. */
+export function densityNormalize(rgb, n) {
+  if (!(n > DENSITY_FREE)) return rgb.slice();
+  const k = Math.pow(DENSITY_FREE / n, DENSITY_EXP);
+  return rgb.map(v => v * k);
+}
+
+/** JS mirror of flDenseSurface (total pool-surface fixture term, overlap count n). */
+export function denseSurface(rgb, n) {
+  if (!(n > DENSE_FROM)) return rgb.slice();
+  const peak = Math.max(...rgb);
+  if (peak <= DENSE_KNEE) return rgb.slice();
+  const room = DENSE_MAX - DENSE_KNEE;
+  const k = (DENSE_KNEE + room * (1 - Math.exp(-(peak - DENSE_KNEE) / room))) / peak;
+  const x = Math.min(1, Math.max(0, (n - DENSE_FROM) / (DENSE_TO - DENSE_FROM)));
+  const t = x * x * (3 - 2 * x);
+  return rgb.map(v => v + (v * k - v) * t);
+}
+
+/** JS mirror of flSurfaceKnee. */
+export function surfaceKnee(rgb) {
+  const peak = Math.max(...rgb);
+  if (peak <= SURFACE_KNEE) return rgb.slice();
+  const k = (SURFACE_KNEE + SURFACE_ROOM * (1 - Math.exp(-(peak - SURFACE_KNEE) / SURFACE_ROOM))) / peak;
+  return rgb.map(v => v * k);
+}
+
+/**
  * GPU-side container. Owns the two textures and the uniform objects every shader
  * shares (bind them with `bindFieldLightUniforms`).
  */
@@ -256,6 +376,8 @@ export class FixtureLightField {
       uClusterBounds: { value: new T.Vector4(0, 0, 1, 1) },
       uClusterDim: { value: clusterDim },
       uFieldCount: { value: 0 },
+      uFieldDensityNormOff: { value: 0 },
+      uFieldMaxGroups: { value: clusterK / 4 },
     };
     this.count = 0;
     this._geoKey = "";

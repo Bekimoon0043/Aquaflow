@@ -24,6 +24,9 @@ import { SceneHistory } from "./sceneHistory";
 import {
   TOOLS, DEFAULT_TOOL, readModifiers, matchShortcut, shouldDuplicate, GRID_SNAP_M,
 } from "./editorSnapping";
+// AF-CAD-032/033: the shared drafting kernel (object snap + typed pipe drawing).
+import { buildSnapScene } from "../../../engineering/drafting/snap";
+import { DraftingSession } from "../../../engineering/drafting/session";
 
 const SELECT_COLOR = 0xffb020;
 const HOVER_COLOR = 0x66ccff;
@@ -32,7 +35,7 @@ export class SceneEditor {
   /**
    * @param {object} deps { THREE, scene, camera, renderer, canvas, graph? }
    */
-  constructor({ THREE, scene, camera, renderer, canvas, graph = null }) {
+  constructor({ THREE, scene, camera, renderer, canvas, graph = null, history = null }) {
     this.T = THREE;
     this.scene = scene;
     this.camera = camera;
@@ -61,10 +64,21 @@ export class SceneEditor {
     this.proxies = new Map();   // nodeId -> Mesh
     this.hoveredId = null;
     this._listeners = new Set();
-    this.history = new SceneHistory(this.graph, {
-      limit: 100,
-      onChange: () => this._emit("history-state"),
-    });
+    // AF-CAD-031: the host may inject the shared 2D/3D command history (SharedSceneHistory);
+    // otherwise the editor keeps its own bounded graph history.
+    if (history) {
+      this.history = history;
+      history.setOnChange?.(() => this._emit("history-state"));
+    } else {
+      this.history = new SceneHistory(this.graph, {
+        limit: 100,
+        onChange: () => this._emit("history-state"),
+      });
+    }
+    // AF-CAD-032/033: plan frame for object snapping and drafting (setPlanFrame).
+    this.planFrame = null;
+    this.drafting = null;
+    this._osnap = null;
 
     // Camera navigation state.
     this.focus = new THREE.Vector3(0, 1.2, 0);
@@ -274,6 +288,14 @@ export class SceneEditor {
 
       if (e.button !== 0) return;
 
+      // AF-CAD-033: while a pipe is being drafted, a left click picks a ground point.
+      if (this.drafting) {
+        const gp = this.groundPoint(0);
+        if (gp) this.draftClick({ x: gp.x, z: gp.z }, { shift: !!e.shiftKey });
+        e.preventDefault();
+        return;
+      }
+
       // A gizmo handle wins over everything behind it.
       const handle = this.gizmo.pick(this.raycaster);
       if (handle) {
@@ -281,6 +303,7 @@ export class SceneEditor {
         if (center && this.gizmo.beginDrag(handle, this.raycaster, center)) {
           this._pendingDuplicate = shouldDuplicate(mods);
           this._dragCheckpointed = false;
+          this._osnap = this._osnapContext(this.graph.selected());
           this._dragStart = this.graph.selected().map(id => ({
             id, pos: { ...this.graph.get(id).transform.position },
             rot: { ...this.graph.get(id).transform.rotation },
@@ -320,10 +343,16 @@ export class SceneEditor {
 
       this._setPointer(e);
 
+      if (this.drafting) {
+        const gp = this.groundPoint(0);
+        if (gp) this.draftPointer({ x: gp.x, z: gp.z }, { shift: !!e.shiftKey });
+        return;
+      }
+
       if (this.gizmo.isDragging()) {
         this._dragMoved = true;
         const mods = readModifiers(e);
-        const res = this.gizmo.updateDrag(this.raycaster, mods, { orthographic: this.orthographic });
+        const res = this.gizmo.updateDrag(this.raycaster, mods, { orthographic: this.orthographic, osnap: this._osnap });
         if (res) this._applyDrag(res);
         return;
       }
@@ -346,6 +375,7 @@ export class SceneEditor {
         this._pendingDuplicate = false;
         this._dragStart = null;
         this._dragCheckpointed = false;
+        this._osnap = null;
         if (this._dragMoved) this._emit("transform");
       }
     };
@@ -363,6 +393,10 @@ export class SceneEditor {
       const target = e.target;
       // Never steal keys from a field the designer is typing in.
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (this.drafting && !(e.ctrlKey || e.metaKey)) {
+        const res = this.draftKey(e.key);
+        if (res?.handled) { e.preventDefault(); return; }
+      }
       const cmd = matchShortcut(e);
       if (!cmd) return;
       e.preventDefault();
@@ -638,6 +672,65 @@ export class SceneEditor {
   }
 
   clearHistory() { this.history.clear(); }
+
+  // ── AF-CAD-032/033: plan frame, object snap and pipe drafting ─────────────
+  /**
+   * frame = { toPlan({x,z}) → {x,y}, toWorld({x,y}) → {x,z}, getDesign() → engineering
+   * design {fixtures, pipes, geometry, basins, siteSurfaces}, commitPipe(pipe) }.
+   */
+  setPlanFrame(frame) { this.planFrame = frame || null; }
+
+  /** Metres per screen pixel at the focus distance (snap aperture conversion). */
+  _worldPerPx() {
+    const cam = this.camera;
+    const h = this.canvas?.clientHeight || this.canvas?.height || 800;
+    if (cam?.isOrthographicCamera) return Math.abs((cam.top - cam.bottom) / (cam.zoom || 1)) / h;
+    const dist = cam?.position && this.focus ? cam.position.distanceTo(this.focus) : 20;
+    return (2 * dist * Math.tan(((cam?.fov || 50) * Math.PI) / 360)) / h;
+  }
+
+  _osnapContext(excludeIds = []) {
+    const f = this.planFrame;
+    if (!f?.getDesign) return null;
+    const design = f.getDesign() || {};
+    return {
+      scene: buildSnapScene(design, { exclude: excludeIds }),
+      worldPerPx: this._worldPerPx(),
+      toPlan: (p) => f.toPlan({ x: p.x, z: p.z }),
+      toWorld: (p) => f.toWorld(p),
+    };
+  }
+
+  /** Start drafting a pipe on the ground plane (same session rules as the 2D designer). */
+  beginPipeDraft(settings = {}) {
+    const f = this.planFrame;
+    if (!f) return null;
+    this.drafting = new DraftingSession({
+      getDesign: () => f.getDesign?.() || {},
+      onCreate: (pipe) => { f.commitPipe?.(pipe); this._emit("structure"); },
+      settings,
+    });
+    this._emit("tool");
+    return this.drafting;
+  }
+
+  endPipeDraft() { this.drafting?.cancel(); this.drafting = null; this._emit("tool"); }
+
+  draftPointer(world, { shift = false } = {}) {
+    if (!this.drafting || !this.planFrame) return null;
+    return this.drafting.pointer(this.planFrame.toPlan(world), { worldPerPx: this._worldPerPx(), shift });
+  }
+
+  draftClick(world, { shift = false } = {}) {
+    if (!this.drafting || !this.planFrame) return null;
+    return this.drafting.click(this.planFrame.toPlan(world), { worldPerPx: this._worldPerPx(), shift });
+  }
+
+  draftKey(key) {
+    if (!this.drafting) return { handled: false };
+    if (key === "Escape" && !this.drafting.active) { this.endPipeDraft(); return { handled: true, type: "end" }; }
+    return this.drafting.key(key);
+  }
 
   dispose() {
     const c = this.canvas;

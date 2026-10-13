@@ -1,5 +1,13 @@
 # Session Handover — LuxuryCon Platforms
 
+> **AF-NEXT-015 update (2026-10-13):** controller support and physical evidence are now
+> separate in Device Discovery. Every catalog/device class is labeled **simulated**,
+> **bench verified**, **site commissioned**, or **unsupported**, with its evidence scope.
+> The specific `192.168.5.2` I-CAN path is **bench verified**; no entry is currently
+> **site commissioned**. Art-Net/sACN loopback passed 5/5 and the focused PLC/protocol
+> simulator set passed 223/223. Physical sign-off remains mandatory. See
+> `docs/evidence/AF-NEXT-015.md`.
+
 > **AUTHORITATIVE AquaFlow numbers (2026-07-06, AF-HUB Stage 7):** backend pytest **532
 > passed, 21 skipped, 0 errors** · line coverage **59%** · frontend vitest **231 passed** ·
 > build green. See `AQUAFLOW_STATUS_CANONICAL.md`. Older counts below are point-in-time.

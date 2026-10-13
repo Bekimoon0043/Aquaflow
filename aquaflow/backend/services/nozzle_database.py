@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from services.equipment_provenance import cite, normalize_provenance, is_verified
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 DEFAULT_CATALOG_FILE = DATA_DIR / "nozzle_catalogs.json"
 
@@ -48,6 +50,17 @@ class NozzleModel:
     # Tabulated catalog curve, list of {"pressure","flow","jet_height"?} points.
     pressure_flow_points: list[dict] = field(default_factory=list)
     notes: str = ""
+    # AF-NEXT-012 — where these numbers come from (equipment_provenance schema).
+    # Defaults to a generic estimate: data is never trusted unless it says why.
+    provenance: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.provenance = normalize_provenance(self.provenance, kind="nozzle",
+                                               model=self.model, manufacturer=self.manufacturer)
+
+    def citation(self) -> dict:
+        return cite(self.provenance, equipment_model=f"{self.id} ({self.model})".strip(),
+                    kind="nozzle")
 
     # ── Derived K factor ──────────────────────────────────────────────────────
     def effective_k(self) -> Optional[float]:
@@ -167,17 +180,47 @@ class NozzleModel:
             "nozzle_type": self.nozzle_type,
             "pressure_flow_points": self.pressure_flow_points,
             "notes": self.notes,
+            "provenance": self.provenance,
+            "verified": is_verified(self.provenance),
+            "citation": self.citation(),
         }
 
 
 class NozzleDatabase:
     """In-memory nozzle store organised by manufacturer catalog."""
 
-    def __init__(self, load_defaults: bool = True):
+    def __init__(self, load_defaults: bool = True, load_verified: bool = True):
         self._models: dict[str, NozzleModel] = {}
         self._catalogs: dict[str, set[str]] = {}   # manufacturer -> {model ids}
         if load_defaults:
             self.load_default_catalogs()
+        if load_verified:
+            self.load_verified_models()
+
+    def load_verified_models(self, registry=None) -> int:
+        """AF-NEXT-012 — add manufacturer-datasheet / user-measured nozzles from the
+        equipment registry (data/equipment_models + the user data dir)."""
+        try:
+            from services.equipment_registry import get_equipment_registry
+            reg = registry or get_equipment_registry()
+            records = reg.list("nozzle")
+        except Exception:
+            return 0
+        for r in records:
+            d = r.get("data") or {}
+            prov = r.get("provenance") or {}
+            self.add_model(NozzleModel(
+                id=r["id"],
+                manufacturer=prov.get("manufacturer") or ("User measured" if prov.get("source") == "user_measured" else "Unknown"),
+                model=prov.get("model") or r.get("label", ""),
+                k_factor=(None if d.get("k_factor") in (None, "") else float(d["k_factor"])),
+                orifice_mm=(None if d.get("orifice_mm") in (None, "") else float(d["orifice_mm"])),
+                nozzle_type=str(d.get("nozzle_type", "jet")),
+                pressure_flow_points=list(d.get("pressure_flow_points", [])),
+                notes=str(prov.get("notes", "")),
+                provenance=prov,
+            ))
+        return len(records)
 
     # ── Loading ────────────────────────────────────────────────────────────────
     def load_default_catalogs(self) -> int:
@@ -206,6 +249,9 @@ class NozzleDatabase:
         Returns the number of nozzle models loaded.
         """
         manufacturer = str(catalog.get("manufacturer", "Unknown"))
+        # Catalog-level provenance applies to every model unless the model has its own.
+        # A catalog without one is a generic estimate (normalize_provenance default).
+        catalog_prov = catalog.get("provenance") if isinstance(catalog.get("provenance"), dict) else {}
         loaded = 0
         for n in catalog.get("nozzles", catalog.get("models", [])):
             model = NozzleModel(
@@ -217,6 +263,8 @@ class NozzleDatabase:
                 nozzle_type=str(n.get("nozzle_type", "jet")),
                 pressure_flow_points=list(n.get("pressure_flow_points", [])),
                 notes=str(n.get("notes", "")),
+                provenance=(n.get("provenance") if isinstance(n.get("provenance"), dict)
+                            else catalog_prov),
             )
             self.add_model(model)
             loaded += 1
@@ -250,6 +298,10 @@ class NozzleDatabase:
             "manufacturer": model.manufacturer,
             "model": model.model,
             "k_factor": model.effective_k(),
+            "units": {"pressure": "bar", "flow": "L/min", "jet_height": "m",
+                      "k_factor": "L/min/sqrt(bar)"},
+            "provenance": model.provenance,
+            "citation": model.citation(),
         }
         if pressure is not None:
             result["pressure"] = float(pressure)
@@ -271,4 +323,11 @@ def get_nozzle_database() -> NozzleDatabase:
     global _db
     if _db is None:
         _db = NozzleDatabase()
+    return _db
+
+
+def reload_nozzle_database() -> NozzleDatabase:
+    """Rebuild the singleton (after a verified model is added/removed)."""
+    global _db
+    _db = NozzleDatabase()
     return _db

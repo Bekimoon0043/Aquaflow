@@ -91,6 +91,22 @@ export const ARTICLES = [
     "Export a full engineering package as one ZIP: a cover PDF, the CAD layout (DXF), the Bill of " +
     "Materials (XLSX), the P&ID drawing (SVG), and the dependency/hydraulics JSON — each verified by " +
     "a manifest with checksums."),
+  // AF-NEXT-014: linked from the Commission / Operate workspace guidance.
+  a("safe-commissioning", "Safe Commissioning Procedure", "Hardware",
+    ["commissioning", "plcsim", "sign-off", "procedure", "checklist", "interlock"], ["plc", "devices", "fountain", "operator"],
+    "AquaFlow never arms, starts or pulses physical equipment from its guidance, checklists or " +
+    "diagnostics — those only open the responsible screen. The safe order is: (1) design and program " +
+    "the show, then run Preflight with zero errors; (2) create the Siemens site from the design and " +
+    "prove the program on the PLCSIM test PLC (Siemens Setup → Connect: 'Test PLC: PLCSIM on this PC', " +
+    "then Verify and Test there) — the Lebu pilot and any software or PLCSIM result are NOT evidence " +
+    "that an installation is commissioned; (3) on site, the approved commissioning engineer follows " +
+    "HARDWARE_COMMISSIONING_CHECKLIST.md in the AquaFlow repository: pre-flight with the hardware " +
+    "E-stop tested cold, the simulated host output self-test, real per-protocol transmission, the " +
+    "per-fixture address and channel map, safety verification on real hardware (all must pass), " +
+    "output timing on the wire and a full-show dress run; (4) the results are recorded in " +
+    "AF-HUB-011_COMMISSIONING_RECORD.md and signed off. Only then is the hardware-commissioned flag " +
+    "set; until it is, every screen shows 'simulated output only'. Follow site lockout/tagout and PPE " +
+    "rules, keep an E-stop within reach and do not continue past any failed check."),
 ];
 
 export const CATEGORIES = [...new Set(ARTICLES.map((x) => x.category))];

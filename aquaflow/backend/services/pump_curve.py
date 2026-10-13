@@ -27,6 +27,8 @@ from typing import Optional
 
 import numpy as np
 
+from services.equipment_provenance import cite, normalize_provenance, summarize
+
 GRAVITY = 9.81          # m/s²
 WATER_DENSITY = 1000.0  # kg/m³ (fresh water)
 
@@ -50,6 +52,8 @@ class PumpCurve:
         self.eff_coeffs = eff_coeffs          # (e0, e1, e2) for η(Q), or None
         self.speed_ratio = float(speed_ratio)
         self.rated_speed = float(rated_speed)
+        # AF-NEXT-012 — curve-set provenance; generic estimate unless stated.
+        self.provenance = normalize_provenance(None, kind="pump", model=name)
         self.shutoff_head = self.head(0.0)
         self.max_flow = self._solve_zero_head()
 
@@ -124,7 +128,16 @@ class PumpCurve:
         scaled = PumpCurve(self.c0 * s * s, self.c1 * s, self.c2,
                            name=f"{self.name}@{s:.2f}",
                            eff_coeffs=self.eff_coeffs, speed_ratio=s)
+        scaled.provenance = self.provenance      # same curve set, scaled by affinity laws
         return scaled
+
+    def with_provenance(self, prov) -> "PumpCurve":
+        self.provenance = normalize_provenance(prov, kind="pump", model=self.name)
+        return self
+
+    def citation(self) -> dict:
+        return cite(self.provenance, equipment_model=self.name, kind="pump",
+                    units={"flow": "m3/s", "head": "m", "power": "W"})
 
     # ── Power ─────────────────────────────────────────────────────────────────
     def hydraulic_power(self, q: float, h: Optional[float] = None) -> float:
@@ -143,7 +156,8 @@ class PumpCurve:
         return {"name": self.name, "coeffs": [self.c0, self.c1, self.c2],
                 "shutoff_head_m": round(self.shutoff_head, 4),
                 "max_flow_m3s": round(self.max_flow, 6),
-                "speed_ratio": self.speed_ratio}
+                "speed_ratio": self.speed_ratio,
+                "provenance": self.provenance, "citation": self.citation()}
 
 
 # ── System curve ──────────────────────────────────────────────────────────────
@@ -305,7 +319,14 @@ def operating_point(pump, system: SystemCurve) -> dict:
 
 
 # ── Built-in pump catalog (data integration) ──────────────────────────────────
-# Realistic manufacturer-style H–Q points (flow m³/s, head m).
+# GENERIC H–Q curve sets (flow m³/s, head m). They are shaped like typical fountain
+# pumps but are NOT any manufacturer's published curve — AF-NEXT-012 labels them
+# generic_estimate. Verified pump curves (datasheet / measured) come from the
+# equipment registry (services/equipment_registry.py) and are looked up by id.
+GENERIC_PUMP_PROVENANCE = {
+    "source": "generic_estimate",
+    "notes": "AquaFlow generic pump curve — not a manufacturer curve. Verify with the supplier datasheet.",
+}
 PUMP_CATALOG: dict = {
     "fountain-small": {
         "flows": [0.0, 0.01, 0.02, 0.03, 0.04],
@@ -322,11 +343,27 @@ PUMP_CATALOG: dict = {
 }
 
 
+def _verified_pump(model: str) -> Optional[dict]:
+    try:
+        from services.equipment_registry import get_equipment_registry
+        return get_equipment_registry().get("pump", model)
+    except Exception:
+        return None
+
+
 def load_catalog_pump(model: str) -> PumpCurve:
-    if model not in PUMP_CATALOG:
+    if model in PUMP_CATALOG:
+        d = PUMP_CATALOG[model]
+        return PumpCurve.from_points(d["flows"], d["heads"], name=model).with_provenance(
+            {**GENERIC_PUMP_PROVENANCE, "model": model})
+    rec = _verified_pump(model)
+    if rec is None:
         raise KeyError(f"unknown pump model '{model}'")
-    d = PUMP_CATALOG[model]
-    return PumpCurve.from_points(d["flows"], d["heads"], name=model)
+    d = rec.get("data") or {}
+    eff = d.get("efficiency") or {}
+    eff_points = (eff.get("flows"), eff.get("values")) if eff.get("flows") and eff.get("values") else None
+    return PumpCurve.from_points(d["flows"], d["heads"], name=rec["id"],
+                                 eff_points=eff_points).with_provenance(rec["provenance"])
 
 
 def analyze(payload: dict) -> dict:
@@ -343,8 +380,11 @@ def analyze(payload: dict) -> dict:
     if pspec.get("model"):
         base = load_catalog_pump(pspec["model"])
     else:
+        # Ad-hoc points: generic estimate unless the caller supplies a provenance block
+        # that meets the trust rules (normalize_provenance downgrades otherwise).
         base = PumpCurve.from_points(pspec["flows"], pspec["heads"],
                                      name=pspec.get("name", "pump"))
+        base.with_provenance(pspec.get("provenance"))
     if pspec.get("speed_ratio", 1.0) != 1.0:
         base = base.at_speed(float(pspec["speed_ratio"]))
 
@@ -365,7 +405,10 @@ def analyze(payload: dict) -> dict:
             float(sspec["q_design"]), float(sspec["h_design"]))
 
     op = operating_point(pump, system)
+    citation = base.citation()
+    op["equipment"] = citation
     return {
+        "data_provenance": summarize([citation]),
         "pump": base.to_dict(),
         "configuration": {"count": count, "mode": mode if count > 1 else "single"},
         "system": {"static_head_m": system.static_head, "k": system.k},

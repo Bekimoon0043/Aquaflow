@@ -1050,8 +1050,12 @@ def translate_show(site, clips):
             pump_clips.setdefault(fid, []).append({**_base(clip), "fixtureId": fid, "type": "pump_speed",
                                                    "startTime": start, "duration": duration, "value": capped})
         elif channel and channel["kind"] == "light" and kind in LIGHT_TRACKS:
-            light_clips.append({**_base(clip), "fixtureId": fid, "type": kind, "startTime": start,
-                                "duration": duration, "value": max(0.0, min(100.0, value))})
+            light_clip = {**_base(clip), "fixtureId": fid, "type": kind, "startTime": start,
+                          "duration": duration, "value": max(0.0, min(100.0, value))}
+            # AF-NEXT-004: keep the programmed colour so it reaches the RGB output bytes.
+            if isinstance(clip.get("color"), str) and re.fullmatch(r"#[0-9a-fA-F]{6}", clip["color"]):
+                light_clip["color"] = clip["color"].lower()
+            light_clips.append(light_clip)
         else:
             report["ignored"] += 1
             if fid and fid not in report["ignored_devices"]:

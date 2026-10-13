@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { API_BASE_URL } from "../../config";
 import { useShowStore } from "../../store/showStore";
+import PreflightPanel from "./PreflightPanel";
 
 const API = API_BASE_URL;
 
@@ -81,6 +82,9 @@ export default function CompilePanel() {
       </div>
 
       <div style={{ padding:12, flex:1, overflow:"auto" }}>
+
+        {/* AF-NEXT-009 — preflight gate: every issue, grouped by severity, each with a fix location */}
+        <PreflightPanel />
 
         {/* Current show info */}
         <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10, marginBottom:12 }}>

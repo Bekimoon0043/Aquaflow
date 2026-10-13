@@ -1,6 +1,15 @@
 # AquaFlow Studio — Current Status
 
-**2026-10-13: AutoCAD import + rendering programme (AF-CAD / AF-3D) — installed as 1.2.32**
+**2026-10-13: AF-NEXT release programme — AquaFlow Studio 1.2.33 packaged**
+
+- AF-NEXT-001 through AF-NEXT-015 are implemented and evidenced under `docs/evidence/`.
+- Full release gates: backend **1,248 passed / 21 skipped**; frontend **1,102 passed**; packaged engine and unpacked desktop smoke passed.
+- 1.2.33 adds the guided four-workspace flow, bundled Lebu pilot, unified timeline/3D frame and colour pipeline, CAD/drafting round-trip, data provenance, hydraulics/preflight, recovery, GT 730 adaptive-quality cap and honest per-controller commissioning-evidence labels.
+- Offline desktop startup no longer requests Google Fonts. Startup resources are loopback-only; updates and intentional online services remain optional network features.
+- Hardware stays **not commissioned**. I-CAN's exact recorded path is **bench verified**; no controller is labeled site commissioned.
+- Installer: `aquaflow/desktop/dist/AquaFlowSetup-1.2.33.exe`; SHA-256 `FF9F938CD283060850C0F45DADFB0A16F023F08CDB3FEFFBF7C016FA5019F955`. 1.2.32 is retained for rollback.
+
+**Earlier 2026-10-13 status: AutoCAD import + rendering programme (AF-CAD / AF-3D) — installed as 1.2.32**
 
 - **Installed on this PC as 1.2.32** (silent NSIS upgrade). New engine `resources/engine-1.2.32` bundles ezdxf; packaged smoke test PASS (health, `/api/cad/import` recognises the round-trip test design, `/api/cad/export.dxf` 200). Not yet exercised by hand in the installed UI.
 

@@ -17,10 +17,21 @@
  * maximum and reported as over-demand rather than being silently drawn.
  */
 
-/** Accept a solver record only if it carries a usable exit velocity. */
+/**
+ * Accept a solver record only if it carries a usable exit velocity — or, in the
+ * AF-NEXT-007 engineering preview, an engineering cap (`engineeringCapMs`, the launch
+ * speed whose apex is the height the time-dependent hydraulics deliver at the playhead).
+ */
 export function normalizePhysics(rec) {
   const v = Number(rec?.exitVelocityMs);
-  return Number.isFinite(v) && v > 0 ? rec : null;
+  if (Number.isFinite(v) && v > 0) return rec;
+  return rec && rec.engineeringCapMs != null && Number.isFinite(Number(rec.engineeringCapMs)) ? rec : null;
+}
+
+/** Engineering-preview gate: 0 removes the jet (closed valve, stopped pump, filling pipe). */
+export function engineeringGate(physics) {
+  const g = Number(physics?.engineeringGate);
+  return Number.isFinite(g) ? Math.max(0, Math.min(1, g)) : 1;
 }
 
 /**
@@ -36,6 +47,11 @@ export function launchSpeed(physics, demand, fallbackSpeed, sink, id) {
   const p = normalizePhysics(physics);
   if (!p) return fallbackSpeed;               // unsolved → legacy estimate, unchanged
 
+  // AF-NEXT-007 engineering preview: the delivered hydraulics cap the launch speed.
+  const cap = p.engineeringCapMs != null ? Math.max(0, Number(p.engineeringCapMs)) : Infinity;
+  const v0 = Number(p.exitVelocityMs);
+  if (!(Number.isFinite(v0) && v0 > 0)) return Math.min(fallbackSpeed, cap);
+
   const d = Math.max(0, Number(demand) || 0);
 
   if (d > 1.0 && sink) {
@@ -47,7 +63,7 @@ export function launchSpeed(physics, demand, fallbackSpeed, sink, id) {
     }
   }
 
-  return Number(p.exitVelocityMs) * Math.sqrt(Math.min(d, 1.0));
+  return Math.min(cap, v0 * Math.sqrt(Math.min(d, 1.0)));
 }
 
 /** Ideal free-jet height for a launch speed (v²/2g). */

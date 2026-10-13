@@ -1,0 +1,6 @@
+{
+  "schema": "aquaflow.equipment-models/1",
+  "kind": "light",
+  "_comment": "Bundled verified models. Intentionally empty: AquaFlow ships no manufacturer data without a licence/permission note. Models entered in the UI are saved to $AQUAFLOW_DATA_DIR/equipment_models/light.json. See docs/FIXTURE-DATA-PROVENANCE.md.",
+  "models": []
+}

@@ -202,6 +202,14 @@ writer remains available only through `cad_writer: "r12"`.
 - **Frame:** CAD +Y-up metres, so `cad = (plan_x, -plan_y)` and
   `rotation_cad = -rotation_plan`, the same as `exportCadDxf`.
 
+- **Multi-basin (AF-NEXT-010):** when the design carries `basins[]` (each with `outer`),
+  every basin is written on `POOL_OUTLINE` with XDATA
+  `{"kind": "pool", "id", "name", "depth", "floorLevel"?, "wallHeight"?}` and its islands
+  on `POOL_ISLANDS` with `{"kind": "island", "id": "<basin id>-island-<n>", "basinId"}`.
+  A legacy single-`geometry` design is written exactly as before. On import every outline
+  chosen as `basin` becomes a basin (pool XDATA `id`/`name`/levels are reused); each
+  island attaches to `parent_handle`, else to the smallest chosen basin containing it.
+
 Importing the file back, through `/api/cad/import` or the browser importer,
 reproduces positions within 1 mm and matches every fixture by XDATA.
 

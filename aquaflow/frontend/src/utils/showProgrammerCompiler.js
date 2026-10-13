@@ -7,6 +7,7 @@
 
 // AF-HUB-004B — canonical DMX patch reader + frame size (single source of truth).
 import { readPatch, DMX_CHANNELS_PER_UNIVERSE } from "../runtime/dmxPatch";
+import { evaluateShowFrameAt, lightViewState } from "../show/evaluateShowFrame";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -148,6 +149,39 @@ export function compileShow({
   const fixtureCommands = [];
   const cuePoints = [];
 
+  // AF-NEXT-004: ordinary timed clips (no effects, or only the editor's redundant
+  // "basic" effect) are evaluated by the canonical show frame — the same levels,
+  // fades, overlap policy and colours as the timeline, 3D preview and Siemens runtime.
+  const isPlain = clip => (clip.effects || []).every(effect => effect?.type === 'basic');
+  const plainClips = [];
+  clips.forEach((clip, index) => {
+    if (!isPlain(clip)) return;
+    const targets = clip.fixtureId ? [clip.fixtureId] : (clip.fixtures || []);
+    targets.forEach(fixtureId => plainClips.push({ ...clip, id: clip.id ?? `clip-${index}`, fixtureId }));
+  });
+  if (plainClips.length) {
+    const project = { fixtures, clips: plainClips };
+    const byId = new Map(fixtures.map(fixture => [fixture.id, fixture]));
+    const targeted = new Set(plainClips.map(clip => clip.fixtureId));
+    frames.forEach((frame, fi) => {
+      const evaluated = evaluateShowFrameAt(project, frame.time);
+      for (const fixtureId of targeted) {
+        const fixture = byId.get(fixtureId), record = evaluated.fixtures[fixtureId];
+        if (!fixture || !record) continue;
+        let state = frame.states[fixtureId];
+        if (Object.keys(record.channels).length) {
+          const view = record.kind === 'light' ? lightViewState(record)
+            : { intensity: record.level, color: record.color?.hex || getDefaultFixtureState(fixture.type).color };
+          state = { ...getDefaultFixtureState(fixture.type), intensity: view.intensity, color: view.color, on: view.intensity > 0.01 };
+          frame.states[fixtureId] = state;
+        }
+        if (fi > 0 ? stateChanged(state, frames[fi - 1].states[fixtureId]) : state.on) {
+          fixtureCommands.push({ time: frame.time, fixtureId, type: getFixtureProtocol(fixture), params: stateToProtocolParams(fixture, state) });
+        }
+      }
+    });
+  }
+
   clips.forEach(clip => {
     const clipStart = clip.startTime || 0;
     const clipEnd = clipStart + (clip.duration || 0);
@@ -159,8 +193,8 @@ export function compileShow({
       type: 'effect_start',
     });
 
-    // Process clip effects
-    (clip.effects || []).forEach(effect => {
+    // Process clip effects (plain clips were evaluated canonically above)
+    (isPlain(clip) ? [] : clip.effects || []).forEach(effect => {
       const effectStart = clipStart + (effect.startTime || 0);
       const effectDuration = effect.duration || EFFECT_TEMPLATES[effect.type]?.duration || 1.0;
       const effectEnd = effectStart + effectDuration;

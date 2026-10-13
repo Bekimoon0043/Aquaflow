@@ -1,0 +1,89 @@
+{
+  "format": "AquaFlowPilotManifest",
+  "version": 1,
+  "ticket": "AF-NEXT-002",
+  "project": "aquaflow/samples/lebu-pilot/Lebu_Fountain_Pilot.aqua",
+  "statusRecordedAt": "2026-10-13T00:00:00.000Z",
+  "statusNote": "status/sha256/size were recorded on the authoring PC. Run `cd aquaflow/frontend && npx vite-node ../tools/validate_lebu_fountain.mjs` to re-check on this PC. Only role=project is required to open the pilot; everything else is optional provenance. Large CAD files are referenced by hash and expected location and are NOT committed.",
+  "hardware": {
+    "status": "unmapped",
+    "provisional": true,
+    "addresses": []
+  },
+  "assets": [
+    {
+      "path": "aquaflow/samples/lebu-pilot/Lebu_Fountain_Pilot.aqua",
+      "role": "project",
+      "required": true,
+      "committed": true,
+      "description": "The pilot project. Open it with the Show Browser (Open .aqua) in AquaFlow Studio.",
+      "sha256": "6bc61b77fab3efe5c33be588c8acf7b62d7f4d9872870c33471bfb49444da5dd",
+      "size": 53939,
+      "status": "present"
+    },
+    {
+      "path": "aquaflow/tools/generate_lebu_fountain.mjs",
+      "role": "generator",
+      "required": false,
+      "committed": true,
+      "description": "Regenerates the .aqua and this manifest.",
+      "sha256": "bc9bfbb3deef552b66d36378c57a74564dd413e1c980f0745c4f8df306381787",
+      "size": 25047,
+      "status": "present"
+    },
+    {
+      "path": "aquaflow/tools/validate_lebu_fountain.mjs",
+      "role": "validator",
+      "required": false,
+      "committed": true,
+      "description": "Loads the .aqua through the real loader and re-checks every asset below on this PC.",
+      "sha256": "4a3641ccd651e1a2a762f4a7882fe9519b11f1240fa6a8fa3d6df58bfe31f41f",
+      "size": 4377,
+      "status": "present"
+    },
+    {
+      "path": "lebu fountain.dwg",
+      "role": "source-cad",
+      "required": false,
+      "committed": false,
+      "expectedLocation": "unknown: the original DWG was not found on the authoring PC",
+      "description": "Original drawing (AC1021, metres). Only the basin outline on 'Layer 06$fountain' is used.",
+      "sha256": null,
+      "size": null,
+      "status": "missing"
+    },
+    {
+      "path": "outputs/lebu_fountain_converted.dxf",
+      "role": "derived-cad",
+      "required": false,
+      "committed": false,
+      "expectedLocation": "<repo>/outputs/ (gitignored)",
+      "description": "LibreDWG dwg2dxf conversion of the DWG; evidence for the basin coordinates. Needed only to re-import the CAD underlay.",
+      "sha256": "81164a6e11ac309f6eb6faecfb392101395c02c5565f8718e36915b155906577",
+      "size": 81921612,
+      "status": "present"
+    },
+    {
+      "path": "outputs/lebu_fountain.min.json",
+      "role": "derived-cad-intermediate",
+      "required": false,
+      "committed": false,
+      "expectedLocation": "<repo>/outputs/ (gitignored)",
+      "description": "LibreDWG minified JSON dump used by .tools/analyze_libredwg_json.py to locate the fountain layer.",
+      "sha256": "77c9fde476aa7abe8d96a22283d5a5b771560dc710d4bd73f8fb23aff589516d",
+      "size": 202495048,
+      "status": "present"
+    },
+    {
+      "path": "Scene 9_1.png",
+      "role": "reference-render",
+      "required": false,
+      "committed": false,
+      "expectedLocation": "unknown: the render image was not found on the authoring PC",
+      "description": "Visual reference from which fixture placement and colours were interpreted.",
+      "sha256": null,
+      "size": null,
+      "status": "missing"
+    }
+  ]
+}

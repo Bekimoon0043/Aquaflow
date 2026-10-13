@@ -217,11 +217,14 @@ export function colorFromSignalColor(scene, value, fallback = "#ffffff") {
   }
 
   if (value && typeof value === "object") {
-    return new T.Color(
-      value.r ?? 1,
-      value.g ?? 1,
-      value.b ?? 1
-    );
+    // AF-NEXT-013 (docs/COLOR-PIPELINE.md): signal colours are sRGB-ENCODED 0..1 — the
+    // same numbers the HUD shows as R/G/B x 255 and the drivers send as DMX/PLC bytes.
+    // new THREE.Color(r, g, b) would take them as linear and wash every mid-tone out;
+    // decode explicitly so {r,g,b} and the equivalent "#rrggbb" give the same colour.
+    const c = new T.Color();
+    const r = value.r ?? 1, g = value.g ?? 1, b = value.b ?? 1;
+    if (T.SRGBColorSpace && typeof c.setRGB === "function") return c.setRGB(r, g, b, T.SRGBColorSpace);
+    return c.setRGB(r, g, b);
   }
 
   return new T.Color(fallback);

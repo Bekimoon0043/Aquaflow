@@ -7,15 +7,17 @@
  * - Screenshot and video export
  */
 import { deriveRuntimeSignals } from "../../utils/runtimeSignalSelector";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { FountainScene, ENVIRONMENTS, CAMERA_MODES, RENDER_QUALITY } from "./FountainScene_v6";
 import { useEngineeringSync } from "../../hooks/useEngineeringSync";
+import { normalizeCameraViews, resolveCameraView, NAMED_CAMERA_MODE } from "../../utils/cameraViews";
 import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
 import useProjectStore from "../../store/projectStore";
 import { useICANPreviewStore } from "../../store/icanPreviewStore";
 import { evaluateICANPreview } from "../../utils/icanPatternPreview";
 import ICANPreviewControls from "./ICANPreviewControls";
+import HydraulicPreviewPanel, { useEngineeringPreview } from "./HydraulicPreviewPanel";
 // AF-3D-VID-001 - baked (frame-exact) video render.
 import { planBake, etaSeconds } from "../../video/bakedTimeline";
 import { createBakeSampler } from "../../video/bakeSignalSampler";
@@ -23,11 +25,17 @@ import { createBakeSampler } from "../../video/bakeSignalSampler";
 import { SceneEditor } from "./editor/sceneEditor";
 import { SceneGraph } from "./editor/sceneGraph";
 import { defaultVenueModels } from "./modelLibrary";
+// AF-NEXT-013: GPU-aware starting tier, eco extras and adaptive quality.
+import { detectGpuProfile, resolveStartTier, resolveTierLimit } from "./gpuTier";
+import { applyTierExtras, applyRenderScale, AdaptiveQualityController } from "./sceneAdaptive";
 import {
   importDesign, importEngineeringFixtures, importSiteModels, graphToNozzles, graphToLights,
   graphToEngineeringFixtures, graphToSiteModels, reconcileEngineeringGraph,
 } from "./editor/fixtureBridge";
 import { poolCenter, engineeringToWorld } from "../../engineering/geometryContract";
+// AF-CAD-031..033: shared 2D/3D command history + plan frame for snapping and drafting.
+import { createPlanFrame, createStoreSceneHistory } from "./editor/engineeringDraftingBridge";
+import { sharedDraftingHistory } from "../../engineering/drafting/commands";
 import {
   EditorToolbar, LibraryPalette, SceneTree, Inspector, ShortcutHint, useLibraryDrop,
 } from "./editor/ui/workspaceUI";
@@ -100,7 +108,20 @@ export default function PreviewPanel() {
   const showPerf = renderSettings.showPerformance;
   const setEnv = setRenderField("environment");
   const setCam = setRenderField("cameraMode");
+  // AF-NEXT-002: project-saved named views (render.cameraViews / activeCameraView).
+  const cameraViews = normalizeCameraViews(renderSettings.cameraViews);
+  const activeCameraView = renderSettings.activeCameraView || null;
+  const selectCameraView = (id) => updateRender({ cameraMode: NAMED_CAMERA_MODE, activeCameraView: id });
   const setQuality = setRenderField("quality");
+  // AF-NEXT-013: the tier actually rendered. Starts from the GPU profile (auto) or the
+  // user's choice, then adaptive quality may step it down/up at runtime. Not saved.
+  const adaptiveQuality = renderSettings.adaptiveQuality !== false;
+  const setAdaptiveQuality = setRenderField("adaptiveQuality");
+  const gpuProfile = useMemo(() => detectGpuProfile(), []);
+  const startTier = resolveStartTier({ quality, adaptive: adaptiveQuality, profile: gpuProfile });
+  const tierLimit = resolveTierLimit({ quality, adaptive: adaptiveQuality, profile: gpuProfile });
+  const [effectiveQuality, setEffectiveQuality] = useState(startTier);
+  useEffect(() => { setEffectiveQuality(startTier); }, [startTier]);
   const toneMapping = renderSettings.toneMapping || "aces";
   const setToneMapping = setRenderField("toneMapping");
   const halfResSpray = !!renderSettings.halfResSpray;
@@ -318,16 +339,19 @@ if (sitePreview.active && sitePreview.plan) {
 
   // Live engineering sync
   const { hasData } = useEngineeringSync(sceneRef);
+  // AF-NEXT-007/008: creative vs engineering water response + splash envelope.
+  const engineeringPreview = useEngineeringPreview({ sceneRef, sitePreview, wind: { x: windX, z: windZ } });
 
   // Init scene
   useEffect(() => {
     if (!canvasRef.current) return;
     const scene = new FountainScene(canvasRef.current, {
-      environment: env, quality, cameraMode: cam, lightColor: lightCol,
+      environment: env, quality: effectiveQuality, cameraMode: cam, lightColor: lightCol,
       toneMapping: useProjectStore.getState().render.toneMapping,
       halfResSpray: !!useProjectStore.getState().render.halfResSpray,
     });
     scene.init();
+    applyTierExtras(scene);   // AF-NEXT-013: eco water/particles + particle budget
     scene.setWaterSimulation?.({
       response: waveResponse,
       damping: waveDamping,
@@ -365,7 +389,7 @@ if (sitePreview.active && sitePreview.plan) {
     }
     const venueDefaults = defaultVenueModels({
       poolType, radius: params?.radius, width: params?.width, length: params?.length,
-    }, quality);
+    }, effectiveQuality);
     if (!Array.isArray(modelSpecs)) {
       // Preserve already-arranged people/buildings from v1, but migrate the scene to
       // real editable tree models once. Subsequent user deletions stay deleted in v2.
@@ -381,10 +405,17 @@ if (sitePreview.active && sitePreview.plan) {
     if (!useEngineeringStore.getState().siteModels?.length && modelSpecs?.length) {
       useEngineeringStore.getState().updateEngineering({ siteModels: graphToSiteModels(graph) });
     }
+    let publishTimer = null;
+    let publishGraphToEngineering = () => {};
+    // AF-CAD-031: 3D edits of engineering entities share the designer's command history.
+    const sharedSceneHistory = createStoreSceneHistory(useEngineeringStore, {
+      flush: () => { if (publishTimer) { clearTimeout(publishTimer); publishTimer = null; publishGraphToEngineering(); } },
+    });
     const editor = new SceneEditor({
       THREE: scene.THREE, scene: scene.scene, camera: scene.camera,
-      renderer: scene.renderer, canvas: canvasRef.current, graph,
+      renderer: scene.renderer, canvas: canvasRef.current, graph, history: sharedSceneHistory,
     });
+    editor.setPlanFrame(createPlanFrame(useEngineeringStore));
     scene.attachEditor(editor);
     editor.attachViewportSource(scene);
     editor.syncProxies();
@@ -407,20 +438,24 @@ if (sitePreview.active && sitePreview.plan) {
         scene.setEngineeringLights?.(graphToLights(graph));
       }
     });
-    let publishTimer = null;
     let publishingToEngineering = false;
-    const publishGraphToEngineering = () => {
+    publishGraphToEngineering = () => {
+      publishTimer = null;
       const store = useEngineeringStore.getState();
       const center = poolCenter(store.geometry, store.params, store.poolType);
+      const before = { fixtures: store.fixtures || [], siteModels: store.siteModels || [] };
+      const after = {
+        fixtures: graphToEngineeringFixtures(graph, store.fixtures, { center }),
+        siteModels: graphToSiteModels(graph),
+      };
       publishingToEngineering = true;
       try {
-        store.updateEngineering({
-          fixtures: graphToEngineeringFixtures(graph, store.fixtures, { center }),
-          siteModels: graphToSiteModels(graph),
-        });
+        store.updateEngineering(after);
       } finally {
         publishingToEngineering = false;
       }
+      // One gizmo drag / duplicate / typed edit = one shared transaction (coalesced).
+      sharedSceneHistory.recordPublish(before, after);
       setEngineeringSaveState("Synced");
     };
     const offModels = graph.subscribe((reason) => {
@@ -448,6 +483,7 @@ if (sitePreview.active && sitePreview.plan) {
         || next.poolType !== previous.poolType
         || next.loadRevision !== previous.loadRevision;
       if (!graphDataChanged) return;
+      if (next.loadRevision !== previous.loadRevision) sharedDraftingHistory.clear("load");
 
       clearTimeout(publishTimer);
       const center = poolCenter(next.geometry, next.params, next.poolType);
@@ -503,11 +539,46 @@ if (sitePreview.active && sitePreview.plan) {
       offUnderlay();
       clearTimeout(publishTimer);
       editor.dispose();
+      sharedSceneHistory.dispose();
       editorRef.current = null;
       scene.dispose();
       sceneRef.current = null;
     };
-  }, [quality, projectName]);
+  }, [effectiveQuality, projectName]);
+
+  // AF-NEXT-013 adaptive quality: if the median frame time stays above 33 ms for ~2 s,
+  // step the render scale 1 → 0.8 → 0.6, then drop a tier; step back up with headroom
+  // (never above the user's/auto tier). Off = the user's tier at full scale, exactly.
+  const adaptiveRef = useRef(null);
+  const [renderScale, setRenderScaleState] = useState(1);
+  useEffect(() => {
+    adaptiveRef.current = adaptiveQuality
+      ? new AdaptiveQualityController({ tier: startTier, ceiling: tierLimit, floor: "eco" })
+      : null;
+  }, [adaptiveQuality, startTier, tierLimit]);
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const ctl = adaptiveRef.current;
+    if (!scene) return undefined;
+    if (!ctl) { applyRenderScale(scene, 1); setRenderScaleState(1); return undefined; }
+    ctl.tier = effectiveQuality;
+    ctl.settle(performance.now());
+    applyRenderScale(scene, ctl.scale);
+    setRenderScaleState(ctl.scale);
+    let raf = 0, prev = performance.now(), warm = 0;
+    const tick = now => {
+      const dt = now - prev; prev = now;
+      // Skip the first frames after a rebuild (shader compiles) and baked renders.
+      if (++warm > 30 && !scene._baking && !document.hidden) {
+        const action = ctl.sample(dt, now);
+        if (action?.type === "scale") { applyRenderScale(scene, action.scale); setRenderScaleState(action.scale); }
+        else if (action?.type === "tier") { setEffectiveQuality(action.tier); return; }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [effectiveQuality, adaptiveQuality, startTier, tierLimit]);
 
   // Entering edit mode hands the viewport's pointer and camera to the editor.
   useEffect(() => {
@@ -517,6 +588,10 @@ if (sitePreview.active && sitePreview.plan) {
 
   useEffect(() => { sceneRef.current?.setEnvironment(env); }, [env]);
   useEffect(() => { sceneRef.current?.setCameraMode(cam); }, [cam]);
+  useEffect(() => {
+    if (cam !== NAMED_CAMERA_MODE) return;
+    sceneRef.current?.setNamedView?.(resolveCameraView(useProjectStore.getState().render, activeCameraView));
+  }, [cam, activeCameraView]);
   useEffect(() => { sceneRef.current?.setLightColor(lightCol); }, [lightCol]);
   useEffect(() => { sceneRef.current?.setWind(windX, windZ); }, [windX, windZ]);
   useEffect(() => {
@@ -536,7 +611,7 @@ if (sitePreview.active && sitePreview.plan) {
     if (!showPerf) { setPerfStats(null); return; }
     const id = setInterval(() => {
       const s = sceneRef.current?.getPerfStats?.();
-      if (s) setPerfStats(s);
+      if (s) setPerfStats({ ...s, renderScale: sceneRef.current?._renderScale ?? 1 });
     }, 250);
     return () => clearInterval(id);
   }, [showPerf]);
@@ -552,14 +627,14 @@ if (sitePreview.active && sitePreview.plan) {
 
   if (pattern === "none") sceneRef.current.stopPattern();
   else sceneRef.current.playPattern(pattern, 0.88);
-}, [pattern, manualPriority, sitePreview.active, quality]);
+}, [pattern, manualPriority, sitePreview.active, effectiveQuality]);
   useEffect(() => {
   if (!sceneRef.current) return;
   sceneRef.current.setSignals({ ...engineSignals,
     fixtureIntensities: sitePreview.active ? engineSignals.fixtureIntensities : null,
     fixtureLightStates: sitePreview.active ? engineSignals.fixtureLightStates || null : null,
     fixtureMotion: sitePreview.active ? engineSignals.fixtureMotion || null : null });
-}, [engineSignals, quality]);
+}, [engineSignals, effectiveQuality]);
 
   const screenshot = () => {
     const url = canvasRef.current?.toDataURL("image/png");
@@ -691,7 +766,7 @@ if (sitePreview.active && sitePreview.plan) {
         </button>
         <span style={{ width:1, height:16, background:"rgba(26,107,58,0.35)" }} />
         <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} title="Frame all objects" style={{ ...btnSm(false), padding:"4px 7px", color:"#9aaa96" }}>Frame All</button>
-        <span style={{ color:"#607264", fontSize:9, padding:"0 4px" }}>{CAMS.find(item => item.key === cam)?.label || cam}</span>
+        <span style={{ color:"#607264", fontSize:9, padding:"0 4px" }}>{cam === NAMED_CAMERA_MODE ? (cameraViews.find(view => view.id === activeCameraView)?.name || "Saved view") : (CAMS.find(item => item.key === cam)?.label || cam)}</span>
         <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 6px", borderRadius:9,
           background:sitePreview.active?"rgba(16,185,129,0.14)":"rgba(201,162,39,0.10)",
           color:sitePreview.active?"#34d399":"#c9a227", fontSize:9 }}>
@@ -776,6 +851,11 @@ if (sitePreview.active && sitePreview.plan) {
             <span style={{ color:"#556677" }}>Tier</span>
             <span style={{ color:"#58c7ff", textTransform:"capitalize" }}>
               {perfStats.quality} · {perfStats.backend}
+              {" "}· {adaptiveQuality ? (quality === "auto" ? "auto" : "adaptive") : "fixed"}
+            </span>
+            <span style={{ color:"#556677" }}>Scale</span>
+            <span style={{ color: perfStats.renderScale < 1 ? "#ffcc00" : "#8ea4b8" }}>
+              {Math.round((perfStats.renderScale ?? 1) * 100)}%
             </span>
             <span style={{ color:"#556677" }}>Particles</span>
             <span style={{ color:"#58c7ff" }}>{perfStats.particles.toLocaleString()}</span>
@@ -846,6 +926,7 @@ if (sitePreview.active && sitePreview.plan) {
 
         <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"8px 10px" }}>
           <ICANPreviewControls />
+          <HydraulicPreviewPanel {...engineeringPreview} />
 
           {/* ── DESIGN TAB — the 3D editing workspace ── */}
           {tab==="design" && (<>
@@ -897,6 +978,18 @@ if (sitePreview.active && sitePreview.plan) {
                 }}>{c.icon} {c.label}</button>
               ))}
             </div>
+            {cameraViews.length > 0 && (
+              <>
+                <div style={sectionLabel}>Saved views</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:10 }} data-testid="saved-camera-views">
+                  {cameraViews.map(view => (
+                    <button key={view.id} onClick={() => selectCameraView(view.id)} title={view.note || view.name} style={{
+                      ...btnSm(cam === NAMED_CAMERA_MODE && activeCameraView === view.id), textAlign:"left", padding:"4px 6px",
+                    }}>⌖ {view.name}</button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div style={sectionLabel}>Review</div>
             <div style={{ display:"flex", flexDirection:"column", gap:3, marginBottom:10 }}>
@@ -925,9 +1018,18 @@ if (sitePreview.active && sitePreview.plan) {
 
             <div style={sectionLabel}>Quality</div>
             <div style={{ display:"flex", gap:3, marginBottom:10 }}>
-              {["low","medium","high"].map(q=>(
-                <button key={q} onClick={()=>setQuality(q)} style={{ ...btnSm(quality===q), flex:1, textAlign:"center", textTransform:"capitalize" }}>{q}</button>
+              {["auto","eco","low","medium","high"].map(q=>(
+                <button key={q} onClick={()=>setQuality(q)} title={q==="auto" ? `Detected for this GPU: ${gpuProfile.tier}` : q==="eco" ? "Entry GPUs: small particle budget, no shadows/reflection" : undefined}
+                  style={{ ...btnSm((quality || "auto")===q), flex:1, textAlign:"center", textTransform:"capitalize" }}>{q}</button>
               ))}
+            </div>
+            <label style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, color:"#71869a", fontSize:9 }}>
+              <input type="checkbox" checked={adaptiveQuality} onChange={e=>setAdaptiveQuality(e.target.checked)} />
+              Adaptive quality (lower resolution, then tier, below 30 fps)
+            </label>
+            <div style={{ color:"#556677", fontSize:8, marginBottom:10, lineHeight:1.4 }}>
+              GPU: {gpuProfile.renderer || "unknown"} ({gpuProfile.gpuClass}) · rendering {effectiveQuality}
+              {renderScale < 1 ? ` at ${Math.round(renderScale * 100)}%` : ""}
             </div>
 
             <div style={sectionLabel}>Tone Mapping</div>
@@ -937,7 +1039,7 @@ if (sitePreview.active && sitePreview.plan) {
                   style={{ ...btnSm(toneMapping===id), flex:1, textAlign:"center" }}>{label}</button>
               ))}
             </div>
-            {quality === "medium" && (
+            {effectiveQuality === "medium" && (
               <label style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, color:"#71869a", fontSize:9 }}>
                 <input type="checkbox" checked={halfResSpray} onChange={e=>setHalfResSpray(e.target.checked)} />
                 Half-resolution spray &amp; mist (faster)

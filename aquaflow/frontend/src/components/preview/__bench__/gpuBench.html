@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AquaFlow GPU bench (AF-NEXT-013)</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+    #host { position: absolute; left: 0; top: 0; }
+    #host canvas { display: block; }
+    #status { position: fixed; right: 8px; bottom: 8px; color: #9cf; font: 12px monospace; z-index: 2; }
+  </style>
+</head>
+<body>
+  <!-- Dev-server-only page: not part of `vite build` (index.html is the only build input).
+       Driven by aquaflow/tools/gpu-bench/run.mjs through window.__gpuBench. -->
+  <div id="host"></div>
+  <div id="status">loading…</div>
+  <script type="module" src="./gpuBenchPage.js"></script>
+</body>
+</html>

@@ -13,6 +13,9 @@ import {
   deserializeShow,
 } from "../utils/showFile";
 import { API_BASE_URL } from "../config";
+// AF-NEXT-006 — atomic desktop save, manifest-verified open, rolling autosave snapshots.
+import { saveProject, openProjectFile, openProjectPath, restoreSnapshot, listRecentProjectFiles } from "../utils/projectPersistence";
+import { getSnapshotBackend, desktopProjectBridge } from "../utils/projectRecovery";
 
 export default function ShowBrowser({ mode, onClose }) {
   const store = useShowStore();
@@ -37,7 +40,11 @@ export default function ShowBrowser({ mode, onClose }) {
   const [backendError, setBackendError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef(null);
-  const autoSave = loadAutoSave();
+  const legacyAutoSave = loadAutoSave();
+  const [snapshots, setSnapshots] = useState([]);
+  const [recentFiles, setRecentFiles] = useState([]);
+  const desktop = !!desktopProjectBridge();
+  const autoSave = legacyAutoSave || snapshots.length > 0;
   const backendAvailable = connectionState === "connected";
   const engineeringRevision = useEngineeringStore((s) => s.lastUpdated);
   const loadEngineeringProject = useEngineeringStore((s) => s.loadProject);
@@ -51,6 +58,8 @@ export default function ShowBrowser({ mode, onClose }) {
 
   useEffect(() => {
     setRecentShows(getRecentShows());
+    getSnapshotBackend().list(null).then(setSnapshots).catch((e) => setError(`Autosave history unavailable: ${e.message}`));
+    listRecentProjectFiles().then(setRecentFiles).catch(() => setRecentFiles([]));
   }, []);
 
   useEffect(() => {
@@ -142,25 +151,24 @@ export default function ShowBrowser({ mode, onClose }) {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     setError(null);
     try {
-      downloadShowFile(saveState, currentEngineering);
-      addServerLog({ level: "info", msg: `Local export created: ${(showName || "show").replace(/\s+/g, "_")}.aqua` });
+      // Apply the form's name/BPM/duration, then save through the project pipeline: atomic
+      // Save As on desktop (with asset manifest), Blob download in a browser.
+      useShowStore.setState({ currentShow: { ...saveState.currentShow } });
+      const res = await saveProject({ saveAs: desktop });
+      if (res && desktop) onClose();
     } catch (e) {
-      setError("Download failed: " + e.message);
+      setError((desktop ? "Save failed: " : "Download failed: ") + e.message);
     }
   };
 
   const handleFile = async (file) => {
     setError(null);
     try {
-      const { state, meta } = await readShowFile(file);
-      loadShow(state);
-      loadEngineeringProject(state.engineeringProject);
-      loadProjectDocument(state.projectDocument, state.currentShow?.name);
-      saveToRecent({ name: meta.name, savedAt: meta.savedAt });
-      addServerLog({ level: "info", msg: `Opened local file: ${meta.name}` });
+      const { state } = await openProjectFile(file);
+      addServerLog({ level: "info", msg: `Opened local file: ${state.currentShow?.name || file.name}` });
       onClose();
     } catch (e) {
       setError(e.message);
@@ -361,7 +369,7 @@ export default function ShowBrowser({ mode, onClose }) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".aqua,.json"
+                  accept=".aqua,.aquapkg,.json"
                   style={{ display: "none" }}
                   onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
                 />
@@ -370,9 +378,31 @@ export default function ShowBrowser({ mode, onClose }) {
               {error && <Notice tone="error">✕ {error}</Notice>}
               {backendError && <Notice tone="warn">{backendError}</Notice>}
 
-              {autoSave && (
+              {snapshots.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <SectionLabel>Auto-saved Session</SectionLabel>
+                  <SectionLabel>Autosave Snapshots (newest first — your saved file is never overwritten)</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {snapshots.slice(0, 10).map((snap) => (
+                      <div key={snap.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "rgba(0,212,255,0.05)", border: "1px solid var(--border-accent)", borderRadius: "var(--radius-sm)" }}>
+                        <span style={{ fontSize: 16 }}>⟳</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: "var(--text-primary)" }}>{snap.name || "Untitled Show"}</div>
+                          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {new Date(snap.savedAt).toLocaleString()}{snap.originalPath ? ` · ${snap.originalPath}` : ""}
+                          </div>
+                        </div>
+                        <button className="btn primary" style={{ fontSize: 11 }} onClick={async () => {
+                          try { await restoreSnapshot(snap.id); onClose(); } catch (e) { setError(`Restore failed: ${e.message}`); }
+                        }}>Restore</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {legacyAutoSave && (
+                <div style={{ marginBottom: 16 }}>
+                  <SectionLabel>Legacy Auto-save Slot</SectionLabel>
                   <div
                     style={{
                       display: "flex",
@@ -387,21 +417,21 @@ export default function ShowBrowser({ mode, onClose }) {
                     <span style={{ fontSize: 18 }}>⟳</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 12, color: "var(--text-primary)" }}>
-                        {autoSave.state?.currentShow?.name || "Auto-saved Show"}
+                        {legacyAutoSave.state?.currentShow?.name || "Auto-saved Show"}
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                        Saved: {autoSave.savedAt ? new Date(autoSave.savedAt).toLocaleString() : "Unknown"}
+                        Saved: {legacyAutoSave.savedAt ? new Date(legacyAutoSave.savedAt).toLocaleString() : "Unknown"}
                       </div>
                     </div>
                     <button
                       className="btn primary"
                       style={{ fontSize: 11 }}
                       onClick={() => {
-                        loadShow(autoSave.state);
-                        loadEngineeringProject(autoSave.state.engineeringProject);
+                        loadShow(legacyAutoSave.state);
+                        loadEngineeringProject(legacyAutoSave.state.engineeringProject);
                         loadProjectDocument(
-                          autoSave.state.projectDocument,
-                          autoSave.state.currentShow?.name,
+                          legacyAutoSave.state.projectDocument,
+                          legacyAutoSave.state.currentShow?.name,
                         );
                         addServerLog({ level: "info", msg: "Auto-saved session restored" });
                         onClose();
@@ -440,6 +470,21 @@ export default function ShowBrowser({ mode, onClose }) {
                         onOpen={() => handleOpenBackendShow(show.id)}
                         onDelete={() => handleDeleteBackendShow(show.id)}
                       />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {recentFiles.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <SectionLabel>Recent Project Files</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {recentFiles.map((f) => (
+                      <button key={f.path} className="btn" disabled={!f.exists} title={f.path}
+                        style={{ justifyContent: "flex-start", textAlign: "left", fontSize: 11, height: "auto", padding: "6px 10px" }}
+                        onClick={async () => { try { await openProjectPath(f.path); onClose(); } catch (e) { setError(e.message); } }}>
+                        {f.name} <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{f.exists ? f.path : "(missing)"}</span>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -573,7 +618,7 @@ export default function ShowBrowser({ mode, onClose }) {
                   {saveSuccess ? "✓ Saved!" : savingRemote ? "Saving..." : backendAvailable ? "Save to Backend" : "Save as Local File"}
                 </button>
                 <button className="btn" onClick={handleDownload} style={{ width: 170, justifyContent: "center", fontSize: 13, padding: "10px" }}>
-                  Download .aqua
+                  {desktop ? "Save As .aqua…" : "Download .aqua"}
                 </button>
               </div>
             </div>

@@ -85,4 +85,19 @@ describe("I-CAN engineering preview", () => {
     state().close(); expect(state().active).toBe(false);
     expect(network).not.toHaveBeenCalled();
   });
+  it("replaces a live editable plan without resetting the 3D playhead", () => {
+    let timestamp = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => timestamp);
+    const state = () => useICANPreviewStore.getState();
+    state().load(pattern, 1);
+    state().seek(2.5);
+    state().play();
+    const edited = { name: "Edited arrangement", steps: [{ duration_ms: 6000, groups: { 1: [9] } }] };
+    state().replace(edited, 1, null, "show_programmer");
+    expect(state()).toMatchObject({ active: true, position: 2.5, playback: "playing", editPanel: "show_programmer" });
+    expect(state().plan.duration).toBe(6);
+    timestamp = 1500;
+    state().tick();
+    expect(state().position).toBe(3);
+  });
 });

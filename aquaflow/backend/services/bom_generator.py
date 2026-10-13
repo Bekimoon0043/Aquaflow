@@ -14,6 +14,11 @@ instruments — or a whole hydraulic network) up into a costed bill of materials
     dependency) as well as CSV / JSON.
 
 Currency and units are carried through untouched; costs are unit_cost * quantity.
+
+AF-NEXT-012 — every line cites its equipment model, data source
+(manufacturer_datasheet / user_measured / generic_estimate), confidence, units and
+data revision, and the CSV/XLSX exports carry those columns. Supplier references and
+prices in data/parts_catalog.json are illustrative placeholders (generic estimates).
 """
 from __future__ import annotations
 
@@ -26,6 +31,10 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 from xml.sax.saxutils import escape
+
+from services.equipment_provenance import (
+    cite, normalize_provenance, summarize, units_text,
+)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 PARTS_CATALOG_FILE = DATA_DIR / "parts_catalog.json"
@@ -44,6 +53,31 @@ class BOMLine:
     unit_cost: float = 0.0
     currency: str = "USD"
     notes: str = ""
+    # AF-NEXT-012 citation: equipment_model, data_source, confidence, units, revision.
+    citation: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not self.citation:
+            self.citation = cite(None, equipment_model=self.part_number or self.description,
+                                 kind=_kind_for(self.category))
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "BOMLine":
+        cit = d.get("citation") or {}
+        if not cit and d.get("data_source"):
+            cit = {"equipment_model": d.get("equipment_model", ""),
+                   "manufacturer": d.get("manufacturer", ""),
+                   "data_source": d.get("data_source"),
+                   "source_label": d.get("source_label", ""),
+                   "confidence": d.get("confidence", "low"),
+                   "units": d.get("units_basis_map") or {},
+                   "revision": d.get("data_revision", ""),
+                   "document": d.get("source_document", "")}
+        return cls(item=d["item"], category=d["category"], description=d["description"],
+                   quantity=d["quantity"], unit=d.get("unit", "ea"),
+                   manufacturer=d.get("manufacturer", ""), part_number=d.get("part_number", ""),
+                   supplier=d.get("supplier", ""), unit_cost=d.get("unit_cost", 0.0),
+                   currency=d.get("currency", "USD"), notes=d.get("notes", ""), citation=cit)
 
     @property
     def total_cost(self) -> float:
@@ -63,13 +97,33 @@ class BOMLine:
             "currency": self.currency,
             "total_cost": self.total_cost,
             "notes": self.notes,
+            "equipment_model": self.citation.get("equipment_model", ""),
+            "data_source": self.citation.get("data_source", "generic_estimate"),
+            "source_label": self.citation.get("source_label", ""),
+            "confidence": self.citation.get("confidence", "low"),
+            "units_basis": units_text(self.citation.get("units")),
+            "units_basis_map": dict(self.citation.get("units") or {}),
+            "data_revision": self.citation.get("revision", ""),
+            "source_document": self.citation.get("document", ""),
+            "citation": dict(self.citation),
         }
         return d
 
 
+def _kind_for(category: str) -> str:
+    c = str(category or "").lower()
+    for k in ("nozzle", "pump", "valve", "light", "pipe"):
+        if k in c:
+            return k
+    return "equipment"
+
+
 class BOMGenerator:
     COLUMNS = ["Item", "Category", "Description", "Qty", "Unit", "Manufacturer",
-               "Part Number", "Supplier", "Unit Cost", "Total Cost", "Notes"]
+               "Part Number", "Supplier", "Unit Cost", "Total Cost", "Notes",
+               # AF-NEXT-012 provenance columns (appended — earlier indexes unchanged)
+               "Equipment Model", "Data Source", "Confidence", "Units Basis",
+               "Data Revision", "Source Document"]
 
     def __init__(self, project: str = "AquaFlow Studio",
                  catalog: Optional[dict] = None, currency: str = "USD"):
@@ -112,9 +166,11 @@ class BOMGenerator:
 
         # 2) Nozzles — count by model, enrich from the nozzle database.
         noz_groups: dict[str, float] = {}
+        noz_samples: dict[str, dict] = {}
         for n in model.get("nozzles", []):
             model_id = str(n.get("model") or n.get("id") or "nozzle")
             noz_groups[model_id] = noz_groups.get(model_id, 0.0) + float(n.get("quantity", 1) or 1)
+            noz_samples.setdefault(model_id, n)
 
         # 3) Pipes — sum length by (diameter, material).
         pipe_groups: dict[tuple, float] = {}
@@ -141,20 +197,25 @@ class BOMGenerator:
         for (cat, part), g in sorted(eq_groups.items()):
             item += 1
             ref = self._lookup(part, f"{cat}:{part}", cat)
-            self.lines.append(self._line(item, cat, g["sample"], g["qty"], "ea", ref, part))
+            line = self._line(item, cat, g["sample"], g["qty"], "ea", ref, part)
+            line.citation = self._citation(g["sample"], kind=_kind_for(cat),
+                                           model=part or str(g["sample"].get("type") or cat))
+            self.lines.append(line)
 
         for model_id, qty in sorted(noz_groups.items()):
             item += 1
             noz = self._nozzle_info(model_id)
             ref = self._lookup(model_id, f"nozzle:{model_id}")
             desc = noz.get("description") or f"Nozzle {model_id}"
+            sample = noz_samples.get(model_id) or {}
+            citation = noz.get("citation") or self._citation(sample, kind="nozzle", model=model_id)
             self.lines.append(BOMLine(
                 item=item, category="nozzle", description=desc, quantity=qty, unit="ea",
                 manufacturer=ref.get("manufacturer", noz.get("manufacturer", "")),
                 part_number=ref.get("part_number", model_id),
                 supplier=ref.get("supplier", ""),
                 unit_cost=float(ref.get("unit_cost", 0.0)), currency=self.currency,
-                notes=noz.get("notes", ""),
+                notes=noz.get("notes", ""), citation=citation,
             ))
 
         for (d_mm, material), length in sorted(pipe_groups.items()):
@@ -170,6 +231,8 @@ class BOMGenerator:
                 supplier=ref.get("supplier", ""),
                 unit_cost=float(ref.get("unit_cost", 0.0)), currency=self.currency,
                 notes=ref.get("notes", ""),
+                citation=cite(None, equipment_model=f"{material} pipe DN{int(d_mm)}", kind="pipe",
+                              units={"length": "m", "nominal_size": "DN (mm)"}),
             ))
 
         for (cat, typ, size, part), g in sorted(misc_groups.items()):
@@ -183,9 +246,28 @@ class BOMGenerator:
                 supplier=ref.get("supplier", ""),
                 unit_cost=float(ref.get("unit_cost", 0.0)), currency=self.currency,
                 notes=ref.get("notes", ""),
+                citation=self._citation(g["sample"], kind=_kind_for(cat), model=part or desc),
             ))
 
         return self
+
+    @staticmethod
+    def _citation(sample: dict, kind: str, model: str) -> dict:
+        """Citation for a design item. A verified registry model named by
+        ``equipment_model_id`` wins; then a provenance block carried by the item
+        (normalised — incomplete trust claims downgrade to generic); else generic."""
+        sample = sample if isinstance(sample, dict) else {}
+        reg_id = sample.get("equipment_model_id")
+        if reg_id and kind in ("nozzle", "pump", "valve", "light"):
+            try:
+                from services.equipment_registry import get_equipment_registry
+                rec = get_equipment_registry().get(kind, str(reg_id))
+                if rec is not None:
+                    return cite(rec["provenance"], equipment_model=rec["id"], kind=kind)
+            except Exception:
+                pass
+        prov = normalize_provenance(sample.get("provenance"), kind=kind, model=model)
+        return cite(prov, equipment_model=model, kind=kind)
 
     def _line(self, item, cat, sample, qty, unit, ref, part) -> BOMLine:
         return BOMLine(
@@ -214,7 +296,8 @@ class BOMGenerator:
             if m is not None:
                 return {"manufacturer": m.manufacturer,
                         "description": f"{m.manufacturer} {m.model}".strip(),
-                        "notes": m.notes}
+                        "notes": m.notes,
+                        "citation": m.citation()}
         except Exception:
             pass
         return {}
@@ -233,6 +316,7 @@ class BOMGenerator:
             "total_cost": self.total_cost(),
             "currency": self.currency,
             "cost_by_category": by_cat,
+            "data_provenance": summarize([l.citation for l in self.lines]),
         }
 
     # ── Exports ─────────────────────────────────────────────────────────────────
@@ -242,11 +326,16 @@ class BOMGenerator:
     def _matrix(self) -> tuple[list[str], list[list]]:
         rows = []
         for l in self.lines:
+            c = l.citation
             rows.append([l.item, l.category, l.description, round(l.quantity, 4), l.unit,
                          l.manufacturer, l.part_number, l.supplier,
-                         round(l.unit_cost, 2), l.total_cost, l.notes])
+                         round(l.unit_cost, 2), l.total_cost, l.notes,
+                         c.get("equipment_model", ""), c.get("source_label") or c.get("data_source", ""),
+                         c.get("confidence", ""), units_text(c.get("units")),
+                         c.get("revision", ""), c.get("document", "")])
         # Total row.
-        rows.append(["", "", "TOTAL", "", "", "", "", "", "", self.total_cost(), ""])
+        rows.append(["", "", "TOTAL", "", "", "", "", "", "", self.total_cost(), "",
+                     "", "", "", "", "", ""])
         return self.COLUMNS, rows
 
     def to_csv(self) -> str:

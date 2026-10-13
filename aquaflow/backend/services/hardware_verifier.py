@@ -81,7 +81,8 @@ class VirtualDMXNode:
         while self._running:
             try:
                 pkt, _ = self._sock.recvfrom(2048)
-                self.frames.append((time.monotonic(), pkt))
+                # perf_counter: monotonic is 15.6 ms-quantized on Windows (AF-NEXT-001)
+                self.frames.append((time.perf_counter(), pkt))
             except socket.timeout:
                 continue
             except OSError:

@@ -464,7 +464,7 @@ def solve_network(payload: dict) -> dict:
     res = solver.solve(nodes, pipes)
 
     node_by_id = {n.id: n for n in nodes}
-    return {
+    out = {
         "converged": res.converged,
         "iterations": res.iterations,
         "method": res.method,
@@ -509,3 +509,43 @@ def solve_network(payload: dict) -> dict:
             for pid in res.pipe_flow
         ],
     }
+    _attach_citations(out, payload)
+    return out
+
+
+def _attach_citations(out: dict, payload: dict) -> None:
+    """AF-NEXT-012 — each nozzle/pump node and every pipe in the result cites the
+    equipment model, data source, units and revision its numbers rest on. Input
+    nodes may carry ``model`` / ``equipment_model_id`` / ``provenance``; anything
+    without a verified provenance is cited as a generic estimate."""
+    from services.equipment_provenance import cite, normalize_provenance, summarize
+
+    raw_nodes = {str(n.get("id")): n for n in payload.get("nodes", []) if isinstance(n, dict)}
+    raw_pipes = {str(p.get("id")): p for p in payload.get("pipes", []) if isinstance(p, dict)}
+    citations = []
+    for node in out["nodes"]:
+        raw = raw_nodes.get(str(node["id"]), {})
+        if node.get("is_nozzle"):
+            kind, units = "nozzle", {"flow": "L/min (nozzle_flow_lpm), m3/s", "head": "m",
+                                     "velocity": "m/s", "jet_height": "m"}
+        elif node.get("fixed") and (raw.get("model") or raw.get("provenance")):
+            kind, units = "pump", {"head": "m", "flow": "m3/s"}
+        else:
+            continue
+        model = str(raw.get("model") or raw.get("equipment_model") or raw.get("equipment_model_id")
+                    or f"{kind} at node {node['id']}")
+        c = cite(normalize_provenance(raw.get("provenance"), kind=kind, model=model),
+                 equipment_model=model, kind=kind, units=units)
+        node["equipment"] = c
+        citations.append(c)
+    for pipe in out["pipes"]:
+        raw = raw_pipes.get(str(pipe["id"]), {})
+        model = str(raw.get("model") or
+                    f"pipe Ø{float(raw.get('diameter', 0.1)) * 1000:.0f} mm, C={raw.get('roughness', 130)}")
+        c = cite(normalize_provenance(raw.get("provenance"), kind="pipe", model=model),
+                 equipment_model=model, kind="pipe",
+                 units={"flow": "m3/s", "velocity": "m/s", "headloss": "m", "diameter": "m",
+                        "length": "m", "roughness": "Hazen-Williams C"})
+        pipe["equipment"] = c
+        citations.append(c)
+    out["data_provenance"] = summarize(citations)

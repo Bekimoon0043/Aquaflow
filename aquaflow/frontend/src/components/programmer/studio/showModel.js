@@ -1,6 +1,7 @@
 import { generateAutoTracks } from '../../../runtime/autoTrackGenerator';
 import { createSiteWaterTrack } from '../../../utils/siteShowCompiler';
 import { getFixtureInfo } from '../../../utils/fixtureTypeResolver';
+import { evaluateShowFrameAt, groupInherits, recipeAudible } from '../../../show/evaluateShowFrame';
 
 export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve'];
 export const ORDERS = ['engineering', 'left-to-right', 'right-to-left', 'front-to-back', 'clockwise', 'counter-clockwise', 'center-out'];
@@ -69,14 +70,10 @@ export const newRecipe = (groupId, start = 0) => ({ id: uid('recipe'), version: 
   name: 'Traveling wave', effect: 'wave', start, duration: 8, cycles: 2, spread: 1, intensity: 80,
   color: '#65d9d0', attribute: 'level', order: 'left-to-right', seed: 1, muted: false, locked: false });
 
+// Inherited group flags (muted/solo/locked) — one implementation, shared with the
+// canonical show-frame evaluator (AF-NEXT-004).
 export function groupFlag(groups, groupId, flag) {
-  const byId = new Map(groups.map(g => [g.id, g])), seen = new Set();
-  let group = byId.get(groupId);
-  while (group && !seen.has(group.id)) {
-    if (group[flag]) return true;
-    seen.add(group.id); group = byId.get(group.parentId);
-  }
-  return false;
+  return groupInherits(groups, groupId, flag);
 }
 
 export function editableClip(studio, clip) {
@@ -151,12 +148,6 @@ export function compileStudio(studio, items) {
   const ids = new Set(items.map(i => i.id));
   const clips = [...studio.legacyClips];
   const issues = [];
-  const hasSolo = studio.groups.some(g => g.solo);
-  const inherited = (group, key, seen = new Set()) => {
-    if (!group || seen.has(group.id)) return false;
-    seen.add(group.id);
-    return Boolean(group[key]) || inherited(groups.get(group.parentId), key, seen);
-  };
   studio.legacyClips.forEach(c => {
     if (!ids.has(c.fixtureId)) issues.push(`Missing fixture for ${c.name || c.id}`);
     if (![c.startTime, c.duration, c.value].every(Number.isFinite) || c.startTime < 0 || c.duration <= 0 || c.startTime + c.duration > 600
@@ -166,7 +157,7 @@ export function compileStudio(studio, items) {
   for (const recipe of studio.recipes) {
     const group = groups.get(recipe.groupId);
     if (!group) { issues.push(`${recipe.name}: group is missing.`); continue; }
-    if (recipe.muted || inherited(group, 'muted') || (hasSolo && !inherited(group, 'solo'))) continue;
+    if (!recipeAudible(recipe, groups)) continue;
     if (!EFFECTS.includes(recipe.effect)) { issues.push(`${recipe.name}: unsupported effect.`); continue; }
     if (recipe.effect === 'curve' && recipe.envelope && (recipe.envelope.length < 2 || recipe.envelope.some((p, i, list) => !Number.isFinite(p.time) || !Number.isFinite(p.value) || p.time < 0 || p.time > 1 || p.value < 0 || p.value > 1 || (i > 0 && p.time <= list[i - 1].time)))) {
       issues.push(`${recipe.name}: curve points must have increasing times and levels between 0 and 100%.`); continue;
@@ -223,16 +214,30 @@ export function compileStudio(studio, items) {
   return { clips, issues: [...new Set(issues)] };
 }
 
+// Timeline/plan sampler. Evaluated by the canonical show frame (AF-NEXT-004):
+// value = highest active channel level of the fixture, colour = its evaluated colour
+// (lights) or the winning clip colour. Projects are cached per clips array.
+const clipProjects = new WeakMap();
+export function clipProject(clips) {
+  if (!Array.isArray(clips)) return { clips: [] };
+  if (!clipProjects.has(clips)) clipProjects.set(clips, { clips });
+  return clipProjects.get(clips);
+}
+
 export function sampleClips(clips, time) {
+  const frame = evaluateShowFrameAt(clipProject(clips), Number(time) || 0);
   const levels = {};
-  for (const c of clips) {
-    const local = time - c.startTime;
-    if (local < 0 || local >= c.duration) continue;
-    const fade = Math.min(1, c.fadeIn ? local / c.fadeIn : 1, c.fadeOut ? (c.duration - local) / c.fadeOut : 1);
-    const value = Math.max(0, Math.min(1, c.value / 100 * fade));
-    if (!levels[c.fixtureId] || value >= levels[c.fixtureId].value) levels[c.fixtureId] = { value, color: c.color || '#65d9d0' };
+  for (const [id, fixture] of Object.entries(frame.fixtures)) {
+    const values = Object.values(fixture.channels);
+    if (!values.length) continue;
+    levels[id] = { value: Math.max(...values), color: fixture.color?.hex || '#65d9d0' };
   }
   return levels;
+}
+
+/** Canonical show-frame project for the Studio document (resolved clips + groups). */
+export function studioShowProject(studio, items, clips) {
+  return { fixtures: items, clips, groups: studio.groups, recipes: studio.recipes, tempo: studio.tempo };
 }
 
 // Translate the existing AI engine's section proposal into editable group recipes.

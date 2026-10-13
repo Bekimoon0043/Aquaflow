@@ -20,6 +20,7 @@ files:
   - updater.js
   - ui-server.js
   - cad-native.js
+  - project-files.js       # AF-NEXT-006 atomic save / snapshots / crash detection
   - splash.html
   - "assets/**/*"           # icon.png, shield.png, splash.png (runtime), *.ico
   - "web/**/*"
@@ -37,10 +38,10 @@ extraResources:
   # runner. Checked before switching: packaged smoke test PASS, acceptance over S7 against
   # the FB twin PASS, and every saved site keeps its program signature (0x6A3198F3 and
   # 0x4794E8BA unchanged). The pre-1.2.16 engine stays in resources/ for rollback.
-  # 1.2.32 engine: adds ezdxf AutoCAD import (/api/cad/import, recognize, templates, diff,
-  # topology, export.dxf). Packaged smoke test PASS (health, DXF import, DXF export).
-  # engine-1.2.29 stays in resources/ for rollback.
-  - from: resources/engine-1.2.32
+  # 1.2.33 engine: same-revision backend for the AF-NEXT release (including honest
+  # per-controller verification labels). Packaged smoke must pass before installation.
+  # engine-1.2.32 stays available through the prior installer for rollback.
+  - from: resources/engine-1.2.33
     to: engine
     filter: ["**/*"]
   # Bundled license secret (+ update URL). resolveConfig() reads this from

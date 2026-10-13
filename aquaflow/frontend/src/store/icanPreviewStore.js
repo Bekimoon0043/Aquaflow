@@ -22,6 +22,27 @@ export const useICANPreviewStore = create((set, get) => ({
     const plan = createICANPreviewPlan(pattern, repeat);
     set({ active: true, plan, position: 0, playback: "paused", audioFile, editPanel });
   },
+  // Replace an editable show preview without throwing the playhead back to zero.
+  // The embedded 3D arrangement timeline uses this after a pattern move/resize so
+  // the water renderer follows the same document the operator is editing.
+  replace: (pattern, repeat = 1, audioFile = null, editPanel = "show_programmer") => {
+    const previous = get();
+    const plan = createICANPreviewPlan(pattern, repeat);
+    // While playing, carry the live clock position (not the last ticked value) so an
+    // edit never nudges the playhead backwards (AF-NEXT-004).
+    const live = previous.playback === "playing" && previous.plan ? positionAt(previous, now()) : previous.position;
+    const position = Math.max(0, Math.min(plan.duration, Number(live) || 0));
+    set({
+      active: true,
+      plan,
+      position,
+      playback: previous.playback === "playing" && position < plan.duration ? "playing" : "paused",
+      anchorPosition: position,
+      anchorTime: now(),
+      audioFile: audioFile ?? previous.audioFile,
+      editPanel,
+    });
+  },
   openSiteEditor: pattern => set({ editorDraft: pattern, editorRepeat: 1, siteEditorRequested: true }),
   play: () => {
     const state = get();

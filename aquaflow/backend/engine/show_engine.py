@@ -62,6 +62,8 @@ class ShowEngine:
         # Hardware conflict detection (Stage 1, Priority 3): the last operator-facing
         # error, set when a show is blocked from starting due to address conflicts.
         self.last_error: str = ""
+        # AF-NEXT-009 — result of the last preflight gate run by play() on real hardware.
+        self.last_preflight = None
         # AF-HUB-013 — ShowEngine is the SINGLE playback timing + output authority. The
         # RuntimeTransport (demoted to a driven mirror) is attached here so this one 100 Hz
         # loop can push the playhead into it; the transport no longer runs its own clock.
@@ -285,6 +287,36 @@ class ShowEngine:
                     return False
         except Exception:  # pragma: no cover - never let the check itself block dev/sim
             pass
+        # ── AF-NEXT-009 — preflight compiler gate on REAL hardware ────────────────
+        # Resolve the loaded show once and run every preflight check (missing links,
+        # address conflicts, pump/valve dependencies, output limits, min on/off, flame
+        # rules). Any error refuses the start. FAIL CLOSED: if the check itself cannot
+        # run while commissioned, the show does not start. Simulation stays available.
+        self.last_preflight = None
+        try:
+            from services.commissioning import is_hardware_commissioned
+            commissioned = is_hardware_commissioned()
+        except Exception:  # pragma: no cover
+            commissioned = False
+        if commissioned:
+            try:
+                from services.preflight import engine_project, run_preflight
+                bus = self.protocol_bus
+                mapped = getattr(bus, "_has_mapping", None) if bus is not None else None
+                result = run_preflight(engine_project(self), {"kind": "runtime", "mapped": mapped})
+            except Exception as exc:
+                self.last_error = f"Preflight could not run — show blocked on real hardware: {exc}"
+                print("[BLOCKED] " + self.last_error)
+                return False
+            self.last_preflight = {k: result[k] for k in ("ok", "summary", "resolved_revision")}
+            if not result["ok"]:
+                errors = [i["message"] for i in result["issues"] if i["severity"] == "error"]
+                extra = f" (+{len(errors) - 5} more)" if len(errors) > 5 else ""
+                self.last_error = ("Preflight refused playback on real hardware — "
+                                   + "; ".join(errors[:5]) + extra)
+                self.last_preflight["issues"] = result["issues"]
+                print("[BLOCKED] " + self.last_error)
+                return False
         self.last_error = ""
         await self._cancel_playback_task()
         self._start_time = time.monotonic()
@@ -421,18 +453,31 @@ class ShowEngine:
         solo_tracks = [track for track in self.timeline_tracks if track.get("solo")]
         active_tracks = solo_tracks if solo_tracks else [track for track in self.timeline_tracks if not track.get("muted")]
 
+        # AF-NEXT-004: fades/curves use the canonical show-frame envelope
+        # (engine.show_frame) and overlapping clips on one device+type resolve
+        # highest-takes-precedence (ties: later clip) instead of last-command-wins.
+        from engine.show_frame import fade_factor, normalize_curve
+        winners = {}
         for track in active_tracks:
             for clip in track.get("clips", []):
+                if clip.get("muted") is True or clip.get("disabled") is True:
+                    continue
                 clip_start = float(clip.get("start", 0))
                 clip_end = float(clip.get("end", clip_start))
                 if clip_start <= t < clip_end:
                     progress = (t - clip_start) / max(1e-6, clip_end - clip_start)
-                    commands.append({
+                    envelope = fade_factor({
+                        "start": clip_start, "end": clip_end,
+                        "fadeIn": max(0.0, float(clip.get("fadeIn", 0) or 0)),
+                        "fadeOut": max(0.0, float(clip.get("fadeOut", 0) or 0)),
+                        "curve": normalize_curve(clip.get("curveType")) or "linear",
+                    }, t)
+                    command = {
                         "track_id": track.get("id"),
                         "device_id": track.get("deviceId"),
                         "type": self._normalize_track_type(track.get("type")),
                         "label": clip.get("label"),
-                        "intensity": float(clip.get("intensity", 100)) / 100.0,
+                        "intensity": float(clip.get("intensity", 100)) / 100.0 * envelope,
                         "progress": progress,
                         "clip_id": clip.get("id"),
                         "color": (
@@ -441,7 +486,13 @@ class ShowEngine:
                             or clip.get("lightingColor")
                             or track.get("color")
                         ),
-                })
+                    }
+                    device = command["device_id"]
+                    key = (str(device), command["type"]) if device is not None else ("track", command["track_id"], len(winners))
+                    current = winners.get(key)
+                    if current is None or command["intensity"] >= current["intensity"]:
+                        winners[key] = command
+        commands.extend(winners.values())
 
         # ── Release devices whose clips have ended ────────────────────────────
         held = getattr(self, "_held_devices", None)
@@ -658,6 +709,7 @@ class ShowEngine:
             "revision": self._revision,
             "hardware_conflicts": self.get_hardware_conflicts(),
             "error": self.last_error,
+            "preflight": self.last_preflight,
         }
 
     def get_snapshot(self) -> dict:

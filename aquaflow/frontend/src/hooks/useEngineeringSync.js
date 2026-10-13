@@ -24,6 +24,7 @@ export function useEngineeringSync(sceneRef) {
   const syncTimerRef = useRef(null);
 
   const geometry    = useEngineeringStore(s => s.geometry);
+  const basins      = useEngineeringStore(s => s.basins);
   const params      = useEngineeringStore(s => s.params);
   const poolType    = useEngineeringStore(s => s.poolType);
   const fixtures    = useEngineeringStore(s => s.fixtures);
@@ -37,6 +38,7 @@ export function useEngineeringSync(sceneRef) {
     if (!scene) return;
 
     const key = JSON.stringify({ geometry, params, poolType,
+      basins: basins?.length > 1 ? basins.map(b => [b.id, b.outer, b.holes, b.floorLevel, b.wallHeight]) : null,
       // Include every renderer-visible fixture field. Previously, changing height,
       // visibility, tilt or light appearance could be ignored because the cache key
       // only watched plan position and Y rotation.
@@ -54,7 +56,7 @@ export function useEngineeringSync(sceneRef) {
     lastSceneRef.current = scene;
 
     // 1. Pool geometry
-    const poolConfig = geometryToPoolConfig(geometry, params, poolType);
+    const poolConfig = geometryToPoolConfig(geometry, params, poolType, basins);
     if (poolConfig) scene.setPoolGeometry?.(poolConfig);
 
     // 2. Layer visibility filtering
@@ -172,6 +174,7 @@ if (scene.setNozzlePhysics && nozzleConfigs.length) {
     fixtures: nozzleFixtures,
     params,
     volumeLitres: metrics.capacityLitres,
+    basins,
   });
   apiPost("/hydraulics/preview-physics", solvePayload)
     .then(res => {
@@ -189,7 +192,7 @@ if (scene.setNozzlePhysics && nozzleConfigs.length) {
     })
     .catch(() => { scene.setNozzlePhysics(null); });
 }
-  }, [geometry, params, poolType, fixtures, siteSurfaces, manualPipes, layers]);
+  }, [geometry, basins, params, poolType, fixtures, siteSurfaces, manualPipes, layers]);
 
   useEffect(() => {
     if (!lastUpdated) return;

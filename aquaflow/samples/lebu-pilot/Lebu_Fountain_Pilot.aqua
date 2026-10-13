@@ -1,0 +1,2242 @@
+{
+  "aquaflow": "1.1",
+  "savedAt": "2026-10-13T00:00:00.000Z",
+  "show": {
+    "id": "lebu-fountain-show-v1",
+    "name": "Lebu Fountain · Pilot",
+    "bpm": 120,
+    "duration": 60,
+    "sampleRate": 48000,
+    "loop": true
+  },
+  "nodes": [],
+  "connections": [],
+  "timelineTracks": [
+    {
+      "id": "track-perimeter",
+      "label": "Perimeter Jets · Pattern",
+      "color": "#32c8ff",
+      "type": "outer_ring_jets",
+      "muted": false,
+      "solo": false,
+      "clips": [
+        {
+          "id": "p1",
+          "start": 0,
+          "end": 8,
+          "label": "Opening Rise",
+          "intensity": 62
+        },
+        {
+          "id": "p2",
+          "start": 8,
+          "end": 20,
+          "label": "Clockwise Chase",
+          "intensity": 92
+        },
+        {
+          "id": "p3",
+          "start": 20,
+          "end": 32,
+          "label": "Mirrored Waves",
+          "intensity": 86
+        },
+        {
+          "id": "p4",
+          "start": 32,
+          "end": 44,
+          "label": "Low Frame",
+          "intensity": 48
+        },
+        {
+          "id": "p5",
+          "start": 44,
+          "end": 56,
+          "label": "Blue-White Finale",
+          "intensity": 100
+        },
+        {
+          "id": "p6",
+          "start": 56,
+          "end": 60,
+          "label": "Grand Rise",
+          "intensity": 100
+        }
+      ]
+    },
+    {
+      "id": "track-arches",
+      "label": "Inner Crown · Ripple",
+      "color": "#73b7ff",
+      "type": "arch_jets",
+      "muted": false,
+      "solo": false,
+      "clips": [
+        {
+          "id": "a1",
+          "start": 0,
+          "end": 8,
+          "label": "Soft Crown",
+          "intensity": 35
+        },
+        {
+          "id": "a2",
+          "start": 8,
+          "end": 20,
+          "label": "Following Ripple",
+          "intensity": 58
+        },
+        {
+          "id": "a3",
+          "start": 20,
+          "end": 32,
+          "label": "Side Support",
+          "intensity": 64
+        },
+        {
+          "id": "a4",
+          "start": 32,
+          "end": 44,
+          "label": "Crown Feature",
+          "intensity": 88
+        },
+        {
+          "id": "a5",
+          "start": 44,
+          "end": 56,
+          "label": "Crown Sparkle",
+          "intensity": 94
+        },
+        {
+          "id": "a6",
+          "start": 56,
+          "end": 60,
+          "label": "Full Crown",
+          "intensity": 100
+        }
+      ]
+    },
+    {
+      "id": "track-center",
+      "label": "Central Sculpture · Hero",
+      "color": "#ffffff",
+      "type": "center_jets",
+      "muted": false,
+      "solo": false,
+      "clips": [
+        {
+          "id": "c1",
+          "start": 0,
+          "end": 8,
+          "label": "Center Glow",
+          "intensity": 42
+        },
+        {
+          "id": "c2",
+          "start": 8,
+          "end": 20,
+          "label": "Center Hold",
+          "intensity": 55
+        },
+        {
+          "id": "c3",
+          "start": 20,
+          "end": 32,
+          "label": "Center Build",
+          "intensity": 72
+        },
+        {
+          "id": "c4",
+          "start": 32,
+          "end": 44,
+          "label": "Hero Pulse",
+          "intensity": 100
+        },
+        {
+          "id": "c5",
+          "start": 44,
+          "end": 56,
+          "label": "Hero Hold",
+          "intensity": 82
+        },
+        {
+          "id": "c6",
+          "start": 56,
+          "end": 60,
+          "label": "Hero Finale",
+          "intensity": 100
+        }
+      ]
+    },
+    {
+      "id": "track-lights",
+      "label": "RGB Underwater Lights",
+      "color": "#f59e0b",
+      "type": "rgb_lights",
+      "muted": false,
+      "solo": false,
+      "clips": [
+        {
+          "id": "l1",
+          "start": 0,
+          "end": 8,
+          "label": "Moon White",
+          "intensity": 55,
+          "color": "#dff7ff"
+        },
+        {
+          "id": "l2",
+          "start": 8,
+          "end": 20,
+          "label": "Cyan Chase",
+          "intensity": 88,
+          "color": "#25bfff"
+        },
+        {
+          "id": "l3",
+          "start": 20,
+          "end": 32,
+          "label": "Deep Blue",
+          "intensity": 82,
+          "color": "#2266ff"
+        },
+        {
+          "id": "l4",
+          "start": 32,
+          "end": 44,
+          "label": "Ice White",
+          "intensity": 96,
+          "color": "#eaf8ff"
+        },
+        {
+          "id": "l5",
+          "start": 44,
+          "end": 50,
+          "label": "Finale Blue",
+          "intensity": 100,
+          "color": "#168cff"
+        },
+        {
+          "id": "l6",
+          "start": 50,
+          "end": 56,
+          "label": "Finale White",
+          "intensity": 100,
+          "color": "#ffffff"
+        },
+        {
+          "id": "l7",
+          "start": 56,
+          "end": 60,
+          "label": "Grand White",
+          "intensity": 100,
+          "color": "#ffffff"
+        }
+      ]
+    },
+    {
+      "id": "track-pump",
+      "label": "Master Water Level",
+      "color": "#00d4ff",
+      "type": "pump",
+      "muted": false,
+      "solo": false,
+      "clips": [
+        {
+          "id": "m1",
+          "start": 0,
+          "end": 8,
+          "label": "Safe Start",
+          "intensity": 62
+        },
+        {
+          "id": "m2",
+          "start": 8,
+          "end": 20,
+          "label": "Chase Pressure",
+          "intensity": 88
+        },
+        {
+          "id": "m3",
+          "start": 20,
+          "end": 32,
+          "label": "Wave Pressure",
+          "intensity": 84
+        },
+        {
+          "id": "m4",
+          "start": 32,
+          "end": 44,
+          "label": "Center Feature",
+          "intensity": 96
+        },
+        {
+          "id": "m5",
+          "start": 44,
+          "end": 56,
+          "label": "Finale Pressure",
+          "intensity": 100
+        },
+        {
+          "id": "m6",
+          "start": 56,
+          "end": 60,
+          "label": "Final Hold",
+          "intensity": 100
+        }
+      ]
+    }
+  ],
+  "devices": [],
+  "engineering": {
+    "format": "AquaFlowPoolGeometry",
+    "version": "1.0",
+    "id": "lebu-fountain-cad-v1",
+    "name": "Lebu Fountain · CAD Design",
+    "pool_type": "freeform",
+    "params": {
+      "width": 16.8162,
+      "length": 9.9842,
+      "radius": 0,
+      "depth": 0.8,
+      "units": "m"
+    },
+    "geometry": {
+      "type": "polygon",
+      "closed": true,
+      "points": [
+        {
+          "x": -16.2058,
+          "y": 27.4258
+        },
+        {
+          "x": -16.0867,
+          "y": 27.5561
+        },
+        {
+          "x": -15.9484,
+          "y": 27.6712
+        },
+        {
+          "x": -15.7941,
+          "y": 27.7671
+        },
+        {
+          "x": -15.628,
+          "y": 27.8406
+        },
+        {
+          "x": -15.4551,
+          "y": 27.8901
+        },
+        {
+          "x": -15.2803,
+          "y": 27.9152
+        },
+        {
+          "x": -15.1038,
+          "y": 27.9165
+        },
+        {
+          "x": -14.9253,
+          "y": 27.8934
+        },
+        {
+          "x": -14.7501,
+          "y": 27.8455
+        },
+        {
+          "x": -14.5833,
+          "y": 27.7737
+        },
+        {
+          "x": -14.4293,
+          "y": 27.6806
+        },
+        {
+          "x": -14.2921,
+          "y": 27.5695
+        },
+        {
+          "x": -6.3956,
+          "y": 20.2418
+        },
+        {
+          "x": -6.2283,
+          "y": 20.0535
+        },
+        {
+          "x": -6.0958,
+          "y": 19.8272
+        },
+        {
+          "x": -6.0099,
+          "y": 19.5736
+        },
+        {
+          "x": -5.9773,
+          "y": 19.3079
+        },
+        {
+          "x": -5.9985,
+          "y": 19.0466
+        },
+        {
+          "x": -6.0676,
+          "y": 18.8043
+        },
+        {
+          "x": -6.1817,
+          "y": 18.5798
+        },
+        {
+          "x": -6.344,
+          "y": 18.3738
+        },
+        {
+          "x": -6.5486,
+          "y": 18.2012
+        },
+        {
+          "x": -6.784,
+          "y": 18.0738
+        },
+        {
+          "x": -7.0351,
+          "y": 17.998
+        },
+        {
+          "x": -7.2858,
+          "y": 17.9738
+        },
+        {
+          "x": -21.0219,
+          "y": 17.9738
+        },
+        {
+          "x": -21.2581,
+          "y": 17.9952
+        },
+        {
+          "x": -21.4945,
+          "y": 18.0621
+        },
+        {
+          "x": -21.7181,
+          "y": 18.1743
+        },
+        {
+          "x": -21.9163,
+          "y": 18.327
+        },
+        {
+          "x": -22.0791,
+          "y": 18.511
+        },
+        {
+          "x": -22.2009,
+          "y": 18.7144
+        },
+        {
+          "x": -22.2841,
+          "y": 18.9365
+        },
+        {
+          "x": -22.3265,
+          "y": 19.1785
+        },
+        {
+          "x": -22.3224,
+          "y": 19.4287
+        },
+        {
+          "x": -22.2709,
+          "y": 19.6735
+        },
+        {
+          "x": -22.1758,
+          "y": 19.9
+        },
+        {
+          "x": -22.0454,
+          "y": 20.0981
+        },
+        {
+          "x": -16.2058,
+          "y": 27.4258
+        }
+      ],
+      "source": {
+        "file": "lebu fountain.dwg",
+        "layer": "Layer 06$fountain",
+        "dwgVersion": "AC1021",
+        "units": "meters",
+        "extents": {
+          "minX": -22.5578,
+          "minY": 17.9738,
+          "maxX": -5.7416,
+          "maxY": 27.958
+        }
+      }
+    },
+    "fixtures": [
+      {
+        "id": "lebu-perimeter-01",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 01",
+        "x": -20.0354,
+        "y": 18.2157,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "base"
+        }
+      },
+      {
+        "id": "lebu-light-01",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 01",
+        "x": -20.0354,
+        "y": 18.2157,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-01"
+        }
+      },
+      {
+        "id": "lebu-perimeter-02",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 02",
+        "x": -17.9904,
+        "y": 18.2898,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "base"
+        }
+      },
+      {
+        "id": "lebu-light-02",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 02",
+        "x": -17.9904,
+        "y": 18.2898,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#eaf7ff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-02"
+        }
+      },
+      {
+        "id": "lebu-perimeter-03",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 03",
+        "x": -16.0149,
+        "y": 18.3904,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "base"
+        }
+      },
+      {
+        "id": "lebu-light-03",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 03",
+        "x": -16.0149,
+        "y": 18.3904,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-03"
+        }
+      },
+      {
+        "id": "lebu-perimeter-04",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 04",
+        "x": -14.1543,
+        "y": 18.4538,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "base"
+        }
+      },
+      {
+        "id": "lebu-light-04",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 04",
+        "x": -14.1543,
+        "y": 18.4538,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#eaf7ff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-04"
+        }
+      },
+      {
+        "id": "lebu-perimeter-05",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 05",
+        "x": -12.2942,
+        "y": 18.3909,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "base"
+        }
+      },
+      {
+        "id": "lebu-light-05",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 05",
+        "x": -12.2942,
+        "y": 18.3909,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-05"
+        }
+      },
+      {
+        "id": "lebu-perimeter-06",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 06",
+        "x": -10.3192,
+        "y": 18.2903,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "base"
+        }
+      },
+      {
+        "id": "lebu-light-06",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 06",
+        "x": -10.3192,
+        "y": 18.2903,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#eaf7ff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-06"
+        }
+      },
+      {
+        "id": "lebu-perimeter-07",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 07",
+        "x": -8.2744,
+        "y": 18.216,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "base"
+        }
+      },
+      {
+        "id": "lebu-light-07",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 07",
+        "x": -8.2744,
+        "y": 18.216,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-base",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-07"
+        }
+      },
+      {
+        "id": "lebu-perimeter-08",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 08",
+        "x": -20.6219,
+        "y": 21.3102,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "left"
+        }
+      },
+      {
+        "id": "lebu-light-08",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 08",
+        "x": -20.6219,
+        "y": 21.3102,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#eaf7ff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-08"
+        }
+      },
+      {
+        "id": "lebu-perimeter-09",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 09",
+        "x": -19.3353,
+        "y": 22.8102,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "left"
+        }
+      },
+      {
+        "id": "lebu-light-09",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 09",
+        "x": -19.3353,
+        "y": 22.8102,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-09"
+        }
+      },
+      {
+        "id": "lebu-perimeter-10",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 10",
+        "x": -18.1065,
+        "y": 24.2793,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "left"
+        }
+      },
+      {
+        "id": "lebu-light-10",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 10",
+        "x": -18.1065,
+        "y": 24.2793,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#eaf7ff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-10"
+        }
+      },
+      {
+        "id": "lebu-perimeter-11",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 11",
+        "x": -16.9399,
+        "y": 25.7773,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "left"
+        }
+      },
+      {
+        "id": "lebu-light-11",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 11",
+        "x": -16.9399,
+        "y": 25.7773,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-left",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-11"
+        }
+      },
+      {
+        "id": "lebu-perimeter-12",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 12",
+        "x": -13.1447,
+        "y": 25.9327,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "right"
+        }
+      },
+      {
+        "id": "lebu-light-12",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 12",
+        "x": -13.1447,
+        "y": 25.9327,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#eaf7ff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-12"
+        }
+      },
+      {
+        "id": "lebu-perimeter-13",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 13",
+        "x": -11.5561,
+        "y": 24.3725,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "right"
+        }
+      },
+      {
+        "id": "lebu-light-13",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 13",
+        "x": -11.5561,
+        "y": 24.3725,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-13"
+        }
+      },
+      {
+        "id": "lebu-perimeter-14",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 14",
+        "x": -9.8756,
+        "y": 22.9048,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "right"
+        }
+      },
+      {
+        "id": "lebu-light-14",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 14",
+        "x": -9.8756,
+        "y": 22.9048,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#eaf7ff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-14"
+        }
+      },
+      {
+        "id": "lebu-perimeter-15",
+        "type": "nozzle_straight_dn25",
+        "label": "Perimeter Jet 15",
+        "x": -8.0845,
+        "y": 21.3812,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "outer_ring_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.8,
+          "flowLpm": 44,
+          "pressureBar": 2.6,
+          "nozzleDiaMm": 11,
+          "connectionSize": "DN25",
+          "designSource": "Scene 9_1.png",
+          "cadLayer": "Layer 06$fountain",
+          "side": "right"
+        }
+      },
+      {
+        "id": "lebu-light-15",
+        "type": "light_uw_rgb_36w",
+        "label": "RGB Light 15",
+        "x": -8.0845,
+        "y": 21.3812,
+        "z": 0,
+        "rotation": 0,
+        "zone": "perimeter-right",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#55bfff",
+        "intensity": 4.5,
+        "radius": 4.2,
+        "engineering": {
+          "wattage": 36,
+          "beamRadiusM": 4.2,
+          "ipRating": "IP68",
+          "pairedNozzleId": "lebu-perimeter-15"
+        }
+      },
+      {
+        "id": "lebu-inner-arch-01",
+        "type": "nozzle_arch_small",
+        "label": "Inner Arch 01",
+        "x": -14.1497,
+        "y": 20.1,
+        "z": 0,
+        "rotation": 90,
+        "zone": "inner-crown",
+        "groupId": "arch_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 1.8,
+          "flowLpm": 30,
+          "pressureBar": 2.2,
+          "nozzleDiaMm": 10,
+          "connectionSize": "DN20"
+        }
+      },
+      {
+        "id": "lebu-inner-arch-02",
+        "type": "nozzle_arch_small",
+        "label": "Inner Arch 02",
+        "x": -12.3743,
+        "y": 20.875,
+        "z": 0,
+        "rotation": 150,
+        "zone": "inner-crown",
+        "groupId": "arch_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 1.8,
+          "flowLpm": 30,
+          "pressureBar": 2.2,
+          "nozzleDiaMm": 10,
+          "connectionSize": "DN20"
+        }
+      },
+      {
+        "id": "lebu-inner-arch-03",
+        "type": "nozzle_arch_small",
+        "label": "Inner Arch 03",
+        "x": -12.3743,
+        "y": 22.425,
+        "z": 0,
+        "rotation": 210,
+        "zone": "inner-crown",
+        "groupId": "arch_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 1.8,
+          "flowLpm": 30,
+          "pressureBar": 2.2,
+          "nozzleDiaMm": 10,
+          "connectionSize": "DN20"
+        }
+      },
+      {
+        "id": "lebu-inner-arch-04",
+        "type": "nozzle_arch_small",
+        "label": "Inner Arch 04",
+        "x": -14.1497,
+        "y": 23.2,
+        "z": 0,
+        "rotation": 270,
+        "zone": "inner-crown",
+        "groupId": "arch_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 1.8,
+          "flowLpm": 30,
+          "pressureBar": 2.2,
+          "nozzleDiaMm": 10,
+          "connectionSize": "DN20"
+        }
+      },
+      {
+        "id": "lebu-inner-arch-05",
+        "type": "nozzle_arch_small",
+        "label": "Inner Arch 05",
+        "x": -15.9251,
+        "y": 22.425,
+        "z": 0,
+        "rotation": 330,
+        "zone": "inner-crown",
+        "groupId": "arch_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 1.8,
+          "flowLpm": 30,
+          "pressureBar": 2.2,
+          "nozzleDiaMm": 10,
+          "connectionSize": "DN20"
+        }
+      },
+      {
+        "id": "lebu-inner-arch-06",
+        "type": "nozzle_arch_small",
+        "label": "Inner Arch 06",
+        "x": -15.9251,
+        "y": 20.875,
+        "z": 0,
+        "rotation": 30,
+        "zone": "inner-crown",
+        "groupId": "arch_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 1.8,
+          "flowLpm": 30,
+          "pressureBar": 2.2,
+          "nozzleDiaMm": 10,
+          "connectionSize": "DN20"
+        }
+      },
+      {
+        "id": "lebu-center-crown",
+        "type": "nozzle_geyser",
+        "label": "Central Crown Jet",
+        "x": -14.1497,
+        "y": 21.65,
+        "z": 0.08,
+        "rotation": 0,
+        "zone": "center-feature",
+        "groupId": "center_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 2.2,
+          "flowLpm": 65,
+          "pressureBar": 2.8,
+          "designNote": "Water crown surrounding the central sculpture shown in the reference render"
+        }
+      },
+      {
+        "id": "lebu-center-hero",
+        "type": "nozzle_geyser",
+        "label": "Central Hero Jet",
+        "x": -14.1497,
+        "y": 20.73,
+        "z": 0.08,
+        "rotation": 0,
+        "zone": "center-feature",
+        "groupId": "center_jets",
+        "visible": true,
+        "engineering": {
+          "jetHeightM": 3.6,
+          "flowLpm": 82,
+          "pressureBar": 3.2
+        }
+      },
+      {
+        "id": "lebu-center-light",
+        "type": "light_uw_rgb_54w",
+        "label": "Central RGB Feature Light",
+        "x": -14.1497,
+        "y": 21.65,
+        "z": 0.1,
+        "rotation": 0,
+        "zone": "center-feature",
+        "groupId": "rgb_lights",
+        "visible": true,
+        "color": "#ffffff",
+        "engineering": {
+          "wattage": 54,
+          "beamRadiusM": 5.5,
+          "ipRating": "IP68"
+        }
+      }
+    ],
+    "site_models": [],
+    "site_surfaces": [
+      {
+        "id": "central-sculpture-island",
+        "label": "Central circular sculpture island",
+        "type": "rock",
+        "color": "#888c92",
+        "elevation": 0.12,
+        "visible": true,
+        "points": [
+          {
+            "x": -12.6997,
+            "y": 21.65
+          },
+          {
+            "x": -12.7491,
+            "y": 22.0253
+          },
+          {
+            "x": -12.894,
+            "y": 22.375
+          },
+          {
+            "x": -13.1244,
+            "y": 22.6753
+          },
+          {
+            "x": -13.4247,
+            "y": 22.9057
+          },
+          {
+            "x": -13.7744,
+            "y": 23.0506
+          },
+          {
+            "x": -14.1497,
+            "y": 23.1
+          },
+          {
+            "x": -14.525,
+            "y": 23.0506
+          },
+          {
+            "x": -14.8747,
+            "y": 22.9057
+          },
+          {
+            "x": -15.175,
+            "y": 22.6753
+          },
+          {
+            "x": -15.4054,
+            "y": 22.375
+          },
+          {
+            "x": -15.5503,
+            "y": 22.0253
+          },
+          {
+            "x": -15.5997,
+            "y": 21.65
+          },
+          {
+            "x": -15.5503,
+            "y": 21.2747
+          },
+          {
+            "x": -15.4054,
+            "y": 20.925
+          },
+          {
+            "x": -15.175,
+            "y": 20.6247
+          },
+          {
+            "x": -14.8747,
+            "y": 20.3943
+          },
+          {
+            "x": -14.525,
+            "y": 20.2494
+          },
+          {
+            "x": -14.1497,
+            "y": 20.2
+          },
+          {
+            "x": -13.7744,
+            "y": 20.2494
+          },
+          {
+            "x": -13.4247,
+            "y": 20.3943
+          },
+          {
+            "x": -13.1244,
+            "y": 20.6247
+          },
+          {
+            "x": -12.894,
+            "y": 20.925
+          },
+          {
+            "x": -12.7491,
+            "y": 21.2747
+          }
+        ]
+      }
+    ],
+    "layers": [
+      {
+        "key": "pool_outline",
+        "label": "CAD Fountain Boundary",
+        "visible": true,
+        "locked": true,
+        "color": "#00aaff"
+      },
+      {
+        "key": "water_surface",
+        "label": "Water Surface",
+        "visible": true,
+        "locked": false,
+        "color": "#168dcc"
+      },
+      {
+        "key": "landscape",
+        "label": "Central Sculpture Island",
+        "visible": true,
+        "locked": false,
+        "color": "#888c92"
+      },
+      {
+        "key": "nozzles",
+        "label": "Nozzles",
+        "visible": true,
+        "locked": false,
+        "color": "#00ccaa"
+      },
+      {
+        "key": "lights",
+        "label": "RGB Lights",
+        "visible": true,
+        "locked": false,
+        "color": "#ffcc00"
+      },
+      {
+        "key": "measurements",
+        "label": "Measurements",
+        "visible": true,
+        "locked": false,
+        "color": "#ffcc00"
+      },
+      {
+        "key": "annotations",
+        "label": "Annotations",
+        "visible": true,
+        "locked": false,
+        "color": "#ffcc00"
+      },
+      {
+        "key": "pipework",
+        "label": "Pipework",
+        "visible": false,
+        "locked": false,
+        "color": "#ff8800"
+      },
+      {
+        "key": "equipment",
+        "label": "Equipment",
+        "visible": true,
+        "locked": false,
+        "color": "#888888"
+      }
+    ],
+    "measurements": [
+      {
+        "id": "measure-width",
+        "x1": -22.5578,
+        "y1": 17.5,
+        "x2": -5.7416,
+        "y2": 17.5,
+        "label": "16.82 m overall width"
+      },
+      {
+        "id": "measure-depth",
+        "x1": -23,
+        "y1": 17.9738,
+        "x2": -23,
+        "y2": 27.958,
+        "label": "9.98 m overall depth"
+      }
+    ],
+    "depth_zones": [
+      {
+        "id": "display",
+        "zone": "display",
+        "label": "Display Basin",
+        "depth": 0.8,
+        "color": "#168dcc",
+        "points": [
+          {
+            "x": -16.2058,
+            "y": 27.4258
+          },
+          {
+            "x": -16.0867,
+            "y": 27.5561
+          },
+          {
+            "x": -15.9484,
+            "y": 27.6712
+          },
+          {
+            "x": -15.7941,
+            "y": 27.7671
+          },
+          {
+            "x": -15.628,
+            "y": 27.8406
+          },
+          {
+            "x": -15.4551,
+            "y": 27.8901
+          },
+          {
+            "x": -15.2803,
+            "y": 27.9152
+          },
+          {
+            "x": -15.1038,
+            "y": 27.9165
+          },
+          {
+            "x": -14.9253,
+            "y": 27.8934
+          },
+          {
+            "x": -14.7501,
+            "y": 27.8455
+          },
+          {
+            "x": -14.5833,
+            "y": 27.7737
+          },
+          {
+            "x": -14.4293,
+            "y": 27.6806
+          },
+          {
+            "x": -14.2921,
+            "y": 27.5695
+          },
+          {
+            "x": -6.3956,
+            "y": 20.2418
+          },
+          {
+            "x": -6.2283,
+            "y": 20.0535
+          },
+          {
+            "x": -6.0958,
+            "y": 19.8272
+          },
+          {
+            "x": -6.0099,
+            "y": 19.5736
+          },
+          {
+            "x": -5.9773,
+            "y": 19.3079
+          },
+          {
+            "x": -5.9985,
+            "y": 19.0466
+          },
+          {
+            "x": -6.0676,
+            "y": 18.8043
+          },
+          {
+            "x": -6.1817,
+            "y": 18.5798
+          },
+          {
+            "x": -6.344,
+            "y": 18.3738
+          },
+          {
+            "x": -6.5486,
+            "y": 18.2012
+          },
+          {
+            "x": -6.784,
+            "y": 18.0738
+          },
+          {
+            "x": -7.0351,
+            "y": 17.998
+          },
+          {
+            "x": -7.2858,
+            "y": 17.9738
+          },
+          {
+            "x": -21.0219,
+            "y": 17.9738
+          },
+          {
+            "x": -21.2581,
+            "y": 17.9952
+          },
+          {
+            "x": -21.4945,
+            "y": 18.0621
+          },
+          {
+            "x": -21.7181,
+            "y": 18.1743
+          },
+          {
+            "x": -21.9163,
+            "y": 18.327
+          },
+          {
+            "x": -22.0791,
+            "y": 18.511
+          },
+          {
+            "x": -22.2009,
+            "y": 18.7144
+          },
+          {
+            "x": -22.2841,
+            "y": 18.9365
+          },
+          {
+            "x": -22.3265,
+            "y": 19.1785
+          },
+          {
+            "x": -22.3224,
+            "y": 19.4287
+          },
+          {
+            "x": -22.2709,
+            "y": 19.6735
+          },
+          {
+            "x": -22.1758,
+            "y": 19.9
+          },
+          {
+            "x": -22.0454,
+            "y": 20.0981
+          },
+          {
+            "x": -16.2058,
+            "y": 27.4258
+          }
+        ]
+      }
+    ],
+    "manualPipes": [],
+    "pipes": [],
+    "hydraulics": null,
+    "solved_hydraulics": null,
+    "bom": [],
+    "design_notes": [
+      "Pool boundary reconstructed from the dedicated DWG fountain layer in metres.",
+      "Jet and light placement interpreted from Scene 9_1.png because the DWG layer contains only the basin outline.",
+      "Central rock surface represents the circular sculpture plinth; the custom metal orb itself is not embedded as a GLB asset."
+    ],
+    "provenance": {
+      "package": "AF-NEXT-002 Lebu pilot",
+      "fromDrawing": {
+        "file": "lebu fountain.dwg",
+        "dwgVersion": "AC1021 (AutoCAD 2007)",
+        "insunits": "6 (metres)",
+        "layer": "Layer 06$fountain",
+        "entities": "3 rational quadratic SPLINE corners (handles 5F60E, 5F610, 5F612) joined by LINE edges (5F60F, 5F611, 5F613)",
+        "verifiedAgainst": "outputs/lebu_fountain_converted.dxf (LibreDWG dwg2dxf conversion; see manifest.json)",
+        "fields": [
+          "engineering.geometry.points",
+          "engineering.params.width",
+          "engineering.params.length",
+          "engineering.geometry.source.extents",
+          "engineering.depth_zones[0].points",
+          "engineering.measurements"
+        ],
+        "method": "Each SPLINE is sampled as two rational quadratic Bezier halves from the DXF control points and weights (6 segments per half)."
+      },
+      "interpretedFromRender": {
+        "file": "Scene 9_1.png",
+        "status": "render image is not in the package; see manifest.json",
+        "fields": [
+          "engineering.fixtures (all 39: positions, types, engineering data)",
+          "engineering.site_surfaces (central sculpture island)",
+          "programmer.studio (groups, recipes, markers)",
+          "timelineTracks (pattern show)",
+          "render.cameraViews"
+        ],
+        "note": "The DWG fountain layer contains only the basin outline; no nozzle or light blocks exist in the drawing."
+      },
+      "assumptions": [
+        "Basin depth 0.8 m is a design assumption (not in the DWG layer).",
+        "Nozzle/light engineering values (flow, pressure, jet height, wattage) are generic estimates, not manufacturer data.",
+        "The show is an original pattern show, not a reproduction of any commissioned controller program."
+      ]
+    }
+  },
+  "project": {
+    "id": "project-lebu-fountain-pilot",
+    "name": "Lebu Fountain · Pilot",
+    "schemaVersion": 2,
+    "revision": 1,
+    "createdAt": "2026-10-13T00:00:00.000Z",
+    "modifiedAt": "2026-10-13T00:00:00.000Z"
+  },
+  "workspace": {
+    "activePanel": "preview"
+  },
+  "render": {
+    "environment": "night",
+    "cameraMode": "named",
+    "quality": "high",
+    "pattern": "none",
+    "lightColor": "#3aaeff",
+    "windX": 0,
+    "windZ": 0,
+    "waveResponse": 1,
+    "waveDamping": 0.985,
+    "waveBoundaryDamping": 0.82,
+    "reviewMode": true,
+    "reviewOverlays": false,
+    "showPerformance": true,
+    "sidebarOpen": true,
+    "sidebarTab": "render",
+    "editMode": false,
+    "exportResolution": "1080p",
+    "exportFps": 60,
+    "bakeStart": 0,
+    "bakeDuration": 60,
+    "bakeAudio": false,
+    "activeCameraView": "base-audience",
+    "cameraViews": [
+      {
+        "id": "plan-top",
+        "name": "Plan · top-down",
+        "position": {
+          "x": 0,
+          "y": 22,
+          "z": 0.01
+        },
+        "target": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "note": "Plan view of the DWG basin outline and all fixtures."
+      },
+      {
+        "id": "base-audience",
+        "name": "Audience · base edge",
+        "position": {
+          "x": 0,
+          "y": 3.2,
+          "z": -15.97
+        },
+        "target": {
+          "x": 0,
+          "y": 1.4,
+          "z": 0
+        },
+        "note": "Eye-level view across the straight base edge. Viewpoint is an assumption, not the render camera."
+      },
+      {
+        "id": "apex-three-quarter",
+        "name": "Three-quarter · apex side",
+        "position": {
+          "x": 9,
+          "y": 6.5,
+          "z": 12
+        },
+        "target": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "note": "Elevated overview from the curved apex side."
+      },
+      {
+        "id": "center-feature",
+        "name": "Center feature close-up",
+        "position": {
+          "x": 0,
+          "y": 2.4,
+          "z": -7.5
+        },
+        "target": {
+          "x": 0,
+          "y": 1.6,
+          "z": -1.3
+        },
+        "note": "Central crown, hero jet and RGB feature light."
+      }
+    ]
+  },
+  "programmer": {
+    "studio": {
+      "version": 1,
+      "groups": [
+        {
+          "id": "group-perimeter",
+          "name": "Perimeter Jets",
+          "memberFixtureIds": [
+            "lebu-perimeter-01",
+            "lebu-perimeter-02",
+            "lebu-perimeter-03",
+            "lebu-perimeter-04",
+            "lebu-perimeter-05",
+            "lebu-perimeter-06",
+            "lebu-perimeter-07",
+            "lebu-perimeter-08",
+            "lebu-perimeter-09",
+            "lebu-perimeter-10",
+            "lebu-perimeter-11",
+            "lebu-perimeter-12",
+            "lebu-perimeter-13",
+            "lebu-perimeter-14",
+            "lebu-perimeter-15"
+          ],
+          "orderMode": "clockwise",
+          "color": "#32c8ff"
+        },
+        {
+          "id": "group-left",
+          "name": "Left Side Jets",
+          "memberFixtureIds": [
+            "lebu-perimeter-08",
+            "lebu-perimeter-09",
+            "lebu-perimeter-10",
+            "lebu-perimeter-11"
+          ],
+          "orderMode": "front-to-back",
+          "color": "#65d9d0"
+        },
+        {
+          "id": "group-right",
+          "name": "Right Side Jets",
+          "memberFixtureIds": [
+            "lebu-perimeter-12",
+            "lebu-perimeter-13",
+            "lebu-perimeter-14",
+            "lebu-perimeter-15"
+          ],
+          "orderMode": "front-to-back",
+          "color": "#65d9d0"
+        },
+        {
+          "id": "group-inner",
+          "name": "Inner Crown Arches",
+          "memberFixtureIds": [
+            "lebu-inner-arch-01",
+            "lebu-inner-arch-02",
+            "lebu-inner-arch-03",
+            "lebu-inner-arch-04",
+            "lebu-inner-arch-05",
+            "lebu-inner-arch-06"
+          ],
+          "orderMode": "clockwise",
+          "color": "#73b7ff"
+        },
+        {
+          "id": "group-center",
+          "name": "Center Feature",
+          "memberFixtureIds": [
+            "lebu-center-crown",
+            "lebu-center-hero"
+          ],
+          "orderMode": "engineering",
+          "color": "#ffffff"
+        },
+        {
+          "id": "group-lights",
+          "name": "RGB Underwater Lights",
+          "memberFixtureIds": [
+            "lebu-light-01",
+            "lebu-light-02",
+            "lebu-light-03",
+            "lebu-light-04",
+            "lebu-light-05",
+            "lebu-light-06",
+            "lebu-light-07",
+            "lebu-light-08",
+            "lebu-light-09",
+            "lebu-light-10",
+            "lebu-light-11",
+            "lebu-light-12",
+            "lebu-light-13",
+            "lebu-light-14",
+            "lebu-light-15",
+            "lebu-center-light"
+          ],
+          "orderMode": "clockwise",
+          "color": "#3b82f6"
+        }
+      ],
+      "recipes": [
+        {
+          "id": "r-intro-water",
+          "version": 1,
+          "groupId": "group-perimeter",
+          "name": "Opening rise",
+          "effect": "pulse",
+          "start": 0,
+          "duration": 8,
+          "cycles": 1,
+          "spread": 0.25,
+          "intensity": 62,
+          "color": "#bfeaff",
+          "attribute": "level",
+          "order": "center-out",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-intro-light",
+          "version": 1,
+          "groupId": "group-lights",
+          "name": "Moonlight opening",
+          "effect": "static",
+          "start": 0,
+          "duration": 8,
+          "cycles": 1,
+          "spread": 0,
+          "intensity": 55,
+          "color": "#dff7ff",
+          "attribute": "level",
+          "order": "clockwise",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-chase-water",
+          "version": 1,
+          "groupId": "group-perimeter",
+          "name": "Triangular perimeter chase",
+          "effect": "chase",
+          "start": 8,
+          "duration": 12,
+          "cycles": 4,
+          "spread": 1,
+          "intensity": 92,
+          "color": "#4dc8ff",
+          "attribute": "level",
+          "order": "clockwise",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-chase-light",
+          "version": 1,
+          "groupId": "group-lights",
+          "name": "Cyan light chase",
+          "effect": "wave",
+          "start": 8,
+          "duration": 12,
+          "cycles": 3,
+          "spread": 1,
+          "intensity": 88,
+          "color": "#25bfff",
+          "attribute": "level",
+          "order": "clockwise",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-left-wave",
+          "version": 1,
+          "groupId": "group-left",
+          "name": "Mirrored left wave",
+          "effect": "wave",
+          "start": 20,
+          "duration": 12,
+          "cycles": 3,
+          "spread": 0.9,
+          "intensity": 86,
+          "color": "#76ddff",
+          "attribute": "level",
+          "order": "front-to-back",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-right-wave",
+          "version": 1,
+          "groupId": "group-right",
+          "name": "Mirrored right wave",
+          "effect": "wave",
+          "start": 20,
+          "duration": 12,
+          "cycles": 3,
+          "spread": 0.9,
+          "intensity": 86,
+          "color": "#76ddff",
+          "attribute": "level",
+          "order": "right-to-left",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-inner",
+          "version": 1,
+          "groupId": "group-inner",
+          "name": "Inner crown ripple",
+          "effect": "ripple",
+          "start": 32,
+          "duration": 12,
+          "cycles": 4,
+          "spread": 0.85,
+          "intensity": 78,
+          "color": "#b7e8ff",
+          "attribute": "level",
+          "order": "center-out",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-center",
+          "version": 1,
+          "groupId": "group-center",
+          "name": "Center hero pulse",
+          "effect": "pulse",
+          "start": 32,
+          "duration": 12,
+          "cycles": 3,
+          "spread": 0,
+          "intensity": 100,
+          "color": "#ffffff",
+          "attribute": "level",
+          "order": "engineering",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-finale-water",
+          "version": 1,
+          "groupId": "group-perimeter",
+          "name": "Blue-white finale chase",
+          "effect": "chase",
+          "start": 44,
+          "duration": 12,
+          "cycles": 6,
+          "spread": 1,
+          "intensity": 100,
+          "color": "#eaf8ff",
+          "attribute": "level",
+          "order": "counter-clockwise",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-finale-inner",
+          "version": 1,
+          "groupId": "group-inner",
+          "name": "Crown sparkle",
+          "effect": "sparkle",
+          "start": 44,
+          "duration": 12,
+          "cycles": 6,
+          "spread": 1,
+          "intensity": 94,
+          "color": "#4aa8ff",
+          "attribute": "level",
+          "order": "clockwise",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-grand",
+          "version": 1,
+          "groupId": "group-perimeter",
+          "name": "Grand final rise",
+          "effect": "static",
+          "start": 56,
+          "duration": 4,
+          "cycles": 1,
+          "spread": 0,
+          "intensity": 100,
+          "color": "#ffffff",
+          "attribute": "level",
+          "order": "engineering",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-grand-center",
+          "version": 1,
+          "groupId": "group-center",
+          "name": "Hero finale",
+          "effect": "static",
+          "start": 56,
+          "duration": 4,
+          "cycles": 1,
+          "spread": 0,
+          "intensity": 100,
+          "color": "#ffffff",
+          "attribute": "level",
+          "order": "engineering",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        },
+        {
+          "id": "r-grand-lights",
+          "version": 1,
+          "groupId": "group-lights",
+          "name": "White finale",
+          "effect": "static",
+          "start": 56,
+          "duration": 4,
+          "cycles": 1,
+          "spread": 0,
+          "intensity": 100,
+          "color": "#ffffff",
+          "attribute": "level",
+          "order": "engineering",
+          "seed": 7,
+          "muted": false,
+          "locked": false
+        }
+      ],
+      "presets": [],
+      "tempo": [
+        {
+          "time": 0,
+          "bpm": 120
+        }
+      ],
+      "legacyClips": [],
+      "markers": [
+        {
+          "id": "mk1",
+          "time": 0,
+          "name": "Opening"
+        },
+        {
+          "id": "mk2",
+          "time": 8,
+          "name": "Perimeter chase"
+        },
+        {
+          "id": "mk3",
+          "time": 20,
+          "name": "Mirrored waves"
+        },
+        {
+          "id": "mk4",
+          "time": 32,
+          "name": "Center feature"
+        },
+        {
+          "id": "mk5",
+          "time": 44,
+          "name": "Finale"
+        },
+        {
+          "id": "mk6",
+          "time": 56,
+          "name": "Grand finish"
+        }
+      ],
+      "layout": {
+        "preset": "Compose",
+        "left": 250,
+        "right": 292,
+        "timeline": 310,
+        "view": "plan"
+      }
+    },
+    "timelineClips": [],
+    "cues": [],
+    "audioDuration": 60,
+    "notes": "AF-NEXT-002 pilot: DWG-derived triangular basin with render-interpreted fixtures and an editable blue-white pattern show. Hardware unmapped."
+  },
+  "integrations": {
+    "siemensSiteId": null
+  },
+  "automation": {
+    "audioData": null,
+    "manualPatterns": null,
+    "manualPatternMeta": {
+      "name": "Lebu Triangular Crown",
+      "source": "CAD + Scene 9_1.png"
+    },
+    "manualPriority": false,
+    "manualPatternConfig": {
+      "patternType": "wave",
+      "intensity": 0.9,
+      "speed": 1.15,
+      "stepLength": 0.5,
+      "beatSync": true,
+      "steps": [
+        0.35,
+        0.55,
+        0.75,
+        1,
+        0.75,
+        0.55,
+        0.35,
+        0.55,
+        0.75,
+        1,
+        0.75,
+        0.55,
+        0.35,
+        0.55,
+        0.75,
+        1
+      ]
+    },
+    "generatedTracks": []
+  },
+  "ui": {
+    "timelineZoom": 8,
+    "showGrid": true,
+    "snapToGrid": true
+  },
+  "hardware": {
+    "status": "unmapped",
+    "provisional": true,
+    "addresses": [],
+    "note": "No controller, DMX/I-CAN or Siemens addresses are assigned. Any address added here must carry provisional: true until site commissioning evidence exists."
+  }
+}

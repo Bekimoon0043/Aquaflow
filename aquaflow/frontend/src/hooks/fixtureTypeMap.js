@@ -272,12 +272,15 @@ groupId: f.groupId || resolveFixtureGroup(f.type),
 /**
  * Convert engineering geometry to FountainScene_v6 poolGeometry config.
  */
-export function geometryToPoolConfig(geometry, params, poolType) {
+export function geometryToPoolConfig(geometry, params, poolType, basins = null) {
   if (!geometry && !params) return null;
   return {
     poolType: poolType || "rectangular",
     params:   params   || { width:12, length:8, radius:6, depth:0.8 },
     geometry: geometry || null,
+    // AF-NEXT-010: every basin (basins[0] === geometry); only multi-basin designs carry it,
+    // so a single-basin config (and the scene's change detection) is unchanged.
+    ...(Array.isArray(basins) && basins.length > 1 ? { basins } : {}),
   };
 }
 /**

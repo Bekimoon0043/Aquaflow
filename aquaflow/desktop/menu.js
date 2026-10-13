@@ -17,7 +17,10 @@ async function openShowDialog() {
   const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
   const res = await dialog.showOpenDialog(win, {
     title: "Open AquaFlow Show",
-    filters: [{ name: "AquaFlow Show", extensions: ["aquashow"] }, { name: "All Files", extensions: ["*"] }],
+    filters: [
+      { name: "AquaFlow Project", extensions: ["aqua", "aquapkg", "aquashow"] },
+      { name: "All Files", extensions: ["*"] },
+    ],
     properties: ["openFile"],
   });
   if (!res.canceled && res.filePaths[0]) sendToRenderer("open-show", res.filePaths[0]);
@@ -55,6 +58,9 @@ function buildMenu() {
       submenu: [
         { label: "Open Show…", accelerator: "CmdOrCtrl+O", click: openShowDialog },
         { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendToRenderer("menu-save") },
+        // AF-NEXT-006 — Save As picks a new path; Package embeds assets into an .aquapkg.
+        { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendToRenderer("menu-save-as") },
+        { label: "Package Project (.aquapkg)…", click: () => sendToRenderer("menu-package") },
         { type: "separator" },
         { label: "Exit", accelerator: "CmdOrCtrl+Q", role: "quit" },
       ],

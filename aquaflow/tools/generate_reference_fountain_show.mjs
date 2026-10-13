@@ -4,6 +4,12 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outputPath = path.resolve(here, "..", "..", "outputs", "Reference_Keyhole_Crown_Fountain.aqua");
+
+// AF-NEXT-001: the show is built by a pure function so tests can generate it in
+// memory instead of depending on the gitignored outputs/ folder. Running this
+// file directly (node tools/generate_reference_fountain_show.mjs) still writes
+// outputs/Reference_Keyhole_Crown_Fountain.aqua exactly as before.
+export function buildReferenceFountainShow({ savedAt = new Date().toISOString() } = {}) {
 const round = (value) => Number(value.toFixed(3));
 
 const basinPoints = [
@@ -254,7 +260,7 @@ const engineering = {
 
 const file = {
   aquaflow: "1.0",
-  savedAt: new Date().toISOString(),
+  savedAt,
   show: {
     id: "show-reference-keyhole-crown-v1",
     name: "Reference Keyhole Crown Fountain",
@@ -277,16 +283,24 @@ if (fixtures.filter(fixture => fixture.type.startsWith("nozzle_")).length !== 61
 if (timelineTracks.length !== 7 || basinPoints.length < 12) {
   throw new Error("Generated show is incomplete");
 }
-fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-fs.writeFileSync(outputPath, `${JSON.stringify(file, null, 2)}\n`, "utf8");
-console.log(JSON.stringify({
-  outputPath,
-  basinPoints: basinPoints.length,
-  waterOutlets: 61,
-  lights: 26,
-  pumps: 3,
-  siteModels: siteModels.length,
-  timelineTracks: timelineTracks.length,
-  cues: timelineTracks.reduce((sum, track) => sum + track.clips.length, 0),
-  durationSeconds: file.show.duration,
-}, null, 2));
+return file;
+}
+
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const file = buildReferenceFountainShow();
+  const { fixtures, site_models: siteModels } = file.engineering;
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, `${JSON.stringify(file, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({
+    outputPath,
+    basinPoints: file.engineering.geometry.points.length,
+    waterOutlets: fixtures.filter(fixture => fixture.type.startsWith("nozzle_")).length,
+    lights: fixtures.filter(fixture => fixture.type.startsWith("light_")).length,
+    pumps: fixtures.filter(fixture => fixture.type.startsWith("pump_")).length,
+    siteModels: siteModels.length,
+    timelineTracks: file.timelineTracks.length,
+    cues: file.timelineTracks.reduce((sum, track) => sum + track.clips.length, 0),
+    durationSeconds: file.show.duration,
+  }, null, 2));
+}

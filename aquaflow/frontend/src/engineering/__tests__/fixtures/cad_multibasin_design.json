@@ -1,0 +1,234 @@
+{
+ "basins": [
+  {
+   "closed": true,
+   "depthZones": [],
+   "floorLevel": -0.8,
+   "holes": [
+    [
+     {
+      "x": 8.0,
+      "y": -3.0
+     },
+     {
+      "x": 12.0,
+      "y": -3.0
+     },
+     {
+      "x": 12.0,
+      "y": -7.0
+     },
+     {
+      "x": 8.0,
+      "y": -7.0
+     }
+    ]
+   ],
+   "id": "basin-33",
+   "name": "Basin 1",
+   "outer": [
+    {
+     "x": 0.0,
+     "y": 0.0
+    },
+    {
+     "x": 20.0,
+     "y": 0.0
+    },
+    {
+     "x": 20.0,
+     "y": -10.0
+    },
+    {
+     "x": 0.0,
+     "y": -10.0
+    }
+   ],
+   "type": "freeform",
+   "wallHeight": 0.8
+  },
+  {
+   "closed": true,
+   "depthZones": [],
+   "floorLevel": -0.8,
+   "holes": [],
+   "id": "basin-35",
+   "name": "Basin 2",
+   "outer": [
+    {
+     "x": 26.0,
+     "y": 0.0
+    },
+    {
+     "x": 36.0,
+     "y": 0.0
+    },
+    {
+     "x": 36.0,
+     "y": -8.0
+    },
+    {
+     "x": 26.0,
+     "y": -8.0
+    }
+   ],
+   "type": "freeform",
+   "wallHeight": 0.8
+  }
+ ],
+ "depth_zones": [],
+ "fixtures": [
+  {
+   "cadHandle": "3B",
+   "cadLayer": "F-NOZZLES",
+   "engineering": {
+    "mappingStatus": "commissioning-required",
+    "plcChannel": null
+   },
+   "id": "cad-3B",
+   "label": "N-01",
+   "rotation": 0,
+   "type": "nozzle_geyser",
+   "x": 3.0,
+   "y": -2.0
+  },
+  {
+   "cadHandle": "3E",
+   "cadLayer": "F-NOZZLES",
+   "engineering": {
+    "mappingStatus": "commissioning-required",
+    "plcChannel": null
+   },
+   "id": "cad-3E",
+   "label": "N-02",
+   "rotation": 0,
+   "type": "nozzle_geyser",
+   "x": 5.5,
+   "y": -1.75
+  },
+  {
+   "cadHandle": "41",
+   "cadLayer": "F-NOZZLES",
+   "engineering": {
+    "mappingStatus": "commissioning-required",
+    "plcChannel": null
+   },
+   "id": "cad-41",
+   "label": "N-03",
+   "rotation": 0,
+   "type": "nozzle_geyser",
+   "x": 15.0,
+   "y": -8.0
+  },
+  {
+   "cadHandle": "44",
+   "cadLayer": "F-NOZZLES",
+   "engineering": {
+    "icanChannel": 7,
+    "icanGroup": 2,
+    "mappingStatus": "commissioning-required",
+    "plcChannel": 12
+   },
+   "id": "cad-44",
+   "label": "N-11",
+   "rotation": 0,
+   "type": "nozzle_geyser",
+   "x": 29.0,
+   "y": -4.0
+  },
+  {
+   "cadHandle": "47",
+   "cadLayer": "F-NOZZLES",
+   "engineering": {
+    "mappingStatus": "commissioning-required",
+    "plcChannel": null
+   },
+   "id": "cad-47",
+   "label": "N-12",
+   "rotation": 0,
+   "type": "nozzle_geyser",
+   "x": 33.0,
+   "y": -4.0
+  },
+  {
+   "cadHandle": "4F",
+   "cadLayer": "F-LIGHTS",
+   "engineering": {
+    "dmxAddress": 205,
+    "mappingStatus": "commissioned",
+    "plcChannel": null
+   },
+   "id": "cad-4F",
+   "label": "L-01",
+   "rotation": 0,
+   "type": "light_rgb",
+   "x": 2.0,
+   "y": -9.0
+  },
+  {
+   "cadHandle": "52",
+   "cadLayer": "F-LIGHTS",
+   "engineering": {
+    "mappingStatus": "commissioning-required",
+    "plcChannel": null
+   },
+   "id": "cad-52",
+   "label": "L-11",
+   "rotation": 0,
+   "type": "light_rgb",
+   "x": 35.0,
+   "y": -7.0
+  }
+ ],
+ "geometry": {
+  "closed": true,
+  "floorLevel": -0.8,
+  "holes": [
+   [
+    {
+     "x": 8.0,
+     "y": -3.0
+    },
+    {
+     "x": 12.0,
+     "y": -3.0
+    },
+    {
+     "x": 12.0,
+     "y": -7.0
+    },
+    {
+     "x": 8.0,
+     "y": -7.0
+    }
+   ]
+  ],
+  "points": [
+   {
+    "x": 0.0,
+    "y": 0.0
+   },
+   {
+    "x": 20.0,
+    "y": 0.0
+   },
+   {
+    "x": 20.0,
+    "y": -10.0
+   },
+   {
+    "x": 0.0,
+    "y": -10.0
+   }
+  ],
+  "type": "freeform",
+  "wallHeight": 0.8
+ },
+ "name": "Two basin plaza",
+ "params": {
+  "depth": 0.8,
+  "length": 10,
+  "width": 20
+ },
+ "pool_type": "freeform"
+}

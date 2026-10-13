@@ -196,15 +196,19 @@ export function getRecentShows() {
 }
 
 /**
- * Auto-save to localStorage
+ * Legacy single-slot auto-save to localStorage. AF-NEXT-006: the app now writes rolling
+ * snapshots (utils/projectRecovery.js); this helper is kept for callers of the old slot
+ * and reports failures instead of swallowing them.
+ * Returns { ok: true } | { ok: false, error }.
  */
 export function autoSave(state, engineeringProject = null, projectDocument = null) {
   try {
     const data = serializeShow(state, engineeringProject, projectDocument);
     localStorage.setItem("aquaflow_autosave", JSON.stringify(data));
     localStorage.setItem("aquaflow_autosave_ts", new Date().toISOString());
+    return { ok: true };
   } catch (e) {
-    // Silently fail if storage is full
+    return { ok: false, error: e?.message || String(e) };
   }
 }
 

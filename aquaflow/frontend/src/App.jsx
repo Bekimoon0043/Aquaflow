@@ -45,6 +45,7 @@ const PoolGeometryDesigner = lazy(() => import("./components/panels/PoolGeometry
 const PatternDesignerPanel = lazy(() => import("./components/panels/PatternDesignerPanel"));
 const Export3DPanel = lazy(() => import("./components/panels/Export3DPanel"));
 const ShowProgrammerPanel = lazy(() => import("./components/programmer/studio/ShowStudio"));
+const PreviewShowTimeline = lazy(() => import("./components/programmer/studio/PreviewShowTimeline"));
 const FountainControlPanel = lazy(() => import("./components/panels/FountainControlPanel"));
 import ResizeHandle from "./components/layout/ResizeHandle";
 import { useResizableLayout } from "./components/layout/useResizableLayout";
@@ -53,10 +54,17 @@ import ConnectionBanner from "./components/ConnectionBanner";
 import CommissioningBanner from "./components/CommissioningBanner";
 import LogPanel from "./components/LogPanel";
 import ShowBrowser from "./components/ShowBrowser";
+import ProjectRecoveryHost from "./components/ProjectRecoveryHost"; // AF-NEXT-006
 import { useShowStore } from "./store/showStore";
 import useProjectStore from "./store/projectStore";
 import "./styles/globals.css";
 import PanelErrorBoundary from "./components/PanelErrorBoundary";
+// AF-NEXT-014 — guided Design / Program / Commission / Operate workspaces over the same panels.
+import WorkspaceSwitcher from "./components/workspace/WorkspaceSwitcher";
+import WorkspaceNav from "./components/workspace/WorkspaceNav";
+import GuidanceStrip from "./components/workspace/GuidanceStrip";
+import StartCard from "./components/workspace/StartCard";
+import useWorkspaceController from "./workspaces/useWorkspaceController";
 
 
 
@@ -108,6 +116,7 @@ function StudioApp() {
   const projectDirty = useProjectStore((state) => state.dirty);
   const { lastSaved } = useAutoSave();
   useServerShowSync();
+  const guided = useWorkspaceController({ activePanel, setActivePanel });
 
   return (
     <div className="app-shell">
@@ -121,7 +130,20 @@ function StudioApp() {
         onOpenBrowser={(mode) => setShowBrowser(mode)}
         isDirty={isDirty || projectDirty}
         lastSaved={lastSaved}
+        workspaceSwitcher={<WorkspaceSwitcher workspace={guided.workspace} onSelect={guided.selectWorkspace} onStart={() => guided.setStartOpen(true)} />}
       />
+      <GuidanceStrip
+        workspace={guided.workspace}
+        steps={guided.steps}
+        diagnostics={guided.diagnostics}
+        onGo={guided.goStep}
+        onDiagnostic={guided.runDiagnostic}
+        onRunPreflight={guided.runPreflightNow}
+        preflightBusy={guided.preflightBusy}
+        preflightError={guided.preflightError}
+      />
+      <div className="workspace-frame">
+      <WorkspaceNav workspace={guided.workspace} activePanel={activePanel} onOpen={guided.open} />
       <div className={`workspace${activePanel === "geometry" ? " engineering-workspace" : ""}`} ref={workspaceRef}>
         {visitedPanelsRef.current.has("geometry") && (
           <div className="engineering-workspace-content" hidden={activePanel !== "geometry"} aria-hidden={activePanel !== "geometry"}>
@@ -201,7 +223,9 @@ function StudioApp() {
               invert: true, containerPx: centerHeightPx(), otherPanelsPx: 0,
             })}
           />
-          <Timeline height={layout.timelineHeight} />
+          {activePanel === "preview"
+            ? <Suspense fallback={<div style={{ height: layout.timelineHeight, padding: 16 }}>Loading show timeline…</div>}><PreviewShowTimeline height={layout.timelineHeight} /></Suspense>
+            : <Timeline height={layout.timelineHeight} />}
           </div>
         </div>
         <ResizeHandle
@@ -218,9 +242,20 @@ function StudioApp() {
         <InspectorPanel width={layout.rightWidth} />
         </div>
       </div>
+      </div>
       {showLogs && <LogPanel onClose={() => setShowLogs(false)} />}
       {showBrowser && <ShowBrowser mode={showBrowser} onClose={() => setShowBrowser(null)} />}
       <StatusBar onToggleLogs={() => setShowLogs((v) => !v)} lastSaved={lastSaved} />
+      {guided.startOpen && (
+        <StartCard
+          pilotState={guided.pilotState}
+          onOpenPilot={guided.openPilot}
+          onImportCad={() => { guided.setStartOpen(false); guided.selectWorkspace("design"); guided.open({ panel: "geometry", action: "cad-import" }); }}
+          onOpenProject={() => { guided.setStartOpen(false); setShowBrowser("open"); }}
+          onClose={() => guided.setStartOpen(false)}
+        />
+      )}
+      <ProjectRecoveryHost />
     </div>
   );
 }

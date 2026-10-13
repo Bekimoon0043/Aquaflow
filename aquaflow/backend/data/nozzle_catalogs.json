@@ -27,7 +27,13 @@
           "k_factor": 28.0,
           "notes": "Glass-clear laminar jet."
         }
-      ]
+      ],
+      "provenance": {
+        "source": "generic_estimate",
+        "confidence": "low",
+        "revision": "aquaflow-generic-2026.10",
+        "notes": "Illustrative placeholder values. The 'AquaFlow Standard' catalog name is a placeholder only — these numbers were NOT taken from a manufacturer datasheet. Verify with the supplier datasheet."
+      }
     },
     {
       "manufacturer": "OASE",
@@ -38,11 +44,31 @@
           "nozzle_type": "foam",
           "orifice_mm": 30,
           "pressure_flow_points": [
-            {"pressure": 0.5, "flow": 45.0,  "jet_height": 1.2},
-            {"pressure": 1.0, "flow": 64.0,  "jet_height": 2.1},
-            {"pressure": 2.0, "flow": 90.0,  "jet_height": 3.6},
-            {"pressure": 3.0, "flow": 110.0, "jet_height": 4.8},
-            {"pressure": 4.0, "flow": 127.0, "jet_height": 5.7}
+            {
+              "pressure": 0.5,
+              "flow": 45.0,
+              "jet_height": 1.2
+            },
+            {
+              "pressure": 1.0,
+              "flow": 64.0,
+              "jet_height": 2.1
+            },
+            {
+              "pressure": 2.0,
+              "flow": 90.0,
+              "jet_height": 3.6
+            },
+            {
+              "pressure": 3.0,
+              "flow": 110.0,
+              "jet_height": 4.8
+            },
+            {
+              "pressure": 4.0,
+              "flow": 127.0,
+              "jet_height": 5.7
+            }
           ],
           "notes": "Tabulated manufacturer pressure-flow-height curve."
         },
@@ -52,14 +78,37 @@
           "nozzle_type": "fan",
           "orifice_mm": 40,
           "pressure_flow_points": [
-            {"pressure": 0.5, "flow": 70.0,  "jet_height": 0.8},
-            {"pressure": 1.0, "flow": 99.0,  "jet_height": 1.4},
-            {"pressure": 2.0, "flow": 140.0, "jet_height": 2.3},
-            {"pressure": 3.0, "flow": 171.0, "jet_height": 3.0}
+            {
+              "pressure": 0.5,
+              "flow": 70.0,
+              "jet_height": 0.8
+            },
+            {
+              "pressure": 1.0,
+              "flow": 99.0,
+              "jet_height": 1.4
+            },
+            {
+              "pressure": 2.0,
+              "flow": 140.0,
+              "jet_height": 2.3
+            },
+            {
+              "pressure": 3.0,
+              "flow": 171.0,
+              "jet_height": 3.0
+            }
           ],
           "notes": "Wide fan spray, height is low by design."
         }
-      ]
+      ],
+      "provenance": {
+        "source": "generic_estimate",
+        "confidence": "low",
+        "revision": "aquaflow-generic-2026.10",
+        "notes": "Illustrative placeholder values. The 'OASE' catalog name is a placeholder only — these numbers were NOT taken from a manufacturer datasheet. Verify with the supplier datasheet."
+      }
     }
-  ]
+  ],
+  "_comment": "AF-NEXT-012: every catalog here is a generic estimate (see provenance). Add verified manufacturer/user-measured nozzles via the Equipment registry (data/equipment_models), not here."
 }

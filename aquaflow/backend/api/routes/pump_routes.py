@@ -21,6 +21,15 @@ async def catalog():
     for model, data in PUMP_CATALOG.items():
         pc = load_catalog_pump(model)
         out[model] = {"points": data, **pc.to_dict()}
+    # AF-NEXT-012 — verified (datasheet / user-measured) curve sets from the registry.
+    try:
+        from services.equipment_registry import get_equipment_registry
+        for rec in get_equipment_registry().list("pump"):
+            pc = load_catalog_pump(rec["id"])
+            out[rec["id"]] = {"points": {"flows": rec["data"].get("flows"),
+                                         "heads": rec["data"].get("heads")}, **pc.to_dict()}
+    except Exception:
+        pass
     return {"pumps": out}
 
 

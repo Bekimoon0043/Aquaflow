@@ -8,15 +8,35 @@
  * drive the floor and wall heights.
  */
 import {
+  basinRings,
   centeredPoolPoints,
   centeredPoolHoles,
   deckWithOpening,
+  maskedWaterGeometry,
   polygonWaterGeometry,
   poolPerimeterSegments,
   poolPolygonBounds,
   poolShapeGeometry,
 } from "./basinGeometry";
-import { basinMaskForPool, clipGeometryToMask } from "./basinMask";
+import { basinMaskForPool, clipGeometryToMask, createBasinMask } from "./basinMask";
+import { basinsInWorld } from "../../engineering/basins";
+import { poolCenter } from "../../engineering/geometryContract";
+
+/**
+ * AF-NEXT-010: every basin of a multi-basin design in the world frame. The world origin
+ * stays the primary basin's centre (poolCenter(geometry)), the same shift fixtures use, so
+ * extra basins and their islands sit exactly where the designer drew them. Null for a
+ * single-basin design (which keeps the historical path bit-for-bit).
+ */
+export function multiBasinWorld(geom) {
+  const basins = geom?.basins;
+  if (!Array.isArray(basins) || basins.length < 2 || !geom.geometry) return null;
+  const world = basinsInWorld(basins, poolCenter(geom.geometry, geom.params || {}, geom.poolType));
+  if (world.length < 2) return null;
+  let ex = 0, ez = 0;
+  basinRings(world).forEach(ring => ring.forEach(p => { ex = Math.max(ex, Math.abs(p.x)); ez = Math.max(ez, Math.abs(p.y)); }));
+  return { primary: world[0], extra: world.slice(1), all: world, width: ex * 2, length: ez * 2 };
+}
 import { applyStoneMaps } from "./groundTextures";
 import { WATER_VERT_V2, WATER_FRAG_V2, MAX_RIPPLES } from "./sceneShaders";
 import { createCadUnderlay3D } from "./cadUnderlay3D";
@@ -47,12 +67,21 @@ export function buildPool(scene) {
       poolL = bounds?.length || poolL;
     }
   }
+  const multi = multiBasinWorld(geom);
+  if (multi) {
+    // Symmetric extents about the origin: splash bounds, height field and venue cover every basin.
+    poolType = 'freeform'; poolPoints = multi.primary.outer; poolHoles = multi.primary.holes;
+    poolW = multi.width; poolL = multi.length;
+  }
   scene._poolRadius=poolRadius; scene._poolW=poolW; scene._poolL=poolL; scene._poolType=poolType;
   scene._poolPoints=poolPoints;
   scene._poolHoles=poolHoles;
+  scene._extraBasins = multi ? multi.extra : [];
   scene._basinMask?.dispose?.();
-  scene._basinMask = poolType === 'freeform'
-    ? basinMaskForPool({ type: 'freeform', points: poolPoints, holes: poolHoles }) : null;
+  scene._basinMask = multi
+    ? createBasinMask(multi.all.map(b => ({ outer: b.outer, holes: b.holes })))
+    : poolType === 'freeform'
+      ? basinMaskForPool({ type: 'freeform', points: poolPoints, holes: poolHoles }) : null;
 
   // Optional design heights. Defaults reproduce the historical basin exactly: floor
   // at -0.45 m, wall from the floor up to the 0.45 m kerb, coping on top.
@@ -63,7 +92,9 @@ export function buildPool(scene) {
 
   const deckMat = new T.MeshStandardMaterial({ color:0x10151b, roughness:0.78, metalness:0.12 });
   if (gt) { applyStoneMaps(deckMat, gt.deck); deckMat.metalness = 0.05; }
-  const deck = new T.Mesh(deckWithOpening(T, { poolType, radius: poolRadius, width: poolW, length: poolL, points:poolPoints }), deckMat);
+  const deckExtent = multi ? Math.max(80, Math.max(poolW, poolL) + 20) : 80;
+  const deck = new T.Mesh(deckWithOpening(T, { poolType, radius: poolRadius, width: poolW, length: poolL, points:poolPoints,
+    extraBasins: scene._extraBasins }, deckExtent), deckMat);
   deck.rotation.x=-Math.PI/2; deck.position.y=-0.02; deck.receiveShadow=true;
   scene.scene.add(deck); scene._poolObjects.push(deck);
 
@@ -148,6 +179,9 @@ export function buildPool(scene) {
     top.rotation.x = -Math.PI / 2; top.position.y = levels.kerbY; top.receiveShadow = true;
     scene.scene.add(top); scene._poolObjects.push(top);
   });
+
+  // AF-NEXT-010: extra basins — floor, walls, coping and island tops at their own levels.
+  scene._extraBasins.forEach(b => buildExtraBasin(scene, b, { wallMat, copingMat, floorMat, deckMat }));
 
   const gridHelper = new T.GridHelper(40,40,0x263447,0x101b29);
   gridHelper.material.transparent = true;
@@ -238,9 +272,11 @@ export function buildWaterSurface(scene) {
   // were tuned, and ripples would have been invisible on them entirely.
   const geo = scene._poolType==='circular'
     ? new T.PlaneGeometry(scene._poolRadius*2, scene._poolRadius*2, 96, 96)
-    : scene._poolType==='freeform'
-      ? clipGeometryToMask(polygonWaterGeometry(T, scene._poolPoints, 112), scene._basinMask)
-      : new T.PlaneGeometry(scene._poolW, scene._poolL, segs, segs);
+    : scene._poolType==='freeform' && scene._extraBasins?.length
+      ? maskedWaterGeometry(T, scene._basinMask, 160)       // every basin, islands cut out
+      : scene._poolType==='freeform'
+        ? clipGeometryToMask(polygonWaterGeometry(T, scene._poolPoints, 112), scene._basinMask)
+        : new T.PlaneGeometry(scene._poolW, scene._poolL, segs, segs);
 
   scene.waterMat = new T.ShaderMaterial({
     vertexShader: WATER_VERT_V2, fragmentShader: WATER_FRAG_V2,
@@ -289,6 +325,33 @@ export function buildWaterSurface(scene) {
   scene.scene.add(scene.waterSurface);
   // Environment is built before the water on init; initialize these here too.
   scene._setWaterPalette();
+}
+
+/** One extra basin of a multi-basin design (world-centred plan rings, own levels). */
+export function buildExtraBasin(scene, basin, { wallMat, copingMat, floorMat, deckMat }) {
+  const T = scene.THREE;
+  const levels = basinLevels(basin);
+  const add = (mesh) => { scene.scene.add(mesh); scene._poolObjects.push(mesh); return mesh; };
+  const rings = [basin.outer, ...(basin.holes || [])];
+  const wall = new T.Group();
+  rings.flatMap(ring => poolPerimeterSegments(ring)).forEach(segment => {
+    const side = new T.Mesh(new T.BoxGeometry(segment.length + 0.14, levels.wallHeight, 0.18), wallMat);
+    side.position.set(segment.x, levels.wallCenterY, segment.z);
+    side.rotation.y = -segment.rotation;
+    side.castShadow = true;
+    wall.add(side);
+    const coping = new T.Mesh(new T.BoxGeometry(segment.length + 0.12, 0.09, 0.22), copingMat);
+    coping.position.set(segment.x, levels.copingY, segment.z);
+    coping.rotation.y = -segment.rotation;
+    wall.add(coping);
+  });
+  add(wall);
+  const floor = add(new T.Mesh(poolShapeGeometry(T, basin.outer, basin.holes || []), floorMat));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = levels.floorY;
+  (basin.holes || []).forEach(hole => {
+    const top = add(new T.Mesh(poolShapeGeometry(T, hole), deckMat));
+    top.rotation.x = -Math.PI / 2; top.position.y = levels.kerbY; top.receiveShadow = true;
+  });
 }
 
 /**

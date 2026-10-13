@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import useEngineeringStore from '../../../store/engineeringStore';
 import useProjectStore from '../../../store/projectStore';
 import { useShowStore } from '../../../store/showStore';
-import { downloadShowFile } from '../../../utils/showFile';
+import { saveProject, takePendingAsset } from '../../../utils/projectPersistence';
 import { apiUrl } from '../../../utils/apiClient';
 import { createFullShowPreview } from '../../../utils/fullShowPreview';
 import { useICANPreviewStore } from '../../../store/icanPreviewStore';
@@ -11,6 +11,7 @@ import SiemensShowControls from '../SiemensShowControls';
 import StudioPlcPanel from './StudioPlcPanel';
 import { checkPlcLimits, issuesByBlock, nozzleLinks } from './plcLimits';
 import { siemensRequest } from '../../../utils/siemensSite';
+import { takePendingFocus } from '../../../preflight/preflight';
 import ShowChoreographyAssistant from '../ShowChoreographyAssistant';
 import ArrayPatternBuilder from '../ArrayPatternBuilder';
 import useShowDocument from './useShowDocument';
@@ -82,7 +83,26 @@ export default function ShowStudio() {
   const ghostClips = useMemo(() => ghost && proposalValid ? compileStudio({ ...studio, recipes: proposal.recipes.filter(r => proposalIds.includes(r.id)), legacyClips: [] }, items).clips : clips,
     [ghost, proposalValid, proposal, proposalIds, studio, items, clips]);
   const levels = useMemo(() => sampleClips(ghostClips, time), [ghostClips, time]);
-  useEffect(() => { setSelection([]); setGroupId(null); setSelectedId(null); clipboard.current = null; setPlaying(false); setTime(0); setProposal(null); setAudioFile(null); setAudioName(useProjectStore.getState().programmer?.audioFileReference?.name || ''); }, [revision]);
+  useEffect(() => { setSelection([]); setGroupId(null); setSelectedId(null); clipboard.current = null; setPlaying(false); setTime(0); setProposal(null); setAudioFile(takePendingAsset('audio:programmer')); setAudioName(useProjectStore.getState().programmer?.audioFileReference?.name || ''); }, [revision]);
+  // AF-NEXT-006: audio verified against the project's asset manifest (or relinked from the asset report) arrives here.
+  useEffect(() => { const onAttached = e => { if (e.detail?.id === 'audio:programmer' && e.detail.file) { takePendingAsset('audio:programmer'); setAudioFile(e.detail.file); } }; window.addEventListener('aquaflow:asset-attached', onAttached); return () => window.removeEventListener('aquaflow:asset-attached', onAttached); }, []);
+  // AF-NEXT-009 — a preflight issue's "open clip" fix: select the timeline item that owns
+  // the clip (the Studio recipe, or a legacy clip) and move the playhead to the issue time.
+  const focusClip = useRef(null);
+  focusClip.current = detail => {
+    if (!detail?.clipId) return;
+    const all = [...studio.recipes, ...studio.legacyClips];
+    const target = all.find(c => c.id === detail.clipId) || all.find(c => c.id === detail.itemId);
+    if (target) selectClip(target.id, studio.legacyClips.some(c => c.id === target.id));
+    if (Number.isFinite(detail.timeMs)) setTime(Math.max(0, detail.timeMs / 1000));
+  };
+  useEffect(() => {
+    const onOpenClip = e => focusClip.current?.(e.detail);
+    window.addEventListener('aquaflow:open-clip', onOpenClip);
+    const pending = takePendingFocus('clip');
+    if (pending) focusClip.current?.(pending);
+    return () => window.removeEventListener('aquaflow:open-clip', onOpenClip);
+  }, []);
   useEffect(() => { if (!active) { setPlaying(false); audio.current?.pause(); } }, [active]);
   useEffect(() => {
     setAudioBuffer(null);
@@ -171,8 +191,9 @@ export default function ShowStudio() {
     if (pending) { setMessage('Resolving patterns. Save again in a moment.'); return; }
     const project = useProjectStore.getState();
     project.rememberProgrammer({ ...project.programmer, studio, timelineClips: clips, audioFile });
-    downloadShowFile(useShowStore.getState(), useEngineeringStore.getState().getProjectPayload(), project.getProjectDocument());
-    project.markSaved(); setMessage('Saved the Engineering design, groups, patterns, and resolved timeline in one .aqua file.');
+    // AF-NEXT-006: atomic save to the project path on desktop (Blob download in a browser).
+    saveProject().then(res => { if (res) setMessage(`Saved the Engineering design, groups, patterns, and resolved timeline in one .aqua file${res.path ? ` (${res.path})` : ''}.`); })
+      .catch(e => setMessage(`Save failed: ${e.message}. The previous file is unchanged.`));
   };
   useEffect(() => {
     if (!active) return;

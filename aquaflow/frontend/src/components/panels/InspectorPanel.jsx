@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useShowStore } from "../../store/showStore";
 import { API_BASE_URL } from "../../config";
+import ProvenanceBadge from "./ProvenanceBadge"; // AF-NEXT-012
+import { getFixtureProvenance } from "../../data/fixtureLibrary";
 
 const DEVICES_API = `${API_BASE_URL}/devices`;
 const AI_API = `${API_BASE_URL}/ai`;
@@ -205,6 +207,14 @@ function ParamsTab({ subject, isNode, updateNodeParam, updateDevicePatch, addSer
             {subject.status?.toUpperCase()}
           </span>
         </div>
+        {!isNode && (
+          // AF-NEXT-012 — equipment data source for this device (generic unless linked
+          // to a fixture type / verified model with a complete provenance).
+          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "var(--text-muted)" }}>
+            <span>Equipment data</span>
+            <ProvenanceBadge provenance={getFixtureProvenance({ type: subject.fixtureType || subject.fixture_type || subject.model || subject.type, provenance: subject.provenance })} />
+          </div>
+        )}
         {subject.ip && (
           <div style={{ marginTop: 6, fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
             {subject.ip}:{subject.port}

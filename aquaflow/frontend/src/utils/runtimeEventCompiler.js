@@ -31,6 +31,7 @@ import {
   DEFAULT_SAFETY_LIMITS,
   DEVICE_EMERGENCY_STATE,
 } from "./runtimeSignalSchema.js";
+import { evaluateShowFrameAt, normalizeCurve, showDiagnostics } from "../show/evaluateShowFrame.js";
 
 // ─── Compiler Version ────────────────────────────────────────────────────────
 
@@ -115,6 +116,13 @@ export function compileShow({
   // ── 2. Resolve group → individual devices ─────────────────────────────────
   const expandedClips = _expandGroupClips(timelineClips, deviceRegistry, warnings);
 
+  // AF-NEXT-004: overlapping clips on one output are resolved highest-takes-precedence
+  // by the canonical frame, but an event list cannot express that and the Siemens
+  // compiler rejects them, so they surface here as diagnostics.
+  for (const issue of showDiagnostics({ clips: expandedClips })) {
+    if (issue.code === "overlap") warnings.push(`OVERLAP: ${issue.message} (clips ${issue.clipIds.join(", ")} at ${(issue.startMs / 1000).toFixed(3)}s)`);
+  }
+
   // ── 3. Extract events from each clip ─────────────────────────────────────
   const rawEvents = [];
   for (const clip of expandedClips) {
@@ -126,8 +134,14 @@ export function compileShow({
   const compensatedEvents = _applyLatencyCompensation(rawEvents, deviceRegistry, warnings);
 
   // ── 5. Sort events by time, then priority, then deviceId ──────────────────
+  // At equal times a clip's closing event sorts before another clip's opening event
+  // so back-to-back clips follow the canonical half-open [start, end) window.
+  const EDGE_ORDER = { end: 0, start: 1, ramp: 2 };
   compensatedEvents.sort((a, b) => {
     if (a.time !== b.time) return a.time - b.time;
+    if (a.deviceId === b.deviceId && a.channelId === b.channelId && a.edge !== b.edge) {
+      return (EDGE_ORDER[a.edge] ?? 1) - (EDGE_ORDER[b.edge] ?? 1);
+    }
     if (a.priority !== b.priority) return b.priority - a.priority;
     if (a.deviceId !== b.deviceId) return String(a.deviceId).localeCompare(String(b.deviceId));
     if (a.channelId !== b.channelId) return String(a.channelId).localeCompare(String(b.channelId));
@@ -144,7 +158,7 @@ export function compileShow({
   const deduped = _deduplicateEvents(eventsWithIds);
 
   // ── 8. Run safety validation ──────────────────────────────────────────────
-  const safetyResult = _validateSafety(deduped, deviceRegistry);
+  const safetyResult = _validateSafety(deduped, deviceRegistry, expandedClips);
   errors.push(...safetyResult.errors);
   warnings.push(...safetyResult.warnings);
 
@@ -174,6 +188,8 @@ export function compileShow({
     tickRate:        100,              // Hz — matches show_engine.py TICK_RATE
     audioOffset:     0,                // seconds: audio starts at show epoch 0
     events:          deduped,
+    // Resolved per-fixture clips: the input of the canonical show frame (AF-NEXT-004).
+    clips:           expandedClips,
     deviceMap,
     safetyLimits,
     syncPoints,
@@ -408,67 +424,42 @@ function _extractClipEvents(clip, registry, warnings) {
   const clipEasing = normalizeCurveType(clip.curveType);
   const channels = _getChannelsForTrackType(trackType, clip, clipEasing);
 
-  for (const { channelId, startValue, endValue, easing } of channels) {
-    // Event at clip start
-    events.push({
-      time:         startTime,
-      deviceId,
-      channelId,
-      value:        startValue,
-      easing:       EASING.STEP,
-      easingParams: [],
-      priority:     SIGNAL_PRIORITY.TIMELINE,
-      flags:        SIGNAL_FLAGS.NONE,
-      clipId:       clip.id,
-    });
+  // AF-NEXT-004: fades follow the canonical show-frame envelope. A fade-in ramps
+  // 0→value with the clip curve, the level holds, a fade-out ramps value→0 with the
+  // mirrored curve, and the clip closes with a step to 0 at its end.
+  const curve = normalizeCurve(clip.curveType) || "linear";
+  const FADE_IN_EASING = { linear: EASING.LINEAR, "ease-in": EASING.EASE_IN, "ease-out": EASING.EASE_OUT, "ease-in-out": EASING.EASE_BOTH };
+  const FADE_OUT_EASING = { linear: EASING.LINEAR, "ease-in": EASING.EASE_OUT, "ease-out": EASING.EASE_IN, "ease-in-out": EASING.EASE_BOTH };
+  let fadeIn = Number(clip.fadeIn ?? 0);
+  let fadeOut = Number(clip.fadeOut ?? 0);
+  if (!Number.isFinite(fadeIn) || fadeIn < 0) fadeIn = 0;
+  if (!Number.isFinite(fadeOut) || fadeOut < 0) fadeOut = 0;
+  const base = { deviceId, priority: SIGNAL_PRIORITY.TIMELINE, clipId: clip.id, easingParams: [] };
 
-    // Event at clip end
-    events.push({
-      time:         endTime,
-      deviceId,
-      channelId,
-      value:        endValue,
-      easing:       easing || EASING.LINEAR,
-      easingParams: [],
-      priority:     SIGNAL_PRIORITY.TIMELINE,
-      flags:        SIGNAL_FLAGS.NONE,
-      clipId:       clip.id,
-    });
-  }
-
-  // Add fade-in transition event if specified
-  let fadeIn = clip.fadeIn ?? 0;
-  if (isNaN(fadeIn)) fadeIn = 0;
-  if (fadeIn > 0) {
-    events.push({
-      time:         startTime + fadeIn,
-      deviceId,
-      channelId:    channels[0]?.channelId ?? CHANNEL.INTENSITY,
-      value:        channels[0]?.startValue ?? (clip.value / 100),
-      easing:       EASING.EASE_IN,
-      easingParams: [],
-      priority:     SIGNAL_PRIORITY.TIMELINE,
-      flags:        SIGNAL_FLAGS.FADE_IN,
-      clipId:       clip.id,
-    });
-  }
-
-  // Add fade-out transition event if specified
-  let fadeOut = clip.fadeOut ?? 0;
-  if (isNaN(fadeOut)) fadeOut = 0;
-  if (fadeOut > 0) {
-    events.push({
-      time:         endTime - fadeOut,
-      deviceId,
-      channelId:    channels[0]?.channelId ?? CHANNEL.INTENSITY,
-      value:        0,
-      easing:       EASING.EASE_OUT,
-      easingParams: [],
-      priority:     SIGNAL_PRIORITY.TIMELINE,
-      flags:        SIGNAL_FLAGS.FADE_OUT,
-      clipId:       clip.id,
-    });
-  }
+  channels.forEach(({ channelId, startValue, endValue }, index) => {
+    // Binary channels (valves, triggers, shutters) and motion positions never ramp.
+    // Fades apply to the primary channel only, as before.
+    const ramps = index === 0 && !/^(solenoid_open|solenoid_duration|device_enable|fire_trigger|laser_intensity|motion_pan|motion_tilt|motion_angle)$/.test(String(trackType).toLowerCase());
+    const fin = ramps ? fadeIn : 0, fout = ramps ? fadeOut : 0;
+    const push = (time, value, eventEasing, edge, flags = SIGNAL_FLAGS.NONE) =>
+      events.push({ ...base, time, channelId, value, easing: eventEasing, flags, edge });
+    if (fin > 0) {
+      if (curve === "step") {
+        push(startTime, 0, EASING.STEP, "start", SIGNAL_FLAGS.FADE_IN);
+        push(startTime + fin / 2, startValue, EASING.STEP, "ramp", SIGNAL_FLAGS.FADE_IN);
+      } else {
+        push(startTime, 0, FADE_IN_EASING[curve], "start", SIGNAL_FLAGS.FADE_IN);
+        push(startTime + fin, startValue, EASING.STEP, "ramp", SIGNAL_FLAGS.FADE_IN);
+      }
+    } else {
+      push(startTime, startValue, EASING.STEP, "start");
+    }
+    if (fout > 0) {
+      if (curve === "step") push(endTime - fout / 2, endValue, EASING.STEP, "ramp", SIGNAL_FLAGS.FADE_OUT);
+      else push(endTime - fout, startValue, FADE_OUT_EASING[curve], "ramp", SIGNAL_FLAGS.FADE_OUT);
+    }
+    push(endTime, endValue, EASING.STEP, "end");
+  });
 
   return events;
 }
@@ -618,19 +609,24 @@ function _deduplicateEvents(events) {
 
 // ─── Internal: Safety Validation ─────────────────────────────────────────────
 
-function _validateSafety(events, registry) {
+function _validateSafety(events, registry, clips = []) {
   const errors = [], warnings = [];
 
-  // Check fire device continuous-on limits.
+  // AF-NEXT-009: when the resolved clips are available, safety is judged on the canonical
+  // show frame (the same state the timeline, 3D preview and PLC evaluate). The backend
+  // preflight (services/preflight.py, POST /api/preflight) is the authoritative gate; this
+  // is the small client-side subset that runs during compile.
+  if (Array.isArray(clips) && clips.length) {
+    const frame = _validateFrameSafety(clips, registry);
+    return { errors: [...errors, ...frame.errors], warnings: [...warnings, ...frame.warnings] };
+  }
+
+  // Event-only fallback (no resolved clips): flame on/off event pairs.
   // Parens are explicit: flame channel OR (enable channel that belongs to a flame device).
-  // Without parens the || / && precedence makes this filter too broad.
   const fireEvents = events.filter(e =>
     e.channelId === CHANNEL.FLAME ||
     (e.channelId === CHANNEL.ENABLE && registry[e.deviceId]?.deviceType === "flame")
   );
-
-  // TODO Phase 2: implement proper on-time tracking per device
-  // For now: warn if any fire clip event window exceeds 10 seconds
   const fireDevices = new Set(fireEvents.map(e => e.deviceId));
   for (const deviceId of fireDevices) {
     const deviceFireEvents = fireEvents.filter(e => e.deviceId === deviceId);
@@ -649,6 +645,73 @@ function _validateSafety(events, registry) {
     }
   }
 
+  return { errors, warnings };
+}
+
+const _isFlameType = (text) => /flame|fire/i.test(String(text || ""));
+const _registryKind = (address = {}) => {
+  const t = String(address.deviceType || address.type || "").toLowerCase();
+  if (_isFlameType(t)) return "effect";
+  if (t.includes("pump")) return "pump";
+  if (t.includes("valve") || t.includes("solenoid")) return "valve";
+  return undefined;
+};
+
+/** Per-device on-time tracking and pump/valve dependency checks on the canonical frame. */
+function _validateFrameSafety(clips, registry) {
+  const errors = [], warnings = [];
+  const fixtures = Object.entries(registry || {}).map(([id, address]) => {
+    const kind = _registryKind(address);
+    return kind ? { id, kind } : { id, type: address?.deviceType || address?.type };
+  });
+  const flames = new Set(Object.entries(registry || {})
+    .filter(([, a]) => _isFlameType(a?.deviceType || a?.type)).map(([id]) => id));
+  clips.forEach(c => { if (c?.fixtureId && (_isFlameType(c.type) || c.trackType === "flame")) flames.add(c.fixtureId); });
+  const pumpOf = new Map(Object.entries(registry || {})
+    .map(([id, a]) => [id, a?.pumpId ?? a?.supplyingPumpId ?? a?.engineering?.pumpId])
+    .filter(([, pump]) => pump));
+  // Only the fixtures these rules look at are evaluated (the frame is per fixture), which
+  // keeps this cheap for large shows.
+  const relevant = new Set([...flames, ...pumpOf.keys(), ...pumpOf.values()]);
+  if (!relevant.size) return { errors, warnings };
+  const relevantClips = clips.filter(c => relevant.has(c?.fixtureId));
+  const project = { fixtures: fixtures.filter(f => relevant.has(f.id)), clips: relevantClips };
+  const times = [...new Set(relevantClips.flatMap(c => {
+    const start = Number(c?.startTime ?? c?.start ?? 0), duration = Number(c?.duration ?? 0);
+    return Number.isFinite(start) && Number.isFinite(duration) ? [start, start + duration] : [];
+  }))].sort((a, b) => a - b);
+  const onSince = new Map(), reported = new Set();
+  for (let i = 0; i < times.length - 1; i++) {
+    const t0 = times[i], t1 = times[i + 1];
+    if (t1 - t0 < 1e-6) continue;
+    const frame = evaluateShowFrameAt(project, (t0 + t1) / 2);
+    for (const id of flames) {
+      const on = (frame.fixtures[id]?.level || 0) > 0;
+      if (!on) { onSince.delete(id); continue; }
+      if (!onSince.has(id)) onSince.set(id, t0);
+      const limit = registry?.[id]?.maxOnDurationMs ?? DEFAULT_SAFETY_LIMITS.flame.maxOnDurationMs;
+      const onMs = (t1 - onSince.get(id)) * 1000;
+      if (onMs > limit && !reported.has(`flame:${id}`)) {
+        reported.add(`flame:${id}`);
+        errors.push(`SAFETY: Device ${id} fire continuously on ${Math.round(onMs)}ms from ${onSince.get(id).toFixed(2)}s exceeds limit ${limit}ms`);
+      }
+    }
+    const openByPump = new Map();
+    for (const [valve, pump] of pumpOf) {
+      const open = Boolean(frame.valves[valve]?.open);
+      if (open) openByPump.set(pump, true);
+      if (open && frame.pumps[pump] && !frame.pumps[pump].run && !reported.has(`dry:${valve}`)) {
+        reported.add(`dry:${valve}`);
+        warnings.push(`SAFETY: Valve ${valve} is open at ${t0.toFixed(2)}s while pump ${pump} is stopped (no flow).`);
+      }
+    }
+    for (const pump of new Set(pumpOf.values())) {
+      if (frame.pumps[pump]?.run && !openByPump.get(pump) && !reported.has(`dead:${pump}`)) {
+        reported.add(`dead:${pump}`);
+        warnings.push(`SAFETY: Pump ${pump} runs at ${t0.toFixed(2)}s with every linked valve closed (dead-head).`);
+      }
+    }
+  }
   return { errors, warnings };
 }
 

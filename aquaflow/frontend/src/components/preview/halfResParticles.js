@@ -31,7 +31,7 @@
 
 /** Is the half-res spray pass on for this tier + user setting? */
 export function halfResSprayEnabled(quality, userToggle) {
-  if (quality === "high") return true;
+  if (quality === "high" || quality === "eco") return true;   // eco: AF-NEXT-013
   if (quality === "medium") return !!userToggle;
   return false;
 }

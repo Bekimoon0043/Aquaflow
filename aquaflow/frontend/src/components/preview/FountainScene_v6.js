@@ -66,7 +66,7 @@ import { frameShowTime as VB_frameShowTime, frameTimestamp as VB_frameTimestamp,
 // AQ-S3-010 — the cinematic post chain (bloom, AO, grade, SMAA) and the AF-3D-008
 // half-res spray composite live in scenePost.js.
 // AQ-S2-002 Phase 2 — solver-driven jet physics (pure, unit-tested, single definition).
-import { launchSpeed as JP_launchSpeed, jetHeightFor as JP_jetHeightFor, normalizePhysics as JP_normalizePhysics } from "./jetPhysics";
+import { launchSpeed as JP_launchSpeed, jetHeightFor as JP_jetHeightFor, normalizePhysics as JP_normalizePhysics, engineeringGate as JP_engineeringGate } from "./jetPhysics";
 // AQ-S3-012 — a real mirror image in the pool, and a record of where the water lands.
 import { WaterReflectionProbe } from "./waterReflection";
 import { SplashMap, insidePool as SM_insidePool, litresPerImpact as SM_litresPerImpact } from "./splashMap";
@@ -428,7 +428,7 @@ export class NozzleV2 {
     this.glow.frustumCulled = false;
   }
 
-  setIntensity(v) { this.intensity = Math.max(0, Math.min(1, v)); }
+  setIntensity(v) { this.intensity = Math.max(0, Math.min(1, v)) * JP_engineeringGate(this.physics); }
 
   /** Attach solved hydraulics for this nozzle (AQ-S2-002 Phase 2).
    *  `rec` = { exitVelocityMs, jetHeightM }; `sink` collects over-demand reports. */
@@ -2080,7 +2080,7 @@ export class FountainScene {
     if (this._venueGroup) disposeVenue(this._venueGroup);
     this._venueGroup = buildVenue(this.THREE, {
       poolType: this._poolType, radius: this._poolRadius, points: this._poolPoints,
-      width: this._poolW, length: this._poolL,
+      width: this._poolW, length: this._poolL, extraBasins: this._extraBasins,
       quality: this.quality, environment: this.environment,
     });
     this.scene.add(this._venueGroup);
@@ -2653,6 +2653,11 @@ export class FountainScene {
       cam.position.set(0, 25, 0.01); cam.lookAt(0,0,0);
     } else if (this.cameraMode === CAMERA_MODES.FRONT) {
       cam.position.set(0, 5, 17); cam.lookAt(0, 4, 0);
+    } else if (this.cameraMode === "named" && this._namedView) {
+      // AF-NEXT-002: a project-saved viewpoint (render.cameraViews), held fixed.
+      const v = this._namedView;
+      cam.position.set(v.position.x, v.position.y, v.position.z);
+      cam.lookAt(v.target.x, v.target.y, v.target.z);
     }
   }
 
@@ -2943,6 +2948,25 @@ export class FountainScene {
     if(this._initialized) { this._applyEnvironment(); this._setWaterPalette(); this._buildVenueElements(); }
   }
   setCameraMode(m)  { this.cameraMode=m; this._pathTime=0; if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true; }
+  /**
+   * AF-NEXT-002: hold the camera on a saved project view ({position, target} in world
+   * metres, see utils/cameraViews.js). Passing null clears it. In editor mode the
+   * editor owns navigation, so the view is applied once and the editor takes over.
+   */
+  setNamedView(view) {
+    this._namedView = view && view.position && view.target
+      ? { position: { ...view.position }, target: { ...view.target } }
+      : null;
+    if (!this._namedView) return false;
+    this.cameraMode = "named";
+    this.orbitAuto = false;
+    if (this._editorMode && this.camera) {
+      const { position: p, target: t } = this._namedView;
+      this.camera.position.set(p.x, p.y, p.z);
+      this.camera.lookAt(t.x, t.y, t.z);
+    }
+    return true;
+  }
   setReviewOverlays(visible) {
     this.reviewOverlays = visible !== false;
     if (this._reviewGroup) this._reviewGroup.visible = this.reviewOverlays;
@@ -3057,7 +3081,9 @@ export class FountainScene {
       this._buildLasers();
       this._buildNozzles();
       this._buildReviewOverlays();
-      if (dimensionsChanged) this.fitCameraToDesign();
+      // A saved named view (AF-NEXT-002) is the designer's explicit choice; loading the
+      // pool geometry must not silently replace it with the auto-fit orbit.
+      if (dimensionsChanged && !(this.cameraMode === "named" && this._namedView)) this.fitCameraToDesign();
     }
   }
   /** AF-CAD-011: the locked CAD underlay ({ toWorld, centerKey } — see sceneBasin.js). */

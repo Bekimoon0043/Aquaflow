@@ -1,5 +1,14 @@
 /** Pure, read-only evaluation of a Site I-CAN pattern against engineering fixtures. */
 import { evaluateFullShowPreview } from "./fullShowPreview";
+import { evaluateShowFrameAt } from "../show/evaluateShowFrame";
+
+// Design clips ({fixtureId, start, end, value, fadeIn, fadeOut}) evaluated by the canonical
+// show frame (AF-NEXT-004); one project per plan clip list.
+const designProjects = new WeakMap();
+function designProject(clips) {
+  if (!designProjects.has(clips)) designProjects.set(clips, { clips: clips.map(c => ({ ...c })) });
+  return designProjects.get(clips);
+}
 export function createICANPreviewPlan(pattern, repeat = 1) {
   const steps = (pattern?.steps || []).map(step => {
     const duration = Number(step.duration_ms);
@@ -33,6 +42,8 @@ export function evaluateICANPreview(plan, position, fixtures = [], stopped = fal
   const selected = (group, channel) => (groups[String(group)] || []).includes(channel);
   const fixtureIntensities = {};
   let mapped = 0, unmapped = 0, active = 0;
+  const designFrame = plan.designClips ? evaluateShowFrameAt(designProject(plan.designClips), timeMs / 1000,
+    { loop: { startMs: 0, endMs: plan.passMs }, stopped: stopped || ended }) : null;
   for (const fixture of fixtures) {
     const eng = fixture.engineering || {};
     // Only explicit capture-derived valve addresses drive water in this preview.
@@ -41,11 +52,7 @@ export function evaluateICANPreview(plan, position, fixtures = [], stopped = fal
       && [1, 9].includes(eng.icanGroup) && Number.isInteger(eng.icanChannel)
       && eng.icanChannel >= 9 && eng.icanChannel <= 40;
     let value = hasAddress && selected(eng.icanGroup, eng.icanChannel) ? 1 : 0;
-    if (plan.designClips) {
-      const t = (timeMs % plan.passMs) / 1000;
-      value = stopped || ended ? 0 : Math.max(0, ...plan.designClips.filter(c => c.fixtureId === fixture.id && c.start <= t && t < c.end)
-        .map(c => c.value / 100 * Math.min(1, c.fadeIn ? (t - c.start) / c.fadeIn : 1, c.fadeOut ? (c.end - t) / c.fadeOut : 1)));
-    }
+    if (designFrame) value = designFrame.fixtures[fixture.id]?.level ?? 0;
     fixtureIntensities[fixture.id] = value;
     if (hasAddress) mapped++;
     else if (String(fixture.type || "").startsWith("nozzle_")) unmapped++;

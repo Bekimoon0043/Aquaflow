@@ -10,7 +10,7 @@ export function SiemensLinkStatus({ status, mode }) {
   const age = status?.last_rx_age_seconds;
   const fault = status?.connection_state === "lost" || status?.connection_state === "failed" || status?.connection_state === "stop_unconfirmed" || Boolean(status?.error);
   const recent = !simulated && !fault && status?.hardware_verified && status?.telemetry_fresh && typeof age === "number" && age <= 2;
-  const label = simulated ? "Internal AquaFlow preview only" : fault ? "Communication fault" : recent ? "PLC responding" : status?.hardware_verified ? "Verified · idle" : "PLC not verified";
+  const label = simulated ? "PREVIEW ONLY — not sent to hardware · Internal AquaFlow preview only" : fault ? "Communication fault" : recent ? "PLC responding" : status?.hardware_verified ? "Verified · idle" : "PLC not verified";
   return <div className={`siemens-link ${recent ? "siemens-link--active" : ""} ${fault ? "siemens-link--fault" : ""}`} aria-label={`Siemens connection: ${label}`}>
     <div className="siemens-link__path" aria-hidden="true">
       <span className="siemens-link__node">AquaFlow</span>
@@ -124,7 +124,7 @@ export default function SiemensShowControls({ clips, onLoadExample, selectedSite
     <div className="siemens-runtime__actions">
       {button("Verify", () => siemensRequest(`/${id}/verify`, "POST"), status?.running)}
       {button("Prepare & Arm", prepareAndArm, status?.running || (networked && !confirmed))}
-      {button(networked ? (site?.mode === "plcsim" ? "Start PLCSIM show" : "Start physical PLC show") : "Run AquaFlow preview (no PLC)", async () => {
+      {button(networked ? (site?.mode === "plcsim" ? "Start PLCSIM show" : "Start physical PLC show") : "Run preview — PREVIEW ONLY, not sent to hardware", async () => {
         const result = await siemensRequest(`/${id}/start`, "POST");
         return { message: result.running
           ? networked ? `${site?.mode === "plcsim" ? "PLCSIM" : "PLC"} playback started; monitor acknowledgement and feedback.` : "AquaFlow-only playback started. No S7 writes are sent; TIA/PLCSIM DB100 will not change."

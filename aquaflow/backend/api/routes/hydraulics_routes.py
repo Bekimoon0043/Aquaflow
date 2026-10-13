@@ -10,8 +10,29 @@ from fastapi import APIRouter, HTTPException
 from services.hydraulic_solver import solve_network
 from services.pipe_sizing import size_pipes, size_network
 from services.geometry_service import get_geometry_service
+from services.basin_model import normalize_basins
 
 router = APIRouter()
+
+
+def _cite_nozzle_physics(nozzles: list, physics: dict) -> tuple[dict, dict]:
+    """AF-NEXT-012 — every per-nozzle result cites the equipment model (the fixture
+    type), its data source, units and revision. The design nozzle may carry a
+    ``provenance`` block (from the fixture library / a verified model); without a
+    valid one the citation is a generic estimate."""
+    from services.equipment_provenance import cite, normalize_provenance, summarize
+
+    by_id = {str(n.get("id")): n for n in nozzles if isinstance(n, dict)}
+    out, citations = {}, []
+    units = {"flow": "L/min", "exit_velocity": "m/s", "jet_height": "m"}
+    for nid, entry in (physics or {}).items():
+        raw = by_id.get(str(nid), {})
+        model = str(raw.get("model") or raw.get("type") or "unspecified nozzle")
+        c = cite(normalize_provenance(raw.get("provenance"), kind="nozzle", model=model),
+                 equipment_model=model, kind="nozzle", units=units)
+        out[nid] = {**entry, "equipment": c}
+        citations.append(c)
+    return out, summarize(citations)
 
 
 @router.post("/preview-physics")
@@ -43,18 +64,28 @@ async def preview_physics(payload: dict):
         raise HTTPException(400, "'nozzles' must be a list")
     params = payload.get("params") or {}
     volume = float(payload.get("volume_litres") or 0.0)
+    # AF-NEXT-010: optional `basins` (model shape {id, outer, holes} or {id, points, holes});
+    # nozzles are then assigned to the basin containing them, one manifold per basin.
+    raw_basins = payload.get("basins") or []
+    basins = normalize_basins({"basins": [
+        {**b, "outer": b.get("outer") or b.get("points") or []} for b in raw_basins if isinstance(b, dict)
+    ]}) if isinstance(raw_basins, list) else []
     try:
-        res = get_geometry_service()._solve_pool_hydraulics(nozzles, params, volume)
+        extra = {"basins": basins} if len(basins) > 1 else {}
+        res = get_geometry_service()._solve_pool_hydraulics(nozzles, params, volume, **extra)
     except Exception as exc:
         raise HTTPException(500, f"hydraulic solve failed: {exc}")
+    nozzle_physics, provenance = _cite_nozzle_physics(nozzles, res.get("nozzle_physics", {}))
     return {
         "converged": res.get("converged"),
         "method": res.get("method", "hazen-williams"),
-        "nozzle_physics": res.get("nozzle_physics", {}),
+        "nozzle_physics": nozzle_physics,
+        "data_provenance": provenance,
         "validation": res.get("validation", []),
         "total_design_flow_lpm": res.get("total_design_flow_lpm"),
         "turnover_time_hours": res.get("turnover_time_hours"),
         "hydraulic_solution": res.get("hydraulic_solution"),
+        **({k: res[k] for k in ("basins", "nozzle_basin", "warnings") if k in res}),
     }
 
 
@@ -122,3 +153,35 @@ async def size_hydraulic_network(payload: dict):
         raise HTTPException(400, detail=str(e))
     except Exception as e:  # pragma: no cover - defensive
         raise HTTPException(500, detail=str(e))
+
+
+@router.post("/show-timeline")
+async def show_hydraulic_timeline(payload: dict):
+    """
+    AF-NEXT-007 — time-dependent hydraulics of a show (services/show_hydraulics.py).
+
+    Request body:
+        { "project": {fixtures (engineering + provenance), params, hydraulic_network?},
+          "show":    {clips, duration?, groups?, recipes?, tempo?, sections?, frameOpts?},
+          "options": {rate_hz?, max_samples?, pump_tau_s?, pipes_initially_filled?,
+                      solver?: {max_iter, tol}, ...} }
+
+    Response: per-time, per-nozzle delivered height / exit velocity / flow and state,
+    pump operating points, every unique solve's convergence + residuals, named
+    diagnostics (shared Diagnostic shape + endMs), assumptions and equipment citations.
+    Cached per payload revision; the preview samples it by show time. Pure computation
+    — never touches hardware.
+    """
+    from services.show_hydraulics import show_timeline
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("project"), dict):
+        raise HTTPException(400, "'project' must be an object")
+    show = payload.get("show")
+    if not isinstance(show, dict) or not isinstance(show.get("clips", []), list):
+        raise HTTPException(400, "'show' must be an object with a 'clips' list")
+    try:
+        return show_timeline(payload)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+    except Exception as exc:  # pragma: no cover - defensive
+        raise HTTPException(500, detail=f"show hydraulics failed: {exc}")

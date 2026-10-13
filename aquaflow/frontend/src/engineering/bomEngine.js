@@ -1,4 +1,36 @@
-import { getFixtureRatings } from "../data/fixtureLibrary.js";
+import { getFixtureProvenance, getFixtureRatings } from "../data/fixtureLibrary.js";
+import { citeProvenance, equipmentKind, genericProvenance, unitsText } from "../data/fixtureProvenance.js";
+
+// AF-NEXT-012 — the units every BOM total is expressed in, cited on each line.
+export const BOM_UNITS = {
+  quantity: "pcs", flow: "L/min and m3/h", power: "W and kW", air: "L/min",
+  dmx: "channels", io: "points",
+};
+
+/** Flat provenance columns for a BOM item (BOM view + CSV export). */
+export function bomCitation(item = {}) {
+  const c = item.citation || citeProvenance(
+    genericProvenance({ kind: equipmentKind(item), model: item.label || item.key }),
+    { equipmentModel: item.key || item.label, kind: equipmentKind(item),
+      units: item.unit === "m" ? { length: "m", nominal_size: "DN (mm)" } : { quantity: item.unit || "pcs" } },
+  );
+  return {
+    equipmentModel: c.equipmentModel,
+    dataSource: c.dataSource,
+    sourceLabel: c.sourceLabel,
+    confidence: c.confidence,
+    unitsBasis: unitsText(c.units),
+    revision: c.revision,
+    sourceDocument: c.document,
+  };
+}
+
+/** CSV header + cells for the provenance columns (appended to existing exports). */
+export const BOM_PROVENANCE_HEADERS = ["Equipment Model", "Data Source", "Confidence", "Units Basis", "Data Revision", "Source Document"];
+export function bomProvenanceCells(item) {
+  const c = bomCitation(item);
+  return [c.equipmentModel, c.sourceLabel, c.confidence, c.unitsBasis, c.revision, c.sourceDocument];
+}
 
 export function generateBOM(fixtures = []) {
   const items = {};
@@ -68,11 +100,28 @@ export function generateBOM(fixtures = []) {
       category = "Water Treatment";
     }
 
-    if (!items[key]) {
-      items[key] = {
-        key,
+    // Instances of one type with different provenance (e.g. one linked to a
+    // measured model) are never merged into one line.
+    const provenance = getFixtureProvenance(f);
+    const groupKey = provenance.source === "generic_estimate" ? key : `${key}@${provenance.source}:${provenance.revision}`;
+
+    if (!items[groupKey]) {
+      const citation = citeProvenance(provenance, { equipmentModel: key, units: { ...provenance.units, ...BOM_UNITS } });
+      items[groupKey] = {
+        key: groupKey,
+        type: key,
         label,
         category,
+
+        // AF-NEXT-012 citation: equipment model, data source, units, revision.
+        citation,
+        equipmentModel: citation.equipmentModel,
+        manufacturer: citation.manufacturer,
+        dataSource: citation.dataSource,
+        sourceLabel: citation.sourceLabel,
+        confidence: citation.confidence,
+        revision: citation.revision,
+        sourceDocument: citation.document,
 
         quantity: 0,
 
@@ -97,26 +146,26 @@ export function generateBOM(fixtures = []) {
       };
     }
 
-    items[key].quantity += 1;
+    items[groupKey].quantity += 1;
 
-    items[key].totalFlowLpm += ratings.flowLpm;
-    items[key].totalFlowM3Hr += ratings.flowM3Hr;
+    items[groupKey].totalFlowLpm += ratings.flowLpm;
+    items[groupKey].totalFlowM3Hr += ratings.flowM3Hr;
 
     // Same load in two units (W and kW columns) — not two loads.
-    items[key].totalWattage += ratings.powerW;
-    items[key].totalPowerKw += ratings.powerKw;
+    items[groupKey].totalWattage += ratings.powerW;
+    items[groupKey].totalPowerKw += ratings.powerKw;
 
-    items[key].totalAirFlowLpm += Number(eng.airFlowLpm || 0);
+    items[groupKey].totalAirFlowLpm += Number(eng.airFlowLpm || 0);
 
-    items[key].totalFuelFlow += Number(eng.gasFlow || 0);
+    items[groupKey].totalFuelFlow += Number(eng.gasFlow || 0);
 
-    items[key].totalDmxChannels += ratings.dmxChannels;
+    items[groupKey].totalDmxChannels += ratings.dmxChannels;
 
-    items[key].totalDigitalInputs += Number(eng.digitalInputs || 0);
-    items[key].totalDigitalOutputs += Number(eng.digitalOutputs || 0);
+    items[groupKey].totalDigitalInputs += Number(eng.digitalInputs || 0);
+    items[groupKey].totalDigitalOutputs += Number(eng.digitalOutputs || 0);
 
-    items[key].totalAnalogInputs += Number(eng.analogInputs || 0);
-    items[key].totalAnalogOutputs += Number(eng.analogOutputs || 0);
+    items[groupKey].totalAnalogInputs += Number(eng.analogInputs || 0);
+    items[groupKey].totalAnalogOutputs += Number(eng.analogOutputs || 0);
   });
 
   return Object.values(items);

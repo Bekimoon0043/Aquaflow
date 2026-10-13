@@ -33,6 +33,10 @@ export function useEngineeringPublisher(data) {
         geometry:         data.geometry,
         poolType:         data.poolType,
         params:           data.params,
+        // AF-NEXT-010: all basins (basins[0] === geometry). Omitted by legacy callers.
+        ...(Array.isArray(data.basins) ? { basins: data.basins } : {}),
+        // AF-CAD-034: groups as ID lists. Omitted by callers that do not manage groups.
+        ...(Array.isArray(data.groups) ? { groups: data.groups } : {}),
         fixtures:         data.fixtures         || [],
         siteSurfaces:     data.siteSurfaces      || [],
         manualPipes:      data.manualPipes      || [],
@@ -51,6 +55,8 @@ export function useEngineeringPublisher(data) {
     data.geometry,
     data.poolType,
     data.params,
+    data.basins,
+    data.groups,
     data.fixtures,
     data.siteSurfaces,
     data.manualPipes,

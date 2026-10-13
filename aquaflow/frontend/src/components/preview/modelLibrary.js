@@ -87,6 +87,22 @@ export async function listImportedModels() {
   return records.map(({ id, name, category }) => ({ id, name, category }));
 }
 
+// AF-NEXT-006 — the asset manifest hashes imported GLBs and a .aquapkg restores them on
+// another PC under their original id, so site_models keep pointing at the same asset.
+export async function getImportedModelRecord(id) {
+  if (!id?.startsWith("custom:")) return null;
+  return (await transaction("readonly", store => store.get(id))) || null;
+}
+
+export async function restoreImportedModel({ id, name, category = "Imported", bytes }) {
+  if (!id?.startsWith("custom:")) throw new Error("Only imported (custom:) models can be restored.");
+  const buffer = bytes instanceof Uint8Array ? bytes.slice().buffer : bytes;
+  if (buffer.byteLength > MAX_BYTES) throw new Error("Choose a GLB smaller than 60 MB.");
+  validateGlb(buffer);
+  await transaction("readwrite", store => store.put({ id, name: name || id, category, blob: new Blob([buffer], { type: "model/gltf-binary" }) }));
+  return { id, name, category };
+}
+
 async function assetFor(id) {
   if (builtinById.has(id)) return builtinById.get(id);
   if (!id?.startsWith("custom:")) return null;
@@ -96,7 +112,7 @@ async function assetFor(id) {
 /** Default context is editable model nodes, never baked into venue geometry. */
 export function defaultVenueModels(pool = {}, quality = "medium") {
   const { audience, landscape, buildings } = venueLayout(pool);
-  const low = quality === "low";
+  const low = quality === "low" || quality === "eco";   // eco (AF-NEXT-013) is lighter still
   const peopleCount = low ? 8 : 16;
   const treeCount = low ? 10 : 20;
   const buildingCount = low ? 3 : 6;

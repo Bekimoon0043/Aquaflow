@@ -10,6 +10,7 @@ import {
   adapterOptionLabel,
   discoveryStatusLine,
   describeHttpError,
+  controllerVerificationBadge,
 } from "../DeviceDiscoveryPanel.jsx";
 
 // AF-CAT-001 / AF-DISC — the Controllers tab's pure helpers.
@@ -19,6 +20,7 @@ const s7 = {
   protocol: "siemens_s7", tier: "REAL", drivable: true, confidence: "confirmed",
   stage: "identity_confirmed", vendor: "Siemens", model: "6ES7 215-1AG40-0XB0",
   configurable: true, status: "unverified", health: null,
+  verification_level: "simulated", verification_summary: "PLCSIM only",
   plc_prefill: { plc_type: "siemens_s7", ip: "192.168.5.10", port: 102, rack: 0, slot: 1, unit_id: 1,
                  vendor: "Siemens", model: "6ES7 215-1AG40-0XB0", name: "Siemens @ 192.168.5.10",
                  profile_hint: "s7-1200-1500" },
@@ -73,6 +75,16 @@ describe("controller tier rendering", () => {
     expect(confidenceLabel(undefined, undefined)).toBe("unverified service");
     expect(stageLabel("protocol_confirmed")).toBe("protocol confirmed");
     expect(stageLabel("nonsense")).toBe("unverified");
+  });
+});
+
+describe("commissioning evidence rendering", () => {
+  it("keeps driver support separate from physical verification", () => {
+    expect(controllerVerificationBadge("simulated")).toEqual({ color: "#f59e0b", label: "SIMULATED" });
+    expect(controllerVerificationBadge("bench_verified").label).toBe("BENCH VERIFIED");
+    expect(controllerVerificationBadge("site_commissioned").label).toBe("SITE COMMISSIONED");
+    expect(controllerVerificationBadge("unsupported").label).toBe("UNSUPPORTED");
+    expect(controllerVerificationBadge(undefined).label).toBe("UNSUPPORTED");
   });
 });
 

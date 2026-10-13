@@ -14,8 +14,12 @@
  * - Export to BOM
  */
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import useEngineeringStore from "../store/engineeringStore";
+// AF-CAD-032/033: one snap engine + one pipe factory shared with the 3D editor.
+import { buildSnapScene } from "./drafting/snap";
+import { resolveDraftPoint, magnetToPort } from "./drafting/session";
+import { createPipeEntity, connectPipeEnds, cleanPoint, ensureEntityIdentities } from "./drafting/entities";
 
 export const PIPE_COLORS = {
   supply:  "#8b5cf6",   // purple — supply from pump
@@ -27,17 +31,18 @@ export const PIPE_COLORS = {
 
 
 
-export function usePipeDrawing({ zoom, pan, snapToGrid, gridStep, fixtures }) {
+export function usePipeDrawing({ zoom, pan, snapToGrid, gridStep, fixtures, design = null, osnap = true }) {
 const [pipePreview, setPipePreview] = useState(null);
   // All placed manual pipes
   // Pipes now come from engineeringStore (project-scoped, not global localStorage)
 const storePipes = useEngineeringStore(s => s.pipes) || [];
 const updateEngineering = useEngineeringStore(s => s.updateEngineering);
-const [pipes, setPipesState] = useState(storePipes);
+// AF-CAD-030: lazy identity migration (uuid + owner) — preserves existing pipe ids.
+const [pipes, setPipesState] = useState(() => ensureEntityIdentities(storePipes));
 
 // Sync from store on mount / external changes
 useEffect(() => {
-  setPipesState(storePipes);
+  setPipesState(ensureEntityIdentities(storePipes));
 }, [storePipes]);
 
 // Wrapper that updates both local state and engineeringStore
@@ -66,51 +71,35 @@ const [pipeDrawMode, setPipeDrawMode] = useState("polyline");
   const [orthogonalMode, setOrthogonalMode] = useState(true);
   // Live mouse position for preview
   const [mouseWorld, setMouseWorld] = useState(null);
+  // AF-CAD-032/033: last snap/polar resolution (drawn as the snap glyph / polar guide).
+  const [snapInfo, setSnapInfo] = useState(null);
 
-  // ── Snap helpers ────────────────────────────────────────────────────────────
-  const snapPt = useCallback((pt) => {
-    // Snap to fixture center first
-    if (fixtures?.length) {
-      const threshold = Math.max(0.25, 10 / zoom);
-      for (const f of fixtures) {
-        const dx = pt.x - Number(f.x||0);
-        const dy = pt.y - Number(f.y||0);
-        if (Math.sqrt(dx*dx+dy*dy) < threshold) return { x: Number(f.x||0), y: Number(f.y||0), snapped: "fixture" };
-      }
-    }
-    // Grid snap
-    if (snapToGrid && gridStep) {
-      const s = gridStep;
-      return { x: Math.round(pt.x/s)*s, y: Math.round(pt.y/s)*s, snapped: "grid" };
-    }
-    return pt;
-  }, [zoom, fixtures, snapToGrid, gridStep]);
+  // ── Snap helpers (AF-CAD-032: the unified object-snap engine) ───────────────
+  const snapScene = useMemo(() => buildSnapScene({
+    fixtures, pipes, geometry: design?.geometry, basins: design?.basins, siteSurfaces: design?.siteSurfaces,
+  }), [fixtures, pipes, design?.geometry, design?.basins, design?.siteSurfaces]);
 
-  // Constrain to orthogonal from last point
-  const orthogonalPt = useCallback((pt, from) => {
-    if (!orthogonalMode || !from) return pt;
-    const dx = Math.abs(pt.x - from.x);
-    const dy = Math.abs(pt.y - from.y);
-    if (dx >= dy) return { ...pt, y: from.y }; // horizontal
-    return { ...pt, x: from.x };               // vertical
-  }, [orthogonalMode]);
+  const resolvePt = useCallback((pt, { from = null, shift = false, ortho = false } = {}) => resolveDraftPoint(pt, {
+    scene: snapScene, from, worldPerPx: 1 / zoom, grid: { enabled: !!snapToGrid, step: Number(gridStep) || 0.5 },
+    orthogonal: ortho && !!from, polar: !!from, shift, osnap,
+  }), [snapScene, zoom, snapToGrid, gridStep, osnap]);
+
+  const snapPt = useCallback((pt) => resolvePt(pt).point, [resolvePt]);
+
+  const drawingPt = useCallback((worldPt, mode, opts = {}) => {
+    const from = drawing?.points?.length ? drawing.points[drawing.points.length - 1] : null;
+    const curved = mode === "curve" || mode === "arc";
+    return resolvePt(worldPt, { from: curved ? null : from, shift: !!opts.shift, ortho: orthogonalMode && !curved });
+  }, [drawing, resolvePt, orthogonalMode]);
 
   // ── Mouse handlers (call these from canvas events) ──────────────────────────
 
-const onPipeMouseMove = useCallback((worldPt) => {
-  let pt = snapPt(worldPt);
+const onPipeMouseMove = useCallback((worldPt, opts = {}) => {
+  const res = drawingPt(worldPt, drawing?.drawMode || pipeDrawMode, opts);
+  const pt = res.point;
+  setSnapInfo({ snap: res.snap, polar: res.polar, from: drawing?.points?.at(-1) || null });
 
   if (drawing && drawing.points.length > 0) {
-
-    if (
-      drawing.drawMode !== "curve" &&
-      drawing.drawMode !== "arc"
-    ) {
-      pt = orthogonalPt(
-        pt,
-        drawing.points[drawing.points.length - 1]
-      );
-    }
 
     setPipePreview({
       id: "pipe_preview",
@@ -128,20 +117,25 @@ const onPipeMouseMove = useCallback((worldPt) => {
 
   setMouseWorld(pt);
 
-}, [drawing, pipeDiameter, pipeType, snapPt, orthogonalPt]);
-  
-   
-  const onPipeClick = useCallback((worldPt) => {
-  let pt = snapPt(worldPt);
+}, [drawing, pipeDiameter, pipeType, pipeDrawMode, drawingPt]);
 
-  if (
-  drawing &&
-  drawing.points.length > 0 &&
-  pipeDrawMode !== "curve" &&
-  pipeDrawMode !== "arc"
-) {
-  pt = orthogonalPt(pt, drawing.points[drawing.points.length - 1]);
-}
+  // Finish the in-progress pipe through the shared factory (uuid, owner, port connections).
+  const commitPipe = useCallback((points, drawMode) => {
+    const newPipe = createPipeEntity({
+      points, diameterMm: drawing.diameterMm, pipeType: drawing.type, drawMode,
+      connections: connectPipeEnds(points.map(cleanPoint), fixtures),
+    });
+    setPipes(prev => [...prev, newPipe]);
+    setSelectedPipeId(newPipe.id);
+    setDrawing(null);
+    setPipePreview(null);
+    setMouseWorld(null);
+    setSnapInfo(null);
+    return newPipe;
+  }, [drawing, fixtures, setPipes]);
+
+  const onPipeClick = useCallback((worldPt, opts = {}) => {
+  const pt = cleanPoint(drawingPt(worldPt, drawing?.drawMode || pipeDrawMode, opts).point);
 
   // START NEW PIPE
   if (!drawing) {
@@ -156,26 +150,7 @@ const onPipeMouseMove = useCallback((worldPt) => {
 
   // STRAIGHT MODE: second click finishes pipe immediately
   if (pipeDrawMode === "straight") {
-    const newPipe = {
-      id: Date.now(),
-      type: "manual_pipe",
-      points: [...drawing.points, pt],
-      diameterMm: drawing.diameterMm,
-      dn: drawing.diameterMm,
-      pipeType: drawing.type,
-      drawMode: "straight",
-      material: "SS304",
-      pressureClass: "PN10",
-      label: `Pipe DN${drawing.diameterMm}`,
-      layer: "pipework",
-      flowDirection: "forward",
-    };
-
-    setPipes(prev => [...prev, newPipe]);
-    setSelectedPipeId(newPipe.id);
-    setDrawing(null);
-    setPipePreview(null);
-    setMouseWorld(null);
+    commitPipe([...drawing.points, pt], "straight");
     return;
   }
 
@@ -193,26 +168,7 @@ const onPipeMouseMove = useCallback((worldPt) => {
     const nextPoints = [...drawing.points, pt];
 
     if (nextPoints.length >= 3) {
-      const newPipe = {
-        id: Date.now(),
-        type: "manual_pipe",
-        points: nextPoints,
-        diameterMm: drawing.diameterMm,
-        dn: drawing.diameterMm,
-        pipeType: drawing.type,
-        drawMode: pipeDrawMode,
-        material: "SS304",
-        pressureClass: "PN10",
-        label: `${pipeDrawMode === "arc" ? "Arc" : "Curve"} Pipe DN${drawing.diameterMm}`,
-layer: "pipework",
-flowDirection: "forward",
-      };
-
-      setPipes(prev => [...prev, newPipe]);
-      setSelectedPipeId(newPipe.id);
-      setDrawing(null);
-      setPipePreview(null);
-      setMouseWorld(null);
+      commitPipe(nextPoints, pipeDrawMode);
     } else {
       setDrawing(prev => ({
         ...prev,
@@ -222,37 +178,43 @@ flowDirection: "forward",
 
     return;
   }
-}, [drawing, pipeDiameter, pipeType, pipeDrawMode, snapPt, orthogonalPt]);
+}, [drawing, pipeDiameter, pipeType, pipeDrawMode, drawingPt, commitPipe]);
 
-    const onPipeDoubleClick = useCallback((worldPt) => {
+    const onPipeDoubleClick = useCallback(() => {
   if (drawing && drawing.points.length >= 2) {
-    const newPipe = {
-      id: Date.now(),
-      type: "manual_pipe",
-      points: drawing.points,
-      diameterMm: drawing.diameterMm,
-      dn: drawing.diameterMm,
-      pipeType: drawing.type,
-      material: "SS304",
-      pressureClass: "PN10",
-      label: `Pipe DN${drawing.diameterMm}`,
-layer: "pipework",
-flowDirection: "forward",
-    };
-
-    setPipes(prev => [...prev, newPipe]);
-    setSelectedPipeId(newPipe.id);
+    commitPipe(drawing.points, drawing.drawMode === "straight" ? "straight" : "polyline");
+    return;
   }
 
   setDrawing(null);
   setPipePreview(null);
   setMouseWorld(null);
-}, [drawing]);
+  setSnapInfo(null);
+}, [drawing, commitPipe]);
+
+  /**
+   * AF-CAD-033 typed entry: add an EXACT point (from dynamic input). It is not snapped;
+   * it only magnets onto a fixture port within 1 mm so the pipe records the connection.
+   */
+  const addTypedPoint = useCallback((typedPt) => {
+    if (!drawing) return null;
+    const m = magnetToPort(typedPt, fixtures);
+    const pt = cleanPoint({ x: m.x, y: m.y });
+    const nextPoints = [...drawing.points, pt];
+    if (drawing.drawMode === "straight") return commitPipe(nextPoints, "straight");
+    if ((drawing.drawMode === "curve" || drawing.drawMode === "arc") && nextPoints.length >= 3) return commitPipe(nextPoints, drawing.drawMode);
+    setDrawing(prev => ({ ...prev, points: nextPoints }));
+    return pt;
+  }, [drawing, fixtures, commitPipe]);
+
+  /** Enter with an empty input: finish the pipe like a double-click. */
+  const finishDrawing = useCallback(() => onPipeDoubleClick(), [onPipeDoubleClick]);
 
   const cancelDrawing = useCallback(() => {
   setDrawing(null);
   setPipePreview(null);
   setMouseWorld(null);
+  setSnapInfo(null);
 }, []);
 
   // ── Selection ────────────────────────────────────────────────────────────────
@@ -305,7 +267,7 @@ return null;
 
   // ── Node editing ──────────────────────────────────────────────────────────────
   const moveNode = useCallback((pipeId, nodeIndex, newPt) => {
-    let pt = snapPt(newPt);
+    const pt = cleanPoint(snapPt(newPt));
     setPipes(prev => prev.map(p => {
       if (p.id !== pipeId) return p;
       const newPoints = [...p.points];
@@ -379,7 +341,7 @@ const updatePipeProperties = useCallback((pipeId, updates) => {
     setPipes(prev => prev.map(p => {
       if (p.id !== pipeId) return p;
       const newPoints = [...p.points];
-      newPoints.splice(segmentIndex + 1, 0, snapPt(pt));
+      newPoints.splice(segmentIndex + 1, 0, cleanPoint(snapPt(pt)));
       return { ...p, points: newPoints };
     }));
   }, [snapPt]);
@@ -621,6 +583,7 @@ if (
     // State
     pipes, setPipes,
     drawing,
+    snapInfo,
     selectedPipeId, setSelectedPipeId,
 selectedNode, setSelectedNode,
 selectedSegment, setSelectedSegment,
@@ -635,6 +598,8 @@ mouseWorld,
     onPipeMouseMove,
     onPipeClick,
     onPipeDoubleClick,
+    addTypedPoint,
+    finishDrawing,
     cancelDrawing,
     selectPipeAtPoint,
     selectNodeAtPoint,

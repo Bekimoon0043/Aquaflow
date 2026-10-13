@@ -12,9 +12,9 @@ Every entry is HONEST about three separate things, which people conflate:
 
 Tiers reuse the AF-HUB-014 / AF-IO-006 vocabulary and are asserted consistent
 with PROTOCOL_SUPPORT / PLC_SUPPORT by test — the catalog can never advertise a
-drivability the runtime doesn't have. A controller can be detectable but not
-drivable (Allen-Bradley: we can read its identity, we cannot run a show on it) —
-the UI must show that difference, not blur it.
+drivability the runtime doesn't have. Detection, drivability and commissioning
+evidence are independent claims; the UI must show those differences, not blur
+them.
 
 The `ican-music-fountain` entry is special: its config is not from a datasheet,
 it is the REVERSE-ENGINEERED profile of the running site cabinet (AF-ICAN-003..008,
@@ -52,9 +52,72 @@ class ControllerEntry:
     configure_in: str = ""        # which AquaFlow panel drives it once configured
     notes: str = ""
     source: str = ""              # where this knowledge comes from
+    # AF-NEXT-015: evidence for this exact integration class. This is separate
+    # from `tier`: REAL means a driver exists, not that a physical installation
+    # has been commissioned.
+    verification_level: str = ""  # simulated | bench_verified | site_commissioned | unsupported
+    verification_summary: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.verification_level:
+            self.verification_level, self.verification_summary = _verification_for(self)
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+VERIFICATION_LEVELS = {
+    "simulated", "bench_verified", "site_commissioned", "unsupported",
+}
+
+
+def _verification_for(entry: ControllerEntry) -> tuple[str, str]:
+    """Return the strongest recorded evidence without upgrading a driver tier.
+
+    No catalog entry is currently `site_commissioned`: that label requires an
+    exact installation record and signed operator checklist. The I-CAN path has
+    physical gateway/fountain evidence, but its per-channel electrical mapping
+    is still provisional, so it is deliberately only `bench_verified`.
+    """
+    if entry.tier != "REAL":
+        return (
+            "unsupported",
+            "No enabled AquaFlow driver for this native protocol; identification or a documented gateway workaround only.",
+        )
+    if entry.id == "ican-music-fountain":
+        return (
+            "bench_verified",
+            "Verified from this PC against the specific 192.168.5.2 I-CAN gateway, including a shortened capture, the one-minute demo and Stop/blackout. Exact outlet mapping and full signed site commissioning remain pending.",
+        )
+    if entry.protocol in {"artnet", "sacn"}:
+        return (
+            "simulated",
+            "Live UDP loopback verifies packet output, safety zeroing and timing; no physical node or fixture has been signed off.",
+        )
+    if entry.protocol == "siemens_s7":
+        return (
+            "simulated",
+            "PLCSIM/S7comm verifies identity and contract reads. Physical CPU, I/O, watchdog and actuator response are not commissioned.",
+        )
+    if entry.protocol == "modbus_tcp":
+        return (
+            "simulated",
+            "Modbus TCP behavior is verified against software servers and automated tests; this exact controller/device has no recorded physical sign-off.",
+        )
+    if entry.protocol == "ethernet_ip":
+        return (
+            "simulated",
+            "Connect, identity and reads are verified against a cpppo Logix simulator; writes are unit-tested, not verified on a physical Logix controller.",
+        )
+    if entry.protocol == "opc_ua":
+        return (
+            "simulated",
+            "Typed sessions, reads and writes are verified against an asyncua software server; no physical PLC/server is signed off.",
+        )
+    return (
+        "simulated",
+        "Driver behavior is covered by software tests only; physical bench and site commissioning evidence is not recorded.",
+    )
 
 
 CATALOG: list[ControllerEntry] = [
@@ -389,11 +452,14 @@ def entries_for_tcp_port(port: int) -> list[ControllerEntry]:
 
 def catalog_dict() -> dict:
     tiers: dict[str, int] = {}
+    verification: dict[str, int] = {}
     for e in CATALOG:
         tiers[e.tier] = tiers.get(e.tier, 0) + 1
+        verification[e.verification_level] = verification.get(e.verification_level, 0) + 1
     return {
         "entries": [e.to_dict() for e in CATALOG],
         "count": len(CATALOG),
         "by_tier": tiers,
+        "by_verification": verification,
         "drivable": [e.id for e in CATALOG if e.tier == "REAL"],
     }

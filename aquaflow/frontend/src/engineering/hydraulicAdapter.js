@@ -1,4 +1,4 @@
-import { getFixtureLibraryEntry } from "../data/fixtureLibrary.js";
+import { getFixtureLibraryEntry, getFixtureProvenance } from "../data/fixtureLibrary.js";
 
 const BAR_TO_METRES_WATER = 10.19716213;
 
@@ -45,6 +45,9 @@ export function engineeringFixtureToSolverNozzle(fixture = {}) {
     id: fixture.id,
     x: Number(fixture.x || 0),
     y: Number(fixture.y || 0),
+    // AF-NEXT-012 — the solver cites the equipment model + data source per nozzle.
+    type: fixture.type,
+    provenance: getFixtureProvenance(fixture),
     engineering: {
       ...engineering,
       design_flow_lps: flowLpm / 60,
@@ -56,7 +59,7 @@ export function engineeringFixtureToSolverNozzle(fixture = {}) {
   };
 }
 
-export function buildHydraulicPreviewPayload({ fixtures = [], params = {}, volumeLitres = 0 } = {}) {
+export function buildHydraulicPreviewPayload({ fixtures = [], params = {}, volumeLitres = 0, basins = null } = {}) {
   const nozzles = fixtures
     .filter(isWaterNozzleFixture)
     .map(engineeringFixtureToSolverNozzle);
@@ -64,6 +67,11 @@ export function buildHydraulicPreviewPayload({ fixtures = [], params = {}, volum
     nozzles,
     params: { ...params, design_head_m: Number(params.design_head_m || params.designHeadM || 40) },
     volume_litres: Math.max(0, Number(volumeLitres || 0)),
+    // AF-NEXT-010: with 2+ basins the solver assigns each nozzle to the basin containing it.
+    ...(Array.isArray(basins) && basins.length > 1
+      ? { basins: basins.map(b => ({ id: b.id, name: b.name, outer: b.outer, holes: b.holes || [],
+        type: b.type, center: b.center, radius: b.radius, rx: b.rx, ry: b.ry, depth: b.params?.depth })) }
+      : {}),
   };
 }
 
@@ -75,6 +83,7 @@ export function normalizeHydraulicResult(result = {}) {
     totalDesignFlowLpm: Number(result.total_design_flow_lpm || 0),
     turnoverTimeHours: result.turnover_time_hours == null ? null : Number(result.turnover_time_hours),
     nozzlePhysics: result.nozzle_physics || {},
+    dataProvenance: result.data_provenance || null,
     validation: Array.isArray(result.validation) ? result.validation : [],
     hydraulicSolution: result.hydraulic_solution || null,
     solvedAt: new Date().toISOString(),

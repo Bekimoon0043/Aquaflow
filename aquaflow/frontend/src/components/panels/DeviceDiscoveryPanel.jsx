@@ -6,15 +6,16 @@ import { apiGet, apiPost } from "../../utils/apiClient";
 import {
   controllerTierBadge, confidenceLabel, stageLabel, discoveredDeviceProjection,
   plcPrefillFromDetection, isIcanGateway, buildDiscoverBody, adapterOptionLabel,
-  discoveryStatusLine, describeHttpError,
+  discoveryStatusLine, describeHttpError, controllerVerificationBadge,
 } from "../../utils/controllerDiscovery";
 import { PREFILL_KEY, PREFILL_EVENT } from "../../utils/plcConfig";
+import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
 
 // Pure helpers re-exported for the existing tests.
 export {
   controllerTierBadge, confidenceLabel, stageLabel, discoveredDeviceProjection,
   plcPrefillFromDetection, isIcanGateway, buildDiscoverBody, adapterOptionLabel,
-  discoveryStatusLine, describeHttpError,
+  discoveryStatusLine, describeHttpError, controllerVerificationBadge,
 };
 
 const API = `${API_BASE_URL}/devices`;
@@ -42,6 +43,10 @@ export default function DeviceDiscoveryPanel() {
     window.addEventListener("aquaflow:open-device-tab", openTab);
     return () => window.removeEventListener("aquaflow:open-device-tab", openTab);
   }, []);
+  // AF-NEXT-014: workspace navigation (also works before this lazy panel has mounted).
+  usePanelAction("devices", ({ action, detail }) => {
+    if (action === "tab" && ["scan", "controllers", "dmx", "test", "config"].includes(detail?.tab)) setTab(detail.tab);
+  });
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-panel)" }}>
@@ -240,6 +245,7 @@ function ControllersTab({ addServerLog }) {
           )}
           {(result.detected || []).map((d) => {
             const badge = controllerTierBadge(d.tier, d);
+            const verification = controllerVerificationBadge(d.verification_level);
             const ican = isIcanGateway(d);
             const isOpen = expanded === d.discovery_id;
             const prefill = plcPrefillFromDetection(d);
@@ -247,6 +253,7 @@ function ControllersTab({ addServerLog }) {
               <div key={d.discovery_id} style={row}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : d.discovery_id)}>
                   <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
+                  <span title={d.verification_summary} style={{ color: verification.color, fontWeight: 600, fontSize: 9, ...mono }}>{verification.label}</span>
                   <span style={{ color: "var(--text-primary)", flex: 1 }}>{d.label}</span>
                   <span style={{ color: "var(--text-muted)", ...mono }}>
                     {d.ip ? `${d.ip}${d.port ? `:${d.port}` : ""}` : "no IP configured"}
@@ -259,6 +266,11 @@ function ControllersTab({ addServerLog }) {
                   {d.mac && ` · ${d.mac}`}
                   {d.adapter && ` · via ${d.adapter}`}
                 </div>
+                {d.verification_summary && (
+                  <div style={{ marginTop: 3, color: verification.color, fontSize: 9.5 }}>
+                    Evidence: {d.verification_summary}
+                  </div>
+                )}
                 {ican && (
                   <div style={{ marginTop: 3, color: "var(--green)", fontSize: 9.5 }}>
                     ✓ Validated I-CAN gateway reply on {d.ip} (interface {d.identity?.interface || d.adapter || "?"}) — configure and operate it in Fountain Control; nothing was armed or connected here.
@@ -304,16 +316,21 @@ function ControllersTab({ addServerLog }) {
       </div>
       {catalog.map(e => {
         const badge = controllerTierBadge(e.tier);
+        const verification = controllerVerificationBadge(e.verification_level);
         const isOpen = open === e.id;
         return (
           <div key={e.id} style={{ ...row, cursor: "pointer" }} onClick={() => setOpen(isOpen ? null : e.id)}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
+              <span title={e.verification_summary} style={{ color: verification.color, fontWeight: 600, fontSize: 9, ...mono }}>{verification.label}</span>
               <span style={{ color: "var(--text-primary)", flex: 1 }}>{e.vendor} — {e.model}</span>
               <span style={{ color: "var(--text-muted)", fontSize: 9, ...mono }}>{e.category}</span>
             </div>
             {isOpen && (
               <div style={{ marginTop: 6, color: "var(--text-secondary)", fontSize: 9.5 }}>
+                <div style={{ marginBottom: 4, color: verification.color }}>
+                  Evidence: {verification.label} — {e.verification_summary}
+                </div>
                 {e.notes && <div style={{ marginBottom: 4 }}>{e.notes}</div>}
                 {Object.keys(e.default_config || {}).length > 0 && (
                   <div style={{ ...mono, color: "var(--text-muted)", whiteSpace: "pre-wrap", background: "var(--bg-panel)", padding: 6, borderRadius: "var(--radius-sm)" }}>

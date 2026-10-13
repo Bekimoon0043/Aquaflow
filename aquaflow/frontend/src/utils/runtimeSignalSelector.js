@@ -4,6 +4,7 @@
 // This is the bridge between Timeline / AI / Manual Pattern Design and 3D Preview / PLC Compile.
 
 import { DEFAULT_DEVICE_GROUPS } from "./deviceGroupSelector";
+import { fadeFactor, normalizeCurve } from "../show/evaluateShowFrame";
 
 const DEFAULT_GROUP_SIGNALS = Object.fromEntries(
   DEFAULT_DEVICE_GROUPS.map(group => [group.id, 0])
@@ -102,6 +103,13 @@ const TYPE_ALIASES = {
 
   flame_units: "flame_units",
   flame_group: "flame_units",
+
+    // AF-NEXT-004: Show Studio per-fixture track types map onto the global signals,
+    // so Studio clips placed on legacy tracks are not silently dropped.
+  pump_speed: "pump",
+  device_intensity: "pump",
+  solenoid_open: "valve",
+  lighting_master: "lighting",
 
     laser_units: "laser_units",
   laser_group: "laser_units",
@@ -255,7 +263,8 @@ function clipIsActiveAt(clip, playhead) {
   // A zero-duration clip behaves like a pulse at its start point.
   if (end <= start) return Math.abs(playhead - start) < 0.05;
 
-  return playhead >= start && playhead <= end;
+  // AF-NEXT-004: canonical half-open window [start, end), as in every other view.
+  return playhead >= start && playhead < end;
 }
 
 function clipIntensityAt(clip, playhead) {
@@ -277,13 +286,13 @@ function clipIntensityAt(clip, playhead) {
   const fadeIn = Number(clip?.fadeIn ?? clip?.rampIn ?? 0);
   const fadeOut = Number(clip?.fadeOut ?? clip?.rampOut ?? 0);
 
-  let envelope = 1;
-  if (Number.isFinite(fadeIn) && fadeIn > 0 && playhead < start + fadeIn) {
-    envelope = Math.min(envelope, clamp01((playhead - start) / fadeIn));
-  }
-  if (Number.isFinite(fadeOut) && fadeOut > 0 && playhead > end - fadeOut) {
-    envelope = Math.min(envelope, clamp01((end - playhead) / fadeOut));
-  }
+  // One fade/curve implementation for every view (AF-NEXT-004).
+  const envelope = end > start ? fadeFactor({
+    start, end,
+    fadeIn: Number.isFinite(fadeIn) && fadeIn > 0 ? fadeIn : 0,
+    fadeOut: Number.isFinite(fadeOut) && fadeOut > 0 ? fadeOut : 0,
+    curve: normalizeCurve(clip?.curveType) || "linear",
+  }, playhead) : 1;
 
   // Optional simple pulse/chase wave support for generated clips.
   const pattern = String(clip?.pattern || clip?.mode || "").toLowerCase();

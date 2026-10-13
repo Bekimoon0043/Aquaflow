@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { ARTICLES, CATEGORIES } from "../../docs/articles";
 import { search, contextHelp, getArticle, OFFLINE_AVAILABLE } from "../../docs/search";
 import { getHelpContext } from "../../docs/helpContext";
+import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
 
 const box = { background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6 };
 const CONTEXT_LABEL = {
@@ -22,6 +23,10 @@ export default function DocumentationPanel() {
   const [category, setCategory] = useState(null);
   const helpCtx = getHelpContext();
   const [ctx, setCtx] = useState(helpCtx);
+  // AF-NEXT-014: guidance links open a procedure article directly.
+  usePanelAction("docs", ({ action, detail }) => {
+    if (action === "article" && getArticle(detail?.articleId)) { setQuery(""); setSelectedId(detail.articleId); }
+  });
 
   const results = useMemo(() => (query.trim() ? search(query) : []), [query]);
   const ctxHelp = useMemo(() => contextHelp(ctx), [ctx]);

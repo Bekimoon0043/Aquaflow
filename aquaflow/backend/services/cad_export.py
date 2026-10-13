@@ -51,6 +51,8 @@ from typing import Iterable, Optional
 import ezdxf
 from ezdxf import units as dxf_units
 
+from services.basin_model import is_model_basins, normalize_basins
+
 DXF_VERSION = "AC1027"          # AutoCAD 2013 — ezdxf "R2013"
 INSUNITS_METERS = 6
 XDATA_APPID = "AQUAFLOW"
@@ -258,6 +260,7 @@ def pool_geometry(design: dict) -> dict:
 
 
 def _extra_basins(design: dict) -> list[dict]:
+    """Pre-AF-NEXT-010 extension: ``basins: [{points, holes}]`` EXTRA to ``geometry``."""
     out = []
     for i, b in enumerate(design.get("basins") or []):
         if not isinstance(b, dict):
@@ -384,41 +387,55 @@ def build_document(design: dict, *, dimensions: bool = True):
     bounds = _Bounds()
 
     # ── Basin(s) ─────────────────────────────────────────────────────────────
-    g = pool_geometry(design)
     depth = _num((design.get("params") or {}).get("depth"), 0.8) or 0.8
-    pool_meta = {"kind": "pool", "depth": depth}
-    if g["type"] == "circle":
-        cx, cy = to_cad(g["center"])
-        e = msp.add_circle((cx, cy), g["radius"], dxfattribs={"layer": "POOL_OUTLINE"})
-        bounds.add(cx, cy, g["radius"])
-    elif g["type"] == "ellipse":
-        cx, cy = to_cad(g["center"])
-        rx, ry = g["rx"], g["ry"]
-        major = (0.0, -ry) if ry > rx else (rx, 0.0)   # same choice as exportCadDxf
-        e = msp.add_ellipse((cx, cy), major_axis=major, ratio=min(rx, ry) / max(rx, ry),
-                            dxfattribs={"layer": "POOL_OUTLINE"})
-        bounds.add(cx - rx, cy - ry); bounds.add(cx + rx, cy + ry)
+
+    def write_shape(g, meta):
+        if g["type"] == "circle":
+            cx, cy = to_cad(g["center"])
+            ent = msp.add_circle((cx, cy), g["radius"], dxfattribs={"layer": "POOL_OUTLINE"})
+            bounds.add(cx, cy, g["radius"])
+        elif g["type"] == "ellipse":
+            cx, cy = to_cad(g["center"])
+            rx, ry = g["rx"], g["ry"]
+            major = (0.0, -ry) if ry > rx else (rx, 0.0)   # same choice as exportCadDxf
+            ent = msp.add_ellipse((cx, cy), major_axis=major, ratio=min(rx, ry) / max(rx, ry),
+                                  dxfattribs={"layer": "POOL_OUTLINE"})
+            bounds.add(cx - rx, cy - ry); bounds.add(cx + rx, cy + ry)
+        else:
+            cad = [to_cad(p) for p in g["points"]]
+            ent = msp.add_lwpolyline(cad, close=g.get("closed", True), dxfattribs={"layer": "POOL_OUTLINE"})
+            for x, y in cad:
+                bounds.add(x, y)
+        _set_meta(ent, meta)
+
+    def write_island(hole, meta):
+        h = msp.add_lwpolyline([to_cad(p) for p in hole], close=True, dxfattribs={"layer": "POOL_ISLANDS"})
+        _set_meta(h, meta)
+
+    if is_model_basins(design):
+        # AF-NEXT-010: every basin, each with its own id/name/levels and its islands.
+        for b in normalize_basins(design):
+            meta = {"kind": "pool", "id": b["id"], "name": b["name"], "depth": b["depth"] or depth}
+            for k in ("floorLevel", "wallHeight"):
+                if b.get(k) is not None:
+                    meta[k] = b[k]
+            write_shape(b, meta)
+            for j, hole in enumerate(b["holes"]):
+                write_island(hole, {"kind": "island", "id": f"{b['id']}-island-{j + 1}", "basinId": b["id"]})
     else:
-        cad = [to_cad(p) for p in g["points"]]
-        e = msp.add_lwpolyline(cad, close=g.get("closed", True), dxfattribs={"layer": "POOL_OUTLINE"})
-        for x, y in cad:
-            bounds.add(x, y)
-    _set_meta(e, pool_meta)
-    for i, hole in enumerate(g.get("holes") or []):
-        h = msp.add_lwpolyline([to_cad(p) for p in hole], close=True,
-                               dxfattribs={"layer": "POOL_ISLANDS"})
-        _set_meta(h, {"kind": "island", "id": f"island-{i + 1}"})
-    for b in _extra_basins(design):
-        cad = [to_cad(p) for p in b["points"]]
-        e = msp.add_lwpolyline(cad, close=True, dxfattribs={"layer": "POOL_OUTLINE"})
-        _set_meta(e, {"kind": "pool", "id": str(b["id"]),
-                      "depth": _num(b.get("depth"), depth) or depth})
-        for x, y in cad:
-            bounds.add(x, y)
-        for j, hole in enumerate(b["holes"]):
-            h = msp.add_lwpolyline([to_cad(p) for p in hole], close=True,
-                                   dxfattribs={"layer": "POOL_ISLANDS"})
-            _set_meta(h, {"kind": "island", "id": f"{b['id']}-island-{j + 1}"})
+        g = pool_geometry(design)
+        write_shape(g, {"kind": "pool", "depth": depth})
+        for i, hole in enumerate(g.get("holes") or []):
+            write_island(hole, {"kind": "island", "id": f"island-{i + 1}"})
+        for b in _extra_basins(design):
+            cad = [to_cad(p) for p in b["points"]]
+            e = msp.add_lwpolyline(cad, close=True, dxfattribs={"layer": "POOL_OUTLINE"})
+            _set_meta(e, {"kind": "pool", "id": str(b["id"]),
+                          "depth": _num(b.get("depth"), depth) or depth})
+            for x, y in cad:
+                bounds.add(x, y)
+            for j, hole in enumerate(b["holes"]):
+                write_island(hole, {"kind": "island", "id": f"{b['id']}-island-{j + 1}"})
 
     # ── Fixtures → block INSERTs ─────────────────────────────────────────────
     fx_cad: dict[str, tuple[float, float]] = {}

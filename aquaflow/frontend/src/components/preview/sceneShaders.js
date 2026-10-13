@@ -171,7 +171,7 @@ void main(){
 
   // RGB fixture field (AF-3D-022): every fixture whose beam reaches this point —
   // cone x distance x forward scattering, linear HDR so bright beams bloom.
-  col += fieldLight(vWorldPos, viewDir, ${HG_G.toFixed(2)}, 1.0);
+  col += flDensityNormalize(fieldLightN(vWorldPos, viewDir, ${HG_G.toFixed(2)}, 1.0, uFieldMaxGroups));   // AF-NEXT-013
 
   gl_FragColor = vec4(col, vAlpha * (0.55 + 0.45 * facing));
 }`;
@@ -348,6 +348,8 @@ uniform float uFloorY;            // basin floor height, world metres
 uniform float uFloorScale;        // world metres per texture tile
 uniform vec3  uAbsorb;            // Beer-Lambert extinction per metre, per channel
 uniform vec4  uPoolShape;         // x: 1 = circular, y: radius, z: width, w: length
+// AF-NEXT-013 (defaults to 0 when the material does not declare it):
+uniform float uEcoWater;            // 1 = eco tier: 4 nearest fixtures, no refraction ray
 ${FIELD_LIGHT_GLSL}
 varying vec2  vUv;
 varying vec3  vWorldPos;
@@ -376,7 +378,7 @@ void main(){
   // analytically — no second scene pass, and the wobble is physically the right
   // shape rather than a scrolling normal-map trick.
   float causticsFloor = 0.0;
-  if (uHasFloorTex > 0.5) {
+  if (uHasFloorTex > 0.5 && uEcoWater < 0.5) {
     vec3 rdir = refract(viewIn, normalize(vNormal), 1.0 / 1.333);
     if (rdir.y < -1e-3) {
       float t   = (uFloorY - vWorldPos.y) / rdir.y;
@@ -415,19 +417,11 @@ void main(){
   // Per-fixture light field — pool surface receives bleeds + specular tint
   // The surface sits just above the fixtures, so it takes their omni glow (cone off)
   // and no scattering phase — it is a reflector, not a scattering medium.
-  vec3 fieldContrib = fieldLight(vWorldPos, normalize(uCameraPos - vWorldPos), 0.0, 0.0);
-  // Soft knee above 1: with hundreds of fixtures (AF-3D-022) a dense layout can sum
-  // far past what one surface sample should show; compress the excess so the pool
-  // saturates toward the fixture colour instead of clipping to white. Below 0.8 —
-  // one or two fixtures, the pre-AF-3D-022 regime — the response is unchanged.
-  float fieldPeak = max(max(fieldContrib.r, fieldContrib.g), fieldContrib.b);
-  if (fieldPeak > 0.8) fieldContrib *= (0.8 + 0.2 * (1.0 - exp(-(fieldPeak - 0.8) / 0.2))) / fieldPeak;
-      // Realistic surface bleed: visible reflection, not full material recolor.
-    base += fieldContrib * 0.95;
-  base += fieldContrib * caustics * 1.35;
-
-  float fieldStrength = clamp(length(fieldContrib), 0.0, 1.0);
-  base = mix(base, base + fieldContrib * 1.4, fieldStrength);
+  vec4 fieldN = fieldLightN(vWorldPos, normalize(uCameraPos - vWorldPos), 0.0, 0.0, uEcoWater > 0.5 ? 1.0 : uFieldMaxGroups);
+  // AF-NEXT-013: many overlapping fixtures are energy-normalised by their local
+  // overlap count (1-2 fixtures untouched), then the AF-3D-022 soft knee compresses
+  // what remains so the pool saturates toward the fixture colour instead of white.
+  vec3 fieldContrib = flSurfaceKnee(flDensityNormalize(fieldN));
 
   // GGX specular
   vec3 viewDir  = normalize(uCameraPos - vWorldPos);
@@ -440,8 +434,14 @@ void main(){
   float ggx     = a2 / (3.14159 * denom * denom);
   base += vec3(ggx * 0.35);
 
-  // Colored specular spike under strong RGB fixtures
-  base += fieldContrib * ggx * 1.8;
+  // The fixture light the surface shows: realistic bleed (a visible reflection, not a
+  // full material recolour), caustic modulation, the strength-weighted lift and the
+  // coloured specular spike under strong RGB fixtures. Summed first so that, where
+  // more than two fixtures overlap, the TOTAL is capped hue-preservingly
+  // (flDenseSurface, AF-NEXT-013); for 1-2 fixtures it is the same sum as before.
+  float fieldStrength = clamp(length(fieldContrib), 0.0, 1.0);
+  vec3 fixtureLight = fieldContrib * (0.95 + caustics * 1.35 + 1.4 * fieldStrength + ggx * 1.8);
+  base += flDenseSurface(fixtureLight, fieldN.a);
 
   // ── Fresnel reflection ────────────────────────────────────────────────────
   // Schlick against water's true normal-incidence reflectance. For IOR 1.333,

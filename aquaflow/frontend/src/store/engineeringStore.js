@@ -22,6 +22,7 @@ import {
   normalizeEngineeringProject,
   selectEngineeringPipes,
 } from "../engineering/engineeringProject";
+import { reconcileBasins } from "../engineering/basins";
 
 const DEFAULT_ENGINEERING_LAYERS = [
   { key: "pool_outline", label: "Pool Outline", visible: true, locked: false, color: "#00aaff" },
@@ -51,6 +52,9 @@ const useEngineeringStore = create((set, get) => ({
   // geometry: { type, points?, center?, radius?, rx?, ry?, closed? }
   geometry: null,
 
+  // AF-NEXT-010: all basins (engineering/basins.js). basins[0] === geometry (legacy view).
+  basins: [],
+
   // poolType: "rectangular" | "circular" | "elliptical" | "lshape" |
   //           "freeform" | "false_lake" | "false_river"
   poolType: "rectangular",
@@ -65,6 +69,9 @@ const useEngineeringStore = create((set, get) => ({
   // Each fixture: { id, type, label, x, y, z, rotation, zone, engineering:{}, symbol:{} }
   // Symbol metadata automatically derived from type via getEngineeringSymbol()
   fixtures: [],
+
+  // AF-CAD-034: fixture groups stored as ID lists ({ id, uuid, owner, name, members: [entityKey] }).
+  groups: [],
 
   // Editable venue content placed in the 3D workspace (people, trees, buildings, GLB).
   siteModels: [],
@@ -107,11 +114,20 @@ pipes: [],
    * Accepts a partial update — only provided keys are merged.
    */
   updateEngineering: (patch) => {
-    set(state => ({
-      ...state,
-      ...patch,
-      lastUpdated: Date.now(),
-    }));
+    set(state => {
+      const next = { ...state, ...patch, lastUpdated: Date.now() };
+      // A writer that is not multi-basin aware may patch `geometry` alone: keep basins[0]
+      // in step (geometry wins for the primary basin; other basins are untouched).
+      // Depth zones are re-scoped onto their basins whenever either side changes.
+      if (patch && ("geometry" in patch || "depthZones" in patch || "basins" in patch)) {
+        const source = "basins" in patch ? patch.basins : state.basins;
+        next.basins = next.geometry
+          ? reconcileBasins({ basins: source, geometry: next.geometry, poolType: next.poolType, params: next.params,
+            depthZones: next.depthZones })
+          : ("basins" in patch ? reconcileBasins({ basins: source, depthZones: next.depthZones }) : []);
+      }
+      return next;
+    });
   },
 
   /**
@@ -124,9 +140,11 @@ pipes: [],
       projectName:       normalized.name,
       projectId:         normalized.id,
       geometry:          normalized.geometry || null,
+      basins:            normalized.basins || [],
       poolType:          normalized.pool_type,
       params:            normalized.params,
       fixtures:          normalized.fixtures,
+      groups:            normalized.groups,
       siteModels:        normalized.site_models,
       siteSurfaces:      normalized.site_surfaces,
       cadUnderlay:       normalized.cad_underlay,
@@ -161,7 +179,11 @@ pipes: [],
       pool_type:   s.poolType,
       params:      s.params,
       geometry:    s.geometry,
+      basins:      s.geometry
+        ? reconcileBasins({ basins: s.basins, geometry: s.geometry, poolType: s.poolType, params: s.params, depthZones: s.depthZones })
+        : [],
       fixtures:    s.fixtures,
+      groups:      s.groups,
       site_models: s.siteModels,
       site_surfaces: s.siteSurfaces,
       cad_underlay: s.cadUnderlay,

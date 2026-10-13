@@ -5,6 +5,7 @@
 // (AQ-S2-011) so FIXTURE_LIBRARY exposes 500+ fixtures, every one carrying both
 // hydraulic (`engineering`) and electrical (`electrical`) metadata.
 import EXPANDED_FIXTURES from "./fixture_library_expanded.json";
+import { equipmentKind, genericProvenance, isVerifiedProvenance, normalizeProvenance, SOURCE_MEASURED } from "./fixtureProvenance.js";
 
 const CURATED_FIXTURES = [
   // =========================
@@ -1522,12 +1523,23 @@ function deriveElectrical(f) {
 
 function normalizeFixture(f) {
   const engineering = { ...(f.engineering || {}) };
-  if (!engineering.dataSource) engineering.dataSource = GENERIC_DATA_SOURCE;
+  // AF-NEXT-012 — canonical provenance block (data/fixtureProvenance.js). An entry
+  // is only trusted when it carries a complete `provenance` (datasheet document +
+  // revision + licence, or a dated measurement). A bare manufacturer/model pair is
+  // NOT a datasheet: it stays a generic estimate. No entry ships verified today.
+  const provenance = normalizeProvenance(f.provenance, {
+    kind: equipmentKind(f), model: f.model || f.label, manufacturer: f.manufacturer,
+  });
+  const verified = isVerifiedProvenance(provenance);
+  if (!engineering.dataSource || !verified) {
+    engineering.dataSource = verified ? provenance.label : GENERIC_DATA_SOURCE;
+  }
   return {
     ...f,
-    // No library entry carries a real manufacturer/model yet → all are generic.
-    source: f.source || (f.manufacturer && f.model ? "datasheet" : "generic"),
-    generic: f.generic ?? !(f.manufacturer && f.model),
+    // Legacy short code kept for older readers: "generic" | "datasheet" | "measured".
+    source: verified ? (provenance.source === SOURCE_MEASURED ? "measured" : "datasheet") : "generic",
+    generic: !verified,
+    provenance,
     engineering,
     electrical: f.electrical || deriveElectrical(f),
   };
@@ -1564,6 +1576,7 @@ function unknownFixtureType(requestedKey) {
     icon: "?",
     source: "generic",
     generic: true,
+    provenance: genericProvenance({ model: "unknown type" }),
     unknown: true,
     engineering: {},
     electrical: {
@@ -1634,3 +1647,15 @@ export const fixtureLibraryStats = {
   categories: FIXTURE_CATEGORIES.length,
   families: FIXTURE_FAMILIES.length
 };
+/**
+ * AF-NEXT-012 — provenance of a placed fixture: its own `provenance` block (e.g.
+ * linked to a verified model) wins, else the library entry's, else generic.
+ * Always normalised, so an incomplete trust claim reads as a generic estimate.
+ */
+export function getFixtureProvenance(fixture = {}) {
+  const entry = getFixtureType(fixture?.type ?? fixture?.key);
+  const kind = equipmentKind(entry.unknown ? fixture : entry);
+  return normalizeProvenance(fixture?.provenance || entry.provenance, {
+    kind, model: fixture?.model || entry.label, manufacturer: fixture?.manufacturer || entry.manufacturer,
+  });
+}

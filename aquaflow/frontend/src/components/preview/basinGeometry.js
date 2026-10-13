@@ -138,10 +138,60 @@ export function basinOpening(T, { poolType = 'circular', radius = 6, width = 12,
   return hole;
 }
 
+/**
+ * AF-NEXT-010: the primary basin opening plus one per extra basin
+ * (`pool.extraBasins: [{outer:[{x,y}]}]`, world-centred plan points).
+ */
+export function basinOpenings(T, pool = {}) {
+  const extra = (pool.extraBasins || []).filter(b => b?.outer?.length >= 3).map(b => {
+    const outline = toShapePlane(b.outer), path = new T.Path();
+    path.moveTo(outline[0].x, outline[0].y);
+    outline.slice(1).forEach(point => path.lineTo(point.x, point.y));
+    path.closePath();
+    return path;
+  });
+  return [basinOpening(T, pool), ...extra];
+}
+
+/** Every ring (outer + holes) of the given basins, for walls / copings. */
+export const basinRings = (basins = []) => basins.flatMap(b => [b.outer || [], ...(b.holes || [])]).filter(r => r.length >= 3);
+
+/** Water plane over several basins: grid cells kept where the shared basin mask holds water. */
+export function maskedWaterGeometry(T, mask, resolution = 112) {
+  const b = mask?.bounds;
+  if (!b || !(b.width > 0) || !(b.length > 0)) return null;
+  const longest = Math.max(b.width, b.length);
+  const nx = Math.max(12, Math.round(resolution * b.width / longest));
+  const ny = Math.max(12, Math.round(resolution * b.length / longest));
+  const positions = [], uvs = [], indices = [];
+  for (let iz = 0; iz <= ny; iz += 1) {
+    const z = b.minZ + b.length * iz / ny;
+    for (let ix = 0; ix <= nx; ix += 1) {
+      positions.push(b.minX + b.width * ix / nx, -z, 0);   // shape plane: local y = -world z
+      uvs.push(ix / nx, iz / ny);
+    }
+  }
+  const row = nx + 1;
+  for (let iz = 0; iz < ny; iz += 1) {
+    for (let ix = 0; ix < nx; ix += 1) {
+      const x = b.minX + b.width * (ix + 0.5) / nx, z = b.minZ + b.length * (iz + 0.5) / ny;
+      if (!mask.contains(x, z)) continue;
+      const a = iz * row + ix, c = a + row;
+      indices.push(a, c + 1, a + 1, a, c, c + 1);
+    }
+  }
+  const geometry = new T.BufferGeometry();
+  geometry.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function deckWithOpening(T, pool, extent = 80) {
   const s = extent / 2, shape = new T.Shape();
   shape.moveTo(-s, -s); shape.lineTo(s, -s); shape.lineTo(s, s); shape.lineTo(-s, s); shape.closePath();
-  shape.holes.push(basinOpening(T, pool));
+  shape.holes.push(...basinOpenings(T, pool));
   const geometry = new T.ShapeGeometry(shape, 96);
   const uv = geometry.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / extent + 0.5, uv.getY(i) / extent + 0.5);

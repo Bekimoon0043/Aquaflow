@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as THREE from "three";
 import { NozzleV2 } from "../FountainScene_v6";
 import { FixtureInstances, LightMarkerInstances, fixtureKindFor } from "../fixtureModels";
-import { buildSyntheticSite, estimateDrawCalls, SITE_SCALE } from "../__bench__/largeShowBench";
+import { buildSyntheticSite, estimateDrawCalls, SITE_SCALE, BENCH_SIZES, siteForFixtureCount, frameTimeStats, percentile, benchCameraAt } from "../__bench__/largeShowBench";
 import { QUALITY_CONFIG } from "../sceneQuality";
 
 const deps = { THREE, NozzleV2, FixtureInstances, LightMarkerInstances, fixtureKindFor };
@@ -33,5 +33,34 @@ describe("AF-3D-020 large-show baseline (headless parts)", () => {
     expect(QUALITY_CONFIG.low.gpuParticles).toBe(false);
     expect(QUALITY_CONFIG.high.halfResSpray).toBe(true);
     expect(QUALITY_CONFIG.medium.halfResSpray).toBe("toggle");
+  });
+});
+
+describe("AF-NEXT-013 benchmark variants", () => {
+  it("builds 20 / 100 / 300-fixture sites with the same nozzle:light mix", () => {
+    expect(BENCH_SIZES).toEqual([20, 100, 300]);
+    for (const n of BENCH_SIZES) {
+      const s = siteForFixtureCount(n);
+      expect(s.nozzles.length + s.lights.length).toBe(n);
+      expect(s.nozzles.length / n).toBeGreaterThan(0.5);
+      expect(s.lights.length).toBeGreaterThan(0);
+    }
+    const full = siteForFixtureCount(300);
+    expect([full.valves, full.pumps]).toEqual([SITE_SCALE.valves, SITE_SCALE.pumps]);
+  });
+  it("frame-time statistics: median, p99, max and the mean (throughput) frame rate", () => {
+    const ms = [...Array(98).fill(10), 100, 400];
+    const st = frameTimeStats(ms);
+    expect(st.frames).toBe(100);
+    expect(st.medianMs).toBe(10);
+    expect(st.p99Ms).toBe(100);
+    expect(st.maxMs).toBe(400);
+    expect(st.meanMs).toBeCloseTo(14.8, 5);
+    expect(st.meanFps).toBeCloseTo(1000 / 14.8, 1);
+    expect(percentile([], 50)).toBeNull();
+  });
+  it("the camera path is deterministic", () => {
+    expect(benchCameraAt(3)).toEqual(benchCameraAt(3));
+    expect(benchCameraAt(0).position.y).toBeCloseTo(13 + Math.sin(0.8) * 1.5, 6);
   });
 });

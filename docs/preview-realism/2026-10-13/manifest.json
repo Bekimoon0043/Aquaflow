@@ -1,0 +1,987 @@
+{
+  "task": "AF-NEXT-013",
+  "date": "2026-10-13",
+  "gpuName": "NVIDIA GeForce GT 730",
+  "webgl": "ANGLE (NVIDIA, NVIDIA GeForce GT 730 (0x00000F02) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "sizeLimitBytes": 307200,
+  "threshold": 24,
+  "tolerance": 0.02,
+  "scenes": [
+    {
+      "name": "synthetic-300-allon-design-aces",
+      "description": "300 fixtures, every light on in its design colour, ACES",
+      "ms": 1956,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 192,
+        "lights": 108
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 672275,
+      "jpgBytes": 135501,
+      "colour": {
+        "litPixels": 268815,
+        "meanSaturation": 0.401,
+        "nearWhiteShare": 0.0747
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 300,
+        "colors": "design",
+        "toneMapping": "aces"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-300-allon-design-aces.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "81e4318853324aca282b74cb38f4b47ee2a796646586484f7e5ac0ec26efe94e",
+      "committed": [
+        "2026-10-13/synthetic-300-allon-design-aces.jpg"
+      ],
+      "baselineSha256": "a33584b529141188b6bf211518dab3c8fba1b80728518f9b692a0c97d889385b",
+      "baselineBytes": 672290
+    },
+    {
+      "name": "synthetic-300-allon-design-aces-before",
+      "description": "Same, density normalisation OFF (pre-fix reference)",
+      "ms": 1654,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 192,
+        "lights": 108
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 641853,
+      "jpgBytes": 135693,
+      "colour": {
+        "litPixels": 277983,
+        "meanSaturation": 0.3743,
+        "nearWhiteShare": 0.1827
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 300,
+        "colors": "design",
+        "toneMapping": "aces",
+        "densityNorm": false
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-300-allon-design-aces-before.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "b94da099ea7bb265d94eefb2a34cf988a7f76547d1c86f3b97cd62ef7a59b55d",
+      "committed": [
+        "2026-10-13/synthetic-300-allon-design-aces-before.jpg"
+      ],
+      "baselineSha256": "b94da099ea7bb265d94eefb2a34cf988a7f76547d1c86f3b97cd62ef7a59b55d",
+      "baselineBytes": 641853
+    },
+    {
+      "name": "synthetic-300-allon-design-agx",
+      "description": "300 all-on, AgX",
+      "ms": 1599,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 192,
+        "lights": 108
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.98441632082667,
+      "toneMapping": "agx",
+      "pngBytes": 706153,
+      "jpgBytes": 136716,
+      "colour": {
+        "litPixels": 437974,
+        "meanSaturation": 0.4637,
+        "nearWhiteShare": 0.0005
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 300,
+        "colors": "design",
+        "toneMapping": "agx"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-300-allon-design-agx.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "52bdc7a1e6021b7dbc24eec0f80d0783367edee7f8941a343766237d3174f382",
+      "committed": [
+        "2026-10-13/synthetic-300-allon-design-agx.jpg"
+      ],
+      "baselineSha256": "1ef12e036737fec4abc501b2c41db56b0619d69137cd031bc51051a1d0d6bc59",
+      "baselineBytes": 706153
+    },
+    {
+      "name": "synthetic-300-allon-design-neutral",
+      "description": "300 all-on, Neutral",
+      "ms": 1576,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 192,
+        "lights": 108
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 2.1609161517561586,
+      "toneMapping": "neutral",
+      "pngBytes": 649348,
+      "jpgBytes": 133660,
+      "colour": {
+        "litPixels": 399207,
+        "meanSaturation": 0.677,
+        "nearWhiteShare": 0.0074
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 300,
+        "colors": "design",
+        "toneMapping": "neutral"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-300-allon-design-neutral.png",
+        "ratio": 0,
+        "meanAbs": 0.024,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "3b88922285cec7cdfae18ea2fa24ab4e8f36d4952c86474f7e515af52fea78e7",
+      "committed": [
+        "2026-10-13/synthetic-300-allon-design-neutral.jpg"
+      ],
+      "baselineSha256": "eb1bb00f484cda938745ab251951fb955147feba91f3e4e1bf5ca311f0b36418",
+      "baselineBytes": 649433
+    },
+    {
+      "name": "synthetic-20-on-design-neutral",
+      "description": "20 fixtures, Neutral",
+      "ms": 1466,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 12,
+        "lights": 8
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 2.1609161517561586,
+      "toneMapping": "neutral",
+      "pngBytes": 353589,
+      "jpgBytes": 61323,
+      "colour": {
+        "litPixels": 333058,
+        "meanSaturation": 0.851,
+        "nearWhiteShare": 0.0001
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 20,
+        "colors": "design",
+        "toneMapping": "neutral"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-20-on-design-neutral.png",
+        "ratio": 0,
+        "meanAbs": 0.025,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "4d8948a2ccfd7b9240c5250f7541f882d388115c8893a4b1d2017ef53ae1b969",
+      "committed": [
+        "2026-10-13/synthetic-20-on-design-neutral.jpg"
+      ],
+      "baselineSha256": "69d3769a287b0858875fdf5f7eb1fed1b335cf31cdbce31ff3994746ef726146",
+      "baselineBytes": 353714
+    },
+    {
+      "name": "lebu-apex-three-quarter-neutral",
+      "description": "Lebu pilot, Neutral tone mapping",
+      "ms": 1559,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 23,
+        "lights": 16
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 2.1609161517561586,
+      "toneMapping": "neutral",
+      "pngBytes": 500545,
+      "jpgBytes": 89452,
+      "colour": {
+        "litPixels": 422753,
+        "meanSaturation": 0.7085,
+        "nearWhiteShare": 0.0963
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "apex-three-quarter",
+        "toneMapping": "neutral"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\lebu-apex-three-quarter-neutral.png",
+        "ratio": 0,
+        "meanAbs": 0.018,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "9c3b171b1b5acce0c6ea040740a41142ca32c9be3a17bdc567dca1376c71239b",
+      "committed": [
+        "2026-10-13/lebu-apex-three-quarter-neutral.jpg"
+      ],
+      "baselineSha256": "e5f26604302bc253872b294944bcb944f3506d51e728bd12e5f94999f3e93d85",
+      "baselineBytes": 500311
+    },
+    {
+      "name": "synthetic-300-allon-blue-aces",
+      "description": "300 all-on, one runtime colour (#0066ff), ACES",
+      "ms": 1425,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 192,
+        "lights": 108
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 661556,
+      "jpgBytes": 131868,
+      "colour": {
+        "litPixels": 258486,
+        "meanSaturation": 0.6156,
+        "nearWhiteShare": 0
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 300,
+        "colors": "runtime",
+        "toneMapping": "aces"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-300-allon-blue-aces.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "5f297df16c784c707f33ccba39b10d3f5bd6e622913ab11b56ab31a83f054fb0",
+      "committed": [
+        "2026-10-13/synthetic-300-allon-blue-aces.jpg"
+      ],
+      "baselineSha256": "b62217de7a6ecba3abb15eac543d950c27deb3facfbf8fd47ad9696c2d4a3f3b",
+      "baselineBytes": 661555
+    },
+    {
+      "name": "synthetic-300-allon-blue-aces-before",
+      "description": "Same, density normalisation OFF",
+      "ms": 1388,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 192,
+        "lights": 108
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 655769,
+      "jpgBytes": 131774,
+      "colour": {
+        "litPixels": 259105,
+        "meanSaturation": 0.6021,
+        "nearWhiteShare": 0.0007
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 300,
+        "colors": "runtime",
+        "toneMapping": "aces",
+        "densityNorm": false
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-300-allon-blue-aces-before.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "e7e1ff1f9847c6f03b1cf3bd721e45dc0fc077170fefdcbc90e31dc365a01407",
+      "committed": [
+        "2026-10-13/synthetic-300-allon-blue-aces-before.jpg"
+      ],
+      "baselineSha256": "d0d3369bb8b9b6cad15b21416194730dd1c006baa5b9ea733ada55dd916fe752",
+      "baselineBytes": 655760
+    },
+    {
+      "name": "synthetic-20-on-design-aces",
+      "description": "20 fixtures (sparse) — must match the pre-fix look",
+      "ms": 1181,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 12,
+        "lights": 8
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 356074,
+      "jpgBytes": 60434,
+      "colour": {
+        "litPixels": 144776,
+        "meanSaturation": 0.5878,
+        "nearWhiteShare": 0.002
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 20,
+        "colors": "design",
+        "toneMapping": "aces"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-20-on-design-aces.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "7b9de5699c13fbbf500571d0707e8e787c197623947a5e5e24c06e8586f78dbc",
+      "committed": [
+        "2026-10-13/synthetic-20-on-design-aces.jpg"
+      ],
+      "baselineSha256": "7b9de5699c13fbbf500571d0707e8e787c197623947a5e5e24c06e8586f78dbc",
+      "baselineBytes": 356074
+    },
+    {
+      "name": "synthetic-20-on-design-aces-before",
+      "description": "20 fixtures, normalisation OFF",
+      "ms": 1341,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 12,
+        "lights": 8
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 357096,
+      "jpgBytes": 60617,
+      "colour": {
+        "litPixels": 145517,
+        "meanSaturation": 0.5856,
+        "nearWhiteShare": 0.0084
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 20,
+        "colors": "design",
+        "toneMapping": "aces",
+        "densityNorm": false
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-20-on-design-aces-before.png",
+        "ratio": 0,
+        "meanAbs": 0.019,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "8e8991910b658f5d1fa13fc1e8354e7aa01c0423b86af77abcb220ca04e1fc60",
+      "committed": [
+        "2026-10-13/synthetic-20-on-design-aces-before.jpg"
+      ],
+      "baselineSha256": "1c97283e44926c4c98a5b585c7f8912af93bb69a08fb9077633fa4568114c676",
+      "baselineBytes": 356846
+    },
+    {
+      "name": "lebu-base-audience",
+      "description": "Lebu pilot, saved view Audience · base edge, design colours",
+      "ms": 1285,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 23,
+        "lights": 16
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 374291,
+      "jpgBytes": 71192,
+      "colour": {
+        "litPixels": 224930,
+        "meanSaturation": 0.3788,
+        "nearWhiteShare": 0.2068
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "base-audience"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\lebu-base-audience.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "8c7537f8de313687cc8d71ff113fcf807a6e96fca55468a256e9e839d501e0f1",
+      "committed": [
+        "2026-10-13/lebu-base-audience.jpg"
+      ],
+      "baselineSha256": "c6caa4b420fdbb7d10090cf54f2218f6aa68a1f946203d0df7a758baef596cf2",
+      "baselineBytes": 374291
+    },
+    {
+      "name": "lebu-apex-three-quarter",
+      "description": "Lebu pilot, Three-quarter · apex side",
+      "ms": 1495,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 23,
+        "lights": 16
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 496826,
+      "jpgBytes": 86871,
+      "colour": {
+        "litPixels": 218488,
+        "meanSaturation": 0.3649,
+        "nearWhiteShare": 0.21
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "apex-three-quarter"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\lebu-apex-three-quarter.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "2f8df335c00f373f937b03ead30737561003ff882ed26ab9eb248d5de7ffde6f",
+      "committed": [
+        "2026-10-13/lebu-apex-three-quarter.jpg"
+      ],
+      "baselineSha256": "68dffc0af0e548a425c3a9caa53844d80aa38c6859101e7e77311bc3cdec6d4e",
+      "baselineBytes": 496816
+    },
+    {
+      "name": "lebu-apex-three-quarter-before",
+      "description": "Lebu, normalisation OFF",
+      "ms": 1716,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 23,
+        "lights": 16
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 495739,
+      "jpgBytes": 87106,
+      "colour": {
+        "litPixels": 219043,
+        "meanSaturation": 0.3641,
+        "nearWhiteShare": 0.214
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "apex-three-quarter",
+        "densityNorm": false
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\lebu-apex-three-quarter-before.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "9e948f3afd68517e21cbf43d5c0e6be8e40e3ec5019272fee22cb7d135badd9d",
+      "committed": [
+        "2026-10-13/lebu-apex-three-quarter-before.jpg"
+      ],
+      "baselineSha256": "4d0eed8db3b01806861475651033e749e94a205f548195cdd27369bf8ce08e21",
+      "baselineBytes": 495739
+    },
+    {
+      "name": "lebu-plan-top",
+      "description": "Lebu pilot, Plan · top-down",
+      "ms": 1339,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 23,
+        "lights": 16
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 487961,
+      "jpgBytes": 89214,
+      "colour": {
+        "litPixels": 173847,
+        "meanSaturation": 0.345,
+        "nearWhiteShare": 0.1955
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "plan-top"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\lebu-plan-top.png",
+        "ratio": 0,
+        "meanAbs": 0.006,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "7275e6009d4715aabbb29272e9b74665a2d59aebc9493bc60a4891c7d9f0db2a",
+      "committed": [
+        "2026-10-13/lebu-plan-top.jpg"
+      ],
+      "baselineSha256": "8666ef1a68f8a8f1c017213d1e969f590beef53ab619a156421c4b95180476d1",
+      "baselineBytes": 488101
+    },
+    {
+      "name": "lebu-center-feature",
+      "description": "Lebu pilot, Center feature close-up",
+      "ms": 1336,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 23,
+        "lights": 16
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 378274,
+      "jpgBytes": 73997,
+      "colour": {
+        "litPixels": 421820,
+        "meanSaturation": 0.2147,
+        "nearWhiteShare": 0.3626
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "center-feature"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\lebu-center-feature.png",
+        "ratio": 0,
+        "meanAbs": 0.008,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "93354e71f6d5f4534c7a247e6583f1c98a8a4505f857ac15f08cbe3144e0cc89",
+      "committed": [
+        "2026-10-13/lebu-center-feature.jpg"
+      ],
+      "baselineSha256": "c0139802784deb2e0172bcd7e9dabc5a0a19b2b8078907d42556d5b2bf7c8f4e",
+      "baselineBytes": 378276
+    },
+    {
+      "name": "lebu-apex-three-quarter-eco",
+      "description": "Lebu pilot on the eco tier (entry GPUs)",
+      "ms": 888,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 23,
+        "lights": 16
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 452808,
+      "jpgBytes": 78215,
+      "colour": {
+        "litPixels": 223374,
+        "meanSaturation": 0.3645,
+        "nearWhiteShare": 0.1649
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "eco",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "apex-three-quarter"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\lebu-apex-three-quarter-eco.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "d4cdffc539f04ac2c40ab3a802f7b10b8eb5a16466a8f6a5ae27cd7da6fa3090",
+      "committed": [
+        "2026-10-13/lebu-apex-three-quarter-eco.jpg"
+      ],
+      "baselineSha256": "d4cdffc539f04ac2c40ab3a802f7b10b8eb5a16466a8f6a5ae27cd7da6fa3090",
+      "baselineBytes": 452808
+    },
+    {
+      "name": "synthetic-300-allon-blue-eco",
+      "description": "300 all-on, runtime #0066ff, eco tier",
+      "ms": 1237,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 192,
+        "lights": 108
+      },
+      "drawCalls": 1,
+      "triangles": 1,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 501203,
+      "jpgBytes": 113270,
+      "colour": {
+        "litPixels": 255202,
+        "meanSaturation": 0.6973,
+        "nearWhiteShare": 0
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "eco",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "synthetic",
+        "view": {
+          "position": {
+            "x": 0,
+            "y": 13,
+            "z": 30
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "fixtures": 300,
+        "colors": "runtime",
+        "toneMapping": "aces"
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\synthetic-300-allon-blue-eco.png",
+        "ratio": 0,
+        "meanAbs": 0,
+        "sizeMismatch": false,
+        "tolerance": 0.02,
+        "pass": true
+      },
+      "pngSha256": "0241cf2dd8196bae78df0c64536d0a5d7e57ffe653fd8454c764f8ec5e563d97",
+      "committed": [
+        "2026-10-13/synthetic-300-allon-blue-eco.jpg"
+      ],
+      "baselineSha256": "0241cf2dd8196bae78df0c64536d0a5d7e57ffe653fd8454c764f8ec5e563d97",
+      "baselineBytes": 501203
+    }
+  ],
+  "pairs": [
+    {
+      "a": "synthetic-300-allon-design-aces-before",
+      "b": "synthetic-300-allon-design-aces",
+      "ratio": 0.08138,
+      "meanAbs": 5.827,
+      "satBefore": 0.3743,
+      "satAfter": 0.401,
+      "whiteBefore": 0.1827,
+      "whiteAfter": 0.0747
+    },
+    {
+      "a": "synthetic-300-allon-blue-aces-before",
+      "b": "synthetic-300-allon-blue-aces",
+      "ratio": 0.05077,
+      "meanAbs": 2.481,
+      "satBefore": 0.6021,
+      "satAfter": 0.6156,
+      "whiteBefore": 0.0007,
+      "whiteAfter": 0
+    },
+    {
+      "a": "synthetic-20-on-design-aces-before",
+      "b": "synthetic-20-on-design-aces",
+      "ratio": 0.00292,
+      "meanAbs": 0.244,
+      "satBefore": 0.5856,
+      "satAfter": 0.5878,
+      "whiteBefore": 0.0084,
+      "whiteAfter": 0.002
+    },
+    {
+      "a": "lebu-apex-three-quarter-before",
+      "b": "lebu-apex-three-quarter",
+      "ratio": 0.00161,
+      "meanAbs": 0.322,
+      "satBefore": 0.3641,
+      "satAfter": 0.3649,
+      "whiteBefore": 0.214,
+      "whiteAfter": 0.21
+    }
+  ]
+}

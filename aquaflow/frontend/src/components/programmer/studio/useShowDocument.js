@@ -4,6 +4,7 @@ import { compileStudio, readStudio } from './showModel';
 
 export default function useShowDocument(items) {
   const revision = useProjectStore(s => s.loadRevision);
+  const savedProgrammer = useProjectStore(s => s.programmer);
   const [studio, setStudio] = useState(() => readStudio(useProjectStore.getState().programmer));
   const [resolved, setResolved] = useState({ clips: [], issues: [], pending: true });
   const history = useRef({ undo: [], redo: [] });
@@ -28,6 +29,17 @@ export default function useShowDocument(items) {
     current.current = next;
     setStudio(next);
   }, [revision]);
+  // The 3D Preview embeds the same editable arrangement timeline. If it changes
+  // the project while the full Show Programming workspace is kept alive offscreen,
+  // hydrate that external edit instead of letting this local draft overwrite it.
+  useEffect(() => {
+    const next = readStudio(savedProgrammer);
+    if (JSON.stringify(next) === JSON.stringify(current.current)) return;
+    request.current++;
+    history.current = { undo: [], redo: [] };
+    current.current = next;
+    setStudio(next);
+  }, [savedProgrammer]);
   useEffect(() => {
     // On project replacement the hydration effect must commit before persisting.
     if (revision !== loaded.current || studio !== current.current) return;

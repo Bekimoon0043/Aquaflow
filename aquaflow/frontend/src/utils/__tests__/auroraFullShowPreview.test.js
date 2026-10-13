@@ -65,4 +65,14 @@ describe("Aurora full fountain design preview", () => {
     expect(stopped.lightsActive).toBe(0);
     expect(() => createFullShowPreview([{ ...show.clips[0], fixtureId: "missing" }], project.fixtures)).toThrow(/fixture is missing/);
   });
+
+  it("renders the exact RGB color shown on a Show Programming light clip", () => {
+    const fixture = { id: "rgb-1", type: "light_uw_rgb_36w", x: 0, y: 0 };
+    const clip = { id: "gold", fixtureId: fixture.id, type: "lighting_master", startTime: 0,
+      duration: 2, value: 80, fadeIn: 0, fadeOut: 0, color: "#c9a227", effects: [] };
+    const colorPlan = createICANPreviewPlan(createFullShowPreview([clip], [fixture], "Color parity"));
+    const state = evaluateICANPreview(colorPlan, 1, [fixture]);
+    expect(state.fixtureLightStates[fixture.id]).toEqual({ intensity: 0.8, color: "#c9a227" });
+    expect(state.lightingColor).toMatchObject({ r: 201 / 255, g: 162 / 255, b: 39 / 255 });
+  });
 });

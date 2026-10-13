@@ -267,7 +267,7 @@ export class TransformGizmo {
    * Continue a drag.
    * @returns {{type:"translate", position}|{type:"rotate", axis, deltaDeg}|null}
    */
-  updateDrag(raycaster, mods, { orthographic = false } = {}) {
+  updateDrag(raycaster, mods, { orthographic = false, osnap = null } = {}) {
     const d = this.drag;
     if (!d) return null;
     const T = this.T;
@@ -282,7 +282,7 @@ export class TransformGizmo {
       const position = resolveDrag(
         { x: d.origin.x, y: d.origin.y, z: d.origin.z },
         { x: delta.x, y: delta.y, z: delta.z },
-        { axis: d.axis, mods, orthographic },
+        { axis: d.axis, mods, orthographic, osnap },
       );
       return { type: "translate", position };
     }

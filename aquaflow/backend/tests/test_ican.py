@@ -510,12 +510,21 @@ def test_blackout_streams_off_rather_than_going_silent():
             await conn.send_output(0, [9], confirmed=True)
             await asyncio.sleep(0.1)
             await conn.blackout()
-            gw.received.clear()
             await asyncio.sleep(0.15)
-            tail = [f for f in gw.received if f[0] == proto.CMD_OUTPUT]
+            frames = [f for f in gw.received if f[0] == proto.CMD_OUTPUT]
             await conn.close()
-            return tail
-    tail = asyncio.run(run())
-    assert tail, "nothing streamed after blackout"
-    for f in tail:
-        assert proto.channels_from_mask(f[5:10]) == [], "blackout must keep streaming OFF"
+            return frames
+    # AF-NEXT-001: the test used to clear gw.received right after blackout(), but an
+    # ON frame sent *before* the blackout can still be in the fake gateway's receive
+    # thread at that moment (measured 16/30 flaky failures; instrumentation showed 0 ON
+    # frames were sent after blackout). Judge by wire ORDER instead, which is stricter:
+    # once the first OFF frame arrives, every later frame must also be OFF.
+    frames = asyncio.run(run())
+    masks = [proto.channels_from_mask(f[5:10]) for f in frames]
+    assert masks and masks[0] == [9], "the ON state should have streamed before blackout"
+    first_off = next((i for i, m in enumerate(masks) if m == []), None)
+    assert first_off is not None, "blackout sent no OFF frame"
+    tail = masks[first_off:]
+    assert len(tail) >= 2, "nothing streamed after blackout"
+    for m in tail:
+        assert m == [], "blackout must keep streaming OFF"

@@ -7,11 +7,18 @@
 // fixtures) so the feature is usable immediately.
 import { useMemo, useState } from "react";
 import useEngineeringStore from "../../store/engineeringStore";
-import { apiGet, apiPost, apiPostText } from "../../utils/apiClient";
+import { apiGet, apiPost, apiPostText, apiUrl } from "../../utils/apiClient";
+// AF-NEXT-012 — data source / confidence badges, BOM provenance, verified models.
+import ProvenanceBadge from "./ProvenanceBadge";
+import VerifiedModelsTool from "./VerifiedModelsTool";
+import { getFixtureProvenance } from "../../data/fixtureLibrary";
+import { GENERIC_LABEL } from "../../data/fixtureProvenance";
+import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
 
 const TABS = [
   ["hydraulics", "Hydraulics"], ["sizing", "Pipe Sizing"], ["nozzles", "Nozzles"],
   ["bom", "BOM"], ["pid", "P&ID"], ["energy", "Energy"], ["weather", "Weather"],
+  ["verified", "Verified Models"],
 ];
 
 const SAMPLE = {
@@ -34,15 +41,37 @@ const SAMPLE = {
 
 const box = { background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6 };
 
+// AF-NEXT-012 — find the provenance roll-up in any engine response.
+function findProvenance(data) {
+  if (!data || typeof data !== "object") return null;
+  return data.data_provenance || data.summary?.data_provenance || null;
+}
+
+export function ProvenanceSummary({ provenance }) {
+  if (!provenance) return null;
+  const by = provenance.by_source || provenance.bySource || {};
+  const generic = provenance.generic_items ?? provenance.genericItems ?? 0;
+  return (
+    <div data-testid="provenance-summary" style={{ ...box, padding: 6, fontSize: 10, color: generic ? "#fbbf24" : "#4ade80",
+      borderColor: generic ? "#78350f" : "#166534" }}>
+      Equipment data: {by.manufacturer_datasheet || 0} datasheet · {by.user_measured || 0} measured · {by.generic_estimate || 0} generic estimate
+      {generic ? <div>{provenance.warning || GENERIC_LABEL}</div> : null}
+    </div>
+  );
+}
+
 function Result({ state }) {
   if (state.loading) return <div style={{ color: "var(--text-muted)", fontSize: 11, padding: 8 }}>Running…</div>;
   if (state.error) return <div style={{ color: "#ef4444", fontSize: 11, padding: 8, ...box }}>⛔ {state.error}</div>;
   if (state.data === undefined) return null;
   return (
+    <>
+    <ProvenanceSummary provenance={findProvenance(state.data)} />
     <pre style={{ ...box, padding: 8, fontSize: 10.5, lineHeight: 1.5, maxHeight: "50vh",
       overflow: "auto", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
       {typeof state.data === "string" ? state.data : JSON.stringify(state.data, null, 2)}
     </pre>
+    </>
   );
 }
 
@@ -81,8 +110,10 @@ function fixtureModel(fixtures) {
   const equipment = [], nozzles = [];
   for (const f of fixtures) {
     const t = f.type || "equipment";
-    if (NOZ.test(t)) nozzles.push({ model: t, quantity: 1 });
-    else equipment.push({ id: f.id, type: t, label: f.label || f.id, quantity: 1, x: f.x, y: f.y });
+    // AF-NEXT-012: each design item carries its provenance so the BOM line cites it.
+    const trust = { provenance: getFixtureProvenance(f), ...(f.equipmentModelId ? { equipment_model_id: f.equipmentModelId } : {}) };
+    if (NOZ.test(t)) nozzles.push({ model: t, quantity: 1, ...trust });
+    else equipment.push({ id: f.id, type: t, label: f.label || f.id, quantity: 1, x: f.x, y: f.y, ...trust });
   }
   return { project: "AquaFlow Design", equipment, nozzles, pipes: [] };
 }
@@ -97,6 +128,7 @@ function NozzleTool() {
       if (r.models?.length) setModelId(r.models[0].model_id || r.models[0].id); }
     catch (e) { setState({ error: String(e.message || e) }); }
   };
+  const selectedModel = models?.find((x) => (x.model_id || x.id) === modelId) || null;
   const query = async () => {
     setState({ loading: true });
     try { setState({ data: await apiPost("/nozzles/query", { model_id: modelId, pressure: Number(pressure) }) }); }
@@ -112,7 +144,7 @@ function NozzleTool() {
             <select value={modelId} onChange={(e) => setModelId(e.target.value)}
               style={{ ...box, padding: 6, fontSize: 11, color: "var(--text-primary)" }}>
               {models.map((m) => <option key={m.model_id || m.id} value={m.model_id || m.id}>
-                {m.model_id || m.id} — {m.manufacturer || ""}</option>)}
+                {m.model_id || m.id} — {m.manufacturer || ""}{m.verified ? "" : " (generic estimate)"}</option>)}
             </select>
             <label style={{ fontSize: 10, color: "var(--text-muted)" }}>Pressure (bar)
               <input type="number" step="0.1" value={pressure} onChange={(e) => setPressure(e.target.value)}
@@ -122,6 +154,12 @@ function NozzleTool() {
         )}
       </div>
       {models && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{models.length} models loaded.</div>}
+      {selectedModel && (
+        <div style={{ fontSize: 10, display: "flex", gap: 6, alignItems: "center" }}>
+          <ProvenanceBadge provenance={selectedModel.provenance} />
+          <span style={{ color: "var(--text-muted)" }}>rev {selectedModel.provenance?.revision || "—"}</span>
+        </div>
+      )}
       <Result state={state} />
     </div>
   );
@@ -148,6 +186,67 @@ function FixtureTool({ endpoint, label, svg }) {
         <div style={{ ...box, padding: 8, overflow: "auto", maxHeight: "50vh" }}
           dangerouslySetInnerHTML={{ __html: state.data }} />
       ) : <Result state={state} />}
+    </div>
+  );
+}
+
+// AF-NEXT-012 — BOM with per-line equipment model / data source / units / revision,
+// and CSV / XLSX downloads that carry the same columns.
+function BomTool() {
+  const fixtures = useEngineeringStore((s) => s.fixtures) || [];
+  const [state, setState] = useState({});
+  const model = useMemo(() => fixtureModel(fixtures), [fixtures]);
+  const run = async () => {
+    setState({ loading: true });
+    try { setState({ data: await apiPost("/bom/generate", model) }); }
+    catch (e) { setState({ error: String(e.message || e) }); }
+  };
+  const download = async (format) => {
+    try {
+      const res = await fetch(apiUrl(`/bom/generate?format=${format}`), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(model) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url; a.download = `bom.${format}`; document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) { setState((prev) => ({ ...prev, error: `Export failed: ${e.message || e}` })); }
+  };
+  const lines = state.data?.lines || [];
+  const th = { textAlign: "left", padding: 3, color: "var(--text-muted)", fontWeight: 500 };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+        Generate the Bill of Materials from {fixtures.length} design fixtures · <code>POST /bom/generate</code>
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <RunButton onClick={run} />
+        <RunButton onClick={() => download("csv")} label="CSV" />
+        <RunButton onClick={() => download("xlsx")} label="XLSX" />
+      </div>
+      {state.loading && <div style={{ color: "var(--text-muted)", fontSize: 11 }}>Running…</div>}
+      {state.error && <div style={{ color: "#ef4444", fontSize: 11 }}>⛔ {state.error}</div>}
+      {state.data && <ProvenanceSummary provenance={state.data.summary?.data_provenance} />}
+      {lines.length > 0 && (
+        <div style={{ overflow: "auto", maxHeight: "50vh" }}>
+          <table style={{ fontSize: 10, borderCollapse: "collapse", color: "var(--text-primary)", width: "100%" }}>
+            <thead><tr>{["#", "Description", "Qty", "Equipment model", "Data source", "Units", "Revision"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {lines.map((l) => (
+                <tr key={l.item} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td style={{ padding: 3 }}>{l.item}</td>
+                  <td style={{ padding: 3 }}>{l.description}<div style={{ color: "var(--text-muted)" }}>{l.manufacturer} {l.part_number}</div></td>
+                  <td style={{ padding: 3 }}>{l.quantity} {l.unit}</td>
+                  <td style={{ padding: 3 }}>{l.equipment_model}</td>
+                  <td style={{ padding: 3 }}><ProvenanceBadge provenance={l.citation || { data_source: l.data_source, confidence: l.confidence }} /></td>
+                  <td style={{ padding: 3, color: "var(--text-muted)" }}>{l.units_basis}</td>
+                  <td style={{ padding: 3 }}>{l.data_revision}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -194,6 +293,10 @@ function WeatherTool() {
 
 export default function EngineeringToolsPanel() {
   const [tab, setTab] = useState("hydraulics");
+  // AF-NEXT-014: workspace guidance / data-trust warnings open a specific tab.
+  usePanelAction("engtools", ({ action, detail }) => {
+    if (action === "tab" && TABS.some(([k]) => k === detail?.tab)) setTab(detail.tab);
+  });
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg-panel)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 12px", height: 36,
@@ -216,10 +319,11 @@ export default function EngineeringToolsPanel() {
         {tab === "hydraulics" && <JsonTool endpoint="/hydraulics/solve" sample={SAMPLE.hydraulics} hint="Solve a hydraulic network (Global Gradient Algorithm)" />}
         {tab === "sizing" && <JsonTool endpoint="/hydraulics/size" sample={SAMPLE.sizing} hint="Size / audit pipes by velocity" />}
         {tab === "nozzles" && <NozzleTool />}
-        {tab === "bom" && <FixtureTool endpoint="/bom/generate" label="Generate the Bill of Materials" />}
+        {tab === "bom" && <BomTool />}
         {tab === "pid" && <FixtureTool endpoint="/pid/generate" label="Generate the P&ID drawing" svg />}
         {tab === "energy" && <JsonTool endpoint="/energy/model" sample={SAMPLE.energy} hint="Energy consumption + cost model" />}
         {tab === "weather" && <WeatherTool />}
+        {tab === "verified" && <VerifiedModelsTool />}
       </div>
     </div>
   );

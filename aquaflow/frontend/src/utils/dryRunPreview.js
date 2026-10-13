@@ -19,7 +19,38 @@
 
 import { compileShow } from "./runtimeEventCompiler.js";
 import { RuntimePlaybackQueue } from "./runtimePlaybackQueue.js";
-import { EASING } from "./runtimeSignalSchema.js";
+import { EASING, CHANNEL } from "./runtimeSignalSchema.js";
+import { evaluateShowFrameAt } from "../show/evaluateShowFrame.js";
+
+// AF-NEXT-004: channel values in the dry run come from the canonical show frame so
+// the dry run, timeline and 3D preview agree. Track type → compiled channel id, as in
+// runtimeEventCompiler. Motion positions are not levels and stay event-evaluated.
+const TYPE_CHANNEL = {
+  lighting_red: CHANNEL.RED, lighting_green: CHANNEL.GREEN, lighting_blue: CHANNEL.BLUE,
+  lighting_master: CHANNEL.INTENSITY, device_intensity: CHANNEL.INTENSITY, motion_intensity: CHANNEL.INTENSITY,
+  pump_speed: CHANNEL.PUMP_SPEED, pump_pressure: CHANNEL.PRESSURE,
+  solenoid_open: CHANNEL.ENABLE, solenoid_duration: CHANNEL.ENABLE, device_enable: CHANNEL.ENABLE,
+  fire_trigger: CHANNEL.FLAME, fire_intensity: CHANNEL.FLAME, fog_density: CHANNEL.FOG_DENSITY,
+  laser_intensity: CHANNEL.LASER_BEAM, laser_pattern: CHANNEL.LASER_PATTERN,
+};
+const BINARY = new Set(["solenoid_open", "solenoid_duration", "device_enable", "fire_trigger", "laser_intensity"]);
+const NOT_LEVEL = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
+
+function canonicalChannels(project, playhead) {
+  const frame = evaluateShowFrameAt(project, playhead);
+  const result = {};
+  for (const [deviceId, fixture] of Object.entries(frame.fixtures)) {
+    for (const [type, level] of Object.entries(fixture.channels)) {
+      if (NOT_LEVEL.has(type)) continue;
+      const channelId = TYPE_CHANNEL[type] || CHANNEL.INTENSITY;
+      // Binary outputs switch on while their clip is active (compiler semantics).
+      const value = BINARY.has(type) ? (type === "device_enable" ? (level > 0.5 ? 1 : 0) : type === "fire_trigger" ? 1 : level) : level;
+      result[deviceId] = result[deviceId] || {};
+      result[deviceId][channelId] = Math.max(result[deviceId][channelId] ?? 0, value);
+    }
+  }
+  return result;
+}
 
 /**
  * Create a dry-run preview session from timeline clips
@@ -80,6 +111,8 @@ export async function createDryRunPreviewSession({
   // Step 4: Create playback queue
   const queue = new RuntimePlaybackQueue(eventsWithIds);
   const previewIndex = buildPreviewIndex(eventsWithIds);
+  const showProject = { clips: (compiled.clips || []).filter(clip => clip.fixtureId) };
+  const levelAt = (playhead) => canonicalChannels(showProject, playhead);
 
   let playbackStatus = "stopped";
   let lastPosition = 0;
@@ -190,7 +223,16 @@ export async function createDryRunPreviewSession({
         queue.seek(safePlayhead);
       }
 
-      return evaluateAllChannelsPreview(previewIndex, safePlayhead);
+      // Event list supplies the channel set (and motion positions); levels are canonical.
+      const values = evaluateAllChannelsPreview(previewIndex, safePlayhead);
+      const levels = levelAt(safePlayhead);
+      for (const [deviceId, channels] of Object.entries(values)) {
+        for (const channelId of Object.keys(channels)) {
+          if (levels[deviceId]?.[channelId] !== undefined) channels[channelId] = levels[deviceId][channelId];
+          else if (isLevelChannel(channelId)) channels[channelId] = 0;
+        }
+      }
+      return values;
     },
 
     /**
@@ -202,6 +244,7 @@ export async function createDryRunPreviewSession({
     evaluateChannel: (playhead, deviceId, channelId) => {
       const safePlayhead = normalizeSessionTime(playhead);
       lastPosition = safePlayhead;
+      if (isLevelChannel(channelId)) return levelAt(safePlayhead)[deviceId]?.[channelId] ?? 0;
       return evaluateChannelPreview(previewIndex, deviceId, channelId, safePlayhead);
     },
 
@@ -256,6 +299,11 @@ export async function createDryRunPreviewSession({
 }
 
 // ─── Internal Preview Evaluation ─────────────────────────────────────────────
+
+const LEVEL_CHANNELS = new Set(Object.values(TYPE_CHANNEL));
+function isLevelChannel(channelId) {
+  return LEVEL_CHANNELS.has(channelId);
+}
 
 const toPreviewNumber = (value, fallback = 0) => {
   const n = Number(value);

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from services.hydraulic_solver import solve_network
+from services.basin_model import basin_area, basin_for_point, migrate_project, normalize_basins
 
 GEOMETRY_DIR = Path(__file__).parent.parent.parent / "geometry_projects"
 GEOMETRY_DIR.mkdir(exist_ok=True)
@@ -18,6 +19,8 @@ GEOMETRY_DIR.mkdir(exist_ok=True)
 
 class GeometryService:
     def save_project(self, project: dict) -> dict:
+        # AF-NEXT-010: accept both the legacy single `geometry` and `basins[]`; store both.
+        project = migrate_project(project)
         pid = f"pool-{hashlib.md5(project.get('name','').encode()).hexdigest()[:8]}-{int(time.time())}"
         project["id"] = pid
         project["saved_at"] = time.time()
@@ -45,7 +48,7 @@ class GeometryService:
         path = GEOMETRY_DIR / f"{project_id}.json"
         if not path.exists():
             return None
-        return json.loads(path.read_text())
+        return migrate_project(json.loads(path.read_text()))
 
     def delete_project(self, project_id: str) -> bool:
         path = GEOMETRY_DIR / f"{project_id}.json"
@@ -160,18 +163,25 @@ class GeometryService:
         effects = effect_types
         unknown = unknown_types
         pool_type = project.get("pool_type", "rectangular")
-        if pool_type == "circular":
+        basins = normalize_basins(project)
+        if len(basins) > 1:
+            # AF-NEXT-010: water surface of every basin (islands excluded).
+            surface_area = sum(basin_area(b) for b in basins)
+            volume = sum(basin_area(b) * (b.get("depth") or params.get("depth", 0.8)) for b in basins)
+        elif pool_type == "circular":
             r = params.get("radius", 5)
             surface_area = math.pi * r ** 2
+            volume = surface_area * params.get("depth", 0.8)
         else:
             surface_area = params.get("width", 10) * params.get("length", 10)
-        volume = surface_area * params.get("depth", 0.8)
+            volume = surface_area * params.get("depth", 0.8)
         volume_litres = volume * 1000.0
 
         # Real hydraulics: build a supply network from the designed nozzles and solve
         # it with the Hazen-Williams engine (services/hydraulic_solver.solve_network),
         # replacing the old linear turnover approximation.
-        hydraulics = self._solve_pool_hydraulics(nozzles, params, volume_litres)
+        hydraulics = self._solve_pool_hydraulics(nozzles, params, volume_litres,
+                                                 basins=basins if len(basins) > 1 else None)
         hydraulics.update({
             "surface_area_m2": round(surface_area, 2),
             "volume_m3": round(volume, 2),
@@ -183,6 +193,7 @@ class GeometryService:
             "project_name": project.get("name"),
             "pool_type": pool_type,
             "geometry": geom,
+            "basins": project.get("basins") or [],
             "dimensions": params,
             "hydraulics": hydraulics,
             "nozzle_positions": [
@@ -255,7 +266,8 @@ class GeometryService:
         }
 
 
-    def _solve_pool_hydraulics(self, nozzles: list, params: dict, volume_litres: float) -> dict:
+    def _solve_pool_hydraulics(self, nozzles: list, params: dict, volume_litres: float,
+                               basins: Optional[list] = None) -> dict:
         """
         Build a supply network from the designed nozzles and solve it with the real
         Hazen-Williams engine (services/hydraulic_solver.solve_network) — replacing the
@@ -265,6 +277,13 @@ class GeometryService:
         per nozzle (flow from the fixture's engineering spec, or a sensible default).
         Returns the real total design flow, the physically-correct pool turnover time,
         and the full solver solution (per-node pressure, per-pipe flow/head loss).
+
+        AF-NEXT-010: with ``basins`` (two or more ``basin_model.normalize_basins``
+        records) every nozzle is assigned to the basin that contains it (nearest
+        outline, with a warning, when it lies outside every basin) and each basin gets
+        its own main + manifold off the shared pump. ``basins`` / ``nozzle_basin`` in
+        the result report flow, volume and turnover per basin. With one basin or none
+        the network is exactly the historical single-manifold one.
         """
         default_flow_lps = 0.5      # L/s per nozzle when the fixture carries no spec
         design_head_m = float(params.get("design_head_m", 40.0))
@@ -274,21 +293,43 @@ class GeometryService:
                     "turnover_time_hours": None, "hydraulic_solution": None,
                     "method": "hazen-williams", "note": "no nozzles in design"}
 
-        xs = [float(n.get("x") or 0.0) for n in nozzles]
-        ys = [float(n.get("y") or 0.0) for n in nozzles]
-        cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+        multi = [b for b in (basins or []) if b.get("points")]
+        multi = multi if len(multi) > 1 else []
+        warnings: list = []
+        assign: list = []                       # basin id per nozzle (None = single manifold)
+        for n in nozzles:
+            if not multi:
+                assign.append(None)
+                continue
+            b, inside = basin_for_point(multi, float(n.get("x") or 0.0), float(n.get("y") or 0.0))
+            assign.append(b["id"])
+            if not inside:
+                warnings.append(f"Nozzle {n.get('id')} is outside every basin; assigned to the nearest ({b['id']}).")
 
-        nodes = [{"id": "PUMP", "fixed_head": design_head_m, "elevation": 0.0},
-                 {"id": "MANIFOLD", "elevation": 0.0, "demand": 0.0}]
-        pipes = [{"id": "MAIN", "from": "PUMP", "to": "MANIFOLD",
-                  "length": 10.0, "diameter": 0.15, "roughness": 130}]
+        def manifold_of(bid):
+            return "MANIFOLD" if bid is None else f"MANIFOLD_{bid}"
+
+        nodes = [{"id": "PUMP", "fixed_head": design_head_m, "elevation": 0.0}]
+        pipes = []
+        centres = {}
+        for bid in dict.fromkeys(assign):
+            idx = [i for i, a in enumerate(assign) if a == bid]
+            xs = [float(nozzles[i].get("x") or 0.0) for i in idx]
+            ys = [float(nozzles[i].get("y") or 0.0) for i in idx]
+            centres[bid] = (sum(xs) / len(xs), sum(ys) / len(ys))
+            nodes.append({"id": manifold_of(bid), "elevation": 0.0, "demand": 0.0})
+            pipes.append({"id": "MAIN" if bid is None else f"MAIN_{bid}", "from": "PUMP", "to": manifold_of(bid),
+                          "length": 10.0, "diameter": 0.15, "roughness": 130})
         total_flow = 0.0
+        flow_by_basin: dict = {}
         for i, n in enumerate(nozzles):
+            cx, cy = centres[assign[i]]
             eng = n.get("engineering") or {}
             flow_lps = float(eng.get("design_flow_lps", eng.get("flow_lps", default_flow_lps))
                              or default_flow_lps)
             demand = flow_lps / 1000.0
             total_flow += demand
+            flow_by_basin[assign[i]] = flow_by_basin.get(assign[i], 0.0) + demand
             nx = float(n.get("x") or cx); ny = float(n.get("y") or cy)
             length = max(1.0, math.hypot(nx - cx, ny - cy))
             dia = float(eng.get("pipe_diameter_m", 0.05) or 0.05)
@@ -310,7 +351,7 @@ class GeometryService:
             else:
                 node["demand"] = demand
             nodes.append(node)
-            pipes.append({"id": f"P{i}", "from": "MANIFOLD", "to": f"NOZ{i}",
+            pipes.append({"id": f"P{i}", "from": manifold_of(assign[i]), "to": f"NOZ{i}",
                           "length": length, "diameter": dia, "roughness": 130})
 
         network = {"method": "hazen-williams", "nodes": nodes, "pipes": pipes}
@@ -322,6 +363,22 @@ class GeometryService:
             "turnover_time_hours": turnover,
             "method": "hazen-williams",
         }
+        if multi:
+            per = []
+            for b in multi:
+                q = flow_by_basin.get(b["id"], 0.0)
+                vol_l = basin_area(b) * (b.get("depth") or float(params.get("depth", 0.8) or 0.8)) * 1000.0
+                lph = q * 1000.0 * 3600.0
+                per.append({"id": b["id"], "name": b.get("name"), "manifold": manifold_of(b["id"]),
+                            "nozzle_ids": [str(nozzles[i].get("id") or f"NOZ{i}") for i, a in enumerate(assign) if a == b["id"]],
+                            "total_design_flow_lpm": round(q * 60000.0, 2),
+                            "surface_area_m2": round(basin_area(b), 2), "volume_litres": round(vol_l, 0),
+                            "turnover_time_hours": round(vol_l / lph, 2) if lph > 0 else None})
+            for rec in per:
+                rec["nozzle_count"] = len(rec["nozzle_ids"])
+            base["basins"] = per
+            base["nozzle_basin"] = {str(n.get("id") or f"NOZ{i}"): assign[i] for i, n in enumerate(nozzles)}
+            base["warnings"] = warnings
         try:
             solution = solve_network(network)
         except Exception as exc:                     # solver stays non-fatal for export

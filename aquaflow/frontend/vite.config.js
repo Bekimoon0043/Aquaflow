@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // AQ-FIX-002 — the app was shipping as a single ~1.87 MB chunk because every
@@ -36,6 +36,8 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // AF-NEXT-014: the Start card bundles the Lebu pilot from ../samples (outside this root).
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), '../samples'] },
     proxy: {
       '/api': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true }

@@ -21,6 +21,17 @@ export function controllerTierBadge(tier, detection) {
   }
 }
 
+// AF-NEXT-015: driver support and commissioning evidence are separate badges.
+// Keep the four labels aligned with the commissioning handover vocabulary.
+export function controllerVerificationBadge(level) {
+  switch (level) {
+    case "site_commissioned": return { color: "var(--green)", label: "SITE COMMISSIONED" };
+    case "bench_verified": return { color: "#00d4ff", label: "BENCH VERIFIED" };
+    case "simulated": return { color: "#f59e0b", label: "SIMULATED" };
+    default: return { color: "var(--red)", label: "UNSUPPORTED" };
+  }
+}
+
 export function confidenceLabel(confidence, stage) {
   if (confidence === "port_only" || stage === "port_open") return "port match only";
   if (stage === "identity_confirmed") return "identity confirmed";

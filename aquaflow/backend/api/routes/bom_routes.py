@@ -49,12 +49,8 @@ async def from_network(network: dict, format: str = Query("json", pattern="^(jso
         # Rehydrate a generator from the derived rows for file export.
         gen = BOMGenerator(currency=network.get("currency", "USD"))
         from services.bom_generator import BOMLine
-        gen.lines = [BOMLine(
-            item=l["item"], category=l["category"], description=l["description"],
-            quantity=l["quantity"], unit=l["unit"], manufacturer=l["manufacturer"],
-            part_number=l["part_number"], supplier=l["supplier"],
-            unit_cost=l["unit_cost"], currency=l.get("currency", "USD"), notes=l["notes"],
-        ) for l in result["lines"]]
+        # AF-NEXT-012: from_dict keeps each line's provenance citation for the export.
+        gen.lines = [BOMLine.from_dict(l) for l in result["lines"]]
         if format == "xlsx":
             return Response(content=gen.to_xlsx_bytes(), media_type=_XLSX_MIME,
                             headers={"Content-Disposition": 'attachment; filename="bom.xlsx"'})

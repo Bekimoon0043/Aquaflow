@@ -27,7 +27,18 @@ export async function siemensRequest(path = "", method = "GET", body) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : JSON.stringify(result.detail || result));
+  if (!response.ok) {
+    // AF-NEXT-009: a refused preflight returns {message, issues, summary}; keep the readable
+    // message and attach the full Diagnostic list for the UI.
+    const detail = result.detail;
+    if (detail && typeof detail === "object" && typeof detail.message === "string") {
+      const error = new Error(detail.message);
+      error.issues = Array.isArray(detail.issues) ? detail.issues : [];
+      error.summary = detail.summary || null;
+      throw error;
+    }
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail || result));
+  }
   return result;
 }
 
