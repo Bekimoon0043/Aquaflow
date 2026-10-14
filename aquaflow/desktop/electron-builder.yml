@@ -22,6 +22,7 @@ files:
   - cad-native.js
   - project-files.js       # AF-NEXT-006 atomic save / snapshots / crash detection
   - open-queue.js          # holds launch/second-instance opens until the renderer is ready
+  - render-export.js       # AF-3D-VID-002 PNG-sequence folder export
   - splash.html
   - "assets/**/*"           # icon.png, shield.png, splash.png (runtime), *.ico
   - "web/**/*"

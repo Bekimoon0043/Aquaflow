@@ -52,6 +52,18 @@ export const QUALITY_CONFIG = {
             softDepth: true, softScale: 0.5, cones: true, stars: true,
             gpuParticles: true, gpuWater: 262144, gpuSpray: 131072,
             halfResSpray: true },
+  // Final render (video export only, never the live preview, never in TIER_ORDER):
+  // high + 2x particles drawn finer, full-res spray, a sharper soft-depth probe,
+  // 2048 px reflection, 4096 px shadows, 32-sample AO. `supersample` is the drawing
+  // buffer multiple used for the bake (capped by GPU limits in finalRender.js).
+  // See finalRender.js / docs/evidence/FINAL-RENDER.md.
+  ultra:  { pixelRatio: 2.0, shadows: true,  markerScale: 1.15, exposure: 1.08,
+            postfx: true,  bloom: 0.29, smaa: true,  ibl: true,  ao: true,
+            reflect: 2048, reflectEvery: 1,
+            softDepth: true, softScale: 1.0, cones: true, stars: true,
+            gpuParticles: true, gpuWater: 524288, gpuSpray: 262144,
+            halfResSpray: false, final: true, supersample: 2,
+            shadowMapSize: 4096, aoSamples: 32 },
 };
 
 /**
@@ -65,6 +77,7 @@ export const QUALITY_CONFIG = {
  */
 export const CPU_SAMPLE_FRACTION = 1 / 16;
 
-/** Tiers from cheapest to richest — the order adaptive quality steps through. */
+/** Tiers from cheapest to richest — the order adaptive quality steps through.
+ *  (`ultra` is a video-export-only profile and deliberately not in this list.) */
 export const TIER_ORDER = Object.freeze(["eco", "low", "medium", "high"]);
 export const isTier = name => TIER_ORDER.includes(name);

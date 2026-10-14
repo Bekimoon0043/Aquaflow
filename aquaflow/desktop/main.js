@@ -21,6 +21,7 @@ const { registerCadIpc } = require("./cad-native");
 // AF-NEXT-006 — atomic project save/open, autosave snapshots, unclean-exit detection.
 const { registerProjectIpc, acquireSessionLock, releaseSessionLock } = require("./project-files");
 const { createOpenQueue, READY_CHANNEL, OPEN_CHANNEL } = require("./open-queue");
+const { registerRenderExportIpc } = require("./render-export");
 
 const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
 
@@ -118,6 +119,12 @@ const openQueue = createOpenQueue({
 ipcMain.on(READY_CHANNEL, (e) => {
   if (mainWindow && e.sender === mainWindow.webContents) { dbg("renderer ready for open"); openQueue.markReady(); }
 });
+
+// AF-3D-VID-002 — a Final (high/ultra) video render can exhaust a small GPU's memory and
+// reset the GPU process. Chromium then blocks WebGL for the "guilty" origin, so the 3D view
+// could not come back until restart. AquaFlow only loads its own local UI, so let the
+// context be restored and the render fall back to a lighter tier instead.
+try { app.disableDomainBlockingFor3DAPIs(); } catch { /* must run before ready; harmless if absent */ }
 
 // ── Single instance ───────────────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -322,6 +329,7 @@ async function boot() {
   try { sessionInfo = acquireSessionLock(recoveryDir()); dbg(`session lock acquired (previous unclean: ${sessionInfo.uncleanExit})`); }
   catch (e) { sessionInfo = { uncleanExit: false, previous: null, error: e.message }; dbg(`session lock failed: ${e && e.message}`); }
   registerProjectIpc({ ipcMain, dialog, getMainWindow, userDataDir: app.getPath("userData"), sessionInfo });
+  registerRenderExportIpc({ ipcMain, dialog, getMainWindow });   // AF-3D-VID-002 PNG sequence
   installDownloadHandler();
   // AF-PKG-006 — capture a .aquashow passed on the initial launch command line.
   handleOpenShow(showPathFromArgv(process.argv.slice(1)));

@@ -87,7 +87,7 @@ import { createStoneMaps, cloneStoneMaps, disposeStoneMaps } from "./groundTextu
 // CPU field can carry. The CPU field stays as the low-tier fallback AND as the
 // invisible statistical sample that keeps the splash/containment analysis honest.
 import { GPUParticleField, gpuParticlesSupported } from "./particlesGPU";
-import { describeNozzleEmitters, allocatePool, EMIT_CLASS } from "./nozzleEmitters";
+import { describeNozzleEmitters, allocatePool, EMIT_CLASS, spawnDesignNozzle } from "./nozzleEmitters";
 // AF-3D-014 (Phase R4) — real nozzle and luminaire bodies, drawn instanced.
 import { FixtureInstances, LightMarkerInstances, fixtureKindFor } from "./fixtureModels";
 import { buildVenue, disposeVenue } from "./venueModels";
@@ -504,7 +504,7 @@ export class NozzleV2 {
       if (tintColor) uns.uColor.value.copy(tintColor);
     }
 
-    if (ix < 0.015) return;
+    if (ix < 0.015 || spawnDesignNozzle(this, delta, elapsed, wind, wc)) return; // design height → nozzleEmitters
 
     // Phase-1: 4-layer emission per nozzle type ────────────────────────────
     switch (type) {
@@ -1344,7 +1344,7 @@ export class FountainScene {
     // Water Realism V2: a coupled heightfield fed by the same physical landing
     // events as containment. It is intentionally quality-scaled and uploaded as a
     // universally supported RGBA texture; weak GPUs keep the existing ring path.
-    const heightRes = this.quality === "high" ? 96 : this.quality === "medium" ? 72 : 48;
+    const heightRes = this.quality === "high" || this.quality === "ultra" ? 96 : this.quality === "medium" ? 72 : 48;
     this._heightField = new WaterHeightField({ extent, resolution: heightRes });
     this._heightBytes = new Uint8Array(heightRes * heightRes * 4);
     this._heightField.writeRGBA(this._heightBytes);
@@ -2767,7 +2767,7 @@ export class FountainScene {
    * @param {(p:{frame:number,frames:number,phase:string})=>void} [o.onProgress]
    * @param {{aborted:boolean}} [o.abort]
    */
-  async bakeVideo({ plan, sampleSignals, encoder, onProgress, abort }) {
+  async bakeVideo({ plan, sampleSignals, encoder, onProgress, abort, pixelRatio = 1 }) {
     if (!this._initialized) throw new Error("Scene not initialised");
     if (this._baking) throw new Error("A video render is already running");
     if (this._xrSession) throw new Error("Exit VR before rendering a video");
@@ -2802,7 +2802,7 @@ export class FountainScene {
       if (this._reflection) this._reflection.interval = 1;
       // Drawing buffer == exact export size at pixel ratio 1, so the encoder gets
       // true 1080p/4K pixels rather than an upscaled preview.
-      setPR(1);
+      setPR(pixelRatio);   // 1, or >1 to supersample a Final (ultra) render (finalRender.js)
       this._bakeResizing = true;
       try { this.resize(plan.width, plan.height); } finally { this._bakeResizing = false; }
 

@@ -10,6 +10,7 @@
  *   • AdaptiveQualityController — frame-time driven scale/tier stepping (pure)
  */
 import { QUALITY_CONFIG, TIER_ORDER } from "./sceneQuality";
+import { applyFinalExtras } from "./finalRender";
 
 /**
  * Declare/set the eco water flag. GLSL defaults it to 0 (full water shader) when the
@@ -216,5 +217,6 @@ export function applyTierExtras(scene) {
     applyEcoParticles(scene);
   }
   if (q.cpuParticleBudget) attachParticleBudget(scene, q.cpuParticleBudget);
+  if (q.final) applyFinalExtras(scene);   // export-only ultra profile (finalRender.js)
   return true;
 }

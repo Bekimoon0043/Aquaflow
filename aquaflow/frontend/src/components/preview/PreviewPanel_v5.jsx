@@ -19,7 +19,7 @@ import { evaluateICANPreview } from "../../utils/icanPatternPreview";
 import ICANPreviewControls from "./ICANPreviewControls";
 import HydraulicPreviewPanel, { useEngineeringPreview } from "./HydraulicPreviewPanel";
 // AF-3D-VID-001 - baked (frame-exact) video render.
-import { planBake, etaSeconds } from "../../video/bakedTimeline";
+import { planBake } from "../../video/bakedTimeline";
 import { createBakeSampler } from "../../video/bakeSignalSampler";
 // AQ-S3-013 — the 3D view as an editing workspace, not just a render.
 import { SceneEditor } from "./editor/sceneEditor";
@@ -28,6 +28,9 @@ import { defaultVenueModels } from "./modelLibrary";
 // AF-NEXT-013: GPU-aware starting tier, eco extras and adaptive quality.
 import { detectGpuProfile, resolveStartTier, resolveTierLimit } from "./gpuTier";
 import { applyTierExtras, applyRenderScale, AdaptiveQualityController } from "./sceneAdaptive";
+// AF-3D-VID-002: Final render quality, PNG sequence, render progress/summary.
+import { adaptiveAllowed, EXPORT_QUALITY_OPTIONS, EXPORT_FORMAT_OPTIONS, renderStats, formatClock, tierLabel } from "./finalRender";
+import { useBakeTier } from "./useBakeTier";
 import {
   importDesign, importEngineeringFixtures, importSiteModels, graphToNozzles, graphToLights,
   graphToEngineeringFixtures, graphToSiteModels, reconcileEngineeringGraph,
@@ -125,6 +128,10 @@ export default function PreviewPanel() {
   // climbed eco → low, unticking Adaptive (start tier still eco) used to leave the preview on
   // "low · fixed" while the panel showed Eco selected.
   useEffect(() => { setEffectiveQuality(startTier); }, [startTier, quality, adaptiveQuality]);
+  // AF-3D-VID-002: a Final render may rebuild the scene at high/ultra for the bake only.
+  // `sceneTier` is what the scene is built with; effectiveQuality is never touched.
+  const bakeTier = useBakeTier(sceneRef);
+  const sceneTier = bakeTier.tier || effectiveQuality;
   const toneMapping = renderSettings.toneMapping || "aces";
   const setToneMapping = setRenderField("toneMapping");
   const halfResSpray = !!renderSettings.halfResSpray;
@@ -206,7 +213,14 @@ export default function PreviewPanel() {
   const bakeAudio = renderSettings.bakeAudio;
   const setBakeAudio = setRenderField("bakeAudio");
   const [bake, setBake] = useState(null);              // { frame, frames, phase, eta } | null
-  const [bakeMsg, setBakeMsg] = useState("");
+  const [bakeMsg, setBakeMsg] = useState(null);       // { text, tip, error, file } | null
+  // AF-3D-VID-002: "preview" | "high" | "ultra", and "video" | "png" (image sequence).
+  const exportQuality = renderSettings.exportQuality || "preview";
+  const setExportQuality = setRenderField("exportQuality");
+  const exportFormat = renderSettings.exportFormat || "video";
+  const setExportFormat = setRenderField("exportFormat");
+  // Ticks once a second while rendering so elapsed time moves between slow frames.
+  const [, setBakeTick] = useState(0);
   const bakeAbortRef = useRef(null);
 
   // VR Walkthrough (AQ-S3-006)
@@ -348,13 +362,22 @@ if (sitePreview.active && sitePreview.plan) {
   // Init scene
   useEffect(() => {
     if (!canvasRef.current) return;
-    const scene = new FountainScene(canvasRef.current, {
-      environment: env, quality: effectiveQuality, cameraMode: cam, lightColor: lightCol,
-      toneMapping: useProjectStore.getState().render.toneMapping,
-      halfResSpray: !!useProjectStore.getState().render.halfResSpray,
-    });
-    scene.init();
-    applyTierExtras(scene);   // AF-NEXT-013: eco water/particles + particle budget
+    let scene = null;
+    try {
+      scene = new FountainScene(canvasRef.current, {
+        environment: env, quality: sceneTier, cameraMode: cam, lightColor: lightCol,
+        toneMapping: useProjectStore.getState().render.toneMapping,
+        halfResSpray: !!useProjectStore.getState().render.halfResSpray,
+      });
+      scene.init();
+      applyTierExtras(scene);   // AF-NEXT-013: eco water/particles + particle budget
+    } catch (err) {
+      // A Final-render tier the GPU cannot allocate falls back (finalRender.js) instead of crashing.
+      try { scene?.dispose(); } catch { /* partially built */ }
+      if (!bakeTier.tierRef.current) throw err;
+      bakeTier.failed(err);
+      return undefined;
+    }
     scene.setWaterSimulation?.({
       response: waveResponse,
       damping: waveDamping,
@@ -392,7 +415,7 @@ if (sitePreview.active && sitePreview.plan) {
     }
     const venueDefaults = defaultVenueModels({
       poolType, radius: params?.radius, width: params?.width, length: params?.length,
-    }, effectiveQuality);
+    }, sceneTier);
     if (!Array.isArray(modelSpecs)) {
       // Preserve already-arranged people/buildings from v1, but migrate the scene to
       // real editable tree models once. Subsequent user deletions stay deleted in v2.
@@ -534,6 +557,7 @@ if (sitePreview.active && sitePreview.plan) {
     const ro = new ResizeObserver(() => syncCanvasSize());
     if (containerRef.current) ro.observe(containerRef.current);
     syncCanvasSize();
+    bakeTier.ready(scene);
     return () => {
       ro.disconnect();
       offEditor();
@@ -547,7 +571,7 @@ if (sitePreview.active && sitePreview.plan) {
       scene.dispose();
       sceneRef.current = null;
     };
-  }, [effectiveQuality, projectName]);
+  }, [sceneTier, projectName]);
 
   // AF-NEXT-013 adaptive quality: if the median frame time stays above 33 ms for ~2 s,
   // step the render scale 1 → 0.8 → 0.6, then drop a tier; step back up with headroom
@@ -562,7 +586,7 @@ if (sitePreview.active && sitePreview.plan) {
   useEffect(() => {
     const scene = sceneRef.current;
     const ctl = adaptiveRef.current;
-    if (!scene) return undefined;
+    if (!scene || bakeTier.tier) return undefined;   // a Final render owns the scene
     if (!ctl) { applyRenderScale(scene, 1); setRenderScaleState(1); return undefined; }
     ctl.tier = effectiveQuality;
     ctl.settle(performance.now());
@@ -572,7 +596,7 @@ if (sitePreview.active && sitePreview.plan) {
     const tick = now => {
       const dt = now - prev; prev = now;
       // Skip the first frames after a rebuild (shader compiles) and baked renders.
-      if (++warm > 30 && !scene._baking && !document.hidden) {
+      if (++warm > 30 && adaptiveAllowed({ bakeTier: bakeTier.tierRef.current, baking: scene._baking }) && !document.hidden) {
         const action = ctl.sample(dt, now);
         if (action?.type === "scale") { applyRenderScale(scene, action.scale); setRenderScaleState(action.scale); }
         else if (action?.type === "tier") { setEffectiveQuality(action.tier); return; }
@@ -581,7 +605,7 @@ if (sitePreview.active && sitePreview.plan) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [effectiveQuality, adaptiveQuality, startTier, tierLimit]);
+  }, [sceneTier, effectiveQuality, adaptiveQuality, startTier, tierLimit, bakeTier.tier]);
 
   // Entering edit mode hands the viewport's pointer and camera to the editor.
   useEffect(() => {
@@ -630,14 +654,14 @@ if (sitePreview.active && sitePreview.plan) {
 
   if (pattern === "none") sceneRef.current.stopPattern();
   else sceneRef.current.playPattern(pattern, 0.88);
-}, [pattern, manualPriority, sitePreview.active, effectiveQuality]);
+}, [pattern, manualPriority, sitePreview.active, sceneTier]);
   useEffect(() => {
   if (!sceneRef.current) return;
   sceneRef.current.setSignals({ ...engineSignals,
     fixtureIntensities: sitePreview.active ? engineSignals.fixtureIntensities : null,
     fixtureLightStates: sitePreview.active ? engineSignals.fixtureLightStates || null : null,
     fixtureMotion: sitePreview.active ? engineSignals.fixtureMotion || null : null });
-}, [engineSignals, effectiveQuality]);
+}, [engineSignals, sceneTier]);
 
   const screenshot = () => {
     const url = canvasRef.current?.toDataURL("image/png");
@@ -648,7 +672,7 @@ if (sitePreview.active && sitePreview.plan) {
     const scene = sceneRef.current;
     if (!scene || bake) return;
     if (recording) { scene.stopRecording(); setRecording(false); }
-    setBakeMsg("");
+    setBakeMsg(null);
     const site = useICANPreviewStore.getState();
     const show = useShowStore.getState();
     const sampler = createBakeSampler({
@@ -665,36 +689,41 @@ if (sitePreview.active && sitePreview.plan) {
     const total = sampler.defaultDurationS || 10;
     const startS = Math.min(Math.max(0, Number(bakeStart) || 0), Math.max(0, total - 0.1));
     const durationS = Number(bakeDuration) > 0 ? Number(bakeDuration) : Math.max(0.1, total - startS);
-    const plan = planBake({ resolution: exportRes, fps: exportFps, startS, durationS });
+    // Final quality warms the water a little longer so dense high/ultra fields are full on frame 0.
+    const plan = planBake({ resolution: exportRes, fps: exportFps, startS, durationS, ...(exportQuality !== "preview" ? { prerollS: 4 } : {}) });
     const audio = bakeAudio && site.active && site.audioFile
       ? { file: site.audioFile, loopS: site.plan?.passMs ? site.plan.passMs / 1000 : 0 } : null;
 
     const abort = { aborted: false };
     bakeAbortRef.current = abort;
-    setBake({ frame: 0, frames: plan.frames, phase: "prepare", eta: null });
+    const startedAt = Date.now();
+    setBake({ frame: 0, frames: plan.frames, phase: "prepare", startedAt });
     // Freeze the live preview clock so nothing else advances while baking.
     if (site.active && site.playback === "playing") site.pause();
-    let encoder = null;
+    let notice = "";
     try {
-      const { openBakedEncoder } = await import("../../video/bakedEncoder");
-      encoder = await openBakedEncoder(canvasRef.current, plan, { audio });
-      await scene.bakeVideo({
-        plan, encoder, abort,
-        sampleSignals: sampler.sample,
-        onProgress: (p) => setBake({ ...p, eta: etaSeconds(p.frame, p.frames, p.elapsedMs || 0) }),
+      const { runBakeJob } = await import("./finalRenderJob");
+      const r = await runBakeJob({
+        scene, plan, sampler, audio, exportQuality, format: exportFormat, effectiveQuality, bakeTier,
+        wind: [windX, windZ], gpuClass: gpuProfile.gpuClass, projectName: useProjectStore.getState().metadata?.name || projectName, abort,
+        onProgress: (p) => setBake(b => ({ ...(b || {}), ...p, startedAt })),
+        onNotice: (m) => { notice = m; setBake(b => ({ ...(b || {}), notice: m })); },
       });
-      setBake(b => ({ ...(b || {}), phase: "finalize" }));
-      const { blob, ext, codec } = await encoder.finish();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `aquaflow-${plan.width}x${plan.height}-${plan.fps}fps-${Date.now()}.${ext}`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-      setBakeMsg(`Saved ${plan.frames} frames · ${codec.video.toUpperCase()}${encoder.hasAudio ? " + audio" : ""} · ${(blob.size / 1e6).toFixed(1)} MB`);
+      if (r.cancelled) { setBakeMsg(null); return; }
+      const mb = r.bytes ? ` · ${(r.bytes / 1e6).toFixed(1)} MB` : "";
+      setBakeMsg({
+        text: `✓ ${r.width}×${r.height} · ${r.fps} fps · ${r.quality} · ${r.durationS.toFixed(1)} s`,
+        tip: [
+          r.format === "png" ? `${r.frames} PNG frames → ${r.file}` : `Saved to Downloads: ${r.file}`,
+          `${r.codec}${r.hasAudio ? " + audio" : ""}${mb}${r.supersample > 1 ? ` · ${r.supersample}× supersampled` : ""}`,
+          `Rendered in ${formatClock(r.tookS)} (${(r.tookS / r.frames).toFixed(2)} s/frame)`,
+          ...r.fallbacks,
+        ].join("\n"),
+        file: r.file,
+      });
     } catch (e) {
-      await encoder?.cancel?.();
-      setBakeMsg(e?.name === "AbortError" ? "Render cancelled." : `Render failed: ${e?.message || e}`);
+      const cancelled = e?.name === "AbortError";
+      setBakeMsg({ text: cancelled ? "Render cancelled." : `Render failed: ${e?.message || e}`, tip: notice, error: !cancelled });
     } finally {
       bakeAbortRef.current = null;
       setBake(null);
@@ -702,6 +731,11 @@ if (sitePreview.active && sitePreview.plan) {
   };
   const cancelBake = () => { if (bakeAbortRef.current) bakeAbortRef.current.aborted = true; };
   useEffect(() => () => cancelBake(), []);
+  useEffect(() => {
+    if (!bake) return undefined;
+    const id = setInterval(() => setBakeTick(n => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [!!bake]);
 
   const toggleRecord = () => {
     if (!recording) {
@@ -1199,6 +1233,19 @@ if (sitePreview.active && sitePreview.plan) {
           )}
           <div style={{ border:"1px solid #1d4d3a", borderRadius:4, padding:6, display:"flex", flexDirection:"column", gap:4 }}>
             {!bake && (
+              <div style={{ display:"flex", gap:3 }}>
+                {EXPORT_QUALITY_OPTIONS.map(o => (
+                  <button key={o.id} onClick={() => setExportQuality(o.id)} title={o.tip}
+                    style={{ ...btnSm(exportQuality === o.id, "#3ddc84"), flex:1, minWidth:0, padding:"3px 0", textAlign:"center" }}>{o.label}</button>
+                ))}
+                <select value={exportFormat} onChange={e=>setExportFormat(e.target.value)}
+                  title={EXPORT_FORMAT_OPTIONS.map(o => `${o.label}: ${o.tip}`).join("\n")}
+                  style={{ width:66, fontSize:10, padding:"2px 2px", background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4 }}>
+                  {EXPORT_FORMAT_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+            {!bake && (
               <div style={{ display:"flex", gap:3, fontSize:10, color:"#8ea4b8", alignItems:"center" }}>
                 <span>from</span>
                 <input type="number" min={0} step={0.5} value={bakeStart} onChange={e=>setBakeStart(e.target.value)}
@@ -1206,30 +1253,38 @@ if (sitePreview.active && sitePreview.plan) {
                 <span>len</span>
                 <input type="number" min={0} step={1} value={bakeDuration} onChange={e=>setBakeDuration(e.target.value)}
                   title="Length in seconds (0 = to end of show)" style={{ width:44, fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }} />
-                <label title="Include the site preview music" style={{ display:"flex", alignItems:"center", gap:2 }}>
+                <label title={exportFormat === "png" ? "Write the site preview music as a WAV next to the frames" : "Include the site preview music"} style={{ display:"flex", alignItems:"center", gap:2 }}>
                   <input type="checkbox" checked={bakeAudio} onChange={e=>setBakeAudio(e.target.checked)} />♪
                 </label>
               </div>
             )}
-            {bake ? (
+            {bake ? (() => {
+              const st = renderStats({ frame: bake.frame, frames: bake.frames, frameMs: bake.elapsedMs || 0 });
+              const elapsed = formatClock((Date.now() - (bake.startedAt || Date.now())) / 1000);
+              const label = { switch: `Loading ${tierLabel(bake.tier)}…`, restore: "Restoring preview…", recover: "Recovering GPU…", warmup: "Warming up water…",
+                prepare: "Preparing…", finalize: "Writing file…" }[bake.phase];
+              return (
               <>
                 <div style={{ height:6, background:"#0b1220", borderRadius:3, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${bake.frames ? (100 * bake.frame / bake.frames) : 0}%`, background:"#3ddc84" }} />
+                  <div style={{ height:"100%", width:`${st.pct}%`, background:"#3ddc84" }} />
                 </div>
-                <div style={{ fontSize:10, color:"#bce2d9", fontFamily:"monospace" }}>
-                  {bake.phase === "warmup" ? "Warming up water…" : bake.phase === "finalize" ? "Writing file…" : bake.phase === "prepare" ? "Preparing encoder…"
-                    : `Frame ${bake.frame}/${bake.frames}${bake.eta != null ? ` · ~${Math.ceil(bake.eta)}s left` : ""}`}
+                <div style={{ fontSize:10, color:"#bce2d9", fontFamily:"monospace" }}
+                  title={`${tierLabel(bake.tier)}${bake.supersample > 1 ? ` · ${bake.supersample}× supersampled` : ""}${st.secPerFrame ? ` · ${st.secPerFrame.toFixed(2)} s/frame` : ""}\nElapsed ${elapsed}`}>
+                  {label && bake.phase !== "render" ? `${label} ${elapsed}`
+                    : `${bake.frame}/${bake.frames} · ${elapsed} · ~${formatClock(st.etaS)} left`}
                 </div>
-                <button onClick={cancelBake} style={{ ...btnSm(true,"#ff4444"), color:"#ff6666", textAlign:"center" }}>Cancel render</button>
+                {bake.notice && <div style={{ fontSize:9, color:"#e8c06a" }} title={bake.notice}>⚠ {bake.notice}</div>}
+                <button onClick={cancelBake} style={{ ...btnSm(true,"#ff4444"), color:"#ff6666", textAlign:"center" }}>Cancel</button>
               </>
-            ) : (
+              );
+            })() : (
               <button onClick={renderSmoothVideo} disabled={recording}
-                title="Renders every frame at exact show time, then encodes. Smooth at any resolution; takes longer than real time on slow GPUs."
+                title={`Renders every frame at exact show time${exportQuality !== "preview" ? " at final quality (the live view returns afterwards)" : ""}. Smooth at any resolution; slower than real time on slow GPUs.`}
                 style={{ ...btnSm(false,"#3ddc84"), color:"#3ddc84", textAlign:"center" }}>
-                Render video
+                {exportFormat === "png" ? "Render frames" : "Render video"}
               </button>
             )}
-            {bakeMsg && <div style={{ fontSize:9, color: bakeMsg.startsWith("Render failed") ? "#ff8866" : "#8ea4b8" }}>{bakeMsg}</div>}
+            {bakeMsg && <div title={bakeMsg.tip || ""} style={{ fontSize:9, color: bakeMsg.error ? "#ff8866" : "#8ea4b8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{bakeMsg.text}{bakeMsg.file && <div style={{ color:"#5f7f94", overflow:"hidden", textOverflow:"ellipsis" }}>{String(bakeMsg.file).split(/[\\/]/).pop()}</div>}</div>}
           </div>
             </div>
           </details>

@@ -20,7 +20,7 @@ function Waveform({ buffer, zoom, offset, width }) {
   }, [buffer, zoom, offset, width]);
   return <canvas ref={ref} style={{ position: 'absolute', top: HEADER, left: LABEL + offset, height: 44, pointerEvents: 'none' }} aria-label="Music waveform" />;
 }
-export default function StudioTimeline({ studio, items, time, audioBuffer, selectedIds, onSelect, onSelectMany, onMoveSelection, onCopy, onPaste, onDuplicate, onDelete, onChangeRecipe, onChangeLegacy, onSeek, onDropGroup, onGroupPatch, onMarker, plcIssues = new Map(), plcCheck = null, plcSiteName = '', onFocusIssue, onAddPattern, onPatternBuilder, stripExtras = null }) {
+export default function StudioTimeline({ studio, items, time, audioBuffer, selectedIds, onSelect, onSelectMany, onMoveSelection, onCopy, onPaste, onDuplicate, onDelete, onChangeRecipe, onChangeLegacy, onSeek, onDropGroup, onGroupPatch, onMarker, plcIssues = new Map(), plcCheck = null, plcSiteName = '', onFocusIssue, onAddPattern, onPatternBuilder, onEditPattern, stripExtras = null }) {
   const ref = useRef(null), drag = useRef(null);
   const [zoom, setZoom] = useState(32), [scroll, setScroll] = useState({ x: 0, y: 0, width: 800, height: 300 });
   const [collapsed, setCollapsed] = useState(new Set()), [ghost, setGhost] = useState(null);
@@ -29,6 +29,14 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
   const [issueList, setIssueList] = useState(false);
   const [beatSnap, setBeatSnap] = useState(false);
   const [marquee, setMarquee] = useState(null);
+  const [menu, setMenu] = useState(null);
+  useEffect(() => {
+    if (!menu) return undefined;
+    const close = () => setMenu(null);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', close);
+    return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', close); };
+  }, [menu]);
   const selection = useMemo(() => new Set(selectedIds), [selectedIds]);
   const rowTop = HEADER + (audioBuffer ? 44 : 0);
   const end = Math.max(30, audioBuffer?.duration || 0, ...studio.recipes.map(r => r.start + r.duration), ...studio.legacyClips.map(c => c.startTime + c.duration));
@@ -138,10 +146,14 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
             const locked = clip.locked || groupFlag(studio.groups, row.id, 'locked');
             const state = ghost?.resize && ghost.id === clip.id ? ghost : { start: (clip.start ?? clip.startTime) + (!locked && !ghost?.resize && ghost?.ids?.includes(clip.id) ? ghost.delta : 0), duration: clip.duration };
             const issues = plcIssues.get(clip.id) || [], level = worstLevel(issues);
-            const tip = [`${clip.name} · ${state.start}s · ${state.duration}s`, ...issues.map(i => `${i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : 'ℹ'} ${i.text}`)].join('\n');
+            const tip = [`${clip.name} · ${state.start}s · ${state.duration}s`, ...issues.map(i => `${i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : 'ℹ'} ${i.text}`),
+              ...(clip.pattern && onEditPattern ? ['Double-click to edit in the pattern builder'] : [])].join('\n');
             return <button key={clip.id} className={`sp-clip ${selection.has(clip.id) ? 'selected' : ''} ${level ? `plc-${level}` : ''}`} title={tip}
               style={{ left: LABEL + state.start * zoom, width: Math.max(5, state.duration * zoom), opacity: clip.muted || row.muted ? .35 : 1, '--clip-color': clip.color || '#65d9d0' }}
-              onClick={e => { if (e.detail === 0) onSelect(clip.id, row.legacy, e.shiftKey || e.ctrlKey || e.metaKey); }} onPointerDown={e => {
+              onClick={e => { if (e.detail === 0) onSelect(clip.id, row.legacy, e.shiftKey || e.ctrlKey || e.metaKey); }}
+              onDoubleClick={e => { if (!clip.pattern || !onEditPattern) return; e.stopPropagation(); onEditPattern(clip.id); }}
+              onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onSelect(clip.id, row.legacy, false); setMenu({ x: e.clientX, y: e.clientY, id: clip.id, pattern: !!clip.pattern && !row.legacy }); }}
+              onPointerDown={e => {
                 if (e.button !== 0) return;
                 e.stopPropagation(); const additive = e.shiftKey || e.ctrlKey || e.metaKey; onSelect(clip.id, row.legacy, additive);
                 if (locked || additive) return; e.currentTarget.setPointerCapture(e.pointerId);
@@ -151,12 +163,17 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
               }}><span>{level === 'error' ? '⛔ ' : level === 'warn' ? '⚠ ' : ''}{clip.name || clip.effect || 'Clip'}</span><i data-resize="true" title="Drag to resize" /></button>;
           })}
         </div>)}
-        {studio.markers.map(m => <button className="sp-marker" key={m.id} style={{ left: LABEL + m.time * zoom }} title={m.name} onClick={() => onSeek(m.time)}>{m.name}</button>)}
+        {studio.markers.map(m => <button className={`sp-marker ${m.kind === 'section' ? 'section' : ''}`} key={m.id} style={{ left: LABEL + m.time * zoom }} title={m.name} onClick={() => onSeek(m.time)}>{m.name}</button>)}
         <div className="sp-playhead" style={{ left: LABEL + time * zoom }} />
         {marquee && <div className="sp-timeline-marquee" style={{ left: Math.min(marquee.from.x, marquee.to.x), top: Math.min(marquee.from.y, marquee.to.y), width: Math.abs(marquee.from.x - marquee.to.x), height: Math.abs(marquee.from.y - marquee.to.y) }} />}
         {!rows.length && <div className="sp-timeline-empty">Select items in the plan, create a group, then drag it here to design a pattern.</div>}
       </div>
     </div>
+    {menu && <div className="sp-clip-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}>
+      {menu.pattern && onEditPattern && <button role="menuitem" onClick={() => { setMenu(null); onEditPattern(menu.id); }}>✦ Edit in builder</button>}
+      <button role="menuitem" onClick={() => { setMenu(null); onDuplicate(); }}>Duplicate</button>
+      <button role="menuitem" onClick={() => { setMenu(null); onDelete(); }}>Delete</button>
+    </div>}
     <input aria-label="Timeline overview" type="range" min={0} max={duration} step={.1} value={Math.min(time, duration)} onChange={e => onSeek(Number(e.target.value))} className="sp-overview" />
   </section>;
 }

@@ -32,6 +32,10 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   bakeStart: 0,
   bakeDuration: 0,
   bakeAudio: true,
+  // AF-3D-VID-002: render quality of the baked export ("preview" = the live tier,
+  // "high"/"ultra" = Final render) and output ("video" | "png" image sequence).
+  exportQuality: "preview",
+  exportFormat: "video",
 });
 
 const serializable = (value, fallback) => {

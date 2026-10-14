@@ -6,6 +6,8 @@ import { poolCenter } from '../../../engineering/geometryContract';
 import { createFullShowPreview } from '../../../utils/fullShowPreview';
 import StudioTimeline from './StudioTimeline';
 import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
+import { useProgrammerSong } from './musicSync';
+import { usePreviewSongPlayback } from './previewAudio';
 import {
   compileStudio, copyStudioClips, editableClip, groupFlag, inventory,
   moveStudioClips, newRecipe, pasteStudioClips, readStudio, uid,
@@ -28,7 +30,13 @@ export default function PreviewShowTimeline({ height = 300 }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [loop, setLoop] = useState(true);
   const [message, setMessage] = useState('');
-  const [builder, setBuilder] = useState(false);
+  // null = closed; { key, editId } = open (editId reopens a builder-made pattern).
+  const [builder, setBuilder] = useState(null);
+  const openBuilder = (editId = null) => setBuilder({ key: Date.now(), editId });
+  // The show's song plays with the 3D preview. The preview sidebar's own player takes
+  // over while it is open (it plays the same file), so the song never doubles up.
+  const song = useProgrammerSong();
+  usePreviewSongPlayback(song, { yieldTo: state => state.audioFile === song && useProjectStore.getState().render?.sidebarOpen !== false });
   const clipboard = useRef(null);
   // Undo history for edits made from this timeline (one entry per commit).
   const history = useRef([]);
@@ -72,12 +80,12 @@ export default function PreviewShowTimeline({ height = 300 }) {
   useEffect(() => {
     if (!resolved.clips.length || resolved.issues.length) return;
     try {
-      preview.replace(createFullShowPreview(resolved.clips, fixtures, projectName || '3D show preview'), 1, null, 'show_programmer');
+      preview.replace(createFullShowPreview(resolved.clips, fixtures, projectName || '3D show preview'), 1, song || null, 'show_programmer');
       setMessage('');
     } catch (error) {
       setMessage(error.message);
     }
-  }, [resolved.clips, resolved.issues, fixtures, projectName]);
+  }, [resolved.clips, resolved.issues, fixtures, projectName, song]);
 
   useEffect(() => {
     if (!loop || preview.playback !== 'complete') return;
@@ -125,6 +133,7 @@ export default function PreviewShowTimeline({ height = 300 }) {
   )) }));
   const patchGroup = (id, patch) => change(s => ({ ...s, groups: s.groups.map(group => group.id === id ? { ...group, ...patch } : group) }));
 
+  const editable = selectedIds.length === 1 ? studio.recipes.find(r => r.id === selectedIds[0] && r.pattern) : null;
   const play = () => {
     if (!resolved.clips.length || resolved.issues.length) return;
     if (preview.position >= end || preview.playback === 'complete') preview.seek(0);
@@ -143,6 +152,8 @@ export default function PreviewShowTimeline({ height = 300 }) {
       <button aria-pressed={loop} onClick={() => setLoop(value => !value)}>Loop</button>
       <span className="sp-divider" />
       <span className="preview-timeline-cues">{resolved.clips.length} resolved cues</span>
+      {song && <span className="preview-timeline-song" title={`${song.name} plays with the preview`}>♪ {song.name}</span>}
+      {editable && <button onClick={() => openBuilder(editable.id)} title="Open this pattern in the pattern builder">✦ Edit in builder</button>}
       {resolved.issues.length > 0 && <span className="preview-timeline-error">{resolved.issues.length} issue(s)</span>}
       {message && <span className="preview-timeline-message">{message}</span>}
       <span className="sp-grow" />
@@ -157,11 +168,11 @@ export default function PreviewShowTimeline({ height = 300 }) {
       onAddPattern={addPattern}
       onChangeRecipe={patchRecipe} onChangeLegacy={patchLegacy}
       onSeek={preview.seek} onDropGroup={addPattern} onGroupPatch={patchGroup}
-      onPatternBuilder={() => setBuilder(true)}
+      onPatternBuilder={() => openBuilder()} onEditPattern={id => openBuilder(id)}
       stripExtras={<VisibilityBadge studio={studio} items={items} params={params} />}
       onMarker={position => change(s => ({ ...s, markers: [...s.markers, { id: uid('marker'), name: `Cue ${s.markers.length + 1}`, time: position }] }))}
     />
-    {builder && <PatternBuilder studio={studio} items={items} params={params} showLength={showLength}
-      onChange={next => change(next)} onUndo={undo} onClose={() => setBuilder(false)} />}
+    {builder && <PatternBuilder key={builder.key} editRecipeId={builder.editId} studio={studio} items={items} params={params} showLength={showLength}
+      onChange={next => change(next)} onUndo={undo} onClose={() => setBuilder(null)} />}
   </div>;
 }

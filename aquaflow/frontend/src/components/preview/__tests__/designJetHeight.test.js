@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { fixturesToNozzleConfigs } from "../../../hooks/fixtureTypeMap";
 import { launchSpeed, jetHeightFor, designLaunchSpeed, DESIGN_HEIGHT_RANGE_M } from "../jetPhysics";
-import { describeNozzleEmitters } from "../nozzleEmitters";
+import { describeNozzleEmitters, emitterFlight } from "../nozzleEmitters";
 
 const jet = (id, jetHeightM, extra = {}) => ({
   id, type: "nozzle_straight_dn25", x: 0, y: 0,
@@ -66,13 +66,13 @@ describe("design jet height → rendered apex", () => {
     expect(launchSpeed({ exitVelocityMs: 20 }, 1, 0, null, cfg)).toBeCloseTo(20, 10);
   });
 
-  it("the GPU emitters launch at the design speed (apex ≈ design) for the straight jet", () => {
-    for (const h of [0.58, 2.5]) {
+  it("the GPU emitters draw the straight jet's apex at the design height (renderer drag included)", () => {
+    for (const h of [0.58, 2.5, 12]) {
       const cfg = configFor(jet(`j${h}`, h));
       const descs = describeNozzleEmitters(cfg, 1, 0, { x: 0, z: 0 }, null,
         (demand, fallback) => launchSpeed(null, demand, fallback, null, cfg));
       const core = descs[0];
-      expect(jetHeightFor(core.speed * core.dy)).toBeCloseTo(h, 3);
+      expect(Math.abs(emitterFlight(core).apex - h) / h).toBeLessThan(0.01);
     }
   });
 

@@ -12,7 +12,7 @@ export function webCodecsAvailable() {
 }
 
 /** Decode an audio File/Blob and cut it to the render window. Returns AudioBuffer|null. */
-async function buildSoundtrack(audio, plan) {
+export async function buildSoundtrack(audio, plan) {
   if (!audio?.file || typeof OfflineAudioContext === "undefined") return null;
   const sampleRate = 48000;
   const bytes = await audio.file.arrayBuffer();

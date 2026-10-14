@@ -80,4 +80,12 @@ contextBridge.exposeInMainWorld("aquaflow", {
     pickAsset(options) { return ipcRenderer.invoke("asset:pick", options || {}); },
     readAsset(filePath) { return ipcRenderer.invoke("asset:read", String(filePath || "")); },
   },
+
+  // AF-3D-VID-002 — PNG image-sequence export. chooseFolder() opens the OS dialog and returns
+  // { ok, path, token } | { canceled }; writeFile only writes bare *.png/*.wav/*.txt names
+  // into the folder behind that token.
+  render: {
+    chooseFolder(options) { return ipcRenderer.invoke("render:choose-folder", options || {}); },
+    writeFile(token, name, bytes) { return ipcRenderer.invoke("render:write-file", String(token || ""), String(name || ""), bytes); },
+  },
 });

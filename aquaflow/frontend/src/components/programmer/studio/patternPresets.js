@@ -14,6 +14,9 @@ export const MAX_CYCLES = 32;
 export const MIN_VISIBLE_HEIGHT_M = 0.6;
 export const MIN_VISIBLE_MOTION_M = 0.3;
 export const HEAD_LOSSES_M = 0.5;
+/** Valve policy for generated patterns: no sub-second flicker (minimum on / off time). */
+export const MIN_ON_S = 1;
+export const MIN_OFF_S = 1;
 
 export const PATTERN_PRESETS = [
   { id: 'wave', label: 'Smooth wave', hint: 'A soft crest travels along the group',
@@ -28,6 +31,8 @@ export const PATTERN_PRESETS = [
     defaults: { lapSeconds: 8, minLevel: 35, maxLevel: 100, order: 'inward', crests: 1, smoothness: 'smooth', axis: 'sides' } },
   { id: 'sparkle', label: 'Sparkle', hint: 'Random jets flicker up',
     defaults: { lapSeconds: 2, minLevel: 0, maxLevel: 100, order: 'engineering', crests: 1, smoothness: 'sharp' } },
+  { id: 'pulse', label: 'Pulse', hint: 'All jets hit together',
+    defaults: { lapSeconds: 2, minLevel: 20, maxLevel: 100, order: 'engineering', crests: 1, smoothness: 'sharp' } },
 ];
 export const presetById = id => PATTERN_PRESETS.find(p => p.id === id) || PATTERN_PRESETS[0];
 
@@ -39,7 +44,10 @@ export const PRESET_CONTROLS = {
   breathing: { direction: false, crests: false, smoothness: true, minLevel: true },
   mirror: { direction: true, crests: true, smoothness: true, minLevel: true },
   sparkle: { direction: false, crests: false, smoothness: false, minLevel: false },
+  pulse: { direction: false, crests: false, smoothness: false, minLevel: true },
 };
+/** Presets whose hits land on beats when synced to music. */
+export const HIT_PRESETS = new Set(['chase', 'sparkle', 'pulse']);
 
 export const DIRECTIONS = [
   ['clockwise', 'Clockwise'], ['counter-clockwise', 'Counter-clockwise'], ['left-to-right', 'Left → right'],
@@ -70,7 +78,7 @@ export function snapCycles(duration, lapSeconds) {
  * floor = lowest level as a fraction of the top; smoothness sharpens the peak;
  * width (0..1 of one hump) narrows it further for chases. ≥33 points per hump.
  */
-export function patternEnvelope({ crests = 1, floor = 0, smoothness = 'smooth', width = null } = {}) {
+export function patternEnvelope({ crests = 1, floor = 0, smoothness = 'smooth', width = null, peakAtStart = false } = {}) {
   const n = clamp(Math.round(num(crests, 1)), 1, 8);
   const f = clamp(num(floor), 0, 1);
   let power = SHARPNESS[smoothness] || 1;
@@ -82,9 +90,38 @@ export function patternEnvelope({ crests = 1, floor = 0, smoothness = 'smooth', 
   const count = Math.min(1024, perHump * n) + 1;
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
-    const shape = Math.pow(Math.sin(Math.PI * t * n) ** 2, power);
+    // peakAtStart: crest on the first instant of each hump (lands hits on the beat).
+    const shape = Math.pow(Math.sin(Math.PI * t * n + (peakAtStart ? Math.PI / 2 : 0)) ** 2, power);
     return { time: r3(t), value: r3(clamp(f + (1 - f) * shape, 0, 1)) };
   }).filter((p, i, list) => i === 0 || p.time > list[i - 1].time);
+}
+
+/**
+ * One-cycle envelope with `laps` breaths that fades in or out (used for intros/outros:
+ * a fade cannot repeat per cycle, so the laps are drawn into a single long cycle).
+ */
+export function fadeEnvelope({ laps = 1, floor = 0, smoothness = 'smooth', fade = 'out' } = {}) {
+  const n = clamp(Math.round(num(laps, 1)), 1, MAX_CYCLES);
+  const f = clamp(num(floor), 0, 1), power = SHARPNESS[smoothness] || 1;
+  const count = Math.min(1024, 32 * n) + 1;
+  const gain = t => fade === 'in' ? Math.min(1, t / .6) : fade === 'out' ? (t < .4 ? 1 : Math.max(0, 1 - (t - .4) / .6)) : 1;
+  return Array.from({ length: count }, (_, i) => {
+    const t = i / (count - 1);
+    const shape = Math.pow(Math.sin(Math.PI * t * n) ** 2, power);
+    return { time: r3(t), value: r3(clamp((f + (1 - f) * shape) * gain(t), 0, 1)) };
+  }).filter((p, i, list) => i === 0 || p.time > list[i - 1].time);
+}
+
+/** Deterministic shuffle (sparkle order). */
+export function seededShuffle(list, seed = 1) {
+  const out = [...list];
+  let s = (Math.round(num(seed, 1)) * 2654435761) >>> 0 || 1;
+  for (let i = out.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 /** Lowest and highest output level (0–100) a recipe can reach. */
@@ -145,7 +182,7 @@ export function ensureGroup(studio, group) {
   if (group.quick || !group.linkedQuery) {
     const match = studio.groups.find(g => g.name === group.name && !g.linkedQuery && sameMembers(g.memberFixtureIds, group.memberFixtureIds));
     if (match) return { studio, groupId: match.id };
-    const created = { id: uid('group'), name: group.name, memberFixtureIds: [...(group.memberFixtureIds || [])], orderMode: group.orderMode || 'engineering', color: group.color || '#65d9d0' };
+    const created = { id: uid('group'), name: group.name, memberFixtureIds: [...(group.memberFixtureIds || [])], orderMode: group.orderMode || 'engineering', color: group.color || '#65d9d0', createdBy: 'pattern-builder' };
     return { studio: { ...studio, groups: [...studio.groups, created] }, groupId: created.id };
   }
   const { source, quick, ...plain } = group;
@@ -191,8 +228,12 @@ export function applyPattern(studio, { preset, options, group, items, name, attr
     intensity: top, color: o.color || '#65d9d0', attribute, order, seed: num(o.seed, 1),
     pattern: { preset: p.id, options: { ...o, start, duration } }, ...extra,
   });
+  const sync = o.sync && Number(o.sync.bpm) > 0 ? o.sync : null;
   const smooth = patternEnvelope({ crests, floor, smoothness: o.smoothness });
   const ensured = () => { const r = ensureGroup(next, group); next = r.studio; groupIds.push(r.groupId); return r.groupId; };
+  const hitCrests = clamp(Math.round(num(o.crests, 1)), 1, 8);
+  // Half-maximum width of one hit (fraction of a hump), never shorter than MIN_ON_S.
+  const hitWidth = (humpSeconds, wanted) => clamp(Math.max(wanted, MIN_ON_S / Math.max(.1, humpSeconds)), .04, .5);
 
   if (p.id === 'mirror') {
     const memberIds = resolveMembers(group, items);
@@ -201,16 +242,29 @@ export function applyPattern(studio, { preset, options, group, items, name, attr
       next = r.studio; groupIds.push(r.groupId);
       recipes.push(base(r.groupId, 'engineering', { name: `${label} · ${half.side}`, envelope: smooth }));
     }
+  } else if (p.id === 'sparkle' && sync) {
+    // Synced sparkle: jets in a fixed random order, `crests` of them hitting on each step.
+    const ids = seededShuffle(resolveMembers(group, items), o.seed);
+    const count = Math.max(1, ids.length);
+    const width = hitWidth(timing.lapSeconds / hitCrests, 1.2 / (count / hitCrests));
+    recipes.push(base(ensured(), 'engineering', { frozenIds: ids, envelope: patternEnvelope({ crests: hitCrests, floor, width, peakAtStart: true }) }));
   } else if (p.id === 'sparkle') {
     recipes.push(base(ensured(), 'engineering', { effect: 'sparkle', envelope: undefined, seed: Math.max(1, Math.round(num(o.seed, 1))) }));
+  } else if (p.id === 'pulse') {
+    const hump = timing.lapSeconds / hitCrests;
+    recipes.push(base(ensured(), 'engineering', { spread: 0,
+      envelope: patternEnvelope({ crests: hitCrests, floor, width: hitWidth(hump, .3), peakAtStart: !!sync }) }));
+  } else if (p.id === 'breathing' && ['in', 'out'].includes(o.fade)) {
+    recipes.push(base(ensured(), 'engineering', { spread: 0, cycles: 1,
+      envelope: fadeEnvelope({ laps: timing.cycles, floor, smoothness: o.smoothness, fade: o.fade }) }));
   } else if (p.id === 'breathing') {
     recipes.push(base(ensured(), 'engineering', { spread: 0, envelope: smooth }));
   } else if (p.id === 'ripple') {
     recipes.push(base(ensured(), 'center-out', { envelope: smooth }));
   } else if (p.id === 'chase') {
     const count = Math.max(1, resolveMembers(group, items).length);
-    const width = clamp(1.4 / (count / crests), .04, .35);
-    recipes.push(base(ensured(), o.order || 'clockwise', { envelope: patternEnvelope({ crests, floor, width }) }));
+    const width = sync ? hitWidth(timing.lapSeconds / crests, clamp(1.4 / (count / crests), .04, .35)) : clamp(1.4 / (count / crests), .04, .35);
+    recipes.push(base(ensured(), o.order || 'clockwise', { envelope: patternEnvelope({ crests, floor, width, peakAtStart: !!sync }) }));
   } else {
     recipes.push(base(ensured(), o.order || 'clockwise', { envelope: smooth }));
   }
@@ -296,4 +350,78 @@ export function raiseJetsPatch(fixtures, jetIds, params, heightM = 2) {
     params: head != null && head < neededHead ? { ...params, design_head_m: neededHead } : params,
     headChanged: head != null && head < neededHead, heightM: h, headM: head != null && head < neededHead ? neededHead : head,
   };
+}
+
+// ── Pattern units: everything one builder Apply made (reopen / update in place) ──
+// Recipes made together share `pattern.id`: the water recipe(s) — two for Mirror —
+// and the matching-lights recipe (`pattern.role: 'lights'`).
+
+/** The unit a builder-made recipe belongs to, or null for hand-made recipes. */
+export function patternUnit(studio, recipeId) {
+  const recipe = studio.recipes.find(r => r.id === recipeId);
+  if (!recipe?.pattern) return null;
+  const id = recipe.pattern.id || null;
+  let recipes;
+  if (id) recipes = studio.recipes.filter(r => r.pattern?.id === id);
+  else { // made before units existed: siblings with the identical pattern and timing
+    const sig = JSON.stringify(recipe.pattern);
+    recipes = studio.recipes.filter(r => r.pattern && !r.pattern.id && JSON.stringify(r.pattern) === sig && r.start === recipe.start && r.duration === recipe.duration);
+  }
+  return { id, recipes, recipeIds: recipes.map(r => r.id),
+    water: recipes.filter(r => r.pattern.role !== 'lights'), lights: recipes.filter(r => r.pattern.role === 'lights') };
+}
+
+/** Builder form state that reproduces a unit (preset, options, group, lights, sync). */
+export function builderStateFromUnit(unit, groups) {
+  const source = unit.water[0] || unit.recipes[0];
+  const { preset, options = {}, group } = source.pattern;
+  const known = id => id && groups.some(g => g.id === id);
+  const p = presetById(preset).id;
+  const groupId = (p === 'mirror' ? [group, source.groupId] : [source.groupId, group]).find(known) || '';
+  const lit = unit.lights[0];
+  const saved = source.pattern.lights || null;
+  return {
+    preset: p, options: { ...defaultOptions(p), ...options }, groupId,
+    lights: { enabled: !!lit, groupId: lit ? (p === 'mirror' ? [lit.pattern.group, lit.groupId] : [lit.groupId, lit.pattern.group]).find(known) || '' : '',
+      color: lit?.color || saved?.color || '#4f8cff', level: lit ? lit.intensity : saved?.level ?? 30 },
+    sync: !!options.sync,
+  };
+}
+
+/**
+ * Build (or rebuild) one unit. `replaceIds` are removed first and the new recipes take
+ * their place and ids, so an Update is an in-place edit; builder-made groups left
+ * unused are tidied away. Returns { studio, recipes, recipeIds, unitId, timing }.
+ */
+export function buildPatternUnit(studio, { preset, options, group, items, lights = null, unitId = null, replaceIds = [], tag = {} }) {
+  const replace = new Set(replaceIds);
+  const removed = studio.recipes.filter(r => replace.has(r.id));
+  const firstIndex = studio.recipes.findIndex(r => replace.has(r.id));
+  const kept = studio.recipes.filter(r => !replace.has(r.id));
+  const index = firstIndex < 0 ? kept.length : studio.recipes.slice(0, firstIndex).filter(r => !replace.has(r.id)).length;
+  const id = unitId || uid('pattern');
+  const reuse = { water: removed.filter(r => r.pattern?.role !== 'lights').map(r => r.id), lights: removed.filter(r => r.pattern?.role === 'lights').map(r => r.id) };
+  const water = applyPattern({ ...studio, recipes: kept }, { preset, options, group, items });
+  let next = water.studio;
+  const mark = (recipe, role, groupRef, k) => ({ ...recipe, id: reuse[role][k] || recipe.id,
+    pattern: { ...recipe.pattern, id, role, group: groupRef,
+      ...(role === 'water' && lights?.group ? { lights: { level: lights.level, color: lights.color } } : {}), ...tag } });
+  const added = water.recipes.map((r, k) => mark(r, 'water', group.id, k));
+  if (lights?.group) {
+    const lit = applyMatchingLights(next, water.recipes, { group: lights.group, items, color: lights.color, level: lights.level, floor: .2 });
+    next = lit.studio;
+    added.push(...lit.recipes.map((r, k) => mark(r, 'lights', lights.group.id, k)));
+  }
+  const recipes = [...kept.slice(0, index), ...added, ...kept.slice(index)];
+  next = pruneBuilderGroups({ ...next, recipes }, removed.map(r => r.groupId));
+  return { studio: next, recipes: added, recipeIds: added.map(r => r.id), unitId: id, timing: water.timing };
+}
+
+/** Remove builder-made groups (from `candidates`) that no recipe uses any more. */
+export function pruneBuilderGroups(studio, candidates = []) {
+  const ids = new Set(candidates);
+  const used = new Set(studio.recipes.map(r => r.groupId));
+  const parents = new Set(studio.groups.map(g => g.parentId).filter(Boolean));
+  const groups = studio.groups.filter(g => !(ids.has(g.id) && g.createdBy === 'pattern-builder' && !used.has(g.id) && !parents.has(g.id)));
+  return groups.length === studio.groups.length ? studio : { ...studio, groups };
 }
