@@ -121,7 +121,10 @@ export default function PreviewPanel() {
   const startTier = resolveStartTier({ quality, adaptive: adaptiveQuality, profile: gpuProfile });
   const tierLimit = resolveTierLimit({ quality, adaptive: adaptiveQuality, profile: gpuProfile });
   const [effectiveQuality, setEffectiveQuality] = useState(startTier);
-  useEffect(() => { setEffectiveQuality(startTier); }, [startTier]);
+  // Re-sync on every quality/adaptive change, not only when startTier changes: after adaptive
+  // climbed eco → low, unticking Adaptive (start tier still eco) used to leave the preview on
+  // "low · fixed" while the panel showed Eco selected.
+  useEffect(() => { setEffectiveQuality(startTier); }, [startTier, quality, adaptiveQuality]);
   const toneMapping = renderSettings.toneMapping || "aces";
   const setToneMapping = setRenderField("toneMapping");
   const halfResSpray = !!renderSettings.halfResSpray;

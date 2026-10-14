@@ -1,0 +1,51 @@
+/* Pattern builder — non-modal floating panel so the 3D preview stays visible. */
+.pattern-builder { position:fixed; top:72px; right:16px; z-index:60; width:min(372px, calc(100vw - 32px)); max-height:calc(100vh - 96px); overflow:auto;
+  display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--border-accent, var(--border-mid)); border-radius:8px;
+  background:var(--bg-panel); color:var(--text-primary); box-shadow:0 14px 40px rgba(0,0,0,.45); font:12px/1.4 var(--font-body); }
+.pattern-builder button, .pattern-builder input, .pattern-builder select { font:inherit; color:var(--text-button); border:1px solid var(--border-mid); border-radius:5px; background:var(--bg-raised); min-height:27px; }
+.pattern-builder button { padding:0 9px; cursor:pointer; }
+.pattern-builder button:disabled { opacity:.45; cursor:default; }
+.pattern-builder .sp-primary { background:var(--accent); color:#161104; border-color:var(--brand-gold-light); font-weight:700; }
+.pattern-builder .sp-grow { flex:1; }
+.pb-head { display:flex; align-items:center; gap:8px; }
+.pb-head strong { font:600 11px/1 var(--font-display); letter-spacing:1px; text-transform:uppercase; color:var(--text-accent); }
+.pb-row { display:flex; align-items:center; gap:8px; }
+.pb-row > span, .pb-slider > span, .pb-times label > span { width:66px; flex-shrink:0; color:var(--text-muted); font-size:11px; }
+.pb-row select { flex:1; min-width:0; }
+.pb-hint { color:var(--text-muted); font-size:10.5px; margin:-3px 0 0 74px; }
+.pb-presets { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+.pb-presets button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; padding:7px; min-height:72px; text-align:left; }
+.pb-presets button b { font-size:11.5px; color:var(--text-primary); }
+.pb-presets button small { font-size:9.5px; color:var(--text-muted); line-height:1.25; }
+.pb-presets button.active { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.pb-icon { width:50px; height:22px; }
+.pb-icon rect { fill:var(--accent, #65d9d0); opacity:.85; transform-box:fill-box; transform-origin:bottom; animation:pb-rise 1.2s ease-in-out infinite; }
+.pb-icon-chase rect, .pb-icon-sparkle rect { animation-timing-function:steps(2, jump-none); }
+@keyframes pb-rise { 0%,100% { transform:scaleY(.3); } 50% { transform:scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .pb-icon rect { animation:none; } }
+.pb-controls, .pb-lights { display:flex; flex-direction:column; gap:6px; padding-top:6px; border-top:1px solid var(--border-mid); }
+.pb-slider { display:flex; align-items:center; gap:8px; }
+.pb-slider input { flex:1; min-height:0; accent-color:var(--accent); background:none; border:0; }
+.pb-slider output { min-width:62px; text-align:right; font:500 11px/1 var(--font-mono); color:var(--brand-gold-pale, var(--text-primary)); }
+.pb-segment { display:flex; flex:1; }
+.pb-segment button { flex:1; border-radius:0; }
+.pb-segment button:first-child { border-radius:5px 0 0 5px; }
+.pb-segment button:last-child { border-radius:0 5px 5px 0; }
+.pb-segment button.active { background:var(--accent); color:#161104; }
+.pb-times { flex-wrap:wrap; }
+.pb-times label { display:flex; align-items:center; gap:4px; }
+.pb-times label > span { width:auto; }
+.pb-times input[type=number] { width:58px; padding:0 4px; }
+.pattern-builder input[type=color] { width:32px; padding:1px; }
+.pb-check { display:flex; align-items:center; gap:7px; cursor:pointer; }
+.pb-check input { min-height:0; }
+.pb-warnings { display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid var(--amber, #e9a23b); border-radius:6px; background:color-mix(in srgb, var(--amber, #e9a23b) 10%, transparent); }
+.pb-warning { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.pb-warning > span { flex:1 1 100%; color:var(--amber, #e9a23b); font-weight:600; }
+.pb-confirm { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-top:6px; border-top:1px dashed var(--border-mid); }
+.pb-confirm input { width:56px; }
+.pb-confirm small { flex:1 1 100%; color:var(--text-muted); }
+.pb-ok { color:var(--green, #66ef89); font-size:10.5px; }
+.pb-foot { display:flex; align-items:center; gap:6px; padding-top:8px; border-top:1px solid var(--border-mid); }
+.pb-note { color:var(--green, #66ef89); font-size:10.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pb-badge { color:var(--amber, #e9a23b); border:1px solid var(--amber, #e9a23b); border-radius:10px; padding:1px 8px; font-size:10px; white-space:nowrap; cursor:help; }

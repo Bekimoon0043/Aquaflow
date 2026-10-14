@@ -76,8 +76,13 @@ describe("eco tier (AF-NEXT-013)", () => {
   const eco = QUALITY_CONFIG.eco;
   it("fits the entry-GPU budget", () => {
     const particles = eco.gpuWater + eco.gpuSpray;
-    expect(particles).toBeGreaterThanOrEqual(15000);
+    // GT 730 re-measure: 12k water + 2k spray holds >= 30 fps at 1440x900; a floor of
+    // 12k keeps every jet visibly drawn (AF-NEXT-013-gt730-eco.md).
+    expect(particles).toBeGreaterThanOrEqual(12000);
     expect(particles).toBeLessThanOrEqual(30000);
+    expect(eco.gpuWater).toBeGreaterThanOrEqual(12000);
+    // No soft-depth probe on eco: it re-rendered every opaque mesh (eco drew more than low).
+    expect(eco.softDepth).toBe(false);
     expect(eco.cpuParticleBudget).toBeLessThanOrEqual(30000);
     expect(eco).toMatchObject({ pixelRatio: 1, ao: false, shadows: false, reflect: 0, msaa: 0, cones: false, halfResSpray: true, eco: true });
     expect(eco.bloomScale).toBeLessThanOrEqual(0.5);

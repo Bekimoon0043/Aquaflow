@@ -20,7 +20,7 @@ function Waveform({ buffer, zoom, offset, width }) {
   }, [buffer, zoom, offset, width]);
   return <canvas ref={ref} style={{ position: 'absolute', top: HEADER, left: LABEL + offset, height: 44, pointerEvents: 'none' }} aria-label="Music waveform" />;
 }
-export default function StudioTimeline({ studio, items, time, audioBuffer, selectedIds, onSelect, onSelectMany, onMoveSelection, onCopy, onPaste, onDuplicate, onDelete, onChangeRecipe, onChangeLegacy, onSeek, onDropGroup, onGroupPatch, onMarker, plcIssues = new Map(), plcCheck = null, plcSiteName = '', onFocusIssue, onAddPattern }) {
+export default function StudioTimeline({ studio, items, time, audioBuffer, selectedIds, onSelect, onSelectMany, onMoveSelection, onCopy, onPaste, onDuplicate, onDelete, onChangeRecipe, onChangeLegacy, onSeek, onDropGroup, onGroupPatch, onMarker, plcIssues = new Map(), plcCheck = null, plcSiteName = '', onFocusIssue, onAddPattern, onPatternBuilder, stripExtras = null }) {
   const ref = useRef(null), drag = useRef(null);
   const [zoom, setZoom] = useState(32), [scroll, setScroll] = useState({ x: 0, y: 0, width: 800, height: 300 });
   const [collapsed, setCollapsed] = useState(new Set()), [ghost, setGhost] = useState(null);
@@ -102,6 +102,7 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
         </div>}</span>}
       <button onClick={() => setBeatSnap(!beatSnap)} aria-pressed={beatSnap}>Beat snap</button>
       <button onClick={() => onMarker(time)}>+ Marker</button>
+      {onPatternBuilder && <button className="sp-pattern-builder-open" onClick={onPatternBuilder} title="Build a wave, chase, ripple… with live 3D preview">✦ Pattern builder</button>}{stripExtras}
       <span>{selectedIds.length} selected</span><button disabled={!selectedIds.length} onClick={onCopy}>Copy</button><button onClick={onPaste}>Paste</button><button disabled={!selectedIds.length} onClick={onDuplicate}>Duplicate</button><button disabled={!selectedIds.length} onClick={onDelete}>Delete</button>
       <span className="sp-grow" /><button onClick={() => setZoom(Math.max(2, zoom / 1.4))}>−</button><span>{zoom.toFixed(0)} px/s</span><button onClick={() => setZoom(Math.min(180, zoom * 1.4))}>+</button>
       <button onClick={() => { setZoom(Math.max(2, (scroll.width - LABEL - 20) / duration)); if (ref.current) ref.current.scrollLeft = 0; }}>Fit show</button>

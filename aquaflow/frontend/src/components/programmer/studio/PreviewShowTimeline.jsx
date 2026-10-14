@@ -5,6 +5,7 @@ import { useICANPreviewStore } from '../../../store/icanPreviewStore';
 import { poolCenter } from '../../../engineering/geometryContract';
 import { createFullShowPreview } from '../../../utils/fullShowPreview';
 import StudioTimeline from './StudioTimeline';
+import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
 import {
   compileStudio, copyStudioClips, editableClip, groupFlag, inventory,
   moveStudioClips, newRecipe, pasteStudioClips, readStudio, uid,
@@ -27,7 +28,13 @@ export default function PreviewShowTimeline({ height = 300 }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [loop, setLoop] = useState(true);
   const [message, setMessage] = useState('');
+  const [builder, setBuilder] = useState(false);
   const clipboard = useRef(null);
+  // Undo history for edits made from this timeline (one entry per commit).
+  const history = useRef([]);
+  const [undoDepth, setUndoDepth] = useState(0);
+  const revision = useProjectStore(s => s.loadRevision);
+  useEffect(() => { history.current = []; setUndoDepth(0); }, [revision]);
 
   const studio = useMemo(() => readStudio(programmer), [programmer]);
   const items = useMemo(
@@ -37,7 +44,11 @@ export default function PreviewShowTimeline({ height = 300 }) {
   const resolved = useMemo(() => compileStudio(studio, items), [studio, items]);
   const end = Math.max(1, ...resolved.clips.map(c => c.startTime + c.duration));
 
-  const commit = next => {
+  const commit = (next, record = true) => {
+    if (record) {
+      history.current = [...history.current.slice(-59), studio];
+      setUndoDepth(history.current.length);
+    }
     const compiled = compileStudio(next, items);
     rememberProgrammer({
       ...(useProjectStore.getState().programmer || {}),
@@ -48,6 +59,15 @@ export default function PreviewShowTimeline({ height = 300 }) {
     setMessage(compiled.issues.length ? `${compiled.issues.length} programming issue(s)` : '3D preview updated');
   };
   const change = action => commit(typeof action === 'function' ? action(studio) : action);
+  const undo = () => {
+    const previous = history.current.at(-1);
+    if (!previous) return;
+    history.current = history.current.slice(0, -1);
+    setUndoDepth(history.current.length);
+    commit(previous, false);
+  };
+  const showLength = Math.round(Math.max(30, ...studio.recipes.map(r => r.start + r.duration),
+    ...studio.legacyClips.map(c => c.startTime + c.duration)) * 10) / 10;
 
   useEffect(() => {
     if (!resolved.clips.length || resolved.issues.length) return;
@@ -119,6 +139,7 @@ export default function PreviewShowTimeline({ height = 300 }) {
         {preview.playback === 'playing' ? 'Ⅱ Pause' : '▶ Play preview'}
       </button>
       <output>{clock(preview.position)}</output>
+      <button onClick={undo} disabled={!undoDepth} title="Undo last timeline edit">↶ Undo</button>
       <button aria-pressed={loop} onClick={() => setLoop(value => !value)}>Loop</button>
       <span className="sp-divider" />
       <span className="preview-timeline-cues">{resolved.clips.length} resolved cues</span>
@@ -136,7 +157,11 @@ export default function PreviewShowTimeline({ height = 300 }) {
       onAddPattern={addPattern}
       onChangeRecipe={patchRecipe} onChangeLegacy={patchLegacy}
       onSeek={preview.seek} onDropGroup={addPattern} onGroupPatch={patchGroup}
+      onPatternBuilder={() => setBuilder(true)}
+      stripExtras={<VisibilityBadge studio={studio} items={items} params={params} />}
       onMarker={position => change(s => ({ ...s, markers: [...s.markers, { id: uid('marker'), name: `Cue ${s.markers.length + 1}`, time: position }] }))}
     />
+    {builder && <PatternBuilder studio={studio} items={items} params={params} showLength={showLength}
+      onChange={next => change(next)} onUndo={undo} onClose={() => setBuilder(false)} />}
   </div>;
 }

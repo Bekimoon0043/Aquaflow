@@ -15,7 +15,25 @@
  * requires sqrt(f) of the maximum velocity. So choreography still drives the jets
  * up and down continuously, while a demand above 1.0 is clamped to the physical
  * maximum and reported as over-demand rather than being silently drawn.
+ *
+ * THE DESIGN HEIGHT IS WHAT 100 % LOOKS LIKE. A nozzle whose fixture states a design jet
+ * height (engineering.jetHeightM → config.designHeightM) is drawn at exactly that apex at
+ * full demand: launch speed sqrt(2 g H). The solve still caps it from above (a design the
+ * hydraulics cannot deliver is drawn at what they deliver), but a pump with head to spare
+ * no longer throws a 0.58 m bubbler several metres into the air, and without a solve the
+ * design height replaces the per-type estimate.
  */
+
+/** Design heights outside this range are treated as data errors and clamped. */
+export const DESIGN_HEIGHT_RANGE_M = Object.freeze({ min: 0.03, max: 120 });
+
+/** Launch speed whose ballistic apex is the design height, or null when none is given. */
+export function designLaunchSpeed(heightM, gravity = 9.81) {
+  const h = Number(heightM);
+  if (!(Number.isFinite(h) && h > 0)) return null;
+  const clamped = Math.min(DESIGN_HEIGHT_RANGE_M.max, Math.max(DESIGN_HEIGHT_RANGE_M.min, h));
+  return Math.sqrt(2 * gravity * clamped);
+}
 
 /**
  * Accept a solver record only if it carries a usable exit velocity — or, in the
@@ -41,25 +59,35 @@ export function engineeringGate(physics) {
  * @param {number} demand        runtime intensity (show × heightScale); 1.0 = design max
  * @param {number} fallbackSpeed legacy per-type estimate, used when unsolved
  * @param {object} [sink]        collects over-demand reports, keyed by nozzle id
- * @param {string} [id]          nozzle id for the report
+ * @param {string|object} [nozzle] nozzle id for the report, or the nozzle config
+ *                                 ({ id, designHeightM }) — the design height then sets
+ *                                 the full-demand apex (see above)
  */
-export function launchSpeed(physics, demand, fallbackSpeed, sink, id) {
+export function launchSpeed(physics, demand, fallbackSpeed, sink, nozzle) {
+  const cfg = nozzle && typeof nozzle === "object" ? nozzle : null;
+  const id = cfg ? cfg.id : nozzle;
+  const vDesign = cfg ? designLaunchSpeed(cfg.designHeightM) : null;
+  const d = Math.max(0, Number(demand) || 0);
   const p = normalizePhysics(physics);
-  if (!p) return fallbackSpeed;               // unsolved → legacy estimate, unchanged
+  // Unsolved → the design height if stated, else the legacy per-type estimate, unchanged.
+  if (!p) return vDesign != null ? vDesign * Math.sqrt(Math.min(d, 1.0)) : fallbackSpeed;
 
   // AF-NEXT-007 engineering preview: the delivered hydraulics cap the launch speed.
   const cap = p.engineeringCapMs != null ? Math.max(0, Number(p.engineeringCapMs)) : Infinity;
-  const v0 = Number(p.exitVelocityMs);
-  if (!(Number.isFinite(v0) && v0 > 0)) return Math.min(fallbackSpeed, cap);
-
-  const d = Math.max(0, Number(demand) || 0);
+  const vSolved = Number(p.exitVelocityMs);
+  if (!(Number.isFinite(vSolved) && vSolved > 0)) {
+    return Math.min(vDesign != null ? vDesign * Math.sqrt(Math.min(d, 1.0)) : fallbackSpeed, cap);
+  }
+  // Physics is the ceiling; the design height is what full demand looks like beneath it.
+  const v0 = vDesign != null ? Math.min(vSolved, vDesign) : vSolved;
 
   if (d > 1.0 && sink) {
     const key = id || "?";
     const prev = sink[key];
     // Keep the WORST offence seen, not merely the most recent one.
     if (!prev || d > prev.demand) {
-      sink[key] = { demand: d, jetHeightM: Number(p.jetHeightM) || 0 };
+      const solvedH = Number(p.jetHeightM) || 0;
+      sink[key] = { demand: d, jetHeightM: vDesign != null && v0 < vSolved ? jetHeightFor(v0) : solvedH };
     }
   }
 

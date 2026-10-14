@@ -15,8 +15,10 @@ const jobPath = process.argv.find(a => a.endsWith(".json") && fs.existsSync(a));
 if (!jobPath) { console.error("[gpu-bench] no job file"); process.exit(2); }
 const job = JSON.parse(fs.readFileSync(jobPath, "utf8"));
 
-app.commandLine.appendSwitch("disable-gpu-vsync");
-app.commandLine.appendSwitch("disable-frame-rate-limit");
+if (!job.vsync) {   // --vsync keeps the 60 Hz cadence the desktop app actually runs with
+  app.commandLine.appendSwitch("disable-gpu-vsync");
+  app.commandLine.appendSwitch("disable-frame-rate-limit");
+}
 app.commandLine.appendSwitch("force-device-scale-factor", "1");
 if (job.ignoreGpuBlocklist) app.commandLine.appendSwitch("ignore-gpu-blocklist");
 if (job.angle) app.commandLine.appendSwitch("use-angle", job.angle);   // e.g. d3d11 (Windows default)

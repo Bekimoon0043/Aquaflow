@@ -20,13 +20,19 @@
 // shadows/AO/reflection/cones/IBL, post chain WITHOUT MSAA (`msaa: 0`) and with bloom at
 // half resolution (`bloomScale`), half-res spray, and the eco water shader (`eco`).
 // `msaa`/`bloomScale` are optional: tiers that omit them keep the previous behaviour.
+// GT 730 re-measure (docs/evidence/AF-NEXT-013-gt730-eco.md): eco drew MORE than low
+// (450 vs 244 draw calls on the Lebu wave project) because the soft-depth probe re-renders
+// every opaque mesh, and the 20k particle fill was the largest remaining cost. Eco now skips
+// the depth probe (particles meet geometry with a hard edge) and draws 12k water + 2k spray
+// droplets; the core-column meshes still carry each jet. 1440x900: Lebu 30.2 → 35.2 fps,
+// 100-fixture synthetic 33.1 → 38.9 fps (vsync on, mean).
 export const QUALITY_CONFIG = {
   eco:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
             postfx: true,  bloom: 0.20, smaa: false, ibl: false, ao: false,
             msaa: 0, bloomScale: 0.5,
             reflect: 0,   reflectEvery: 1,
-            softDepth: true, softScale: 0.5, cones: false, stars: false,
-            gpuParticles: true, gpuWater: 16384, gpuSpray: 4096,
+            softDepth: false, softScale: 0.5, cones: false, stars: false,
+            gpuParticles: true, gpuWater: 12288, gpuSpray: 2048,
             halfResSpray: true, eco: true, cpuParticleBudget: 24000 },
   low:    { pixelRatio: 1.0, shadows: false, markerScale: 0.82, exposure: 1.00,
             postfx: false, bloom: 0.00, smaa: false, ibl: false, ao: false,

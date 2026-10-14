@@ -8,6 +8,10 @@
  *   options: --tiers low,medium,high  --sizes 20,100,300  --sample-ms 10000
  *            --warmup-ms 3000  --update-baseline  --threshold 24  --tolerance 0.02
  *            --angle d3d11  --ignore-gpu-blocklist  --date 2026-10-13
+ *            --aqua <project.aqua>   bench this project instead of the bundled Lebu pilot
+ *            --width 1440 --height 900   synthetic-site canvas (default 1920x1080)
+ *            --vsync                 keep vsync/frame cap ON (what the desktop app runs with)
+ *            --out-suffix <name>     evidence file suffix (keeps earlier evidence files)
  *
  * 1. Starts a Vite dev server for aquaflow/frontend on a free port (not 3000).
  * 2. Launches the local Electron 33 binary (hardware acceleration on, vsync off) on
@@ -88,7 +92,9 @@ function findElectron() {
 const slug = s => String(s || "unknown-gpu").toLowerCase().replace(/\(r\)|\(tm\)/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const sha256 = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 
-const lebuAqua = () => JSON.parse(fs.readFileSync(path.join(appDir, "samples", "lebu-pilot", "Lebu_Fountain_Pilot.aqua"), "utf8"));
+const aquaPath = opt("aqua", null);
+const lebuAqua = () => JSON.parse(fs.readFileSync(aquaPath || path.join(appDir, "samples", "lebu-pilot", "Lebu_Fountain_Pilot.aqua"), "utf8"));
+const synthW = Number(opt("width", 1920)), synthH = Number(opt("height", 1080));
 
 // ─── screenshot scene set ──────────────────────────────────────────────────
 function shotScenes() {
@@ -150,7 +156,7 @@ function benchMarkdown(r) {
     `| CPU | ${r.machine.cpu.Name} (${r.machine.cpu.NumberOfCores ?? "?"}C/${r.machine.cpu.NumberOfLogicalProcessors ?? "?"}T) |`,
     `| RAM | ${r.machine.ramGB} GB |`,
     `| OS | ${r.machine.os.Caption} ${r.machine.os.Version || ""} |`,
-    `| Runtime | Electron ${r.electron?.electron} / Chrome ${r.electron?.chrome}, vsync off, frame-rate limit off, device scale 1 |`,
+    `| Runtime | Electron ${r.electron?.electron} / Chrome ${r.electron?.chrome}, ${r.config.vsync ? "vsync ON (as the desktop app)" : "vsync off, frame-rate limit off"}, device scale 1 |`,
     `| GPU feature status | webgl2: ${r.gpuFeatureStatus?.webgl2}, gpu_compositing: ${r.gpuFeatureStatus?.gpu_compositing} |`,
     `| Window / canvas | canvas ${r.bench[0]?.resolution?.width}x${r.bench[0]?.resolution?.height} CSS px, pixel ratio 1 |`,
     `| Window | warm-up ${r.config.warmupMs} ms, sample ${r.config.sampleMs} ms, camera: benchCameraAt() orbit r=30 m h=13 m |`,
@@ -162,7 +168,7 @@ function benchMarkdown(r) {
   for (const b of r.bench) {
     const f = b.frameTime;
     const ab = b.ablate ? ` − ${Object.entries(b.ablate).map(([k, v]) => `${k}=${v}`).join(", ")}` : "";
-    const what = b.content === "lebu" ? "Lebu pilot " : "";
+    const what = b.content === "lebu" ? `${r.config.aqua || "Lebu pilot"} ` : "";
     const sc = b.renderScale && b.renderScale !== 1 ? ` @ scale ${b.renderScale}` : "";
     lines.push(`| ${b.quality}${ab}${sc} | ${what}${b.fixtures} (${b.nozzles}/${b.lights}) | ${b.resolution.drawingBuffer.width}x${b.resolution.drawingBuffer.height} | **${f.meanMs} (${f.meanFps})** | ${f.medianMs} | ${f.p95Ms} | ${f.p99Ms} | ${f.maxMs} | ${f.frames} | ${b.drawCalls.median} | ${b.triangles.median.toLocaleString("en-US")} | ${b.particles.median.toLocaleString("en-US")} ${b.particles.backend} | ${b.gpuMemoryEstimateMB ?? "–"} | ${b.vramDeltaMB ?? "–"} |`);
   }
@@ -194,13 +200,13 @@ async function main() {
   const localDir = path.join(realismDir, "_local");
   const job = {
     mode: [doBench && "bench", doShots && "shots"].filter(Boolean).join("+"), url, resultPath,
-    angle: opt("angle", null), ignoreGpuBlocklist: flag("ignore-gpu-blocklist"),
+    angle: opt("angle", null), ignoreGpuBlocklist: flag("ignore-gpu-blocklist"), vsync: flag("vsync"),
     window: { width: 1920, height: 1080 },
     bench: doBench ? { runs: flag("ablate-eco") ? ECO_ABLATIONS.map(ablate => ({ quality: "eco", content: "lebu", aqua: lebuAqua(), width: 1440, height: 900, warmupMs, sampleMs,
         cameraPath: { radius: 16, height: 6, period: 60, start: 0.4 }, ...ablate }))
       : flag("ablate") ? ABLATIONS.map(ablate => ({ quality: "medium", fixtures: 100, width: 1920, height: 1080, warmupMs, sampleMs, ablate }))
       : [
-        ...tiers.flatMap(q => sizes.map(n => ({ quality: q, fixtures: n, width: 1920, height: 1080, warmupMs, sampleMs }))),
+        ...tiers.flatMap(q => sizes.map(n => ({ quality: q, fixtures: n, width: synthW, height: synthH, warmupMs, sampleMs }))),
         // The Lebu pilot at this PC's native 1440x900 (AF-NEXT-013 eco target: >= 30 fps).
         ...(flag("no-lebu") ? [] : tiers.flatMap(q => [1, ...(q === "eco" || q === "low" ? [] : [0.6])].map(renderScale => ({
           quality: q, content: "lebu", aqua: lebuAqua(), width: 1440, height: 900, warmupMs, sampleMs, renderScale,
@@ -241,7 +247,7 @@ async function main() {
   const gpuName = result.webgl?.renderer?.match(/ANGLE \([^,]+, ([^(]+?)(?: \(|,|\))/)?.[1]?.trim() || machine.gpus[0]?.Name || "unknown";
   const out = { task: "AF-NEXT-013", gpuName, machine, webgl: result.webgl, gpuFeatureStatus: result.gpuFeatureStatus,
     gpuInfo: result.gpuInfo, electron: result.electron, startedAt: result.startedAt, endedAt: result.endedAt,
-    config: { tiers, sizes, sampleMs, warmupMs }, nvidiaSmi: NVSMI ? { idle: idleVram } : null };
+    config: { tiers, sizes, sampleMs, warmupMs, vsync: flag("vsync"), aqua: aquaPath ? path.basename(aquaPath) : null }, nvidiaSmi: NVSMI ? { idle: idleVram } : null };
 
   if (doBench) {
     out.bench = result.bench.map(b => {
@@ -252,7 +258,8 @@ async function main() {
     });
     const evDir = path.join(docsDir, "evidence");
     fs.mkdirSync(evDir, { recursive: true });
-    const stem = path.join(evDir, `AF-NEXT-013-gpu-${slug(gpuName)}${flag("ablate") ? "-ablation" : flag("ablate-eco") ? "-eco-ablation" : ""}`);
+    const suffix = opt("out-suffix", null);
+    const stem = path.join(evDir, `AF-NEXT-013-gpu-${slug(gpuName)}${flag("ablate") ? "-ablation" : flag("ablate-eco") ? "-eco-ablation" : ""}${suffix ? `-${suffix}` : ""}`);
     fs.writeFileSync(`${stem}.json`, JSON.stringify(out, null, 2));
     fs.writeFileSync(`${stem}.md`, benchMarkdown(out));
     console.log("[gpu-bench] wrote", `${stem}.md`);

@@ -441,7 +441,7 @@ export class NozzleV2 {
    *  nozzles return the caller's legacy per-type estimate unchanged. */
   _launchSpeed(demand, fallbackSpeed) {
     return JP_launchSpeed(this.physics, demand, fallbackSpeed,
-                          this._overDemandSink, this.config?.id);
+                          this._overDemandSink, this.config); // config.designHeightM = 100 % apex
   }
 
   /**
@@ -521,7 +521,7 @@ export class NozzleV2 {
           this.waterSys.spawn(ox+(Math.random()-0.5)*0.02, 0.08, oz+(Math.random()-0.5)*0.02,
             vx, vy, vz, waterR, waterG, waterB, 0.9, life, sc, 0.7);
         }
-        if (ix > 0.4) this._spawnApexMist(ox, (4.5+ix*5.5)**2/(2*9.81), oz, ix, 0.14);
+        if (ix > 0.4) this._spawnApexMist(ox, this._launchSpeed(ix, 4.5+ix*5.5)**2/(2*9.81), oz, ix, 0.14);
         break;
       }
 
@@ -570,7 +570,7 @@ export class NozzleV2 {
 		  waterR, waterG, waterB, 0.65, life*0.6, sc*0.5, 0.35);
           }
         }
-        const speed2 = 6.5 + ix*8.5;
+        const speed2 = this._launchSpeed(ix, 6.5 + ix*8.5); // mist at the jet's real apex
         this._spawnApexMist(ox, speed2*speed2/(2*9.81), oz, ix, 0.36);
         break;
       }
@@ -2251,6 +2251,7 @@ export class FountainScene {
 	rotationY: c.rotationY || 0,
 	groupId: c.groupId || null,
         engineering: c.engineering || null,
+        designHeightM: c.designHeightM ?? null, // 100 % apex (jetPhysics.launchSpeed)
       }));
     }
     if (this._initialized) this._buildNozzles();
@@ -2396,11 +2397,7 @@ export class FountainScene {
         else if (t === 'laser') live = I.laser || 0;
       }
 
-      // Apply engineering scalar (jet height/pressure) if present
-      if (nz.config.engineering?.heightScale) {
-        live *= Math.min(2.0, Math.max(0.3, nz.config.engineering.heightScale));
-      }
-
+      // Jet height comes from config.designHeightM via _launchSpeed — no intensity re-scaling here.
       const floor = (IDLE[t] || 0.02) * breath * Math.max(0, 1.0 - live*5.0);
       const finalI = this._nozzleOutputIntensity(nz, live, floor);
       nz.setIntensity(finalI);

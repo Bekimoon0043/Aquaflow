@@ -5,7 +5,9 @@
  *    AND an autosave snapshot is newer than that project's last clean save. Offers Restore
  *    snapshot / Open original / Discard. The original file is never modified by any choice.
  *  - Missing/changed asset report after opening a project with an asset manifest. It is a
- *    modal (and swallows Space) so playback cannot start before the user has seen it.
+ *    modal (and swallows Space) so playback cannot start before the user has seen it. When
+ *    every asset checks out there is nothing to decide, so only a status toast is shown
+ *    ("3 assets verified") and the view stays usable.
  *  - Non-blocking status toasts ("aquaflow:project-status"), e.g. autosave failures.
  *  - Desktop menu wiring: File > Save / Save As / Package / Open (window.aquaflow events).
  */
@@ -14,6 +16,7 @@ import { findRecoveryCandidate, getSnapshotBackend, desktopProjectBridge } from 
 import {
   restoreSnapshot, openProjectPath, saveProject, packageProject, relinkAsset, notify,
 } from "../utils/projectPersistence";
+import { assetReportNeedsAttention, verifiedAssetSummary } from "../utils/assetManifest";
 
 const PROMPT_DONE_KEY = "aquaflow.recoveryPromptHandled";
 
@@ -74,7 +77,14 @@ export default function ProjectRecoveryHost() {
 
   // Asset reports from opened projects.
   useEffect(() => {
-    const onReport = (e) => { if (e.detail?.report?.total) setAssetReport(e.detail); };
+    const onReport = (e) => {
+      const detail = e.detail;
+      if (!detail?.report?.total) return;
+      if (assetReportNeedsAttention(detail.report)) { setAssetReport(detail); return; }
+      // Nothing missing or changed: a non-blocking confirmation instead of a modal.
+      setAssetReport(null);
+      notify(verifiedAssetSummary(detail.report), "info");
+    };
     window.addEventListener("aquaflow:asset-report", onReport);
     return () => window.removeEventListener("aquaflow:asset-report", onReport);
   }, []);
@@ -98,6 +108,9 @@ export default function ProjectRecoveryHost() {
       api.onPackage?.(run(() => packageProject())),
       api.onOpenShow?.((filePath) => { openProjectPath(filePath).catch(() => {}); }),
     ];
+    // Only now can an OS-opened project be loaded: tell the main process to deliver any
+    // file it queued at launch (or from a second instance) while the license gate was up.
+    try { api.signalReadyForOpen?.(); } catch { /* older shell without the signal */ }
     return () => offs.forEach((off) => typeof off === "function" && off());
   }, []);
 
@@ -164,7 +177,7 @@ export default function ProjectRecoveryHost() {
         <div style={overlay} role="dialog" aria-modal="true" aria-labelledby="af-assets-title">
           <div style={card}>
             <h2 id="af-assets-title" style={{ margin: "0 0 6px", fontSize: 16 }}>
-              {problems.length ? `${problems.length} project asset${problems.length > 1 ? "s" : ""} need attention` : "All project assets verified"}
+              {problems.length ? `${problems.length} project asset${problems.length > 1 ? "s" : ""} need attention` : "All project assets resolved"}
             </h2>
             <p style={muted}>
               {assetReport.projectPath || "Project"} · checked {items.length} referenced asset{items.length === 1 ? "" : "s"} by path and SHA-256

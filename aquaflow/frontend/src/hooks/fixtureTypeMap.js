@@ -8,6 +8,7 @@
  *  - water color
  *  - whether it's a light (not a water nozzle)
  */
+import { DESIGN_HEIGHT_RANGE_M } from "../components/preview/jetPhysics.js";
 
 export const NOZZLE_3D = {
   JET_1D:     "jet_1d",
@@ -240,9 +241,14 @@ export function fixturesToNozzleConfigs(fixtures) {
     } else {
       // Apply engineering data to scale the 3D effect
       const eng = f.engineering || {};
-      const pressureScale = eng.pressureBar   ? Math.min(2.0, Math.max(0.3, eng.pressureBar / 3.0))  : 1.0;
-      const heightScale   = eng.jetHeightM    ? Math.min(3.0, Math.max(0.2, eng.jetHeightM  / 3.0))  : map.heightMult;
-      const flowScale     = eng.flowLpm       ? Math.min(2.0, Math.max(0.2, eng.flowLpm     / 80.0)) : 1.0;
+      // The design jet height is rendered faithfully (jetPhysics.launchSpeed draws the
+      // 100 % apex at designHeightM). Only nonsense values are bounded — the old 0.2 floor
+      // drew a 0.58 m jet at 0.6 m and every bubbler below that at the same height.
+      const designHeightM = Number(eng.jetHeightM) > 0
+        ? Math.min(DESIGN_HEIGHT_RANGE_M.max, Math.max(DESIGN_HEIGHT_RANGE_M.min, Number(eng.jetHeightM))) : null;
+      const pressureScale = eng.pressureBar   ? Math.min(4.0, Math.max(0.02, eng.pressureBar / 3.0))  : 1.0;
+      const heightScale   = designHeightM != null ? designHeightM / 3.0 : map.heightMult;
+      const flowScale     = eng.flowLpm       ? Math.min(4.0, Math.max(0.02, eng.flowLpm     / 80.0)) : 1.0;
 
       nozzleConfigs.push({
         id:       f.id,
@@ -256,6 +262,7 @@ export function fixturesToNozzleConfigs(fixtures) {
         // Scale effects from engineering data
         intensityScale: pressureScale * flowScale,
         heightScale,
+        designHeightM,
         color:    map.color,
         label:    f.label,
         zone:     f.zone,

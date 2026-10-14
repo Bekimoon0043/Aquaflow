@@ -202,8 +202,27 @@ export async function verifyAssetManifest(data, { resolve }) {
   return {
     checkedAt: new Date().toISOString(), total: items.length, items,
     ok: pick("ok"), missing: pick("missing"), changed: pick("changed"), unverified: pick("unverified"),
-    needsAttention: items.some((i) => i.status === "missing" || i.status === "changed"),
+    needsAttention: items.some((i) => ATTENTION_STATUSES.includes(i.status)),
   };
+}
+
+/** Statuses the user must act on before playback (blocking report dialog). */
+export const ATTENTION_STATUSES = Object.freeze(["missing", "changed"]);
+
+/** True when a report has at least one missing/changed asset. */
+export function assetReportNeedsAttention(report) {
+  return (report?.items || []).some((i) => ATTENTION_STATUSES.includes(i.status));
+}
+
+/** One-line, non-blocking summary for a report with nothing to fix, e.g. "3 assets verified". */
+export function verifiedAssetSummary(report) {
+  const items = report?.items || [];
+  const unverified = items.filter((i) => i.status === "unverified").length;
+  const verified = items.length - unverified;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  if (!unverified) return `${plural(verified, "asset")} verified`;
+  if (!verified) return `${plural(unverified, "asset")} found (no saved hash to verify)`;
+  return `${plural(verified, "asset")} verified · ${unverified} found without a saved hash`;
 }
 
 /** Human-readable lines for logs / evidence. */

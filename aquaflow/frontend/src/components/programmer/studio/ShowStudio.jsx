@@ -20,6 +20,7 @@ import VirtualList from './VirtualList';
 import SpatialPlan from './SpatialPlan';
 import StudioTimeline from './StudioTimeline';
 import EnvelopeEditor from './EnvelopeEditor';
+import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
 import './showStudio.css';
 
 const StudioPreview = lazy(() => import('./StudioPreview'));
@@ -45,7 +46,7 @@ export default function ShowStudio() {
   const [search, setSearch] = useState(''), [dimension, setDimension] = useState('groupId'), [expanded, setExpanded] = useState(new Set());
   const [tab, setTab] = useState('pattern'), [time, setTime] = useState(0), [playing, setPlaying] = useState(false), [loop, setLoop] = useState(false);
   const [message, setMessage] = useState(''), [frame, setFrame] = useState(0), [palette, setPalette] = useState(false);
-  const [commandSearch, setCommandSearch] = useState('');
+  const [commandSearch, setCommandSearch] = useState(''), [builder, setBuilder] = useState(false);
   const [groupName, setGroupName] = useState(''), [prompt, setPrompt] = useState('A flowing blue wave, then a strong pulse finale');
   const [aiDuration, setAiDuration] = useState(24), [proposal, setProposal] = useState(null), [proposalIds, setProposalIds] = useState([]), [ghost, setGhost] = useState(false), [busy, setBusy] = useState(false);
   const [audioFile, setAudioFile] = useState(null), [audioName, setAudioName] = useState('');
@@ -276,7 +277,7 @@ export default function ShowStudio() {
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up, { once: true });
   };
   const navigate = panel => useProjectStore.getState().setActivePanel(panel);
-  const commands = [ ['Play / pause', () => setPlaying(v => !v), 'Space'], ['Add pattern', () => addPattern(), ''], ['Create group from selection', createGroup, 'Ctrl+G'], ['Save project', save, 'Ctrl+S'], ['Undo', doc.undo, 'Ctrl+Z'], ['Redo', doc.redo, 'Ctrl+Y'], ['Frame all', () => setFrame(n => n + 1), 'F'], ['Engineering design', () => navigate('geometry'), ''], ['AI assistant', () => setTab('ai'), ''], ['Compile / Siemens', () => setTab('compile'), ''] ];
+  const commands = [ ['Play / pause', () => setPlaying(v => !v), 'Space'], ['Add pattern', () => addPattern(), ''], ['Pattern builder', () => setBuilder(true), ''], ['Create group from selection', createGroup, 'Ctrl+G'], ['Save project', save, 'Ctrl+S'], ['Undo', doc.undo, 'Ctrl+Z'], ['Redo', doc.redo, 'Ctrl+Y'], ['Frame all', () => setFrame(n => n + 1), 'F'], ['Engineering design', () => navigate('geometry'), ''], ['AI assistant', () => setTab('ai'), ''], ['Compile / Siemens', () => setTab('compile'), ''] ];
   const selectedFixtures = items.filter(i => selectedSet.has(i.id));
   const supportedAttributes = [...new Set(selectedFixtures.flatMap(i => i.tracks.map(t => t.type)))];
   return <div className={`show-studio sp-preset-${studio.layout.preset.toLowerCase()} ${studio.layout.hideExplorer ? 'sp-hide-explorer' : ''} ${studio.layout.hideInspector ? 'sp-hide-inspector' : ''}`} ref={host} style={{ '--sp-left': `${studio.layout.left}px`, '--sp-right': `${studio.layout.right}px`, '--sp-timeline': `${studio.layout.timeline}px` }}>
@@ -287,7 +288,7 @@ export default function ShowStudio() {
     </header>
     <div className="sp-transport"><button onClick={() => { setPlaying(false); seek(0); }} title="Stop preview">■</button><button className="sp-play" onClick={() => { if (time >= end) seek(0); setPlaying(!playing); }} disabled={pending || !clips.length}>{playing ? 'Ⅱ Pause' : '▶ Play preview'}</button>
       <output>{clock(time)}</output><button aria-pressed={loop} onClick={() => setLoop(!loop)}>Loop</button><span className="sp-divider" />
-      <button onClick={() => addPattern()}>+ Pattern</button><button onClick={createGroup}>+ Group</button><button onClick={() => setTab('ai')}>AI compose</button><button onClick={() => setTab('compile')}>Compile / Siemens</button><button className={plcPlaying ? 'sp-primary' : ''} onClick={() => setTab('compile')} title="Send this show to PLCSIM or the PLC">{plcPlaying ? `PLC ▶ ${plcPlaying.elapsed.toFixed(1)}s` : '▶ Play on PLC'}</button>
+      <button onClick={() => addPattern()}>+ Pattern</button><button onClick={() => setBuilder(true)} title="Build a wave, chase, ripple… with live preview">✦ Pattern builder</button><button onClick={createGroup}>+ Group</button><button onClick={() => setTab('ai')}>AI compose</button><button onClick={() => setTab('compile')}>Compile / Siemens</button><button className={plcPlaying ? 'sp-primary' : ''} onClick={() => setTab('compile')} title="Send this show to PLCSIM or the PLC">{plcPlaying ? `PLC ▶ ${plcPlaying.elapsed.toFixed(1)}s` : '▶ Play on PLC'}</button>
       <span className="sp-grow" /><button aria-pressed={!studio.layout.hideExplorer} onClick={() => layout({ hideExplorer: !studio.layout.hideExplorer })}>Explorer</button><button aria-pressed={!studio.layout.hideInspector} onClick={() => layout({ hideInspector: !studio.layout.hideInspector })}>Inspector</button><label className="sp-inline">Layout<select value={studio.layout.preset} onChange={e => { layout({ preset: e.target.value }); if (e.target.value === 'AI') setTab('ai'); }}>{['Compose', 'Spatial', 'Timing', 'AI'].map(p => <option key={p}>{p}</option>)}</select></label>
     </div>
     <div className="sp-main">
@@ -390,7 +391,10 @@ export default function ShowStudio() {
       onFocusIssue={(clipId, at) => { const block = clipId.includes(':') ? clipId.split(':')[0] : clipId; selectClip(block, !studio.recipes.some(r => r.id === block), false); seek(at); setTab('pattern'); }}
       onAddPattern={(groupId, start) => addPattern(groupId, start)}
       onChangeRecipe={patchRecipe} onChangeLegacy={patchLegacy} onSeek={seek} onDropGroup={addPattern} onGroupPatch={patchGroup}
-      onMarker={position => change(s => ({ ...s, markers: [...s.markers, { id: uid('marker'), name: `Cue ${s.markers.length + 1}`, time: position }] }))} />
+      onMarker={position => change(s => ({ ...s, markers: [...s.markers, { id: uid('marker'), name: `Cue ${s.markers.length + 1}`, time: position }] }))}
+      onPatternBuilder={() => setBuilder(true)} stripExtras={<VisibilityBadge studio={studio} items={items} params={params} />} />
+    {builder && <PatternBuilder studio={studio} items={items} params={params} showLength={Math.round(Math.max(30, end) * 10) / 10}
+      onChange={next => change(next)} onUndo={doc.undo} onClose={() => setBuilder(false)} />}
     <footer className="sp-footer" role="status"><span>{message || (issues.length ? `${issues.length} programming issue(s) — open Compile to review` : 'Engineering linked · Space play/pause · Ctrl+G group · Ctrl+D duplicate · Ctrl+K commands')}</span>{message && <button onClick={() => setMessage('')}>×</button>}<span className="sp-grow" /><span>{items.filter(i => i.tracks.length).length} programmable · {studio.groups.length} show groups</span></footer>
     {palette && <div className="sp-modal" onClick={() => setPalette(false)}><div role="dialog" aria-label="Show commands" onClick={e => e.stopPropagation()}><div className="sp-strip"><strong>Commands</strong><button onClick={() => setPalette(false)}>Close</button></div><input autoFocus aria-label="Find command" placeholder="Find a command…" value={commandSearch} onChange={e => setCommandSearch(e.target.value)} />{commands.filter(([label]) => label.toLowerCase().includes(commandSearch.toLowerCase())).map(([label, run, key]) => <button key={label} onClick={() => { setPalette(false); run(); }}>{label}<kbd>{key}</kbd></button>)}</div></div>}
   </div>;

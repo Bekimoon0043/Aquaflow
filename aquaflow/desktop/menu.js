@@ -23,7 +23,7 @@ async function openShowDialog() {
     ],
     properties: ["openFile"],
   });
-  if (!res.canceled && res.filePaths[0]) sendToRenderer("open-show", res.filePaths[0]);
+  if (!res.canceled && res.filePaths[0]) openShowHook(res.filePaths[0]);
 }
 
 function showAbout() {
@@ -50,6 +50,9 @@ let checkForUpdatesHook = () => {
     message: "Update checking is configured on launch.", buttons: ["OK"] });
 };
 function setCheckForUpdatesHook(fn) { checkForUpdatesHook = fn; }
+// main.js routes File > Open Show through its renderer-ready queue (open-queue.js).
+let openShowHook = (filePath) => sendToRenderer("open-show", filePath);
+function setOpenShowHook(fn) { openShowHook = fn; }
 
 function buildMenu() {
   const template = [
@@ -87,4 +90,4 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-module.exports = { buildMenu, showAbout, setCheckForUpdatesHook };
+module.exports = { buildMenu, showAbout, setCheckForUpdatesHook, setOpenShowHook };

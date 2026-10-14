@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld("aquaflow", {
     ipcRenderer.on("open-show", handler);
     return () => ipcRenderer.removeListener("open-show", handler);
   },
+  // The renderer calls this once its open-show handler is mounted (after the license gate).
+  // Until then the main process queues launch/second-instance opens instead of dropping them.
+  signalReadyForOpen() { ipcRenderer.send("renderer:ready-for-open"); },
 
   // File > Save (Ctrl+S) — the frontend triggers its own save flow.
   onSave(callback) {

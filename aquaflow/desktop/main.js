@@ -14,12 +14,13 @@ const http = require("http");
 
 const { findFreePort, startEngine, waitForHealth, stopEngine } = require("./launcher");
 const { resolveConfig } = require("./app-config");
-const { buildMenu, setCheckForUpdatesHook } = require("./menu");
+const { buildMenu, setCheckForUpdatesHook, setOpenShowHook } = require("./menu");
 const { initAutoUpdate, checkForUpdates } = require("./updater");
 const { startUiServer } = require("./ui-server");
 const { registerCadIpc } = require("./cad-native");
 // AF-NEXT-006 — atomic project save/open, autosave snapshots, unclean-exit detection.
 const { registerProjectIpc, acquireSessionLock, releaseSessionLock } = require("./project-files");
+const { createOpenQueue, READY_CHANNEL, OPEN_CHANNEL } = require("./open-queue");
 
 const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
 
@@ -75,7 +76,6 @@ let engine = null; // { child, mode, command }
 let enginePort = 0;
 let ui = null;       // loopback UI server { server, port, url, close }
 let shuttingDown = false;
-let pendingOpenPath = null; // AF-PKG-006 — .aquashow path awaiting the ready window
 let sessionInfo = null;     // AF-NEXT-006 — { uncleanExit, previous } from the session lock
 const recoveryDir = () => path.join(app.getPath("userData"), "project-recovery");
 
@@ -100,14 +100,24 @@ function handleOpenShow(filePath) {
     } catch { /* ignore */ }
     return;
   }
-  if (mainWindow && !mainWindow.webContents.isLoading()) {
-    mainWindow.webContents.send("open-show", filePath);
+  openQueue.enqueue(filePath);
+}
+
+// Project paths wait here until the renderer's open handler (ProjectRecoveryHost, mounted
+// only after the license gate) signals READY_CHANNEL — sending on did-finish-load dropped them.
+const openQueue = createOpenQueue({
+  log: (m) => dbg(m),
+  send: (filePath) => {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return false;
+    mainWindow.webContents.send(OPEN_CHANNEL, filePath);
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
-  } else {
-    pendingOpenPath = filePath;
-  }
-}
+    return true;
+  },
+});
+ipcMain.on(READY_CHANNEL, (e) => {
+  if (mainWindow && e.sender === mainWindow.webContents) { dbg("renderer ready for open"); openQueue.markReady(); }
+});
 
 // ── Single instance ───────────────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -191,17 +201,16 @@ function createMainWindow() {
     );
   }
 
-  mainWindow.webContents.once("did-finish-load", () => {
-    dbg("renderer did-finish-load");
-    // AF-PKG-006 — flush a queued .aquashow (from launch argv) once the UI is ready.
-    if (pendingOpenPath) { handleOpenShow(pendingOpenPath); pendingOpenPath = null; }
-  });
+  mainWindow.webContents.once("did-finish-load", () => dbg("renderer did-finish-load"));
+  // A reload or renderer crash unmounts the open handler: hold opens until it re-signals.
+  mainWindow.webContents.on("did-start-navigation", (_e, _url, isInPlace, isMainFrame) => { if (isMainFrame && !isInPlace) openQueue.markNotReady(); });
+  mainWindow.webContents.on("render-process-gone", () => openQueue.markNotReady());
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
     splashWindow = null;
   });
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.on("closed", () => { mainWindow = null; openQueue.markNotReady(); });
 }
 
 // ── License activation IPC (AF-PKG-ENABLE-LICENSE) ──────────────────────────────
@@ -315,7 +324,7 @@ async function boot() {
   registerProjectIpc({ ipcMain, dialog, getMainWindow, userDataDir: app.getPath("userData"), sessionInfo });
   installDownloadHandler();
   // AF-PKG-006 — capture a .aquashow passed on the initial launch command line.
-  pendingOpenPath = showPathFromArgv(process.argv.slice(1));
+  handleOpenShow(showPathFromArgv(process.argv.slice(1)));
   createSplash();
   try {
     const cfg = resolveConfig();
@@ -376,6 +385,7 @@ async function boot() {
     buildMenu(); // AF-PKG-005 — File/View/Help + About
     // AF-PKG-007 — menu "Check for Updates…" runs an interactive (non-silent) check.
     setCheckForUpdatesHook(() => checkForUpdates({ silent: false }, getMainWindow));
+    setOpenShowHook(handleOpenShow); // File > Open Show… goes through the same ready-queue
     createMainWindow();
 
     // AF-PKG-007 — configure the update feed and run the silent launch check. Admin-only
