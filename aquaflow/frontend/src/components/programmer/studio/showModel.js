@@ -2,8 +2,9 @@ import { generateAutoTracks } from '../../../runtime/autoTrackGenerator';
 import { createSiteWaterTrack } from '../../../utils/siteShowCompiler';
 import { getFixtureInfo } from '../../../utils/fixtureTypeResolver';
 import { evaluateShowFrameAt, groupInherits, recipeAudible } from '../../../show/evaluateShowFrame';
+import { fieldChannels, memberGeometry } from './wavePatterns';
 
-export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve'];
+export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve', 'field'];
 export const ORDERS = ['engineering', 'left-to-right', 'right-to-left', 'front-to-back', 'clockwise', 'counter-clockwise', 'center-out'];
 export const uid = (prefix = 'show') => `${prefix}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 const num = (x, fallback = 0) => Number.isFinite(Number(x)) ? Number(x) : fallback;
@@ -173,6 +174,34 @@ export function compileStudio(studio, items) {
     const members = orderMembers(memberIds, items, recipe.effect === 'ripple' ? 'center-out' : recipe.order || group.orderMode);
     if (!members.length) issues.push(`${recipe.name}: group is empty.`);
     const cycle = duration / cycles;
+    if (recipe.effect === 'field') {
+      // Wave field: one keyed clip per member and channel (wavePatterns.js).
+      const order = recipe.order || group.orderMode;
+      const geometry = memberGeometry(members, { origin: recipe.field?.origin || 'tip', ring: /clockwise/.test(order || '') });
+      const byId = new Map(items.map(i => [i.id, i]));
+      const opened = new Set();
+      members.forEach((item, index) => {
+        const channels = fieldChannels(recipe, geometry[index], item);
+        if (!channels.length) return;
+        // A water wave needs its jet's solenoid open for the whole pattern.
+        const valve = byId.get(item.engineering?.solenoidValveId);
+        const valveTrack = valve?.tracks?.find(t => t.type === 'solenoid_open');
+        if (valveTrack && recipe.field?.openValves !== false && !opened.has(valve.id)) {
+          opened.add(valve.id);
+          clips.push({ id: `${recipe.id}:${valve.id}:open`, studioRecipeId: recipe.id, patternBlockId: recipe.id, fixtureId: valve.id,
+            trackId: valveTrack.id, type: 'solenoid_open', name: recipe.name, startTime: round(start), duration: round(duration),
+            value: 100, color: recipe.color, source: 'show-studio' });
+        }
+        for (const ch of channels) {
+          if (clips.length >= 50000) { issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.'); return; }
+          const values = ch.keys.filter((_, k) => k % 2);
+          clips.push({ id: `${recipe.id}:${item.id}:${ch.type}`, studioRecipeId: recipe.id, patternBlockId: recipe.id,
+            fixtureId: item.id, trackId: ch.trackId, type: ch.type, name: recipe.name, startTime: round(start), duration: round(duration),
+            value: round(Math.max(...values)), keys: ch.keys, color: ch.color, source: 'show-studio' });
+        }
+      });
+      continue;
+    }
     members.forEach((item, index) => {
       const track = primaryTrack(item, recipe.attribute);
       if (!track) { issues.push(`${recipe.name}: ${item.label} has no compatible ${recipe.attribute || 'level'} channel.`); return; }

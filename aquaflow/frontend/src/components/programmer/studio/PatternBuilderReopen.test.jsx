@@ -69,8 +69,8 @@ describe('reopen a builder pattern', () => {
     expect(new Set(before.map(r => r.pattern.id)).size).toBe(1);
     const ids = before.map(r => r.id);
 
-    // Double-click the right half's clip on the timeline.
-    fireEvent.doubleClick(screen.getByRole('button', { name: /Mirror · right/ }));
+    // Both mirror halves are one pattern block on the 3D show timeline: double-click reopens it.
+    fireEvent.doubleClick(screen.getByRole('button', { name: /^Mirror$/ }));
     dialog = screen.getByRole('dialog', { name: 'Pattern builder' });
     expect(within(dialog).getByText('editing')).toBeTruthy();
     expect(within(dialog).getByRole('radio', { name: /Mirror/ }).getAttribute('aria-checked')).toBe('true');

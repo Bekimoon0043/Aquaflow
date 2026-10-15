@@ -132,6 +132,11 @@ export function recipeLevelRange(recipe) {
     return { min: top * Math.min(...values), max: top * Math.max(...values) };
   }
   if (['static', 'color', 'staircase'].includes(recipe?.effect)) return { min: top, max: top };
+  if (recipe?.effect === 'field') {
+    const f = recipe.field || {};
+    const lows = [num(f.low, 20), num(f.lowFar, num(f.low, 20))], highs = [num(f.high, 80), num(f.highFar, num(f.high, 80))];
+    return { min: Math.min(...lows), max: Math.max(...highs) };
+  }
   return { min: 0, max: top };
 }
 

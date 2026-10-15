@@ -5,6 +5,7 @@ import { useICANPreviewStore } from '../../../store/icanPreviewStore';
 import { poolCenter } from '../../../engineering/geometryContract';
 import { createFullShowPreview } from '../../../utils/fullShowPreview';
 import StudioTimeline from './StudioTimeline';
+import PreviewSequence from './PreviewSequence';
 import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
 import { useProgrammerSong } from './musicSync';
 import { usePreviewSongPlayback } from './previewAudio';
@@ -30,6 +31,8 @@ export default function PreviewShowTimeline({ height = 300 }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [loop, setLoop] = useState(true);
   const [message, setMessage] = useState('');
+  // 'sequence' = the patterns as they play (default); 'programming' = group/channel rows.
+  const [view, setView] = useState('sequence');
   // null = closed; { key, editId } = open (editId reopens a builder-made pattern).
   const [builder, setBuilder] = useState(null);
   const openBuilder = (editId = null) => setBuilder({ key: Date.now(), editId });
@@ -66,7 +69,17 @@ export default function PreviewShowTimeline({ height = 300 }) {
     });
     setMessage(compiled.issues.length ? `${compiled.issues.length} programming issue(s)` : '3D preview updated');
   };
-  const change = action => commit(typeof action === 'function' ? action(studio) : action);
+  const change = action => {
+    const next = typeof action === 'function' ? action(studio) : action;
+    if (gesture.current) { gesture.current = false; commit(next, false); } else commit(next);
+  };
+  // Slider drags: the first live step records one undo entry, later steps and the release don't.
+  const gesture = useRef(false);
+  const changeLive = action => {
+    const next = typeof action === 'function' ? action(studio) : action;
+    commit(next, !gesture.current);
+    gesture.current = true;
+  };
   const undo = () => {
     const previous = history.current.at(-1);
     if (!previous) return;
@@ -160,6 +173,15 @@ export default function PreviewShowTimeline({ height = 300 }) {
       <span className="sp-grow" />
       <button onClick={() => navigate('show_programmer')}>Open full Show Programming ↗</button>
     </div>
+    {view === 'sequence' ? <PreviewSequence
+      studio={studio} items={items} definitions={programmer?.patternDefinitions || []} time={preview.position}
+      playing={preview.playback === 'playing'} showLength={showLength} onSeek={preview.seek}
+      onChange={change} onChangeLive={changeLive}
+      onEditInBuilder={id => openBuilder(id)} onPatternBuilder={() => openBuilder()} onProgrammingView={() => setView('programming')}
+      extras={<VisibilityBadge studio={studio} items={items} params={params} />}
+    /> : <>
+    <div className="seq-bar"><strong>PROGRAMMING VIEW</strong><span className="seq-muted">Group / channel rows, as in Show Programming</span>
+      <span className="sp-grow" /><button onClick={() => setView('sequence')}>← Show patterns</button></div>
     <StudioTimeline
       studio={studio} items={items} time={preview.position} audioBuffer={null} selectedIds={selectedIds}
       onSelect={select}
@@ -173,6 +195,7 @@ export default function PreviewShowTimeline({ height = 300 }) {
       stripExtras={<VisibilityBadge studio={studio} items={items} params={params} />}
       onMarker={position => change(s => ({ ...s, markers: [...s.markers, { id: uid('marker'), name: `Cue ${s.markers.length + 1}`, time: position }] }))}
     />
+    </>}
     {builder && <PatternBuilder key={builder.key} editRecipeId={builder.editId} studio={studio} items={items} params={params} showLength={showLength}
       onChange={next => change(next)} onUndo={undo} onClose={() => setBuilder(null)} />}
   </div>;
