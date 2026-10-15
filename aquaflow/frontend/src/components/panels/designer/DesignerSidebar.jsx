@@ -373,17 +373,18 @@ export function FixturePickerSection({ d }) {
         <div style={{ color:"#ffcc00", fontSize:9, fontWeight:"bold", marginBottom:5 }}>ARRAY PLACEMENT</div>
 
         <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }}>Array Type</div>
-        <select value={arrayMode} onChange={e=>setArrayMode(e.target.value)}
+        <select aria-label="Array type" value={arrayMode} onChange={e=>setArrayMode(e.target.value)}
           style={{ width:"100%", padding:"3px", background:"#06121c", color:"#cce8ff", border:"1px solid #0a3040", borderRadius:3, fontSize:9, fontFamily:"monospace", marginBottom:5 }}>
           <option value="centerline">Centerline</option>
           <option value="ring">Ring</option>
           <option value="grid">Grid</option>
+          <option value="edge">Along edge</option>
         </select>
 
         {arrayMode !== "grid" && (
           <div style={{ marginBottom:5 }}>
             <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }}>Count</div>
-            <input type="number" min="1" max="200" step="1" value={arrayCount}
+            <input aria-label="Array count" type="number" min="1" max="200" step="1" value={arrayCount}
               onChange={e=>setArrayCount(parseInt(e.target.value || 1))}
               style={{ width:"100%", padding:"3px 5px", background:"#06121c", color:"#ffcc00", border:"1px solid #0a3040", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
           </div>
@@ -408,7 +409,7 @@ export function FixturePickerSection({ d }) {
 
         <div style={{ marginBottom:6 }}>
           <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }}>Inset from Edge (m)</div>
-          <input type="number" min="0" max="50" step="0.1" value={arrayInset}
+          <input aria-label="Inset from edge (m)" type="number" min="0" max="50" step="0.1" value={arrayInset}
             onChange={e=>setArrayInset(parseFloat(e.target.value || 0))}
             style={{ width:"100%", padding:"3px 5px", background:"#06121c", color:"#ffcc00", border:"1px solid #0a3040", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
         </div>

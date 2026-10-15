@@ -8,6 +8,8 @@
 - Gates: frontend 1,295 passed; backend full suite passed; desktop 36 passed. Engine 1.2.37 staged (`resources/engine-1.2.37`), packaged health check 200.
 - Lebu shows on the Desktop rebuilt as editable patterns: `Lebu_Fountain_80s_Four_Wave_Patterns.aquapkg`, `Lebu_Fountain_160s_Wave_Patterns_Plus_Famous.aquapkg` (Pattern 4 kept as the original recorded cues).
 - Hardware still **not commissioned**. Smooth per-jet waves on site need proportional valves or VFD-driven jets.
+- Later the same day (still 1.2.38): **Pattern creator** (✎ Create pattern) builds patterns from five pieces — movement shape (incl. hand-drawn), path across the jets, timing, height, lights — with live preview, "My patterns" (project + this computer), and pattern-type export/import (.aqtypes.json). Show patterns export/import (.aqpattern.json) on the 3D timeline. Designer array type **Along edge** places jets/lights evenly around any basin outline. Frontend 1,305 tests passed.
+- Guide on the Desktop: `AquaFlow_Guide_Design_and_Create_Patterns.pdf` (41 pages, real screenshots), practice file `Lebu_Fountain_Pattern_Guide_Start.aquapkg`.
 
 **2026-10-13: AF-NEXT release programme — AquaFlow Studio 1.2.33 installed**
 

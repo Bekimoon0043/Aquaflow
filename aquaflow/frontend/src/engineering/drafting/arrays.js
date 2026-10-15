@@ -27,7 +27,7 @@ export function arrayBounds(geometry) {
 }
 
 /**
- * Centerline / ring / grid array of `fixtureType` inside `geometry`.
+ * Centerline / ring / grid / edge array of `fixtureType` inside `geometry`.
  * @returns {Array} new fixtures (only those inside the outline)
  */
 export function buildFixtureArray({ geometry, fixtureType, typeLabel, existing = [], mode = "centerline", count = 8, rows = 3, cols = 5, inset = 1, zone = "medium", owner = OWNER_MODEL }) {
@@ -63,7 +63,55 @@ export function buildFixtureArray({ geometry, fixtureType, typeLabel, existing =
       k += 1;
     }
   }
+  if (mode === "edge") {
+    // Evenly spaced along the outline, set in from the edge by `inset`, facing inward.
+    for (const [i, p] of edgePoints(geometry, n, ins).entries()) made.push(make(i, p.x, p.y, p.rotation));
+  }
   return made.filter((fixture) => pointInGeometry(fixture, geometry));
+}
+
+/**
+ * `n` points spaced by equal arc length around a pool outline, each moved `inset` metres
+ * inward along the edge normal. Rotation (degrees) points into the pool.
+ */
+export function edgePoints(geometry, n, inset = 0) {
+  if (!geometry || n < 1) return [];
+  if (geometry.type === "circle" || geometry.type === "ellipse") {
+    const c = geometry.center, rx = geometry.type === "circle" ? geometry.radius : geometry.rx, ry = geometry.type === "circle" ? geometry.radius : geometry.ry;
+    const ax = Math.max(0.05, rx - inset), ay = Math.max(0.05, ry - inset);
+    // Equal arc length on an ellipse: sample densely, then walk the cumulative length.
+    const steps = 2048, pts = [], len = [0];
+    for (let k = 0; k <= steps; k++) { const a = (k / steps) * Math.PI * 2; pts.push({ x: c.x + Math.cos(a) * ax, y: c.y + Math.sin(a) * ay, a }); if (k) len.push(len[k - 1] + Math.hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y)); }
+    const total = len[steps];
+    const out = [];
+    for (let i = 0, k = 0; i < n; i++) {
+      const target = (i / n) * total;
+      while (k < steps && len[k + 1] < target) k++;
+      const p = pts[k];
+      out.push({ x: p.x, y: p.y, rotation: Number(((p.a * 180 / Math.PI + 180) % 360).toFixed(1)) });
+    }
+    return out;
+  }
+  const pts = (geometry.points || []).filter((p, i, list) => i === 0 || Math.hypot(p.x - list[i - 1].x, p.y - list[i - 1].y) > 1e-9);
+  if (pts.length > 2 && Math.hypot(pts[0].x - pts.at(-1).x, pts[0].y - pts.at(-1).y) < 1e-9) pts.pop();
+  if (pts.length < 3) return [];
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; area += a.x * b.y - b.x * a.y; }
+  const sign = area > 0 ? 1 : -1; // inward normal side depends on winding
+  const edges = pts.map((a, i) => { const b = pts[(i + 1) % pts.length]; const L = Math.hypot(b.x - a.x, b.y - a.y); return { a, b, L, nx: sign * -(b.y - a.y) / L, ny: sign * (b.x - a.x) / L }; });
+  const total = edges.reduce((s, e) => s + e.L, 0);
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let d = ((i + 0.5) / n) * total, e = edges[0];
+    for (const edge of edges) { e = edge; if (d <= edge.L) break; d -= edge.L; }
+    const t = Math.min(1, d / e.L);
+    let x = e.a.x + (e.b.x - e.a.x) * t + e.nx * inset, y = e.a.y + (e.b.y - e.a.y) * t + e.ny * inset;
+    // Near a sharp corner the offset can cross the neighbouring edge: step toward the centroid.
+    for (let k = 0; k < 40 && !pointInGeometry({ x, y }, { ...geometry, points: pts }); k++) { x += (cx - x) * 0.05; y += (cy - y) * 0.05; }
+    out.push({ x, y, rotation: Number(((Math.atan2(e.ny, e.nx) * 180 / Math.PI + 360) % 360).toFixed(1)) });
+  }
+  return out;
 }
 
 /** The AUTO-PLACE NOZZLES layout (centre geyser + arch ring + fan ring for circles). */

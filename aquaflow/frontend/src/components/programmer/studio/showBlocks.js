@@ -167,3 +167,73 @@ export function updateFieldUnit(studio, block, patch) {
     return { ...x, name, color, field, pattern: { ...x.pattern, kind: field.kind } };
   }) };
 }
+
+// ── Pattern files: export blocks to JSON and import them into any show ──────────
+export const PATTERN_FILE_FORMAT = 'aquaflow-show-patterns';
+
+const strip = ({ id, studioRecipeId, ...rest }) => rest;
+
+/** Portable file for the given blocks (times kept as in the show). */
+export function exportPatterns(studio, blocks) {
+  const groupsById = new Map(studio.groups.map(g => [g.id, g]));
+  const role = r => r.pattern?.role || 'water';
+  const patterns = blocks.filter(b => !b.background).map(b => {
+    const recipes = studio.recipes.filter(r => b.recipeIds.includes(r.id)).map(r => ({
+      ...strip(r), role: role(r), groupName: groupsById.get(r.groupId)?.name || r.groupId,
+    }));
+    const clips = studio.legacyClips.filter(c => b.legacyIds.includes(c.id)).map(c => ({ ...strip(c), startTime: c.startTime }));
+    return { name: b.name, type: b.type, start: b.start, duration: b.duration, color: b.color, recipes, clips };
+  });
+  return { format: PATTERN_FILE_FORMAT, version: 1, exportedAt: new Date().toISOString(), patterns };
+}
+
+/**
+ * Add patterns from a pattern file. Recipe groups are matched by id, then by name, then
+ * to this show's main jet / light group (accent lights are dropped when no group fits).
+ * Recorded cues are kept only for fixtures that exist here. `at` moves the earliest
+ * pattern to that time (null = original times). Returns { studio, added, skipped, notes }.
+ */
+export function importPatterns(studio, file, items, { at = null } = {}) {
+  const data = typeof file === 'string' ? JSON.parse(file) : file;
+  if (data?.format !== PATTERN_FILE_FORMAT || !Array.isArray(data.patterns)) throw new Error('This is not an AquaFlow show-pattern file.');
+  const known = new Set(items.map(i => i.id));
+  const groups = defaultFieldGroups(studio, items);
+  const newGroups = [];
+  const groupFor = (r) => {
+    if (studio.groups.some(g => g.id === r.groupId)) return r.groupId;
+    const byName = studio.groups.find(g => g.name === r.groupName);
+    if (byName) return byName.id;
+    const fallback = r.role === 'lights' ? groups.lights : r.role === 'accent' ? null : groups.water;
+    if (!fallback) return null;
+    if (!studio.groups.some(g => g.id === fallback.id) && !newGroups.some(g => g.id === fallback.id)) {
+      const { source, quick, ...plain } = fallback; newGroups.push(plain);
+    }
+    return fallback.id;
+  };
+  const first = Math.min(...data.patterns.map(p => Number(p.start) || 0));
+  const shift = at === null || !Number.isFinite(Number(at)) ? 0 : Number(at) - first;
+  const recipes = [], clips = [], notes = [];
+  let added = 0, skipped = 0;
+  for (const p of data.patterns) {
+    const unit = uid('pattern');
+    let used = 0;
+    for (const r of p.recipes || []) {
+      const groupId = groupFor(r);
+      if (!groupId) { notes.push(`${r.name}: no matching light group, left out.`); continue; }
+      const { role, groupName, ...rest } = r;
+      const start = r3(Math.max(0, Math.min(MAX_END - rest.duration, rest.start + shift)));
+      recipes.push({ ...rest, id: uid('recipe'), groupId, start, locked: false,
+        ...(rest.pattern ? { pattern: { ...rest.pattern, id: unit, ...(rest.pattern.options ? { options: { ...rest.pattern.options, start } } : {}) } } : {}) });
+      used++;
+    }
+    const key = `import-${uid('rec')}`;
+    for (const c of p.clips || []) {
+      if (!known.has(c.fixtureId)) continue;
+      clips.push({ ...c, id: uid('clip'), name: p.name, patternBlockId: key, startTime: r3(Math.max(0, c.startTime + shift)) });
+      used++;
+    }
+    if (used) added++; else { skipped++; notes.push(`${p.name}: its fixtures are not in this design.`); }
+  }
+  const next = { ...studio, groups: [...studio.groups, ...newGroups], recipes: [...studio.recipes, ...recipes], legacyClips: [...studio.legacyClips, ...clips] };
+  return { studio: next, added, skipped, notes };
+}

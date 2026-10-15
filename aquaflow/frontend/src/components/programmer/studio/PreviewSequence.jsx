@@ -3,9 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FIELD_CONTROLS, FIELD_KINDS, ORIGINS, fieldKind } from './wavePatterns';
 import { builderGroups } from './patternPresets';
+import PatternCreator from './PatternCreator';
+import { myTypes } from './customPatterns';
 import {
-  defaultFieldGroups, deleteBlock, duplicateBlock, fieldUnitRecipes, moveBlock, resizeBlock, showBlocks, updateFieldUnit,
+  defaultFieldGroups, deleteBlock, duplicateBlock, exportPatterns, fieldUnitRecipes, importPatterns, moveBlock, resizeBlock, showBlocks, updateFieldUnit,
 } from './showBlocks';
+
+const fileName = text => `${String(text || 'patterns').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) || 'patterns'}.aqpattern.json`;
+function download(name, text) {
+  try {
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch { /* download unavailable (tests) */ }
+}
+const readText = file => (typeof file.text === 'function' ? file.text() : new Promise((resolve, reject) => {
+  const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsText(file);
+}));
 
 const SNAP = 0.25;
 const LANE_H = 46;
@@ -82,13 +97,24 @@ function FieldInspector({ block, studio, items, onPatch, onPatchLive }) {
   </>;
 }
 
-export default function PreviewSequence({ studio, items, definitions, time, playing, showLength, onSeek, onChange, onChangeLive, onEditInBuilder, onPatternBuilder, onProgrammingView, extras = null }) {
+export default function PreviewSequence({ studio, items, definitions, time, playing, showLength, onSeek, onChange, onChangeLive, onEditInBuilder, onPatternBuilder, onProgrammingView, extras = null, onExportFile = download }) {
   const blocks = useMemo(() => showBlocks(studio, definitions), [studio, definitions]);
   const [selectedId, setSelectedId] = useState(null);
   const [zoom, setZoom] = useState(0); // 0 = fit the whole show
   const [menu, setMenu] = useState(false);
   const [drag, setDrag] = useState(null);
   const [context, setContext] = useState(null); // { id, x, y }
+  const [note, setNote] = useState('');
+  const [creator, setCreator] = useState(null); // null | { block }
+  const importRef = useRef(null);
+  // Menus close on any click outside them, or on Escape.
+  useEffect(() => {
+    if (!menu && !context) return undefined;
+    const close = e => { if (e.type === 'keydown' ? e.key === 'Escape' : !e.target.closest?.('.seq-add, .seq-context')) { setMenu(false); setContext(null); } };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
+  }, [menu, context]);
   const scroller = useRef(null);
   const [width, setWidth] = useState(800);
   useEffect(() => {
@@ -143,17 +169,34 @@ export default function PreviewSequence({ studio, items, definitions, time, play
     setDrag(null);
   };
 
-  const add = kind => {
+  const nextStart = () => Math.min(590, snap(Math.max(0, ...blocks.filter(b => !b.background).map(b => b.start + b.duration))));
+  const add = (kind, type = null) => {
     setMenu(false);
     const groups = defaultFieldGroups(studio, items);
     if (!groups.water) return;
-    const end = Math.max(0, ...blocks.filter(b => !b.background).map(b => b.start + b.duration));
-    const start = Math.min(590, snap(end));
+    const start = nextStart();
     const { recipes, unitId } = fieldUnitRecipes({ kind, start, duration: 15, waterGroupId: groups.water.id, lightGroupId: groups.lights?.id,
-      order: groups.water.orderMode === 'counter-clockwise' ? 'counter-clockwise' : 'clockwise' });
+      order: groups.water.orderMode === 'counter-clockwise' ? 'counter-clockwise' : 'clockwise',
+      ...(type ? { name: type.name, field: type.field, light: type.light } : {}) });
     const missing = [groups.water, groups.lights].filter(g => g && !studio.groups.some(x => x.id === g.id)).map(({ source, quick, ...g }) => g);
     onChange(s => ({ ...s, groups: [...s.groups, ...missing], recipes: [...s.recipes, ...recipes] }));
     setSelectedId(`unit:${unitId}`);
+  };
+  const exportBlocks = list => {
+    const real = list.filter(b => !b.background);
+    if (!real.length) { setNote('No patterns to export'); return; }
+    const data = exportPatterns(studio, real);
+    onExportFile(fileName(real.length === 1 ? real[0].name : 'show_patterns'), JSON.stringify(data, null, 1));
+    setNote(`Exported ${real.length} pattern${real.length === 1 ? '' : 's'}`);
+  };
+  const importFile = async file => {
+    if (!file) return;
+    try {
+      const text = await readText(file);
+      let result = null;
+      onChange(s => { result = importPatterns(s, text, items); return result.studio; });
+      setNote(`Imported ${result.added} pattern${result.added === 1 ? '' : 's'}${result.skipped ? ` · ${result.skipped} left out` : ''}${result.notes.length ? ` — ${result.notes[0]}` : ''}`);
+    } catch (error) { setNote(error.message); }
   };
   const patch = (p, live = false) => selected && (live ? onChangeLive : onChange)(s => updateFieldUnit(s, selected, p));
 
@@ -166,14 +209,27 @@ export default function PreviewSequence({ studio, items, definitions, time, play
       <strong>SHOW</strong>
       <span className="seq-muted">{blocks.filter(b => !b.background).length} patterns · {fmt(length)}</span>
       <div className="seq-add">
-        <button className="sp-primary" onClick={() => setMenu(m => !m)} aria-expanded={menu}>+ Add pattern</button>
-        {menu && <div className="seq-menu" role="menu">
+        <button className="sp-primary" aria-expanded={!!menu} onClick={e => {
+          // Fixed position above the button: the timeline panel clips anything inside it.
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenu(m => m ? false : { left: r.left, bottom: window.innerHeight - r.top + 4, maxHeight: Math.max(160, r.top - 12) });
+        }}>+ Add pattern</button>
+        {menu && <div className="seq-menu" role="menu" style={menu}>
+          <button role="menuitem" className="seq-menu-create" onClick={() => { setMenu(false); setCreator({ block: null }); }}><b>✎ Create your own pattern…</b><small>Build a pattern from a movement shape, a path, timing, height and lights</small></button>
+          {myTypes(studio).length > 0 && <div className="seq-menu-head">MY PATTERNS</div>}
+          {myTypes(studio).map(t => <button key={t.id} role="menuitem" onClick={() => add('custom', t)}><b>★ {t.name}</b><small>Your pattern type</small></button>)}
+          <div className="seq-menu-head">READY-MADE</div>
           {FIELD_KINDS.map(k => <button key={k.id} role="menuitem" onClick={() => add(k.id)}><b>{k.label}</b><small>{k.hint}</small></button>)}
           <button role="menuitem" onClick={() => { setMenu(false); onPatternBuilder(); }}><b>Pattern builder…</b><small>Chase, ripple, sparkle, pulse and music-synced patterns</small></button>
         </div>}
       </div>
+      <button onClick={() => setCreator({ block: null })} title="Build your own pattern from its basic pieces">✎ Create pattern</button>
       <button onClick={onPatternBuilder} title="Chase, ripple, sparkle, pulse and music-synced patterns">✦ Pattern builder</button>
+      <button onClick={() => exportBlocks(selected ? [selected] : blocks)} title={selected ? 'Save the selected pattern to a file' : 'Save every pattern in the show to a file'}>⤓ Export{selected ? '' : ' all'}</button>
+      <button onClick={() => importRef.current?.click()} title="Add patterns from a pattern file">⤒ Import</button>
+      <input ref={importRef} type="file" accept=".json,application/json" hidden aria-label="Import patterns file" onChange={e => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
       {extras}
+      {note && <span className="seq-muted seq-note">{note}</span>}
       <span className="sp-grow" />
       <button onClick={() => setZoom(0)} aria-pressed={zoom === 0} title="Fit the whole show">Fit</button>
       <button onClick={() => setZoom(z => Math.max(2, (z || pps) / 1.5))} title="Zoom out">−</button>
@@ -211,6 +267,8 @@ export default function PreviewSequence({ studio, items, definitions, time, play
             onChange={(v, live) => (live ? onChangeLive : onChange)(s => moveBlock(s, selected, v))} />
           {selected.type !== 'recorded' && <Num label="Length" value={selected.duration} min={1} max={Math.max(1, 600 - selected.start)} step={SNAP} suffix="s"
             onChange={(v, live) => (live ? onChangeLive : onChange)(s => resizeBlock(s, selected, v))} />}
+          {selected.type === 'field' && <button className="seq-creator-btn" onClick={() => setCreator({ block: selected })}>
+            ✎ {selected.water.field?.kind === 'custom' ? 'Edit in pattern creator' : 'See how it is made (pattern creator)'}</button>}
           {selected.type === 'field' && <FieldInspector block={selected} studio={studio} items={items}
             onPatch={p => patch(p)} onPatchLive={p => patch(p, true)} />}
           {selected.type === 'builder' && <button onClick={() => onEditInBuilder(selected.recipeIds[0])}>✦ Edit in builder</button>}
@@ -218,14 +276,17 @@ export default function PreviewSequence({ studio, items, definitions, time, play
           {selected.type === 'recorded' && <p className="seq-hint">Recorded pattern ({selected.legacyIds.length} cues). You can move or delete it.
             To change its shape, add a new pattern with “+ Add pattern”.</p>}
           <div className="seq-actions">
+            <button onClick={() => exportBlocks([selected])} title="Save this pattern to a file">⤓ Export</button>
             <button onClick={() => { let id = null; onChange(s => { const r = duplicateBlock(s, selected); id = r.blockId; return r.studio; }); setTimeout(() => id && setSelectedId(id)); }}>Duplicate</button>
             <button onClick={() => { onChange(s => deleteBlock(s, selected)); setSelectedId(null); }}>Delete</button>
           </div>
         </div>
       </aside>}
     </div>
+    {creator && <PatternCreator key={creator.block?.id || 'new'} studio={studio} items={items} start={creator.block ? creator.block.start : nextStart()}
+      editBlock={creator.block} onChange={onChange} onClose={() => setCreator(null)} onExportFile={onExportFile} />}
     {context && (() => { const b = blocks.find(x => x.id === context.id); if (!b) return null; const close = () => setContext(null);
-      return <div className="seq-context" role="menu" style={{ left: context.x, top: context.y }} onPointerLeave={close}>
+      return <div className="seq-context" role="menu" style={{ left: context.x, top: Math.min(context.y, window.innerHeight - 140) }}>
         {b.type === 'builder' && <button role="menuitem" onClick={() => { close(); onEditInBuilder(b.recipeIds[0]); }}>✦ Edit in builder</button>}
         <button role="menuitem" onClick={() => { close(); onChange(s => duplicateBlock(s, b).studio); }}>Duplicate</button>
         <button role="menuitem" onClick={() => { close(); onChange(s => deleteBlock(s, b)); setSelectedId(null); }}>Delete</button>

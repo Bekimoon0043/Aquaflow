@@ -9,7 +9,7 @@ import { evaluateShowFrameAt } from '../../../show/evaluateShowFrame';
 import PreviewShowTimeline from './PreviewShowTimeline';
 import { compileStudio, inventory, readStudio } from './showModel';
 import { FIELD_KINDS, defaultField, fieldLevel, memberGeometry, sampleKeys } from './wavePatterns';
-import { deleteBlock, duplicateBlock, fieldUnitRecipes, moveBlock, resizeBlock, showBlocks, updateFieldUnit } from './showBlocks';
+import { deleteBlock, duplicateBlock, exportPatterns, fieldUnitRecipes, importPatterns, moveBlock, resizeBlock, showBlocks, updateFieldUnit } from './showBlocks';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.React = React;
@@ -142,6 +142,32 @@ describe('show blocks', () => {
   });
 });
 
+describe('pattern files', () => {
+  it('export → import into an empty show recreates the same patterns with new ids', () => {
+    const one = unit('travelling', { name: 'Wave A' }), two = unit('stadium', { start: 20, name: 'Lap B' });
+    const source = { ...studioWith([...one.recipes, ...two.recipes]), legacyClips: [
+      { id: 'r1', fixtureId: 'jet-0', type: 'device_intensity', startTime: 40, duration: 5, value: 50, patternBlockId: 'rec' },
+      { id: 'r2', fixtureId: 'ghost', type: 'device_intensity', startTime: 40, duration: 5, value: 50, patternBlockId: 'rec' }] };
+    const file = JSON.stringify(exportPatterns(source, showBlocks(source)));
+    expect(JSON.parse(file).patterns.map(p => p.name)).toEqual(['Wave A', 'Lap B', 'rec']);
+    // Target show: different group ids → matched to its own jet / light groups.
+    const target = readStudio({ studio: { groups: [{ ...groups[0], id: 'my-jets' }, { ...groups[1], id: 'my-lamps' }], recipes: [] } });
+    const result = importPatterns(target, file, items());
+    expect(result.added).toBe(3);
+    const blocks = showBlocks(result.studio);
+    expect(blocks.map(b => [b.name, b.start, b.duration])).toEqual([['Wave A', 2, 12], ['Lap B', 20, 12], ['rec', 40, 5]]);
+    expect(result.studio.recipes.every(r => ['my-jets', 'my-lamps'].includes(r.groupId))).toBe(true);
+    expect(result.studio.recipes.some(r => one.recipes.some(o => o.id === r.id))).toBe(false);
+    expect(result.studio.legacyClips).toHaveLength(1); // the clip for a missing fixture is left out
+    const { clips, issues } = compileStudio(result.studio, items());
+    expect(issues).toEqual([]);
+    expect(clips.filter(c => c.fixtureId.startsWith('jet-') && c.keys)).toHaveLength(2 * N);
+    // Importing at a time moves the earliest pattern there.
+    expect(showBlocks(importPatterns(target, file, items(), { at: 100 }).studio)[0].start).toBe(100);
+    expect(() => importPatterns(target, '{"format":"other"}', items())).toThrow(/not an AquaFlow/);
+  });
+});
+
 describe('3D show timeline (sequence view)', () => {
   let replace;
   beforeEach(() => {
@@ -168,6 +194,24 @@ describe('3D show timeline (sequence view)', () => {
     expect(studio().recipes[0].field.kind).toBe('swell');
     fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
     expect(studio().recipes[0].field.kind).toBe('travelling');
+  });
+
+  it('exports the selected pattern and imports a pattern file from the timeline bar', async () => {
+    const files = [];
+    render(<PreviewShowTimeline height={320} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add pattern' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Grand swell/ }));
+    URL.createObjectURL ??= () => ''; URL.revokeObjectURL ??= () => {};
+    const blob = vi.spyOn(URL, 'createObjectURL').mockImplementation(b => { files.push(b); return 'blob:x'; });
+    fireEvent.click(screen.getAllByRole('button', { name: /⤓ Export/ })[0]);
+    expect(files).toHaveLength(1);
+    expect(screen.getByText('Exported 1 pattern')).toBeTruthy();
+    const text = await new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.readAsText(files[0]); });
+    blob.mockRestore();
+    const input = screen.getByLabelText('Import patterns file');
+    fireEvent.change(input, { target: { files: [new File([text], 'swell.aqpattern.json', { type: 'application/json' })] } });
+    await screen.findByText('Imported 1 pattern');
+    expect(studio().recipes.filter(r => r.field?.kind === 'swell')).toHaveLength(4);
   });
 
   it('keeps the programming rows one click away', () => {
