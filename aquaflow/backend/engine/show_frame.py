@@ -14,12 +14,18 @@ Policies (see docs/AF-NEXT-005-timing.md):
   clip later in the list; overlaps are reported as diagnostics;
 * lights: active RGB channel clips define the colour, otherwise the master clip
   colour (white if absent); master is 1.0 when only RGB channels play;
-* stop / end of range / blackout produce an all-off frame.
+* stop / end of range / blackout produce an all-off frame;
+* keyed clips: optional `keys` [t0, v0, t1, v1, ...] (t seconds from clip start, strictly
+  increasing, v 0..100) with `keyMode` "linear" (default) / "step" replace `value` in the
+  level (held before the first / after the last key); invalid keys -> "invalid-keys"
+  warning and the constant `value` is used. expand_keyed_clips() flattens them for the
+  compilers that read `value` directly.
 
 Pure: no I/O, no hardware access.
 """
 from __future__ import annotations
 
+import bisect
 import math
 import re
 
@@ -97,8 +103,41 @@ def fade_factor(clip, t):
     return shape_ramp(clip["curve"], min(1.0, ramp))
 
 
+def key_value(keys, u):
+    """Keyed value at `u` seconds from clip start; keys = (times, values, mode)."""
+    times, values, mode = keys
+    if u <= times[0]:
+        return values[0]
+    if u >= times[-1]:
+        return values[-1]
+    i = bisect.bisect_right(times, u) - 1   # times[i] <= u < times[i + 1]
+    if mode == "step":
+        return values[i]
+    return values[i] + (values[i + 1] - values[i]) * (u - times[i]) / (times[i + 1] - times[i])
+
+
 def clip_level(clip, t):
-    return _clamp01(clip["value"] / 100 * fade_factor(clip, t))
+    keys = clip.get("keys")
+    value = key_value(keys, t - clip["start"]) if keys else clip["value"]
+    return _clamp01(value / 100 * fade_factor(clip, t))
+
+
+def _is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def parse_keys(raw):
+    """(times, values, mode) for a clip's valid `keys`, None when absent, False when invalid."""
+    keys = raw.get("keys")
+    if keys is None:
+        return None
+    if (not isinstance(keys, (list, tuple)) or len(keys) < 2 or len(keys) % 2
+            or not all(_is_number(k) for k in keys)):
+        return False
+    times, values = [float(k) for k in keys[0::2]], [float(k) for k in keys[1::2]]
+    if times[0] < 0 or any(b <= a for a, b in zip(times, times[1:])) or any(not 0 <= v <= 100 for v in values):
+        return False
+    return times, values, "step" if raw.get("keyMode") == "step" else "linear"
 
 
 # ─── colour ────────────────────────────────────────────────────────────
@@ -234,13 +273,19 @@ def _normalize_clip(raw, index, tempo, diagnostics):
         diagnostics.append({"code": "invalid-clip", "severity": "error", "clipId": raw.get("id"),
                             "fixtureId": raw.get("fixtureId"), "message": "Invalid timing, value or fixture; ignored."})
         return None
+    keys = parse_keys(raw)
+    if keys is False:
+        diagnostics.append({"code": "invalid-keys", "severity": "warning", "clipId": raw.get("id"),
+                            "message": "Invalid keys (need [t0, v0, t1, v1, ...], times >= 0 strictly increasing, "
+                                       "values 0..100); evaluated as the constant value."})
+        keys = None
     curve = normalize_curve(raw.get("curveType"))
     if curve is None:
         diagnostics.append({"code": "unsupported-curve", "severity": "warning", "clipId": raw.get("id"),
                             "curve": raw.get("curveType"), "message": "Unsupported curve evaluated as linear."})
     return {
         "index": index, "id": raw.get("id", f"clip-{index}"), "fixtureId": raw["fixtureId"],
-        "type": str(raw.get("type") or "device_intensity"), "start": start, "end": end, "value": value,
+        "type": str(raw.get("type") or "device_intensity"), "start": start, "end": end, "value": value, "keys": keys,
         "fadeIn": max(0.0, _finite(raw.get("fadeIn"))), "fadeOut": max(0.0, _finite(raw.get("fadeOut"))),
         "curve": curve or "linear", "color": valid_hex(raw.get("color")),
         "pan": _finite(raw.get("pan")), "tilt": _finite(raw.get("tilt")),
@@ -459,3 +504,68 @@ def evaluate_show_frame(project, time_ms, opts=None):
 def light_bytes(record):
     out = (record or {}).get("output") or {"r": 0, "g": 0, "b": 0}
     return [_round_half_up(_clamp01(out[k]) * 255) for k in ("r", "g", "b")]
+
+
+# ─── keyed clip expansion (for compilers that read `value` directly) ─────────
+
+_TIMING_FIELDS = ("start", "end", "startBeat", "durationBeats", "keys", "keyMode")
+
+
+def expand_keyed_clips(clips, step=0.25, tempo=None):
+    """Flatten keyed clips into consecutive constant clips; other clips pass through untouched.
+
+    For compilers/validators that read a clip's constant `value` (Siemens compile_show,
+    translate_show, preflight). show_frame itself evaluates `keys` directly.
+
+    A valid keyed clip [start, end) is cut at every key time inside it. Segments whose
+    level varies - linear segments between two keys, and any segment touching the fade-in
+    or fade-out ramp - are further split into n = max(1, round(length / step)) equal
+    pieces. Each piece is a constant clip whose `value` is the evaluator level
+    (clip_level: key value x fade x curve) sampled at the piece MIDPOINT, x100, rounded to
+    4 decimals; fades are thus baked in (fadeIn = fadeOut = 0, curveType "linear").
+    Adjacent pieces with equal values are merged. Pieces cover exactly [start, end) with
+    no gaps or overlaps (each piece's startTime + duration is the next piece's startTime
+    up to float rounding), use startTime/duration timing, keep every other field, get ids
+    "<id>~<n>" (n from 0) and `keyedFrom` = the original id. Keyed clips that are muted,
+    disabled, invalid (bad keys or timing) are returned unchanged.
+    """
+    step = float(step) if _is_number(step) and step > 0 else 0.25
+    tempo_map = normalize_tempo(tempo)
+    out = []
+    for index, raw in enumerate(clips or []):
+        if (not isinstance(raw, dict) or raw.get("keys") is None or raw.get("muted") is True
+                or raw.get("disabled") is True or raw.get("isMuted") is True):
+            out.append(raw)
+            continue
+        clip = _normalize_clip(raw, index, tempo_map, [])
+        if clip is None or not clip["keys"]:
+            out.append(raw)
+            continue
+        start, end = clip["start"], clip["end"]
+        duration = end - start
+        times = clip["keys"][0]
+        cuts = sorted({0.0, duration, *(k for k in times if 0 < k < duration)})
+        linear = clip["keys"][2] == "linear"
+        fade_in_end, fade_out_start = clip["fadeIn"], duration - clip["fadeOut"]
+        bounds = [0.0]
+        for a, b in zip(cuts, cuts[1:]):
+            varying = (linear and times[0] < b and a < times[-1]) or \
+                (clip["fadeIn"] > 0 and a < fade_in_end) or (clip["fadeOut"] > 0 and b > fade_out_start)
+            n = max(1, round((b - a) / step)) if varying else 1
+            bounds.extend(a + (b - a) * i / n for i in range(1, n))
+            bounds.append(b)
+        pieces = []
+        for a, b in zip(bounds, bounds[1:]):
+            value = round(clip_level(clip, start + (a + b) / 2) * 100, 4)
+            if pieces and pieces[-1][2] == value:
+                pieces[-1][1] = b
+            else:
+                pieces.append([a, b, value])
+        base = {k: v for k, v in raw.items() if k not in _TIMING_FIELDS}
+        base_id = raw.get("id", f"clip-{index}")
+        for n, (a, b, value) in enumerate(pieces):
+            piece_start = start + a
+            out.append({**base, "id": f"{base_id}~{n}", "keyedFrom": base_id, "startTime": piece_start,
+                        "duration": (end if b == duration else start + b) - piece_start, "value": value,
+                        "fadeIn": 0, "fadeOut": 0, "curveType": "linear"})
+    return out

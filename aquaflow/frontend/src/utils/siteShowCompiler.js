@@ -1,4 +1,5 @@
 /** Local timeline conversion only: no API, socket, device writes, or inferred addresses. */
+import { expandKeyedClips } from "../show/evaluateShowFrame.js";
 const SUPPORTED_TRACKS = new Set(["solenoid_open", "pump_speed", "motion_intensity", "device_intensity", "device_enable"]);
 const emptyGroups = () => ({ "1": [], "2": [], "9": [], "17": [], "25": [] });
 export const CAPTURED_SITE_SUPPORT = Object.freeze([9, 25, 29, 31, 32, 33, 37]);
@@ -13,7 +14,8 @@ export function createSiteWaterTrack(fixture) {
     type: mapped ? "solenoid_open" : "device_intensity" };
 }
 
-export function readWaterTimeline(clips = [], fixtures = []) {
+export function readWaterTimeline(rawClips = [], fixtures = []) {
+  const clips = expandKeyedClips(rawClips);
   if (!clips.length) throw new Error("Generate water clips in the Arrays panel first.");
   const byId = new Map(fixtures.map(f => [f.id, f]));
   const entries = clips.map(clip => {

@@ -1,5 +1,5 @@
 import { classifyFixtureType } from "../hooks/fixtureTypeMap";
-import { evaluateShowFrameAt, lightViewState, normalizeCurve } from "../show/evaluateShowFrame";
+import { evaluateShowFrameAt, lightViewState, normalizeCurve, parseKeys } from "../show/evaluateShowFrame";
 
 const WATER_TYPES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity"]);
 const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
@@ -8,35 +8,48 @@ const PUMP_TYPES = new Set(["pump_speed"]);
 const hexColor = value => /^#[0-9a-f]{6}$/i.test(value || "") ? value : "#ffffff";
 
 /** Convert editable Show Programmer clips to an isolated 3D visualization. */
-export function createFullShowPreview(clips, fixtures, name = "Full fountain show") {
+export function createFullShowPreview(clips, fixtures, name = "Full fountain show", options = {}) {
   if (!Array.isArray(clips) || !clips.length) throw new Error("Add show clips before opening the 3D preview.");
+  const skipUnsupported = Boolean(options.skipUnsupported);
   const byId = new Map((fixtures || []).map(fixture => [fixture.id, fixture]));
-  const visualClips = clips.map(clip => {
+  const visualClips = [];
+  let skippedClips = 0;
+  for (const clip of clips) {
     const fixture = byId.get(clip.fixtureId);
-    if (!fixture) throw new Error(`${clip.name || clip.id}: its engineering fixture is missing.`);
+    if (!fixture) {
+      if (skipUnsupported) { skippedClips++; continue; }
+      throw new Error(`${clip.name || clip.id}: its engineering fixture is missing.`);
+    }
     const category = classifyFixtureType(fixture.type);
     const type = clip.type;
     const allowed = category === "light" ? LIGHT_TYPES.has(type)
-      : category === "equipment" ? fixture.type === "pump" && PUMP_TYPES.has(type)
+      : category === "equipment" ? /pump/i.test(fixture.type) && PUMP_TYPES.has(type)
         : WATER_TYPES.has(type) || (String(fixture.type).startsWith("nozzle_") && PUMP_TYPES.has(type))
           || (String(fixture.type).startsWith("motion") && MOTION_TYPES.has(type));
-    if (!allowed) throw new Error(`${clip.name || clip.id}: this track cannot yet be shown in the 3D design preview.`);
+    if (!allowed) {
+      if (skipUnsupported) { skippedClips++; continue; }
+      throw new Error(`${clip.name || clip.id}: this track cannot yet be shown in the 3D design preview.`);
+    }
     const start = Number(clip.startTime), duration = Number(clip.duration), value = Number(clip.value);
     const fadeIn = Number(clip.fadeIn || 0), fadeOut = Number(clip.fadeOut || 0);
     if (![start, duration, value, fadeIn, fadeOut].every(Number.isFinite) || start < 0 || duration <= 0
       || fadeIn < 0 || fadeOut < 0 || fadeIn + fadeOut > duration
       || (MOTION_TYPES.has(type) ? Math.abs(value) > 60 : value < 0 || value > 100)) {
+      if (skipUnsupported) { skippedClips++; continue; }
       throw new Error(`${clip.name || clip.id}: invalid timing, value, or fade.`);
     }
     // Fade curves are evaluated by the canonical show frame (linear/ease/step).
     if ((clip.curveType && normalizeCurve(clip.curveType) === null)
       || (clip.effects || []).some(effect => effect.type !== "basic")) {
+      if (skipUnsupported) { skippedClips++; continue; }
       throw new Error(`${clip.name || clip.id}: convert complex effects to timed clips before the 3D preview.`);
     }
-    return { id: clip.id, fixtureId: fixture.id, type, start, end: start + duration, value, fadeIn, fadeOut,
+    const keyed = Array.isArray(clip.keys) && parseKeys(clip.keys, clip.keyMode) ? { keys: clip.keys, keyMode: clip.keyMode } : {};
+    visualClips.push({ id: clip.id, fixtureId: fixture.id, type, start, end: start + duration, value, fadeIn, fadeOut, ...keyed,
       curveType: normalizeCurve(clip.curveType) || "linear", color: hexColor(clip.color), pan: Number.isFinite(Number(clip.pan)) ? Number(clip.pan) : 0,
-      tilt: Number.isFinite(Number(clip.tilt)) ? Number(clip.tilt) : 0 };
-  });
+      tilt: Number.isFinite(Number(clip.tilt)) ? Number(clip.tilt) : 0 });
+  }
+  if (!visualClips.length) throw new Error("The timeline has no channels that can be shown in the 3D preview.");
   const duration = Math.max(...visualClips.map(clip => clip.end));
   if (duration > 600) throw new Error("3D show previews must fit within 10 minutes.");
   const steps = [];
@@ -44,7 +57,7 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
   while (remaining > 60000) { steps.push({ duration_ms: 60000, groups: {} }); remaining -= 60000; }
   if (remaining < 100 && steps.length) { steps.at(-1).duration_ms -= 100 - remaining; remaining = 100; }
   steps.push({ duration_ms: remaining, groups: {} });
-  return { id: "full-show-design-preview", name, steps, visualClips };
+  return { id: "full-show-design-preview", name, steps, visualClips, skippedClips };
 }
 
 // Canonical project for a preview plan, cached per (visualClips, fixtures) pair so a
@@ -59,7 +72,7 @@ export function previewPlanProject(plan, fixtures = EMPTY) {
   if (!project) {
     project = { fixtures, clips: clips.map(clip => ({ id: clip.id, fixtureId: clip.fixtureId, type: clip.type,
       start: clip.start, end: clip.end, value: clip.value, fadeIn: clip.fadeIn, fadeOut: clip.fadeOut,
-      curveType: clip.curveType, color: clip.color, pan: clip.pan, tilt: clip.tilt })) };
+      curveType: clip.curveType, color: clip.color, pan: clip.pan, tilt: clip.tilt, keys: clip.keys, keyMode: clip.keyMode })) };
     byFixtures.set(fixtures, project);
   }
   return project;

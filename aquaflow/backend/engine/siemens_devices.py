@@ -23,6 +23,7 @@ import io
 import math
 import re
 
+from engine.show_frame import expand_keyed_clips
 from engine.siemens_site import (
     CAPACITY, CONTRACT, _tia_defaults, signature, validate_site,
 )
@@ -1023,7 +1024,7 @@ def translate_show(site, clips):
     pump_clips, light_clips = {}, []
     report = {"input": len(clips), "nozzle_clips": 0, "ignored": 0, "ignored_devices": [], "capped": 0,
               "stretched": 0, "merged": 0, "auto_pumps": []}
-    for clip in clips:
+    for clip in expand_keyed_clips(clips):   # keyed clips -> constant clips (values read below)
         if clip.get("muted") is True or clip.get("disabled") is True:
             continue
         fid, kind = clip.get("fixtureId"), clip.get("type", "")

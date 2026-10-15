@@ -456,7 +456,7 @@ class ShowEngine:
         # AF-NEXT-004: fades/curves use the canonical show-frame envelope
         # (engine.show_frame) and overlapping clips on one device+type resolve
         # highest-takes-precedence (ties: later clip) instead of last-command-wins.
-        from engine.show_frame import fade_factor, normalize_curve
+        from engine.show_frame import fade_factor, key_value, normalize_curve, parse_keys
         winners = {}
         for track in active_tracks:
             for clip in track.get("clips", []):
@@ -472,12 +472,14 @@ class ShowEngine:
                         "fadeOut": max(0.0, float(clip.get("fadeOut", 0) or 0)),
                         "curve": normalize_curve(clip.get("curveType")) or "linear",
                     }, t)
+                    keys = parse_keys(clip)   # keyed clip: automation curve replaces intensity
                     command = {
                         "track_id": track.get("id"),
                         "device_id": track.get("deviceId"),
                         "type": self._normalize_track_type(track.get("type")),
                         "label": clip.get("label"),
-                        "intensity": float(clip.get("intensity", 100)) / 100.0 * envelope,
+                        "intensity": (key_value(keys, t - clip_start) if keys else float(clip.get("intensity", 100)))
+                        / 100.0 * envelope,
                         "progress": progress,
                         "clip_id": clip.get("id"),
                         "color": (

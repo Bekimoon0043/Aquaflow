@@ -6,7 +6,7 @@
  *              session lock + clean-save log in the main process)
  *   browser  → IndexedDB "aquaflow-autosave-v1" + a localStorage session lock
  *
- *   backend.write(projectKey, project, meta) → { id, savedAt }
+ *   backend.write(projectKey, project, meta) → { id, savedAt }   (project: object or its JSON string)
  *   backend.list(projectKey|null)            → [{ id, projectKey, name, savedAt, time, originalPath }]
  *   backend.read(id)                          → { meta, project }
  *   backend.discard(id|null)
@@ -17,21 +17,40 @@
  * autosave hook surfaces them); nothing here swallows a failed write.
  */
 
-export const SNAPSHOT_LIMIT = 10;
-export const SNAPSHOT_GLOBAL_LIMIT = 50;
+export const SNAPSHOT_LIMIT = 3;                              // per project
+export const SNAPSHOT_GLOBAL_LIMIT = 50;                     // across all projects
+export const SNAPSHOT_MAX_TOTAL_BYTES = 300 * 1024 * 1024;   // across all projects
 
 export const desktopProjectBridge = () =>
   (typeof window !== "undefined" && window.aquaflow?.project) ? window.aquaflow.project : null;
 
-/** Pure: which snapshots to delete so each project keeps `limit` newest (and ≤ globalLimit overall). */
-export function planSnapshotRotation(entries, limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT) {
+/**
+ * Pure: which snapshots to delete so each project keeps `limit` newest, at most
+ * `globalLimit` overall and at most `maxTotalBytes` in total (entry.size), oldest first.
+ * The newest snapshot of every project is always kept — it is the one crash recovery offers.
+ */
+export function planSnapshotRotation(entries, limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT, maxTotalBytes = Infinity) {
   const sorted = [...entries].sort((a, b) => b.time - a.time || String(b.id).localeCompare(String(a.id)));
+  const keyOf = (e) => e.projectKey ?? e.key;
+  const newest = new Set();
   const perKey = new Map();
-  const keep = [], drop = [];
+  let count = 0, bytes = 0;
   for (const entry of sorted) {
-    const n = (perKey.get(entry.projectKey) || 0) + 1;
-    perKey.set(entry.projectKey, n);
-    if (n > limit || keep.length >= globalLimit) drop.push(entry); else keep.push(entry);
+    if (perKey.has(keyOf(entry))) continue;
+    perKey.set(keyOf(entry), 1);
+    newest.add(entry);
+    count += 1; bytes += Number(entry.size) || 0;
+  }
+  const keep = [], drop = [];
+  let overBudget = false;
+  for (const entry of sorted) {
+    if (newest.has(entry)) { keep.push(entry); continue; }
+    const n = perKey.get(keyOf(entry)) + 1;
+    perKey.set(keyOf(entry), n);
+    const size = Number(entry.size) || 0;
+    if (!overBudget && bytes + size > maxTotalBytes) overBudget = true;
+    if (n > limit || count >= globalLimit || overBudget) { drop.push(entry); continue; }
+    keep.push(entry); count += 1; bytes += size;
   }
   return { keep, drop };
 }
@@ -74,19 +93,25 @@ function readCleanSaves(storage) {
 
 // ── Generic key/value snapshot backend (IndexedDB in the browser, Map in tests) ──────
 
-export function createKvSnapshotBackend(kv, { limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT, now = () => Date.now(), storage = globalThis.localStorage, session = null } = {}) {
+export function createKvSnapshotBackend(kv, { limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT, maxTotalBytes = SNAPSHOT_MAX_TOTAL_BYTES, now = () => Date.now(), storage = globalThis.localStorage, session = null } = {}) {
   let seq = 0;
-  const metaOf = ({ project, ...meta }) => meta;
+  // `project` may be the object or (from autosave) its JSON string, stored as-is.
+  const metaOf = ({ project, projectJson, ...meta }) => meta;
   return {
     kind: "browser",
     async write(projectKey, project, meta = {}) {
       const time = now();
       seq = (seq + 1) % 1000;
       const id = `snap-${String(time).padStart(13, "0")}-${String(seq).padStart(3, "0")}`;
-      const record = { ...meta, id, projectKey: String(projectKey || "untitled"), time, savedAt: new Date(time).toISOString(), project };
+      const isJson = typeof project === "string";
+      const record = {
+        ...meta, id, projectKey: String(projectKey || "untitled"), time, savedAt: new Date(time).toISOString(),
+        size: isJson ? project.length : Number(meta.bytes) || 0,
+        ...(isJson ? { projectJson: project } : { project }),
+      };
       await kv.put(record);
       const all = (await kv.getAll()).map(metaOf);
-      const { drop } = planSnapshotRotation(all, limit, globalLimit);
+      const { drop } = planSnapshotRotation(all, limit, globalLimit, maxTotalBytes);
       for (const entry of drop) await kv.delete(entry.id);
       return { id, savedAt: record.savedAt };
     },
@@ -97,7 +122,7 @@ export function createKvSnapshotBackend(kv, { limit = SNAPSHOT_LIMIT, globalLimi
     async read(id) {
       const rec = await kv.get(id);
       if (!rec) throw new Error("Snapshot not found.");
-      return { meta: metaOf(rec), project: rec.project };
+      return { meta: metaOf(rec), project: typeof rec.projectJson === "string" ? JSON.parse(rec.projectJson) : rec.project };
     },
     async discard(id = null) {
       if (id == null) { for (const s of await kv.getAll()) await kv.delete(s.id); return true; }

@@ -31,7 +31,7 @@ import {
   DEFAULT_SAFETY_LIMITS,
   DEVICE_EMERGENCY_STATE,
 } from "./runtimeSignalSchema.js";
-import { evaluateShowFrameAt, normalizeCurve, showDiagnostics } from "../show/evaluateShowFrame.js";
+import { evaluateShowFrameAt, expandKeyedClips, normalizeCurve, showDiagnostics } from "../show/evaluateShowFrame.js";
 
 // ─── Compiler Version ────────────────────────────────────────────────────────
 
@@ -105,6 +105,7 @@ export function compileShow({
   const warnings = [];
 
   // ── 1. Validate inputs ────────────────────────────────────────────────────
+  timelineClips = expandKeyedClips(timelineClips);
   const validationResult = _validateInputs(timelineClips, deviceRegistry);
   errors.push(...validationResult.errors);
   warnings.push(...validationResult.warnings);

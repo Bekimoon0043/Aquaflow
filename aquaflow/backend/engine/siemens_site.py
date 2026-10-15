@@ -15,7 +15,7 @@ import struct
 import uuid
 import zlib
 
-from engine.show_frame import evaluate_show_frame_at, valid_hex
+from engine.show_frame import evaluate_show_frame_at, expand_keyed_clips, valid_hex
 from engine.siemens_contract import (
     CONTRACT_VERSION, DB_SIZE, LIGHT_CAPACITY, LIGHT_COMMAND_OFFSET, PUMP_CAPACITY,
     PUMP_COMMAND_OFFSET, PUMP_MODE_OFFSET, VALVE_CAPACITY,
@@ -418,6 +418,8 @@ def compile_show(site, clips):
     """
     if not clips or len(clips) > 20000:
         raise ValueError("Provide between 1 and 20000 clips")
+    # Keyed clips become consecutive constant clips: the PLC show carries plain values.
+    clips = expand_keyed_clips(clips)
     from services.preflight import PreflightError, run_preflight, siemens_target
     result = run_preflight({"clips": clips}, siemens_target(site))
     if not result["ok"]:

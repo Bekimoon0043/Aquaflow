@@ -25,7 +25,7 @@ import json
 import math
 import zlib
 
-from engine.show_frame import evaluate_show_frame_at, prepare_show
+from engine.show_frame import evaluate_show_frame_at, expand_keyed_clips, prepare_show
 
 PREVIEW_ONLY_LABEL = "PREVIEW ONLY — not sent to hardware"
 HARDWARE_TARGETS = {"siemens", "dmx", "artnet", "ican", "modbus", "runtime"}
@@ -131,7 +131,7 @@ def _label(fx, fid):
 def _clip_target(raw, clip_id):
     """Timeline item that owns a resolved clip: the Studio recipe, else the clip itself."""
     raw = raw or {}
-    return _first(raw.get("studioRecipeId"), raw.get("patternBlockId"), clip_id)
+    return _first(raw.get("studioRecipeId"), raw.get("patternBlockId"), raw.get("keyedFrom"), clip_id)
 
 
 def _fixture_class(fx, frame_kind, clip_types=()):
@@ -248,7 +248,9 @@ def run_preflight(project, target=None):
     site = target.get("site") if kind == "siemens" else None
     issues = []
 
-    raw_clips = [c for c in (project.get("clips") or []) if isinstance(c, dict)]
+    # Keyed clips are flattened into constant clips: every check below reads `value`.
+    raw_clips = expand_keyed_clips([c for c in (project.get("clips") or []) if isinstance(c, dict)],
+                                   tempo=project.get("tempo"))
     fixtures = [f for f in (project.get("fixtures") or []) if isinstance(f, dict) and f.get("id") is not None]
     if site:
         fixtures = _site_fixtures(site)
@@ -881,7 +883,8 @@ def engine_project(engine):
                           "value": _num(clip.get("intensity"), 100.0), "fadeIn": clip.get("fadeIn", 0),
                           "fadeOut": clip.get("fadeOut", 0), "curveType": clip.get("curveType"),
                           "muted": clip.get("muted") is True or track.get("muted") is True,
-                          "disabled": clip.get("disabled")})
+                          "disabled": clip.get("disabled"),
+                          **({"keys": clip["keys"], "keyMode": clip.get("keyMode")} if "keys" in clip else {})})
     return {"fixtures": fixtures, "clips": clips}
 
 

@@ -34,6 +34,7 @@ import { createICANSiteEngineeringProject } from "../../data/icanSiteEngineering
 import { createAuroraDemoProject, AURORA_DEMO_ID } from "../../data/auroraDemoProject";
 import { createAuroraDemoShow } from "../../utils/auroraDemoShow";
 import { createFullShowPreview } from "../../utils/fullShowPreview";
+import { expandKeyedClips } from "../../show/evaluateShowFrame";
 import { PatternBlockInspector, PatternBlockLanes, PatternBlockList } from "./PatternBlocks";
 import { createPatternBlock, getPatternBlocks, patternBlockId, transformPatternBlock, repeatPatternBlock,
   duplicatePatternBlock, deletePatternBlock, unpackPatternBlock, editPatternClip, standaloneClip, filterPatternClips } from "../../utils/patternBlocks";
@@ -91,7 +92,7 @@ const isMotionTrack = (type = "") =>
 const isIntensityTrack = (type = "") =>
   !isMotionTrack(type);
 const compileClipsToRuntimeEvents = (clips = []) => {
-  return clips.map((clip) => ({
+  return expandKeyedClips(clips).map((clip) => ({
     id: `runtime-${clip.id}`,
     clipId: clip.id,
     trackId: clip.trackId,

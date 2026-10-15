@@ -6,7 +6,9 @@
 //  * atomicWriteFile — write <file>.tmp, fsync, keep <file>.bak of the previous version,
 //    rename over <file>. A failure at any step leaves the original byte-for-byte intact.
 //  * snapshot store  — rolling N timestamped autosave snapshots per project in the user
-//    data dir. Snapshots never touch the original project file.
+//    data dir, plus a total byte cap; pruned after every write and once at startup. The
+//    newest snapshot of each project is never pruned. Snapshots never touch the original
+//    project file.
 //  * session lock    — a lock file written at startup and removed on clean quit. Finding it
 //    at the next startup means the previous session ended uncleanly (crash / kill).
 //  * clean-save log  — per project key, when the user last saved cleanly. The renderer
@@ -19,8 +21,10 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const SNAPSHOT_LIMIT = 10;          // per project
-const SNAPSHOT_GLOBAL_LIMIT = 50;   // across all projects
+const SNAPSHOT_LIMIT = 3;                              // per project
+const SNAPSHOT_GLOBAL_LIMIT = 50;                     // across all projects
+const SNAPSHOT_MAX_TOTAL_BYTES = 300 * 1024 * 1024;   // across all projects
+const SNAPSHOT_HEAD_BYTES = 64 * 1024;                // enough to read the meta block
 const MAX_PROJECT_BYTES = 512 * 1024 * 1024;
 const MAX_ASSET_READ_BYTES = 512 * 1024 * 1024;
 const PROJECT_EXTENSIONS = [".aqua", ".aquapkg", ".aquashow", ".json"];
@@ -92,20 +96,75 @@ function safeKey(key) {
 
 const SNAP_RE = /^snap-(\d{13})-(\d{3})-([a-zA-Z0-9_-]+)\.json$/;
 
-/** Pure rotation plan: returns the entries to delete so each key keeps `limit` newest. */
-function planSnapshotRotation(entries, limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT) {
+/**
+ * Pure rotation plan: which entries to delete so each key keeps `limit` newest, at most
+ * `globalLimit` overall and at most `maxTotalBytes` (entry.size) in total, oldest first.
+ * The newest entry of every key is always kept: that is the snapshot crash recovery offers.
+ */
+function planSnapshotRotation(entries, limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT, maxTotalBytes = Infinity) {
   const sorted = [...entries].sort((a, b) => b.time - a.time || b.seq - a.seq);
+  const newest = new Set();
   const perKey = new Map();
-  const keep = [], drop = [];
+  let count = 0, bytes = 0;
   for (const entry of sorted) {
-    const n = (perKey.get(entry.key) || 0) + 1;
+    if (perKey.has(entry.key)) continue;
+    perKey.set(entry.key, 1);
+    newest.add(entry);
+    count += 1; bytes += Number(entry.size) || 0;
+  }
+  const keep = [], drop = [];
+  let overBudget = false;
+  for (const entry of sorted) {
+    if (newest.has(entry)) { keep.push(entry); continue; }
+    const n = perKey.get(entry.key) + 1;
     perKey.set(entry.key, n);
-    if (n > limit || keep.length >= globalLimit) drop.push(entry); else keep.push(entry);
+    const size = Number(entry.size) || 0;
+    if (!overBudget && bytes + size > maxTotalBytes) overBudget = true;
+    if (n > limit || count >= globalLimit || overBudget) { drop.push(entry); continue; }
+    keep.push(entry); count += 1; bytes += size;
   }
   return { keep, drop };
 }
 
-function createSnapshotStore({ dir, limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT, fs: fsx = fs, now = () => Date.now() }) {
+/**
+ * Read a snapshot's meta block without parsing the (possibly 100 MB) project. Snapshot
+ * files are `{"aquaflowSnapshot":1,"meta":{...},"project":...}` — meta always precedes the
+ * project — so the first SNAPSHOT_HEAD_BYTES hold it. Returns null when it cannot be found
+ * there (the caller falls back to a full parse); throws when the file is unreadable or
+ * visibly truncated.
+ */
+function readSnapshotHeadMeta(file, fsx = fs) {
+  const fd = fsx.openSync(file, "r");
+  let head, tail;
+  try {
+    const size = fsx.fstatSync(fd).size;
+    const buf = Buffer.alloc(Math.min(SNAPSHOT_HEAD_BYTES, size));
+    const n = fsx.readSync(fd, buf, 0, buf.length, 0);
+    head = buf.toString("utf8", 0, n);
+    const tb = Buffer.alloc(Math.min(16, size));
+    const tn = fsx.readSync(fd, tb, 0, tb.length, Math.max(0, size - tb.length));
+    tail = tb.toString("utf8", 0, tn).trimEnd();
+  } finally { fsx.closeSync(fd); }
+  if (!tail.endsWith("}")) throw new Error("Truncated snapshot.");
+  const at = head.indexOf('"meta":');
+  if (at < 0 || at > 64) return null;
+  const start = head.indexOf("{", at + 7);
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < head.length; i++) {
+    const c = head[i];
+    if (inStr) {
+      if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth += 1;
+    else if (c === "}" && --depth === 0) return JSON.parse(head.slice(start, i + 1));
+  }
+  return null;
+}
+
+function createSnapshotStore({ dir, limit = SNAPSHOT_LIMIT, globalLimit = SNAPSHOT_GLOBAL_LIMIT, maxTotalBytes = SNAPSHOT_MAX_TOTAL_BYTES, fs: fsx = fs, now = () => Date.now() }) {
   let seq = 0;
   const list = () => {
     let names = [];
@@ -115,26 +174,66 @@ function createSnapshotStore({ dir, limit = SNAPSHOT_LIMIT, globalLimit = SNAPSH
       return m ? { name, file: path.join(dir, name), time: Number(m[1]), seq: Number(m[2]), key: m[3] } : null;
     }).filter(Boolean).sort((a, b) => b.time - a.time || b.seq - a.seq);
   };
+  const withSizes = (entries) => entries.map((e) => {
+    try { return { ...e, size: fsx.statSync(e.file).size }; } catch { return { ...e, size: 0 }; }
+  });
   const readMeta = (entry) => {
+    const base = { id: entry.name, key: entry.key, savedAt: new Date(entry.time).toISOString(), time: entry.time };
     try {
-      const doc = JSON.parse(fsx.readFileSync(entry.file, "utf8"));
-      return { id: entry.name, key: entry.key, savedAt: new Date(entry.time).toISOString(), time: entry.time, ...(doc.meta || {}) };
+      let meta = readSnapshotHeadMeta(entry.file, fsx);
+      if (meta === null) meta = JSON.parse(fsx.readFileSync(entry.file, "utf8")).meta;
+      return { ...base, ...(meta || {}) };
     } catch {
-      return { id: entry.name, key: entry.key, savedAt: new Date(entry.time).toISOString(), time: entry.time, corrupt: true };
+      return { ...base, corrupt: true };
     }
+  };
+  /**
+   * Apply retention (per project, global count, total bytes). With `removeTemp`, also
+   * delete *.tmp files left by a write interrupted by a crash (startup only — no write is
+   * in flight then).
+   */
+  const prune = ({ removeTemp = false } = {}) => {
+    const entries = withSizes(list());
+    const { keep, drop } = planSnapshotRotation(entries, limit, globalLimit, maxTotalBytes);
+    let deleted = 0, freedBytes = 0;
+    for (const entry of drop) {
+      try { fsx.rmSync(entry.file, { force: true }); deleted += 1; freedBytes += entry.size; } catch { /* next prune retries */ }
+    }
+    if (removeTemp) {
+      let names = [];
+      try { names = fsx.readdirSync(dir); } catch { names = []; }
+      for (const name of names) {
+        if (!name.endsWith(".tmp")) continue;
+        const file = path.join(dir, name);
+        try { const size = fsx.statSync(file).size; fsx.rmSync(file, { force: true }); deleted += 1; freedBytes += size; } catch { /* ignore */ }
+      }
+    }
+    return { deleted, freedBytes, kept: keep.length, keptBytes: keep.reduce((t, e) => t + (e.size || 0), 0) };
   };
   return {
     dir,
+    prune,
+    /**
+     * `project` is the project object or its JSON text. Autosave sends the string it already
+     * built, so a large project is not serialised a second time in the main process.
+     */
     write(projectKey, project, meta = {}) {
       const key = safeKey(projectKey);
       const time = now();
       seq = (seq + 1) % 1000;
       const name = `snap-${String(time).padStart(13, "0")}-${String(seq).padStart(3, "0")}-${key}.json`;
-      const doc = { aquaflowSnapshot: 1, meta: { ...meta, projectKey: String(projectKey || "untitled"), savedAt: new Date(time).toISOString() }, project };
-      atomicWriteFile(path.join(dir, name), JSON.stringify(doc), { fs: fsx, keepBackup: false });
-      const { drop } = planSnapshotRotation(list(), limit, globalLimit);
-      for (const entry of drop) { try { fsx.rmSync(entry.file, { force: true }); } catch { /* next write retries */ } }
-      return { id: name, key, savedAt: doc.meta.savedAt };
+      const fullMeta = { ...meta, projectKey: String(projectKey || "untitled"), savedAt: new Date(time).toISOString() };
+      let body;
+      if (typeof project === "string") {
+        if (!/^\s*[{[]/.test(project.slice(0, 64))) throw new Error("Snapshot project must be JSON.");
+        body = project;
+      } else {
+        body = JSON.stringify(project === undefined ? null : project);
+      }
+      const text = `{"aquaflowSnapshot":1,"meta":${JSON.stringify(fullMeta)},"project":${body}}`;
+      const written = atomicWriteFile(path.join(dir, name), text, { fs: fsx, keepBackup: false });
+      prune();
+      return { id: name, key, savedAt: fullMeta.savedAt, size: written.size };
     },
     list(projectKey) {
       const key = projectKey == null ? null : safeKey(projectKey);
@@ -263,6 +362,10 @@ function assertProjectPath(p) {
 function registerProjectIpc({ ipcMain, dialog, getMainWindow, userDataDir, sessionInfo = null, fs: fsx = fs }) {
   const stateDir = path.join(userDataDir, "project-recovery");
   const snapshots = createSnapshotStore({ dir: path.join(stateDir, "snapshots"), fs: fsx });
+  // Startup retention: trims folders that grew under older builds (10 per project, no byte
+  // cap) and removes temp files left by a crash mid-write. Never fatal for startup.
+  let startupPrune = null;
+  try { startupPrune = snapshots.prune({ removeTemp: true }); } catch (e) { startupPrune = { error: String(e && e.message ? e.message : e) }; }
   const senderAllowed = (event) => {
     const win = getMainWindow();
     return !!win && event.sender === win.webContents && (!event.senderFrame || event.senderFrame === event.sender.mainFrame);
@@ -400,12 +503,12 @@ function registerProjectIpc({ ipcMain, dialog, getMainWindow, userDataDir, sessi
     return { ok: true, path: filePath, bytes: new Uint8Array(fsx.readFileSync(filePath)) };
   });
 
-  return { snapshots, stateDir };
+  return { snapshots, stateDir, startupPrune };
 }
 
 module.exports = {
-  SNAPSHOT_LIMIT, ASSET_EXTENSIONS,
-  atomicWriteFile, createSnapshotStore, planSnapshotRotation,
+  SNAPSHOT_LIMIT, SNAPSHOT_GLOBAL_LIMIT, SNAPSHOT_MAX_TOTAL_BYTES, ASSET_EXTENSIONS,
+  atomicWriteFile, createSnapshotStore, planSnapshotRotation, readSnapshotHeadMeta,
   acquireSessionLock, releaseSessionLock, recordCleanSave, addRecentFile, listRecentFiles,
   sha256File, describeAsset, resolveAssetPath, registerProjectIpc,
 };

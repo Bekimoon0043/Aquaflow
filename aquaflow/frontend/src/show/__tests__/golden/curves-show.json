@@ -1,26 +1,248 @@
 {
-  "contract": "aquaflow-golden-show",
-  "version": 1,
-  "description": "AF-NEXT-005 curves / tempo / sections show. Fade curves (linear, ease-in, ease-out, ease-in-out, step), a beat-timed clip through a tempo change (120 BPM to 60 BPM at 4 s), RGB channel colour and named sections. Shared with backend tests/test_show_frame.py via frame-trace.json.",
-  "fixtures": [
-    { "id": "W1", "type": "nozzle_jet" },
-    { "id": "W2", "type": "nozzle_jet" },
-    { "id": "W3", "type": "nozzle_jet" },
-    { "id": "W4", "type": "nozzle_jet" },
-    { "id": "W5", "type": "nozzle_jet" },
-    { "id": "W6", "type": "nozzle_geyser" },
-    { "id": "L3", "type": "light_rgb" }
-  ],
-  "tempo": [{ "time": 0, "bpm": 120 }, { "time": 4, "bpm": 60 }],
-  "sections": [{ "id": "intro", "name": "Intro", "start": 0, "end": 4 }, { "id": "main", "name": "Main", "start": 4, "end": 12 }],
-  "clips": [
-    { "id": "k1", "fixtureId": "W1", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "linear" },
-    { "id": "k2", "fixtureId": "W2", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "ease-in" },
-    { "id": "k3", "fixtureId": "W3", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "ease-out" },
-    { "id": "k4", "fixtureId": "W4", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "ease-in-out" },
-    { "id": "k5", "fixtureId": "W5", "type": "device_intensity", "startTime": 0, "duration": 8, "value": 100, "fadeIn": 2, "fadeOut": 2, "curveType": "step" },
-    { "id": "k6", "fixtureId": "W6", "type": "device_intensity", "startBeat": 8, "durationBeats": 8, "value": 70, "fadeIn": 1, "fadeOut": 0 },
-    { "id": "k7", "fixtureId": "L3", "type": "lighting_master", "startTime": 0, "duration": 12, "value": 50, "color": "#ffffff" },
-    { "id": "k8", "fixtureId": "L3", "type": "lighting_green", "startTime": 0, "duration": 6, "value": 100, "fadeIn": 3, "curveType": "ease-in-out" }
-  ]
+ "contract": "aquaflow-golden-show",
+ "version": 1,
+ "description": "AF-NEXT-005 curves / tempo / sections show. Fade curves (linear, ease-in, ease-out, ease-in-out, step), a beat-timed clip through a tempo change (120 BPM to 60 BPM at 4 s), RGB channel colour and named sections. Shared with backend tests/test_show_frame.py via frame-trace.json.",
+ "fixtures": [
+  {
+   "id": "W1",
+   "type": "nozzle_jet"
+  },
+  {
+   "id": "W2",
+   "type": "nozzle_jet"
+  },
+  {
+   "id": "W3",
+   "type": "nozzle_jet"
+  },
+  {
+   "id": "W4",
+   "type": "nozzle_jet"
+  },
+  {
+   "id": "W5",
+   "type": "nozzle_jet"
+  },
+  {
+   "id": "W6",
+   "type": "nozzle_geyser"
+  },
+  {
+   "id": "L3",
+   "type": "light_rgb"
+  },
+  {
+   "id": "W7",
+   "type": "nozzle_straight"
+  },
+  {
+   "id": "W8",
+   "type": "nozzle_straight"
+  },
+  {
+   "id": "W9",
+   "type": "nozzle_straight"
+  },
+  {
+   "id": "L4",
+   "type": "light_rgb"
+  }
+ ],
+ "tempo": [
+  {
+   "time": 0,
+   "bpm": 120
+  },
+  {
+   "time": 4,
+   "bpm": 60
+  }
+ ],
+ "sections": [
+  {
+   "id": "intro",
+   "name": "Intro",
+   "start": 0,
+   "end": 4
+  },
+  {
+   "id": "main",
+   "name": "Main",
+   "start": 4,
+   "end": 12
+  }
+ ],
+ "clips": [
+  {
+   "id": "k1",
+   "fixtureId": "W1",
+   "type": "device_intensity",
+   "startTime": 0,
+   "duration": 8,
+   "value": 100,
+   "fadeIn": 2,
+   "fadeOut": 2,
+   "curveType": "linear"
+  },
+  {
+   "id": "k2",
+   "fixtureId": "W2",
+   "type": "device_intensity",
+   "startTime": 0,
+   "duration": 8,
+   "value": 100,
+   "fadeIn": 2,
+   "fadeOut": 2,
+   "curveType": "ease-in"
+  },
+  {
+   "id": "k3",
+   "fixtureId": "W3",
+   "type": "device_intensity",
+   "startTime": 0,
+   "duration": 8,
+   "value": 100,
+   "fadeIn": 2,
+   "fadeOut": 2,
+   "curveType": "ease-out"
+  },
+  {
+   "id": "k4",
+   "fixtureId": "W4",
+   "type": "device_intensity",
+   "startTime": 0,
+   "duration": 8,
+   "value": 100,
+   "fadeIn": 2,
+   "fadeOut": 2,
+   "curveType": "ease-in-out"
+  },
+  {
+   "id": "k5",
+   "fixtureId": "W5",
+   "type": "device_intensity",
+   "startTime": 0,
+   "duration": 8,
+   "value": 100,
+   "fadeIn": 2,
+   "fadeOut": 2,
+   "curveType": "step"
+  },
+  {
+   "id": "k6",
+   "fixtureId": "W6",
+   "type": "device_intensity",
+   "startBeat": 8,
+   "durationBeats": 8,
+   "value": 70,
+   "fadeIn": 1,
+   "fadeOut": 0
+  },
+  {
+   "id": "k7",
+   "fixtureId": "L3",
+   "type": "lighting_master",
+   "startTime": 0,
+   "duration": 12,
+   "value": 50,
+   "color": "#ffffff"
+  },
+  {
+   "id": "k8",
+   "fixtureId": "L3",
+   "type": "lighting_green",
+   "startTime": 0,
+   "duration": 6,
+   "value": 100,
+   "fadeIn": 3,
+   "curveType": "ease-in-out"
+  },
+  {
+   "id": "kl",
+   "fixtureId": "W7",
+   "type": "device_intensity",
+   "startTime": 0.5,
+   "duration": 11,
+   "value": 90,
+   "keys": [
+    0,
+    10,
+    1.3,
+    90,
+    4.7,
+    35,
+    9.1,
+    60
+   ]
+  },
+  {
+   "id": "ks",
+   "fixtureId": "W8",
+   "type": "device_intensity",
+   "startTime": 1,
+   "duration": 10,
+   "value": 80,
+   "keyMode": "step",
+   "keys": [
+    0,
+    20,
+    2.6,
+    80,
+    6.1,
+    45
+   ]
+  },
+  {
+   "id": "kf",
+   "fixtureId": "W9",
+   "type": "device_intensity",
+   "startTime": 2,
+   "duration": 8,
+   "value": 70,
+   "fadeIn": 1.5,
+   "fadeOut": 2,
+   "curveType": "ease-in-out",
+   "keys": [
+    0,
+    30,
+    4,
+    70,
+    8,
+    15
+   ]
+  },
+  {
+   "id": "kbad",
+   "fixtureId": "W9",
+   "type": "device_enable",
+   "startTime": 0,
+   "duration": 12,
+   "value": 25,
+   "keys": [
+    0,
+    10,
+    0,
+    40
+   ]
+  },
+  {
+   "id": "klight",
+   "fixtureId": "L4",
+   "type": "lighting_master",
+   "startTime": 0,
+   "duration": 12,
+   "value": 100,
+   "color": "#3366ff",
+   "keys": [
+    0,
+    0,
+    3.3,
+    100,
+    7.7,
+    12,
+    12,
+    64
+   ]
+  }
+ ]
 }

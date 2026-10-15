@@ -80,7 +80,8 @@ export default function PreviewShowTimeline({ height = 300 }) {
   useEffect(() => {
     if (!resolved.clips.length || resolved.issues.length) return;
     try {
-      preview.replace(createFullShowPreview(resolved.clips, fixtures, projectName || '3D show preview'), 1, song || null, 'show_programmer');
+      // Channels the 3D view cannot draw are skipped rather than blocking the whole show.
+      preview.replace(createFullShowPreview(resolved.clips, fixtures, projectName || '3D show preview', { skipUnsupported: true }), 1, song || null, 'show_programmer');
       setMessage('');
     } catch (error) {
       setMessage(error.message);

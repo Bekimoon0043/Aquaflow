@@ -29,7 +29,11 @@
 //   tempo?: [{time, bpm}], sections?: [{id, start, end}], duration?, blackout? }.
 // Clips are the resolved, flat clips every AquaFlow path already shares:
 //   { id, fixtureId, type, startTime (s), duration (s), value (0..100), fadeIn, fadeOut,
-//     curveType, color, trackId, studioRecipeId, muted, pan, tilt }
+//     curveType, color, trackId, studioRecipeId, muted, pan, tilt, keys?, keyMode? }
+// Keyed clips: `keys` = [t0,v0,t1,v1,...] (t seconds from clip start, v 0..100) replaces
+// `value` with a curve, linear between keys or held ("step"); constant before the first
+// and after the last key. Invalid keys → `invalid-keys` diagnostic, constant `value`.
+// Consumers that read `value` directly call expandKeyedClips() first.
 // `start`/`end` (seconds) and `startBeat`/`durationBeats` (resolved through the tempo
 // map) are accepted as alternative timing fields. Legacy `.aqua` data is untouched:
 // this module only reads clips, it never rewrites them.
@@ -115,9 +119,73 @@ export function fadeFactor(clip, t) {
   return shapeRamp(clip.curve, Math.min(1, ramp));
 }
 
-/** Normalized clip level (0..1) at time t: value/100 × fade, clamped. */
+/**
+ * Validated keyed curve { times, values, step } from raw `keys` ([t0,v0,t1,v1,...],
+ * t relative to clip start, v 0..100) and `keyMode`, or null when invalid.
+ */
+export function parseKeys(keys, keyMode) {
+  if (!Array.isArray(keys) || keys.length < 2 || keys.length % 2) return null;
+  const n = keys.length / 2, times = new Float64Array(n), values = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = keys[2 * i], v = keys[2 * i + 1];
+    if (typeof t !== "number" || typeof v !== "number" || !Number.isFinite(t) || !Number.isFinite(v) || t < 0 || v < 0 || v > 100 || (i > 0 && t <= times[i - 1])) return null;
+    times[i] = t; values[i] = v;
+  }
+  return { times, values, step: keyMode === "step" };
+}
+
+/** Value (0..100) of a keyed curve at u seconds after the clip start. Binary search. */
+export function keyedValue(curve, u) {
+  const { times, values } = curve, last = times.length - 1;
+  if (u <= times[0]) return values[0];
+  if (u >= times[last]) return values[last];
+  let lo = 0, hi = last;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (times[mid] <= u) lo = mid; else hi = mid; }
+  if (curve.step) return values[lo];
+  return values[lo] + (values[hi] - values[lo]) * (u - times[lo]) / (times[hi] - times[lo]);
+}
+
+/** Normalized clip level (0..1) at time t: value (or keyed curve)/100 × fade, clamped. */
 export function clipLevel(clip, t) {
-  return clamp01(clip.value / 100 * fadeFactor(clip, t));
+  const value = clip.keys ? keyedValue(clip.keys, t - clip.start) : clip.value;
+  return clamp01(value / 100 * fadeFactor(clip, t));
+}
+
+/**
+ * Expand keyed clips into consecutive constant clips for consumers that read
+ * `clip.value` directly (hardware compilers, PLC limit checks, legacy timelines).
+ * Step mode: one clip per key segment. Linear mode: one clip per `step` seconds,
+ * valued at the piece midpoint (as backend show_frame.expand_keyed_clips). Other clips pass through unchanged (same objects).
+ */
+export function expandKeyedClips(clips, step = 0.25) {
+  if (!Array.isArray(clips) || !clips.some(c => c && Array.isArray(c.keys))) return clips || [];
+  const out = [];
+  for (const clip of clips) {
+    const curve = clip && Array.isArray(clip.keys) ? parseKeys(clip.keys, clip.keyMode) : null;
+    if (!curve) {
+      if (clip && Array.isArray(clip.keys)) { const { keys, keyMode, ...rest } = clip; out.push(rest); } else out.push(clip);
+      continue;
+    }
+    const { keys, keyMode, ...base } = clip;
+    const start = Number(clip.startTime ?? clip.start ?? 0), duration = Number(clip.duration);
+    if (!Number.isFinite(start) || !(duration > 0)) { out.push(base); continue; }
+    const cuts = [0];
+    if (curve.step) for (const t of curve.times) { if (t > 0 && t < duration) cuts.push(t); }
+    else for (let t = step; t < duration - 1e-9; t += step) cuts.push(Math.round(t * 1e6) / 1e6);
+    cuts.push(duration);
+    let n = 0;
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const a = cuts[i], b = cuts[i + 1];
+      if (b - a < 1e-9) continue;
+      const value = Math.round(keyedValue(curve, (a + b) / 2) * 1e4) / 1e4;
+      const prev = out.at(-1);
+      if (n > 0 && prev.value === value) { prev.duration = Math.round((prev.duration + b - a) * 1e6) / 1e6; continue; }
+      out.push({ ...base, id: `${clip.id}~${n++}`, startTime: Math.round((start + a) * 1e6) / 1e6, duration: Math.round((b - a) * 1e6) / 1e6, value,
+        fadeIn: i === 0 ? base.fadeIn : 0, fadeOut: 0 });
+    }
+    if (base.fadeOut && n > 0) out.at(-1).fadeOut = Math.min(base.fadeOut, out.at(-1).duration);
+  }
+  return out;
 }
 
 // ─── Colour ──────────────────────────────────────────────────────────────
@@ -243,12 +311,18 @@ function normalizeClip(raw, index, tempo, diagnostics) {
       message: `${raw.name || raw.id || "clip"}: invalid timing, value or fixture; ignored.` });
     return null;
   }
+  let keys = null;
+  if (raw.keys !== undefined && raw.keys !== null) {
+    keys = parseKeys(raw.keys, raw.keyMode);
+    if (!keys) diagnostics.push({ code: "invalid-keys", severity: "warning", clipId: raw.id ?? null,
+      message: `${raw.name || raw.id}: keyframes are invalid; evaluated as a constant ${value}%.` });
+  }
   const curve = normalizeCurve(raw.curveType);
   if (curve === null) diagnostics.push({ code: "unsupported-curve", severity: "warning", clipId: raw.id ?? null,
     curve: raw.curveType, message: `${raw.name || raw.id}: curve "${raw.curveType}" is not supported; evaluated as linear.` });
   return {
     index, id: raw.id ?? `clip-${index}`, fixtureId: raw.fixtureId, type: String(raw.type || "device_intensity"),
-    start, end, value, fadeIn: Math.max(0, finite(raw.fadeIn)), fadeOut: Math.max(0, finite(raw.fadeOut)),
+    start, end, value, keys, fadeIn: Math.max(0, finite(raw.fadeIn)), fadeOut: Math.max(0, finite(raw.fadeOut)),
     curve: curve ?? "linear", color: validHex(raw.color),
     pan: finite(raw.pan), tilt: finite(raw.tilt),
     recipeId: raw.studioRecipeId ?? raw.patternBlockId ?? null, trackId: raw.trackId ?? null,

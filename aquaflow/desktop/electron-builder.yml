@@ -43,7 +43,9 @@ extraResources:
   # 1.2.33 engine: same-revision backend for the AF-NEXT release (including honest
   # per-controller verification labels). Packaged smoke must pass before installation.
   # engine-1.2.32 stays available through the prior installer for rollback.
-  - from: resources/engine-1.2.33
+  # 1.2.37 engine: keyed (keyframe) clips in show_frame, preflight and the Siemens compilers.
+  # Packaged smoke: /api/health 200 before installation. engine-1.2.33 stays for rollback.
+  - from: resources/engine-1.2.37
     to: engine
     filter: ["**/*"]
   # Bundled license secret (+ update URL). resolveConfig() reads this from

@@ -149,3 +149,83 @@ test("IPC: untrusted senders are refused; save writes atomically and records a c
   assert.equal(read.content, "{\"aquaflow\":\"1.1\"}");
   assert.equal((await handlers.get("asset:read")(ok, path.join(dir, "show.aqua"))).ok, false, "asset reads are limited to media types");
 });
+
+// ── Autosave hardening: retention, byte cap, startup pruning, single serialisation ─────
+
+const snapName = (time, seq, key) => `snap-${String(time).padStart(13, "0")}-${String(seq).padStart(3, "0")}-${key}.json`;
+function seedSnapshot(dir, time, key, bytes, meta = {}) {
+  fs.mkdirSync(dir, { recursive: true });
+  // Old builds wrote JSON.stringify(doc): {"aquaflowSnapshot":1,"meta":{...},"project":{...}}
+  const doc = { aquaflowSnapshot: 1, meta: { name: key, projectKey: key, ...meta }, project: { pad: "x".repeat(Math.max(0, bytes - 120)) } };
+  fs.writeFileSync(path.join(dir, snapName(time, 1, key)), JSON.stringify(doc));
+}
+
+test("retention: default keeps 3 per project; a string project is written verbatim and listed from its head", () => {
+  const dir = tmpDir();
+  let clock = 1_700_000_000_000;
+  const store = createSnapshotStore({ dir: path.join(dir, "snaps"), now: () => (clock += 1000) });
+  for (let i = 1; i <= 6; i++) store.write("A", JSON.stringify({ rev: i }), { name: "Show A", originalPath: "C:/x.aqua" });
+  const a = store.list("A");
+  assert.equal(a.length, 3);
+  assert.deepEqual(a.map((s) => store.read(s.id).project.rev), [6, 5, 4]);
+  assert.equal(a[0].name, "Show A");
+  assert.equal(a[0].originalPath, "C:/x.aqua");
+  assert.equal(a[0].corrupt, undefined);
+  assert.throws(() => store.write("A", "not json", {}), /must be JSON/);
+});
+
+test("retention: the total byte cap deletes oldest first but never a project's newest snapshot", () => {
+  const MB = 1024 * 1024;
+  const entries = [
+    { key: "A", time: 10, seq: 0, size: 40 * MB },
+    { key: "B", time: 9, seq: 0, size: 40 * MB },
+    { key: "A", time: 8, seq: 0, size: 40 * MB },
+    { key: "B", time: 7, seq: 0, size: 40 * MB },
+    { key: "C", time: 1, seq: 0, size: 200 * MB }, // oldest overall, but C's only (newest) snapshot
+  ];
+  const { keep, drop } = planSnapshotRotation(entries, 3, 50, 300 * MB);
+  assert.deepEqual(keep.map((e) => `${e.key}${e.time}`), ["A10", "B9", "C1"]);
+  assert.deepEqual(drop.map((e) => `${e.key}${e.time}`), ["A8", "B7"]);
+  // Even when the newest snapshots alone exceed the cap they are kept.
+  const big = planSnapshotRotation([{ key: "A", time: 2, seq: 0, size: 500 * MB }, { key: "A", time: 1, seq: 0, size: 1 }], 3, 50, 300 * MB);
+  assert.deepEqual(big.keep.map((e) => e.time), [2]);
+});
+
+test("startup pruning trims an oversized snapshot folder (old 10-per-project builds) on registerProjectIpc", async () => {
+  const dir = tmpDir(), snaps = path.join(dir, "project-recovery", "snapshots");
+  const t0 = 1_700_000_000_000;
+  for (let i = 0; i < 10; i++) seedSnapshot(snaps, t0 + i * 30_000, "big", 40 * 1024);
+  for (let i = 0; i < 2; i++) seedSnapshot(snaps, t0 - 1_000_000 + i, "other", 1024);
+  fs.writeFileSync(path.join(snaps, `${snapName(t0 + 999_999, 1, "big")}.tmp`), "partial");
+  const handlers = new Map(), frame = {}, sender = { mainFrame: frame }, win = { webContents: sender };
+  const res = registerProjectIpc({ ipcMain: { handle: (n, fn) => handlers.set(n, fn) }, dialog: {}, getMainWindow: () => win, userDataDir: dir, sessionInfo: { uncleanExit: true } });
+  assert.equal(res.startupPrune.deleted, 8, "7 old 'big' snapshots + the leftover temp file");
+  const left = fs.readdirSync(snaps).sort();
+  assert.equal(left.length, 5);
+  assert.ok(left.includes(snapName(t0 + 9 * 30_000, 1, "big")), "newest snapshot of the project survives");
+  assert.ok(!left.some((n) => n.endsWith(".tmp")));
+  const info = await handlers.get("session:recovery-info")({ sender, senderFrame: frame });
+  assert.equal(info.snapshots[0].id, snapName(t0 + 9 * 30_000, 1, "big"));
+  assert.equal(info.snapshots[0].name, "big");
+  assert.equal(info.snapshots.filter((s) => s.corrupt).length, 0);
+});
+
+test("startup pruning applies the total byte cap", () => {
+  const dir = tmpDir(), snapsDir = path.join(dir, "snaps");
+  const t0 = 1_700_000_000_000;
+  for (let i = 0; i < 3; i++) seedSnapshot(snapsDir, t0 + i, "A", 10_000);
+  for (let i = 0; i < 3; i++) seedSnapshot(snapsDir, t0 - 100 + i, "B", 10_000);
+  const store = createSnapshotStore({ dir: snapsDir, maxTotalBytes: 35_000 });
+  const r = store.prune();
+  assert.equal(r.kept, 3);
+  assert.deepEqual(store.list(null).map((s) => `${s.key}${s.time - t0}`), ["A2", "A1", "B-98"]);
+});
+
+test("a truncated snapshot is listed as corrupt (never offered for recovery)", () => {
+  const dir = tmpDir(), snapsDir = path.join(dir, "snaps");
+  seedSnapshot(snapsDir, 1_700_000_000_000, "A", 2000);
+  const file = path.join(snapsDir, snapName(1_700_000_000_000, 1, "A"));
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").slice(0, 500));
+  const store = createSnapshotStore({ dir: snapsDir });
+  assert.equal(store.list("A")[0].corrupt, true);
+});

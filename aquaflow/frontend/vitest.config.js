@@ -7,5 +7,8 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['src/**/*.{test,spec}.{js,jsx}'],
+    // Node ≥ 22 ships a global localStorage that is undefined without --localstorage-file
+    // and shadows jsdom's; switch it off so jsdom tests get the browser storage.
+    poolOptions: { forks: { execArgv: ['--no-experimental-webstorage'] }, threads: { execArgv: ['--no-experimental-webstorage'] } },
   },
 })

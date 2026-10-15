@@ -66,7 +66,10 @@ describe('pattern presets → recipes', () => {
     const jet3 = compiled.clips.filter(c => c.fixtureId === 'jet-3').sort((x, y) => x.startTime - y.startTime);
     const lap = r.duration / r.cycles, phase = orderMembers(group.memberFixtureIds, items, r.order).findIndex(m => m.id === 'jet-3') / 8;
     const level = t => envelopeValue(r.envelope, ((t / lap - phase) % 1 + 1) % 1) * r.intensity;
-    expect(jet3[0].value).toBeCloseTo(level(0), 2);
+    // Curve recipes compile to one keyed clip per jet: [t0, v0, t1, v1, ...].
+    expect(jet3).toHaveLength(1);
+    expect(jet3[0].keys[1]).toBeCloseTo(level(0), 2);
+    expect(jet3[0].keys.at(-1)).toBeCloseTo(jet3[0].keys[1], 2);
     expect(level(r.duration)).toBeCloseTo(level(0), 6);
   });
 

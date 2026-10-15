@@ -49,18 +49,42 @@ function projectWithAssets() {
 afterEach(() => { __resetSnapshotBackendForTests(null); vi.restoreAllMocks(); });
 
 describe("autosave snapshot rotation", () => {
-  it("keeps the newest 10 per project, independent of other projects", async () => {
+  it("keeps the newest 3 per project, independent of other projects", async () => {
     let clock = 1_000_000;
     const kv = createMemoryKv();
     const backend = createKvSnapshotBackend(kv, { now: () => (clock += 1000), storage: memoryStorage() });
     for (let i = 1; i <= 13; i++) await backend.write("A", { rev: i }, { name: "A" });
     await backend.write("B", { rev: 1 }, { name: "B" });
     const a = await backend.list("A");
-    expect(a).toHaveLength(10);
+    expect(a).toHaveLength(3);
     expect((await backend.read(a[0].id)).project.rev).toBe(13);
-    expect((await backend.read(a[9].id)).project.rev).toBe(4);
+    expect((await backend.read(a[2].id)).project.rev).toBe(11);
     expect(await backend.list("B")).toHaveLength(1);
-    expect(kv.map.size).toBe(11);
+    expect(kv.map.size).toBe(4);
+  });
+
+  it("accepts the autosave JSON string as-is and restores it as an object", async () => {
+    const kv = createMemoryKv();
+    const backend = createKvSnapshotBackend(kv, { storage: memoryStorage() });
+    const { id } = await backend.write("A", JSON.stringify({ aquaflow: "1.1", rev: 7 }), { name: "A" });
+    const [listed] = await backend.list("A");
+    expect(listed.projectJson).toBeUndefined();
+    expect(listed.size).toBeGreaterThan(0);
+    expect((await backend.read(id)).project).toEqual({ aquaflow: "1.1", rev: 7 });
+  });
+
+  it("caps total bytes, oldest first, never dropping a project's newest snapshot", () => {
+    const MB = 1024 * 1024;
+    const entries = [
+      { id: "a3", projectKey: "A", time: 10, size: 40 * MB },
+      { id: "b2", projectKey: "B", time: 9, size: 40 * MB },
+      { id: "a2", projectKey: "A", time: 8, size: 40 * MB },
+      { id: "b1", projectKey: "B", time: 7, size: 40 * MB },
+      { id: "c1", projectKey: "C", time: 1, size: 200 * MB },
+    ];
+    const { keep, drop } = planSnapshotRotation(entries, 3, 50, 300 * MB);
+    expect(keep.map((e) => e.id)).toEqual(["a3", "b2", "c1"]);
+    expect(drop.map((e) => e.id)).toEqual(["a2", "b1"]);
   });
 
   it("planSnapshotRotation applies a global cap", () => {

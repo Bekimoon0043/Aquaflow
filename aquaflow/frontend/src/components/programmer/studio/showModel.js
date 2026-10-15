@@ -193,12 +193,17 @@ export function compileStudio(studio, items) {
           curveType: 'linear', effects: [], source: 'show-studio' });
       };
       if (recipe.effect === 'curve') {
+        // One keyed clip per fixture; the show frame interpolates between samples.
         const samples = Math.min(400, Math.max(20, Math.ceil(duration * 10)));
-        for (let n = 0; n < samples; n++) {
+        const keys = [];
+        for (let n = 0; n <= samples; n++) {
           const offset = n * duration / samples;
           const local = ((offset / cycle - phase * spread) % 1 + 1) % 1;
-          emit(offset, duration / samples, envelopeValue(recipe.envelope, local) * intensity, false, n);
+          keys.push(round(offset), round(Math.max(0, Math.min(100, envelopeValue(recipe.envelope, local) * intensity))));
         }
+        const before = clips.length;
+        emit(0, duration, Math.max(...keys.filter((_, k) => k % 2)), false, 0);
+        if (clips.length > before) Object.assign(clips.at(-1), { keys });
       } else if (['static', 'color'].includes(recipe.effect)) emit(0, duration, intensity);
       else if (recipe.effect === 'staircase') emit(phase * duration * .8, duration, intensity);
       else for (let n = 0; n < cycles; n++) {
