@@ -1,5 +1,14 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-15: editable 3D show timeline and lean show files — AquaFlow Studio 1.2.38 installed**
+
+- The 3D preview timeline now shows one block per pattern as it plays (move, resize, duplicate, delete, edit in a side inspector); the group/channel rows stay behind "Programming view".
+- New wave-field patterns stored as parameters (rolling, travelling, see-saw, swell, converge & split, crossing, stadium, finale) with lights following in a solid colour or a moving rainbow.
+- Keyed (keyframe) clips in the canonical show frame, its Python mirror and every hardware compiler: wave shows went from 72–127 MB to 5–9 MB. Autosave writes only on real changes, serialises once and prunes old snapshots (691 MB → 22 MB on this PC).
+- Gates: frontend 1,295 passed; backend full suite passed; desktop 36 passed. Engine 1.2.37 staged (`resources/engine-1.2.37`), packaged health check 200.
+- Lebu shows on the Desktop rebuilt as editable patterns: `Lebu_Fountain_80s_Four_Wave_Patterns.aquapkg`, `Lebu_Fountain_160s_Wave_Patterns_Plus_Famous.aquapkg` (Pattern 4 kept as the original recorded cues).
+- Hardware still **not commissioned**. Smooth per-jet waves on site need proportional valves or VFD-driven jets.
+
 **2026-10-13: AF-NEXT release programme — AquaFlow Studio 1.2.33 installed**
 
 - AF-NEXT-001 through AF-NEXT-015 are implemented and evidenced under `docs/evidence/`.
