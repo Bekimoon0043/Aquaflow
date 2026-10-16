@@ -24,7 +24,7 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
     const type = clip.type;
     const allowed = category === "light" ? LIGHT_TYPES.has(type)
       : category === "equipment" ? /pump/i.test(fixture.type) && PUMP_TYPES.has(type)
-        : WATER_TYPES.has(type) || (String(fixture.type).startsWith("nozzle_") && PUMP_TYPES.has(type))
+        : WATER_TYPES.has(type) || PUMP_TYPES.has(type) // any water nozzle may be driven by its pump speed (e.g. rotating_jet)
           || (String(fixture.type).startsWith("motion") && MOTION_TYPES.has(type));
     if (!allowed) {
       if (skipUnsupported) { skippedClips++; continue; }

@@ -404,6 +404,22 @@ export const FIXTURE_TYPE_MAP = {
     previewCategory: "water_pirouette",
   },
 
+  // Rotating basket nozzles (the 3D view already draws `rotating_jet` as a pirouette nozzle).
+  rotating_jet: {
+    runtimeType: "pump", category: "pump", deviceType: "pirouette",
+    group: "arch_jets", protocol: "virtual", latencyMs: 28,
+    channels: ["intensity", "enable", "rotation_speed", "tilt"],
+    engineering: { flowLpm: { min: 30, max: 300, default: 75 }, pressureBar: { min: 0.3, max: 8, default: 0.45 }, pumpClass: "class_2", jetHeightM: { min: 0.5, max: 8, default: 2 } },
+    previewCategory: "water_pirouette",
+  },
+  rotating_basket: {
+    runtimeType: "pump", category: "pump", deviceType: "pirouette",
+    group: "arch_jets", protocol: "virtual", latencyMs: 28,
+    channels: ["intensity", "enable", "rotation_speed", "tilt"],
+    engineering: { flowLpm: { min: 30, max: 300, default: 75 }, pressureBar: { min: 0.3, max: 8, default: 0.45 }, pumpClass: "class_2", jetHeightM: { min: 0.5, max: 8, default: 2 } },
+    previewCategory: "water_pirouette",
+  },
+
   // ═══════════════════════════════════════════════════════════
   // WATER / NOZZLES — OUTER RING JETS
   // ═══════════════════════════════════════════════════════════

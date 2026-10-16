@@ -243,17 +243,26 @@ function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) 
     }
 
     case "pirouette": {
-      // The azimuth rotates; the CPU keeps ownership of the animation.
-      const a = elapsed * 2.5;
+      // Rotating (basket) nozzle: `outletCount` streams leaning out by half the spray angle,
+      // turning at `rotationRpm`. Without engineering data: one stream, 23°, 2.5 rad/s.
+      const e = cfg.engineering || {};
+      const outlets = Math.max(1, Math.min(16, Math.round(Number(e.outletCount) || 1)));
+      const rpm = Number(e.rotationRpm);
+      const rate = Number.isFinite(rpm) && rpm > 0 ? rpm * 2 * Math.PI / 60 : 2.5;
+      const angle = Number(e.sprayAngleDeg);
+      // The spray angle is the full cone: each outlet leans out by half of it.
+      const tilt = Number.isFinite(angle) && angle > 0 ? Math.min(45, Math.max(3, angle / 2)) * DEG : 0.4;
       const speed = spd(5.5 + ix * 7.0);
-      const tilt = 0.4;
-      return [emitter({
-        mode: EMIT_MODE.CONE, ox, oz,
-        dx: Math.sin(tilt) * Math.cos(a), dy: Math.cos(tilt), dz: Math.sin(tilt) * Math.sin(a),
-        speed, spread: 0.05, spawnRadius: 0.03,
-        life: flightLife(Math.cos(tilt) * speed, 1.05), color,
-        scale: 0.10 + ix * 0.06, stretch: 0.55, density: ix, weight,
-      })];
+      return Array.from({ length: outlets }, (_, k) => {
+        const a = elapsed * rate + k * 2 * Math.PI / outlets;
+        return emitter({
+          mode: EMIT_MODE.CONE, ox, oz,
+          dx: Math.sin(tilt) * Math.cos(a), dy: Math.cos(tilt), dz: Math.sin(tilt) * Math.sin(a),
+          speed, spread: 0.05, spawnRadius: 0.03,
+          life: flightLife(Math.cos(tilt) * speed, 1.05), color,
+          scale: 0.10 + ix * 0.06, stretch: 0.55, density: ix, weight: weight / Math.sqrt(outlets),
+        });
+      });
     }
 
     case "fan_jet": {
@@ -447,6 +456,11 @@ function applyDesign(descs, cfg, ix, launchSpeed) {
     case "mist": {
       main.speed = speedForApex(h, Math.PI / 2, S) / 1.2;
       main.life = Math.max(main.life, simulateFlight(0, main.speed * 1.2, S).tApex * LIFE_MARGIN / 0.85);
+      break;
+    }
+    case "pirouette": {
+      // Every outlet of a rotating basket reaches the design height.
+      for (const e of descs) cone(e, W, h);
       break;
     }
     case "geyser": {

@@ -69,6 +69,14 @@ describe("keyed clips", () => {
       [jet, pump], "s", { skipUnsupported: true }).skippedClips).toBe(1);
   });
 
+  it("shows a rotating basket (rotating_jet) driven by pump speed in the 3D preview", () => {
+    const basket = { id: "b1", type: "rotating_jet" };
+    const plan = createFullShowPreview([{ id: "bs", fixtureId: "b1", type: "pump_speed", startTime: 0, duration: 10, value: 80 }], [basket]);
+    expect(plan.visualClips.map(c => c.id)).toEqual(["bs"]);
+    plan.duration = 10; plan.passMs = 10000;
+    expect(evaluateFullShowPreview(plan, 5, [basket]).fixtureIntensities.b1).toBeCloseTo(0.8, 6);
+  });
+
   it("passes the curve through the full 3D show preview", () => {
     const plan = createFullShowPreview([keyed()], [jet]);
     plan.duration = 14; plan.passMs = 14000;

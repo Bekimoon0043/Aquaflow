@@ -122,9 +122,10 @@ export const RENDER_QUALITY = { LOW:"low", MEDIUM:"medium", HIGH:"high" };
 // so the old 16-light uniform cap is gone. Volumetric beam cones stay a per-mesh
 // effect and are drawn for the brightest MAX_BEAM_CONES fixtures only.
 const MAX_BEAM_CONES = 16;
-// Emitter slots in the GPU field's parameter texture. A nozzle contributes one or
-// two (a jet plus its atomised shell), so this carries a large design comfortably.
-const MAX_GPU_EMITTERS = 96;
+// Emitter slots in the GPU field's parameter texture (one texel column each; the particle
+// pool is shared out in advance). Room for large designs, e.g. 134 edge jets plus their
+// spray shells and 3 rotating baskets × 8 outlets — slots past the limit are dropped.
+const MAX_GPU_EMITTERS = 512;
 // MAX_RIPPLES (the pool-surface impact ring buffer) lives with the water shader.
 // QUALITY_CONFIG (per-tier feature table) and CPU_SAMPLE_FRACTION live in sceneQuality.js.
 
@@ -2142,6 +2143,8 @@ export class FountainScene {
 	rotationY: cfg.rotationY ?? 0,
 	groupId: cfg.groupId || null,
         engineering: cfg.engineering || null,
+        // Without this every nozzle silently fell back to its generic per-type height.
+        designHeightM: cfg.designHeightM ?? null,
       };
       const nz = new NozzleV2(this.THREE, this.waterSys, this.spraySys, this.foamSys, this.flameSys, finalCfg, this._lightField);
       if (nz.dot) this.scene.add(nz.dot);

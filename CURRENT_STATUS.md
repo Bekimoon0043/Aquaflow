@@ -1,5 +1,12 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-16 (afternoon): AquaFlow Studio 1.2.40 installed — rotating baskets, true design heights**
+
+- `rotating_jet` (rotating basket) is now a known, programmable nozzle type (it was "unknown type", so patterns could not drive it); the 3D preview accepts pump-speed channels on any water nozzle.
+- 3D preview fix: the scene dropped every nozzle's design height, so all jets were drawn at generic heights. Nozzles now draw at their engineering jet height. GPU emitter limit raised 96 → 512 (large designs lost their last streams). Rotating baskets draw `outletCount` streams leaning half the spray angle, turning at `rotationRpm`.
+- `Downloads\Lebu_Fountain_160s_Baskets_Rising.aquapkg`: baskets 2.0 m, 24° spray (crowns land within 1.7 m, inside the basin), editable "Baskets · rising one after another" (0–140 s, left → front → right, 8 s) and "Baskets · rise together (finale)" (140–160 s); basket 03 moved 1.0 m forward off the sculpture island; 134 edge jets raised 0.65 → 2.5 m (user's choice — verify nozzles/pumps with the supplier). Other patterns unchanged.
+- Frontend 1,310 tests passed. Final in-app visual check of the full show was interrupted: the graphics driver became unstable after many automated launches (app "unable to start correctly"); restart the PC before reopening.
+
 **2026-10-16: AquaFlow Studio 1.2.39 installed — every Lebu pattern editable**
 
 - Pattern creator gains: "Straight up and down" (triangle) shape, jets moving in groups with every other group opposite, a start point in the cycle, and a light colour sequence.

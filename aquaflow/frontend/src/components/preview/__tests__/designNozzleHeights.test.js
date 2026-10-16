@@ -284,3 +284,20 @@ describe("landing points against the basin", () => {
     expect(c.life * 0.85).toBeGreaterThan(fallTime(5, c.speed * 0.6));
   });
 });
+
+describe("rotating basket nozzle (rotating_jet)", () => {
+  it("draws one stream per outlet, each at the design height, leaning out and turning at its rpm", () => {
+    const cfg = configFor(fixture("rotating_jet", 2, { outletCount: 8, rotationRpm: 12, sprayAngleDeg: 35 }));
+    expect(cfg.type).toBe("pirouette");
+    const at = t => emit(cfg, 1, null, t);
+    const streams = at(0);
+    expect(streams).toHaveLength(8);
+    for (const e of streams) {
+      close(emitterFlight(e).apex, 2);
+      expect(Math.atan2(Math.hypot(e.dx, e.dz), e.dy) * 180 / Math.PI).toBeCloseTo(17.5, 0); // leans out by half the 35° spray angle
+    }
+    const az = e => Math.atan2(e.dz, e.dx);
+    const turned = ((az(at(1)[0]) - az(streams[0])) + 2 * Math.PI) % (2 * Math.PI);
+    expect(turned).toBeCloseTo(12 * 2 * Math.PI / 60, 6); // 12 rpm → 1.257 rad per second
+  });
+});

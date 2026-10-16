@@ -42,3 +42,13 @@ describe("FountainScene_v6.js growth guard (AF-3D-018)", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("nozzles built by the scene keep their design height", () => {
+  it("_buildNozzles passes designHeightM to every NozzleV2 (design-height drawing depends on it)", () => {
+    const src = read("FountainScene_v6.js");
+    const start = src.indexOf("  _buildNozzles() {");
+    const block = src.slice(start, src.indexOf("new NozzleV2(", start));
+    expect(start).toBeGreaterThan(0);
+    expect(block).toMatch(/designHeightM:\s*cfg\.designHeightM/);
+  });
+});

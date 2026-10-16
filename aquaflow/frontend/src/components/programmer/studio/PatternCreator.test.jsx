@@ -68,6 +68,19 @@ describe('patterns built from basic pieces', () => {
     expect(clips.find(c => c.fixtureId === 'lamp-0' && c.type === 'lighting_blue').keys).toEqual([0, 0, 3, 0, 6, 100]);
   });
 
+  it('rotating basket nozzles (rotating_jet) are programmable, so patterns can drive them', () => {
+    const [basket] = inventory([{ id: 'b1', type: 'rotating_jet', x: 0, y: 0, engineering: { jetHeightM: 2 } }]);
+    expect(basket.status).toBe('Programmable');
+    expect(basket.tracks.map(t => t.type)).toContain('pump_speed');
+    const studio = readStudio({ studio: { groups: [{ id: 'g', name: 'Baskets', memberFixtureIds: ['b1'], orderMode: 'engineering' }],
+      recipes: [{ id: 'r', groupId: 'g', name: 'Rise', effect: 'field', start: 0, duration: 8, cycles: 1, spread: 1, intensity: 100, attribute: 'level', order: 'engineering', color: '#46bfe8',
+        field: { kind: 'custom', shape: 'sine', path: 'together', period: 4, low: 20, high: 100 } }] } });
+    const { clips, issues } = compileStudio(studio, [basket]);
+    expect(issues).toEqual([]);
+    expect(clips).toHaveLength(1);
+    expect(clips[0]).toMatchObject({ fixtureId: 'b1', type: 'pump_speed' });
+  });
+
   it('pattern types round-trip through a file', () => {
     const text = exportTypes([EXAMPLES[0], { ...EXAMPLES[4], name: 'Mine' }]);
     const back = importTypes(text);
