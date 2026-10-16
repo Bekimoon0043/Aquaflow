@@ -10,8 +10,48 @@
 import { describe, it, expect } from "vitest";
 import {
   buildSceneGraph, sceneTriangleCount, exportScene, EXPORT_FORMATS,
-  toGLTF, toGLB, toOBJ, toMTL, toUSDA, toFBXASCII, toLuxExchange,
+  toGLTF, toGLB, toOBJ, toMTL, toUSDA, toFBX, toLuxExchange,
+  toSTL, toPLY, toDAE, toDXF3D, worldTriangles,
 } from "../index.js";
+import { readZip } from "../../utils/zipStore.js";
+
+/** Minimal binary FBX 7.4 reader → [{ name, props, children }] (enough to inspect our own output). */
+function readFBX(bytes) {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const td = new TextDecoder();
+  const node = (o) => {
+    const end = v.getUint32(o, true), nProps = v.getUint32(o + 4, true), propLen = v.getUint32(o + 8, true), nl = v.getUint8(o + 12);
+    if (end === 0) return { next: o + 13, node: null };
+    const name = td.decode(bytes.subarray(o + 13, o + 13 + nl));
+    let p = o + 13 + nl;
+    const props = [];
+    for (let i = 0; i < nProps; i++) {
+      const t = String.fromCharCode(v.getUint8(p++));
+      if (t === "C") { props.push(!!v.getUint8(p)); p += 1; }
+      else if (t === "I") { props.push(v.getInt32(p, true)); p += 4; }
+      else if (t === "L") { props.push(Number(v.getBigInt64(p, true))); p += 8; }
+      else if (t === "D") { props.push(v.getFloat64(p, true)); p += 8; }
+      else if (t === "S" || t === "R") { const n = v.getUint32(p, true); props.push(td.decode(bytes.subarray(p + 4, p + 4 + n))); p += 4 + n; }
+      else if (t === "i" || t === "d") {
+        const n = v.getUint32(p, true), enc = v.getUint32(p + 4, true), len = v.getUint32(p + 8, true);
+        expect(enc).toBe(0);
+        const arr = [];
+        for (let k = 0; k < n; k++) arr.push(t === "i" ? v.getInt32(p + 12 + k * 4, true) : v.getFloat64(p + 12 + k * 8, true));
+        props.push(arr); p += 12 + len;
+      } else throw new Error(`unexpected FBX property type ${t}`);
+    }
+    expect(p).toBe(o + 13 + nl + propLen);
+    const children = [];
+    while (p < end) { const r = node(p); if (r.node) children.push(r.node); p = r.next; }
+    expect(p).toBe(end);
+    return { next: end, node: { name, props, children } };
+  };
+  const roots = [];
+  let o = 27;
+  for (;;) { const r = node(o); o = r.next; if (!r.node) break; roots.push(r.node); }
+  return roots;
+}
+const kids = (n, name) => n.children.filter((c) => c.name === name);
 
 // A representative design: circular pool + a nozzle, a light, a pump, a flame.
 const DESIGN = {
@@ -152,14 +192,23 @@ describe("USD", () => {
 });
 
 describe("FBX", () => {
-  it("emits ASCII FBX with objects + connections", () => {
-    const fbx = toFBXASCII(buildSceneGraph(DESIGN));
-    expect(fbx).toContain("FBXVersion: 7300");
-    expect(fbx).toContain("Objects:  {");
-    expect(fbx).toContain("Connections:  {");
-    expect((fbx.match(/Geometry: \d+, "Geometry::/g) || []).length).toBe(7);
-    expect((fbx.match(/Model: \d+, "Model::/g) || []).length).toBe(7);
-    expect(fbx).toContain('P: "Lcl Translation"');
+  it("emits binary FBX 7.4 with objects + connections (Blender/Autodesk readable)", () => {
+    const fbx = toFBX(buildSceneGraph(DESIGN));
+    expect(fbx).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(fbx.subarray(0, 20))).toBe("Kaydara FBX Binary  ");
+    expect(new DataView(fbx.buffer).getUint32(23, true)).toBe(7400);
+    const roots = readFBX(fbx);
+    const names = roots.map((r) => r.name);
+    for (const n of ["FBXHeaderExtension", "GlobalSettings", "Definitions", "Objects", "Connections"]) expect(names).toContain(n);
+    const objects = roots.find((r) => r.name === "Objects");
+    expect(kids(objects, "Geometry").length).toBe(7);
+    expect(kids(objects, "Model").length).toBe(7);
+    // model→root + geometry→model for every node (+ material→model).
+    expect(kids(roots.find((r) => r.name === "Connections"), "C").length).toBeGreaterThanOrEqual(14);
+    // Polygon index list ends each triangle with a bit-inverted index.
+    const pvi = kids(kids(objects, "Geometry")[0], "PolygonVertexIndex")[0].props[0];
+    expect(pvi.length % 3).toBe(0);
+    expect(pvi[2]).toBeLessThan(0);
   });
 });
 
@@ -269,9 +318,11 @@ describe("node transforms", () => {
   });
 
   it("FBX emits Lcl Rotation + Lcl Scaling", () => {
-    const fbx = toFBXASCII(graph);
-    expect(fbx).toContain('P: "Lcl Rotation", "Lcl Rotation", "", "A",0,90.000000,0');
-    expect(fbx).toMatch(/P: "Lcl Scaling".*1\.500000,1\.500000,1\.500000/);
+    const objects = readFBX(toFBX(graph)).find((r) => r.name === "Objects");
+    const model = kids(objects, "Model").find((m) => m.props[1].startsWith("Arch"));
+    const p70 = kids(kids(model, "Properties70")[0], "P");
+    expect(p70.find((p) => p.props[0] === "Lcl Rotation").props.slice(4)).toEqual([0, 90, 0]);
+    expect(p70.find((p) => p.props[0] === "Lcl Scaling").props.slice(4)).toEqual([1.5, 1.5, 1.5]);
   });
 
   it("OBJ bakes rotation into world vertices (90° swaps X/Z extent)", () => {
@@ -292,5 +343,73 @@ describe("node transforms", () => {
     expect(arch1.engineering.dmx.universe).toBe(3);
     expect(arch1.engineering.engineering.pressureBar).toBe(2.5);
     expect(arch1.engineering.protocol).toBe("artnet");
+  });
+});
+
+describe("CAD / print / mesh formats", () => {
+  const graph = buildSceneGraph(DESIGN);
+  const tris = worldTriangles(graph);
+
+  it("STL is binary, Z-up, one record per triangle", () => {
+    const stl = toSTL(graph);
+    const v = new DataView(stl.buffer);
+    expect(v.getUint32(80, true)).toBe(tris.length);
+    expect(stl.byteLength).toBe(84 + tris.length * 50);
+    // Geyser at plan (1.5, -2) → Y-up world (1.5, ·, -2) → Z-up (1.5, 2, ·).
+    let found = false;
+    for (let i = 0; i < tris.length && !found; i++) {
+      const o = 84 + i * 50 + 12;
+      found = Math.abs(v.getFloat32(o, true) - 1.5) < 0.3 && Math.abs(v.getFloat32(o + 4, true) - 2) < 0.3;
+    }
+    expect(found).toBe(true);
+  });
+
+  it("PLY has an ASCII header and matching vertex/face counts", () => {
+    const ply = toPLY(graph);
+    const marker = "end_header\n";
+    const end = new TextDecoder("latin1").decode(ply).indexOf(marker) + marker.length;
+    const header = new TextDecoder().decode(ply.subarray(0, end));
+    expect(header.startsWith("ply\nformat binary_little_endian 1.0\n")).toBe(true);
+    expect([...header].every((ch) => ch === "\n" || (ch >= " " && ch <= "~"))).toBe(true);
+    expect(header).toContain(`element vertex ${tris.length * 3}`);
+    expect(header).toContain(`element face ${tris.length}`);
+    expect(ply.byteLength).toBe(end + tris.length * 3 * 15 + tris.length * 13);
+  });
+
+  it("COLLADA declares Y_UP metres and one geometry per mesh node", () => {
+    const dae = toDAE(graph);
+    expect(dae).toContain('version="1.4.1"');
+    expect(dae).toContain("<up_axis>Y_UP</up_axis>");
+    expect(dae).toContain('<unit name="meter" meter="1"/>');
+    expect((dae.match(/<geometry /g) || []).length).toBe(7);
+    expect(dae).not.toMatch(/NaN|Infinity/);
+  });
+
+  it("3D DXF writes a 3DFACE per triangle on AQF_ layers", () => {
+    const dxf = toDXF3D(graph);
+    expect(dxf.startsWith("0\r\nSECTION\r\n2\r\nHEADER")).toBe(true);
+    expect(dxf.trimEnd().endsWith("0\r\nEOF")).toBe(true);
+    expect(dxf.split("\r\n3DFACE\r\n").length - 1).toBe(tris.length);
+    expect(dxf).toContain("AQF_POOL");
+    expect(dxf).toContain("AQF_NOZZLES");
+  });
+
+  it("'All formats' zips every other format", () => {
+    const out = exportScene(DESIGN, "all");
+    const names = [...readZip(out.data).keys()];
+    for (const ext of [".fbx", ".glb", ".gltf", ".obj", ".mtl", ".dae", ".dxf", ".stl", ".ply", ".usda", ".luxexchange.json"]) {
+      expect(names.some((n) => n.endsWith(ext))).toBe(true);
+    }
+  });
+
+  it("freeform pool basin sits in the fixtures' coordinate frame", () => {
+    const points = [[10, 10], [20, 10], [20, 16], [10, 16]].map(([x, y]) => ({ x, y }));
+    const g = buildSceneGraph({
+      name: "Offset", poolGeometry: { poolType: "freeform", params: { depth: 0.6 }, geometry: { points } },
+      fixtures: [{ id: "a", type: "geyser", x: 11, y: 11 }],
+    });
+    const xs = worldTriangles(g).filter((t) => t.node.kind === "pool").flatMap((t) => [t.a[0], t.b[0], t.c[0]]);
+    expect(Math.min(...xs)).toBeCloseTo(10, 3);
+    expect(Math.max(...xs)).toBeCloseTo(20, 3);
   });
 });

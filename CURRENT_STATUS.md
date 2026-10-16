@@ -1,5 +1,14 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-16 (evening): AquaFlow Studio 1.2.42 installed — 3D exports that open in other software**
+
+- FBX was ASCII (Blender, Unity and Unreal refuse ASCII FBX) and malformed. It is now **binary FBX 7.4** (Y-up, metres, materials).
+- New formats: COLLADA (.dae), AutoCAD 3D DXF (3DFACE on AQF_ layers, Z-up, overlays the 2D CAD export), binary STL, binary PLY with colours, and "All formats (.zip)". Existing: glTF/GLB, OBJ+MTL, USD, LUXEXCHANGE.
+- Scene fixes in every format: the pool basin sat ~14 m from the jets (footprint translated twice). It is now an open basin shell with the water surface at −0.05 m. Site surfaces (lawn, garden, island) and water jets at design height are added, with toggles in the panel.
+- Validated on the Lebu design: Blender 5.2 imports FBX, GLB, glTF, OBJ, STL, PLY and USD (563 meshes, 48,424 triangles, identical extents; basin 16.35 × 9.95 m with the jets inside). The DXF passes the ezdxf audit with 0 errors and the DAE parses in pycollada (Y_UP, metres). Blender 5.2 has no COLLADA importer, and AutoCAD's console would not run scripts here, so check the DAE in SketchUp and the DXF in AutoCAD by hand once.
+- Sample: `Downloads\Lebu_Fountain_3D_All_Formats.zip`. Frontend 1,316 tests passed.
+- (1.2.41, same day: desktop-style workspace menus and unnumbered tabs; colours unchanged.)
+
 **2026-10-16 (afternoon): AquaFlow Studio 1.2.40 installed — rotating baskets, true design heights**
 
 - `rotating_jet` (rotating basket) is now a known, programmable nozzle type (it was "unknown type", so patterns could not drive it); the 3D preview accepts pump-speed channels on any water nozzle.

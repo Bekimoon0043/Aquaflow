@@ -1,9 +1,9 @@
 // Export3DPanel.jsx — AquaFlow 3D Export Bridge (AQ-X-016)
 //
 // Exports the live engineering design (pool geometry + fixtures) — the same
-// scene the 3D preview renders — to glTF/GLB, OBJ+MTL, USD, FBX, or the
-// LUXEXCHANGE envelope for import into LuxuryForm / LuxuryScape. Pure client-side
-// (no backend); fixture positions + basic materials are preserved in every format.
+// scene the 3D preview renders — to binary FBX, glTF/GLB, OBJ+MTL, COLLADA, 3D DXF,
+// STL, PLY, USD, the LUXEXCHANGE envelope, or all of them in one zip. Pure client-side
+// (no backend); every format is checked by importing it into Blender (see export3d tests).
 import { useMemo, useState } from "react";
 import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
@@ -24,7 +24,9 @@ function download(filename, data, mimeType) {
 }
 
 export default function Export3DPanel() {
-  const [format, setFormat] = useState("gltf");
+  const [format, setFormat] = useState("fbx");
+  const [includeSite, setIncludeSite] = useState(true);
+  const [includeWater, setIncludeWater] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -36,6 +38,7 @@ export default function Export3DPanel() {
   // AF-HUB-004 — fixtures come only from the single master (engineeringStore.fixtures);
   // the old showStore.engineeringFixtures fallback was a dead mirror (never written).
   const engFixtures = useEngineeringStore((s) => s.fixtures);
+  const siteSurfaces = useEngineeringStore((s) => s.siteSurfaces);
   const showPool = useShowStore((s) => s.poolGeometry);
   const showName = useShowStore((s) => s.currentShow?.name);
 
@@ -44,10 +47,11 @@ export default function Export3DPanel() {
     const poolGeometry = (geometry || params)
       ? { poolType, params, geometry }
       : (showPool || null);
-    return { name: showName || "AquaFlow Scene", fixtures, poolGeometry };
-  }, [engFixtures, geometry, params, poolType, showPool, showName]);
+    return { name: showName || "AquaFlow Scene", fixtures, poolGeometry, siteSurfaces: siteSurfaces || [] };
+  }, [engFixtures, geometry, params, poolType, showPool, showName, siteSurfaces]);
 
-  const graph = useMemo(() => buildSceneGraph(design), [design]);
+  const buildOptions = useMemo(() => ({ includeSite, includeWater }), [includeSite, includeWater]);
+  const graph = useMemo(() => buildSceneGraph(design, buildOptions), [design, buildOptions]);
   const stats = useMemo(() => ({
     nodes: graph.nodes.length,
     fixtures: graph.meta.fixtureCount,
@@ -61,7 +65,7 @@ export default function Export3DPanel() {
   const doExport = () => {
     setError(""); setStatus("");
     try {
-      const out = exportScene(design, format, { graph });
+      const out = exportScene(design, format, { ...buildOptions, graph });
       download(out.filename, out.data, out.mimeType);
       out.companions.forEach((c) => download(c.filename, c.data, c.mimeType));
       const extra = out.companions.length ? ` (+${out.companions.length} companion)` : "";
@@ -124,6 +128,18 @@ export default function Export3DPanel() {
           </div>
         </div>
 
+        {/* Options */}
+        <div style={{ display: "flex", gap: 16, fontSize: 11, color: "var(--text-secondary)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={includeSite} onChange={(e) => setIncludeSite(e.target.checked)} />
+            Site surfaces (lawn, paving, islands)
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={includeWater} onChange={(e) => setIncludeWater(e.target.checked)} />
+            Water jets at design height
+          </label>
+        </div>
+
         {/* Action */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={doExport} disabled={!hasContent} style={{
@@ -138,10 +154,10 @@ export default function Export3DPanel() {
 
         <div style={{ ...box, padding: 12, fontSize: 10.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
           <strong style={{ color: "var(--text-secondary)" }}>About</strong> — AquaFlow stays control
-          software; this exports a presentation copy of the existing 3D scene (fixtures, pool, water
-          surface, lights) for external rendering. Fixture positions and basic PBR materials are
-          preserved across all formats. Use <strong>LUXEXCHANGE</strong> to import the layout into
-          LuxuryForm / LuxuryScape (it embeds a glTF plus a fixture manifest).
+          software; this exports a presentation copy of the 3D scene (pool basin, water surface, site,
+          fixtures, water jets, lights) in real metres. FBX, glTF, OBJ, COLLADA and USD are Y-up;
+          DXF, STL and PLY are Z-up and line up with the 2D CAD export. Lights travel in glTF/GLB.
+          Use <strong>LUXEXCHANGE</strong> to import the layout into LuxuryForm / LuxuryScape.
         </div>
       </div>
     </div>

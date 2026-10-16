@@ -153,6 +153,122 @@ export function prism(footprint, height = 0.4) {
   return mesh;
 }
 
+// ── plan polygons (absolute plan coordinates: plan x → world x, plan y → world z) ──
+
+/** Plan points as [x, z] pairs, without a repeated closing point. */
+function planPoints(footprint) {
+  const pts = (footprint || []).map((p) => [Number(p.x) || 0, Number(p.y ?? p.z) || 0]);
+  if (pts.length > 2) {
+    const [a, b] = [pts[0], pts.at(-1)];
+    if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-9) pts.pop();
+  }
+  return pts;
+}
+
+/** Signed area in the XZ plan (positive = counter-clockwise seen from +Y). */
+function signedArea(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x0, z0] = pts[i], [x1, z1] = pts[(i + 1) % pts.length];
+    a += x0 * z1 - x1 * z0;
+  }
+  return a / 2;
+}
+
+/**
+ * Ear-clipping triangulation of a simple plan polygon (convex or concave).
+ * Returns index triples into `pts`, wound so a face built from them points +Y.
+ */
+export function triangulatePlan(footprint) {
+  const pts = Array.isArray(footprint?.[0]) ? footprint : planPoints(footprint);
+  const n = pts.length;
+  if (n < 3) return [];
+  // +Y normal for (a,b,c) with plan (x,z) needs clockwise order when seen from +Y.
+  const order = [...Array(n).keys()];
+  if (signedArea(pts) > 0) order.reverse();
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const inside = (p, a, b, c) => {
+    const d1 = cross(p, a, b), d2 = cross(p, b, c), d3 = cross(p, c, a);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+  };
+  const tris = [];
+  const v = order.slice();
+  let guard = 0;
+  while (v.length > 3 && guard++ < n * n) {
+    let clipped = false;
+    for (let i = 0; i < v.length; i++) {
+      const ia = v[(i + v.length - 1) % v.length], ib = v[i], ic = v[(i + 1) % v.length];
+      const a = pts[ia], b = pts[ib], c = pts[ic];
+      if (cross(a, b, c) >= 0) continue; // reflex or flat in this (clockwise) order
+      let ear = true;
+      for (const j of v) if (j !== ia && j !== ib && j !== ic && inside(pts[j], a, b, c)) { ear = false; break; }
+      if (!ear) continue;
+      tris.push([ia, ib, ic]);
+      v.splice(i, 1);
+      clipped = true;
+      break;
+    }
+    if (!clipped) break; // degenerate outline: fall back to a fan for the rest
+  }
+  if (v.length === 3) tris.push([v[0], v[1], v[2]]);
+  else for (let i = 1; i < v.length - 1; i++) tris.push([v[0], v[i], v[i + 1]]);
+  return tris;
+}
+
+/** Flat horizontal surface over a plan outline at height y, facing up. */
+export function planCap(footprint, y = 0) {
+  const mesh = emptyMesh();
+  const pts = planPoints(footprint);
+  for (const [a, b, c] of triangulatePlan(pts)) {
+    pushTriangle(mesh, [pts[a][0], y, pts[a][1]], [pts[b][0], y, pts[b][1]], [pts[c][0], y, pts[c][1]]);
+  }
+  return mesh;
+}
+
+/** A thin slab over a plan outline, from y0 up to y1 (top cap + side walls). */
+export function planSlab(footprint, y0 = 0, y1 = 0.05) {
+  const mesh = planCap(footprint, y1);
+  const pts = planPoints(footprint);
+  const ccw = signedArea(pts) > 0;
+  for (let i = 0; i < pts.length; i++) {
+    let a = pts[i], b = pts[(i + 1) % pts.length];
+    if (!ccw) [a, b] = [b, a];
+    // Outward-facing wall for a counter-clockwise (seen from +Y) outline.
+    pushQuad(mesh, [a[0], y0, a[1]], [a[0], y1, a[1]], [b[0], y1, b[1]], [b[0], y0, b[1]]);
+  }
+  return mesh;
+}
+
+/**
+ * An open pool shell: floor at -depth, walls up to the rim (y = 0), with faces on both
+ * sides of the walls so the inside of the pool renders in every viewer.
+ */
+export function poolShell(footprint, depth = 0.8) {
+  const mesh = emptyMesh();
+  const pts = planPoints(footprint);
+  for (const [a, b, c] of triangulatePlan(pts)) {
+    pushTriangle(mesh, [pts[a][0], -depth, pts[a][1]], [pts[b][0], -depth, pts[b][1]], [pts[c][0], -depth, pts[c][1]]);
+  }
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const lo = (p) => [p[0], -depth, p[1]], hi = (p) => [p[0], 0, p[1]];
+    pushQuad(mesh, lo(a), hi(a), hi(b), lo(b));
+    pushQuad(mesh, lo(b), hi(b), hi(a), lo(a));
+  }
+  return mesh;
+}
+
+/** Plan outline of a circle / rectangle centred on (cx, cz), as {x, y} plan points. */
+export function circleOutline(cx, cz, radius, segments = 48) {
+  return Array.from({ length: segments }, (_, i) => {
+    const a = (i / segments) * Math.PI * 2;
+    return { x: cx + Math.cos(a) * radius, y: cz + Math.sin(a) * radius };
+  });
+}
+export function rectOutline(cx, cz, w, l) {
+  return [{ x: cx - w / 2, y: cz - l / 2 }, { x: cx + w / 2, y: cz - l / 2 }, { x: cx + w / 2, y: cz + l / 2 }, { x: cx - w / 2, y: cz + l / 2 }];
+}
+
 /**
  * UV sphere centred on the origin. Used as a light/marker glyph.
  */
