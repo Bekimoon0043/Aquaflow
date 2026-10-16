@@ -18,6 +18,7 @@ import { evaluateICANPreview } from "../utils/icanPatternPreview";
  */
 export function createBakeSampler({
   sitePreview = null, fixtures = [], timeline = {},
+  timelinePreviewPlan = null,
   evaluateSite = evaluateICANPreview, deriveTimeline = deriveRuntimeSignals,
 } = {}) {
   if (sitePreview?.active && sitePreview.plan) {
@@ -25,6 +26,22 @@ export function createBakeSampler({
     return {
       source: "site-preview",
       defaultDurationS: Number(plan.duration) || 10,
+      sample: (t) => {
+        const s = evaluateSite(plan, Math.min(t, plan.duration), fixtures, false) || {};
+        return {
+          ...s,
+          fixtureIntensities: s.fixtureIntensities || null,
+          fixtureLightStates: s.fixtureLightStates || null,
+          fixtureMotion: s.fixtureMotion || null,
+        };
+      },
+    };
+  }
+  if (timelinePreviewPlan) {
+    const plan = timelinePreviewPlan;
+    return {
+      source: "full-show-timeline",
+      defaultDurationS: Number(plan.duration) || Number(timeline.showDuration) || 0,
       sample: (t) => {
         const s = evaluateSite(plan, Math.min(t, plan.duration), fixtures, false) || {};
         return {

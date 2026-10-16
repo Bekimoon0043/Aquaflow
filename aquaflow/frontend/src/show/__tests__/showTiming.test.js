@@ -55,6 +55,15 @@ describe("fades and curves", () => {
     expect(() => createFullShowPreview([{ ...clip, curveType: "bounce" }], curves.fixtures)).toThrow(/complex effects/);
     expect(showDiagnostics({ clips: [{ ...clip, curveType: "bounce" }] }).map(d => d.code)).toContain("unsupported-curve");
   });
+
+  it("can build the main 3D timeline while skipping nonvisual control channels", () => {
+    const water = { ...curves.clips[0], effects: [] };
+    const control = { ...water, id: "control", fixtureId: "controller", type: "solenoid_open" };
+    const fixture = { id: "controller", type: "valve" };
+    const preview = createFullShowPreview([water, control], [...curves.fixtures, fixture], "Timeline", { skipUnsupported: true });
+    expect(preview.visualClips.map(c => c.id)).toEqual([water.id]);
+    expect(preview.skippedClips).toBe(1);
+  });
 });
 
 describe("tempo map, sections and stop", () => {

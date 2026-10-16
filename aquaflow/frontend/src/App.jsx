@@ -60,8 +60,7 @@ import useProjectStore from "./store/projectStore";
 import "./styles/globals.css";
 import PanelErrorBoundary from "./components/PanelErrorBoundary";
 // AF-NEXT-014 — guided Design / Program / Commission / Operate workspaces over the same panels.
-import WorkspaceSwitcher from "./components/workspace/WorkspaceSwitcher";
-import WorkspaceNav from "./components/workspace/WorkspaceNav";
+import WorkspaceSwitcher from "./components/workspace/DesktopWorkspaces";
 import GuidanceStrip from "./components/workspace/GuidanceStrip";
 import StartCard from "./components/workspace/StartCard";
 import useWorkspaceController from "./workspaces/useWorkspaceController";
@@ -130,7 +129,7 @@ function StudioApp() {
         onOpenBrowser={(mode) => setShowBrowser(mode)}
         isDirty={isDirty || projectDirty}
         lastSaved={lastSaved}
-        workspaceSwitcher={<WorkspaceSwitcher workspace={guided.workspace} onSelect={guided.selectWorkspace} onStart={() => guided.setStartOpen(true)} />}
+        workspaceSwitcher={<WorkspaceSwitcher workspace={guided.workspace} activePanel={activePanel} onSelect={guided.selectWorkspace} onOpen={guided.open} onStart={() => guided.setStartOpen(true)} />}
       />
       <GuidanceStrip
         workspace={guided.workspace}
@@ -143,7 +142,6 @@ function StudioApp() {
         preflightError={guided.preflightError}
       />
       <div className="workspace-frame">
-      <WorkspaceNav workspace={guided.workspace} activePanel={activePanel} onOpen={guided.open} />
       <div className={`workspace${activePanel === "geometry" ? " engineering-workspace" : ""}`} ref={workspaceRef}>
         {visitedPanelsRef.current.has("geometry") && (
           <div className="engineering-workspace-content" hidden={activePanel !== "geometry"} aria-hidden={activePanel !== "geometry"}>

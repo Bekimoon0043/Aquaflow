@@ -96,6 +96,13 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
   const displayedPlayback = sitePreview.active ? sitePreview.playback : playbackState;
   const displayedPosition = sitePreview.active ? sitePreview.position : playhead;
   const [openMenu, setOpenMenu] = useState(null);
+  const menuRoot = useRef(null);
+  useEffect(() => {
+    if (!openMenu) return;
+    const dismiss = e => { if (!menuRoot.current?.contains(e.target)) setOpenMenu(null); };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, [openMenu]);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
@@ -305,7 +312,8 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
   const menuEntries = (menu) => (menu === ALL_TOOLS_MENU ? allToolsEntries() : MENU_ITEMS[menu]);
 
   return (
-    <div
+    <>
+    <div className="desktop-menubar"
       style={{
         height: "var(--topbar-h)",
         background: "linear-gradient(180deg,#0c1a10 0%,#080e0a 100%)",
@@ -322,18 +330,26 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 10px", borderRight: "1px solid var(--border)", height: "100%", flexShrink: 0 }}>
         <img src="/luxcon-icon.png" alt="" style={{ height: 26, width: "auto" }} />
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 12, letterSpacing: "0.1em", color: "var(--brand-gold-light)", textTransform: "uppercase", lineHeight: 1.2 }}>Luxury Con</span>
-          <span style={{ fontSize: 7, color: "var(--brand-gold)", letterSpacing: "0.15em", textTransform: "uppercase", opacity: 0.7, lineHeight: 1.2 }}>Fountain Studio</span>
+          <span style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: 12, color: "var(--brand-gold-light)", lineHeight: 1.2 }}>Luxury Con</span>
+          <span style={{ fontSize: 9, color: "var(--brand-gold)", opacity: 0.7, lineHeight: 1.2 }}>Fountain Studio</span>
         </div>
       </div>
 
       {/* Professional grouped menus */}
-      <div style={{ display: "flex", height: "100%", flexShrink: 0 }}>
+      <div ref={menuRoot} style={{ display: "flex", height: "100%", flexShrink: 0 }}>
         {topMenus.map((menu) => (
           <Fragment key={menu}>
-          {menu === ALL_TOOLS_MENU && workspaceSwitcher}
           <div style={{ position: "relative" }}>
             <button
+              aria-haspopup="menu"
+              aria-expanded={openMenu === menu}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault(); setOpenMenu(menu);
+                  const container = e.currentTarget.parentElement;
+                  requestAnimationFrame(() => container.querySelector('[role="menuitem"]')?.focus());
+                }
+              }}
               onClick={() => setOpenMenu(openMenu === menu ? null : menu)}
               onMouseEnter={() => {
                 if (openMenu) setOpenMenu(menu);
@@ -357,18 +373,6 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
             {openMenu === menu && (
               <>
                 <div
-                  onClick={() => setOpenMenu(null)}
-                  style={{
-                    position: "fixed",
-                    left: 0,
-                    right: 0,
-                    top: "var(--topbar-h)",
-                    bottom: 0,
-                    zIndex: 510,
-                    background: "transparent",
-                  }}
-                />
-                <div
                   style={{
                     position: "absolute",
                     top: "100%",
@@ -384,6 +388,15 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
                   }}
                   role="menu"
                   aria-label={menu}
+                  onKeyDown={e => {
+                    const items = [...e.currentTarget.querySelectorAll('[role="menuitem"]')];
+                    const index = items.indexOf(document.activeElement);
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                      e.preventDefault(); items[(index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+                    }
+                    if (e.key === 'Escape') { e.currentTarget.parentElement.querySelector('button')?.focus(); setOpenMenu(null); }
+                    if (e.key === 'Tab') setOpenMenu(null);
+                  }}
                 >
                   {menuEntries(menu).map((entry, i) => {
                     const [label, type, value, shortcut] = entry;
@@ -539,6 +552,8 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
         </ModalShell>
       )}
     </div>
+    {workspaceSwitcher && <div className="desktop-workspace-bar">{workspaceSwitcher}</div>}
+    </>
   );
 }
 

@@ -15,7 +15,8 @@ import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
 import useProjectStore from "../../store/projectStore";
 import { useICANPreviewStore } from "../../store/icanPreviewStore";
-import { evaluateICANPreview } from "../../utils/icanPatternPreview";
+import { createICANPreviewPlan, evaluateICANPreview } from "../../utils/icanPatternPreview";
+import { createFullShowPreview } from "../../utils/fullShowPreview";
 import ICANPreviewControls from "./ICANPreviewControls";
 import HydraulicPreviewPanel, { useEngineeringPreview } from "./HydraulicPreviewPanel";
 // AF-3D-VID-001 - baked (frame-exact) video render.
@@ -283,6 +284,17 @@ const manualPatterns = useShowStore(s => s.manualPatterns);
 const manualPatternMeta = useShowStore(s => s.manualPatternMeta);
 const manualPriority = useShowStore(s => s.manualPriority);
 const sitePreview = useICANPreviewStore();
+const timelinePreviewPlan = useMemo(() => {
+  if (pattern !== "none" || !timelineTracks?.length || !engineeringFixtures?.length) return null;
+  const clips = timelineTracks.flatMap(track => track?.clips || track?.items || track?.events || []);
+  if (!clips.length) return null;
+  try {
+    return createICANPreviewPlan(createFullShowPreview(clips, engineeringFixtures,
+      "3D Preview · Project timeline", { skipUnsupported: true }), 1);
+  } catch {
+    return null;
+  }
+}, [pattern, timelineTracks, engineeringFixtures]);
 
 // ─── NEW: Use dry-run session if enabled ──────────────────────────────────
 let engineSignals;
@@ -340,6 +352,11 @@ if (sitePreview.active && sitePreview.plan) {
     },
     effectivePriority: 2,
   };
+} else if (pattern === "none" && timelinePreviewPlan) {
+  // Use the same per-fixture canonical frame as Show Programmer. This preserves
+  // individual jet heights and RGB states in both the live 3D view and final render.
+  engineSignals = evaluateICANPreview(timelinePreviewPlan, playhead, engineeringFixtures,
+    playbackState === "stopped");
 } else {
   // Normal mode: use timeline signals
   engineSignals = deriveRuntimeSignals({
@@ -658,9 +675,9 @@ if (sitePreview.active && sitePreview.plan) {
   useEffect(() => {
   if (!sceneRef.current) return;
   sceneRef.current.setSignals({ ...engineSignals,
-    fixtureIntensities: sitePreview.active ? engineSignals.fixtureIntensities : null,
-    fixtureLightStates: sitePreview.active ? engineSignals.fixtureLightStates || null : null,
-    fixtureMotion: sitePreview.active ? engineSignals.fixtureMotion || null : null });
+    fixtureIntensities: engineSignals.fixtureIntensities || null,
+    fixtureLightStates: engineSignals.fixtureLightStates || null,
+    fixtureMotion: engineSignals.fixtureMotion || null });
 }, [engineSignals, sceneTier]);
 
   const screenshot = () => {
@@ -678,6 +695,7 @@ if (sitePreview.active && sitePreview.plan) {
     const sampler = createBakeSampler({
       sitePreview: site,
       fixtures: useEngineeringStore.getState().fixtures,
+      timelinePreviewPlan,
       timeline: {
         timelineTracks: show.timelineTracks, manualPatterns: show.manualPatterns,
         manualPatternMeta: show.manualPatternMeta, manualPriority: show.manualPriority,
@@ -1015,7 +1033,7 @@ if (sitePreview.active && sitePreview.plan) {
             <div style={subLabel}>Pattern</div>
             <select value={pattern} onChange={e => setPattern(e.target.value)}
               style={{ width:"100%", fontSize:10, padding:"3px 4px", marginBottom:6, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4, textTransform:"capitalize" }}>
-              {PATTERNS.map(p => <option key={p} value={p}>{p === "none" ? "Manual" : p}</option>)}
+              {PATTERNS.map(p => <option key={p} value={p}>{p === "none" ? "Project timeline" : p}</option>)}
             </select>
             </Section>
             <Section title="Water">

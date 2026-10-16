@@ -103,4 +103,19 @@ describe("createBakeSampler", () => {
     expect(out).toMatchObject({ pump: 4.5, playbackState: "playing", fixtureIntensities: null });
     expect(s.defaultDurationS).toBe(90);
   });
+  it("renders a full-show timeline with per-fixture water and RGB states", () => {
+    const plan = { duration: 80 };
+    const evaluateSite = vi.fn((received, t) => ({
+      source: "full-show-simulation",
+      fixtureIntensities: { jet1: t / 80 },
+      fixtureLightStates: { light1: { intensity: .2, color: "#0000ff" } },
+    }));
+    const s = createBakeSampler({ timelinePreviewPlan: plan, fixtures: [{ id: "jet1" }], evaluateSite });
+    const out = s.sample(20);
+    expect(s.source).toBe("full-show-timeline");
+    expect(s.defaultDurationS).toBe(80);
+    expect(out.fixtureIntensities.jet1).toBe(.25);
+    expect(out.fixtureLightStates.light1.color).toBe("#0000ff");
+    expect(evaluateSite).toHaveBeenCalledWith(plan, 20, [{ id: "jet1" }], false);
+  });
 });

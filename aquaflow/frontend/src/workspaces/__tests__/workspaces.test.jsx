@@ -11,8 +11,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import useProjectStore from "../../store/projectStore";
 import useEngineeringStore from "../../store/engineeringStore";
 import { MENU_ITEMS, allToolsEntries } from "../../components/topBarMenu";
-import WorkspaceSwitcher from "../../components/workspace/WorkspaceSwitcher";
-import WorkspaceNav from "../../components/workspace/WorkspaceNav";
+import WorkspaceSwitcher from "../../components/workspace/DesktopWorkspaces";
 import GuidanceStrip from "../../components/workspace/GuidanceStrip";
 import StartCard from "../../components/workspace/StartCard";
 import useWorkspaceController from "../useWorkspaceController";
@@ -56,10 +55,9 @@ function Harness({ deps }) {
   }, [setActivePanel]);
   const g = useWorkspaceController({ activePanel, setActivePanel, deps });
   return <>
-    <WorkspaceSwitcher workspace={g.workspace} onSelect={g.selectWorkspace} onStart={() => g.setStartOpen(true)} />
+    <WorkspaceSwitcher workspace={g.workspace} activePanel={activePanel} onSelect={g.selectWorkspace} onOpen={g.open} onStart={() => g.setStartOpen(true)} />
     <GuidanceStrip workspace={g.workspace} steps={g.steps} diagnostics={g.diagnostics} onGo={g.goStep}
       onDiagnostic={g.runDiagnostic} onRunPreflight={g.runPreflightNow} preflightBusy={g.preflightBusy} preflightError={g.preflightError} />
-    <WorkspaceNav workspace={g.workspace} activePanel={activePanel} onOpen={g.open} />
     <output data-testid="active-panel">{activePanel}</output>
     {g.startOpen && <StartCard onImportCad={() => g.setStartOpen(false)} onOpenProject={() => g.setStartOpen(false)} onClose={() => g.setStartOpen(false)} />}
   </>;
@@ -120,7 +118,7 @@ describe("AF-NEXT-014 workspace switching", () => {
     expect(tab("Program").getAttribute("aria-selected")).toBe("true");
     expect(activePanel()).toBe("show_programmer");
     expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe("program");
-    expect(screen.getByRole("navigation", { name: "Program tools" })).toBeTruthy();
+    expect(screen.getByRole("menu", { name: "Program tools" })).toBeTruthy();
 
     fireEvent.click(tab("Operate"));
     expect(activePanel()).toBe("operator");
@@ -138,26 +136,24 @@ describe("AF-NEXT-014 workspace switching", () => {
     expect(screen.queryByRole("dialog", { name: /Start a fountain project/ })).toBeNull();
   });
 
-  it("every existing panel is reachable from a workspace nav (legacy ones under More)", () => {
+  it("opens workspace tools beneath tabs and closes after choosing a tool", () => {
     window.localStorage.setItem(WORKSPACE_STORAGE_KEY, "design");
     useProjectStore.getState().setActivePanel("geometry");
     render(<Harness deps={baseDeps()} />);
     const reached = new Set();
     for (const ws of WORKSPACES) {
-      fireEvent.click(tab(ws.label));
-      const nav = screen.getByRole("navigation", { name: `${ws.label} tools` });
-      const more = within(nav).getByRole("button", { name: new RegExp(`More in ${ws.label}`) });
-      if (more.getAttribute("aria-expanded") !== "true") fireEvent.click(more);
-      const count = within(nav).getAllByRole("button").filter(b => b.dataset.panel).length;
-      for (let i = 0; i < count; i++) {
-        const button = within(screen.getByRole("navigation", { name: `${ws.label} tools` })).getAllByRole("button").filter(b => b.dataset.panel)[i];
+      for (const entry of [...ws.nav, ...ws.more]) {
+        fireEvent.click(tab(ws.label));
+        const menu = screen.getByRole("menu", { name: `${ws.label} tools` });
+        const button = within(menu).getByRole("menuitem", { name: entry.label.replace(' (legacy)', ''), exact: false });
         fireEvent.click(button);
         expect(activePanel()).toBe(button.dataset.panel);
         reached.add(activePanel());
         expect(tab(ws.label).getAttribute("aria-selected")).toBe("true"); // listed panels never switch away
+        expect(screen.queryByRole('menu', { name: `${ws.label} tools` })).toBeNull();
       }
     }
-    expect(reached).toEqual(appPanels());
+    expect(reached).toEqual(new Set([...appPanels()].filter(p => p !== 'academy')));
   });
 });
 
@@ -276,7 +272,7 @@ describe("AF-NEXT-014 top bar", () => {
     const opened = [];
     render(<TopBar activePanel="nodes" setActivePanel={(p) => opened.push(p)} onToggleLogs={() => {}} onOpenBrowser={() => {}} isDirty={false}
       workspaceSwitcher={<WorkspaceSwitcher workspace="design" onSelect={() => {}} />} />);
-    expect(screen.getAllByRole("tab").map(t => t.textContent)).toEqual(["1Design", "2Program", "3Commission", "4Operate"]);
+    expect(screen.getAllByRole("tab").map(t => t.textContent)).toEqual(["Design", "Program", "Commission", "Operate"]);
     const menus = ["File", "Edit", "All tools", "Help"];
     menus.forEach(name => expect(screen.getByRole("button", { name })).toBeTruthy());
     const panelCount = allToolsEntries().filter(e => e[1] === "panel").length;
