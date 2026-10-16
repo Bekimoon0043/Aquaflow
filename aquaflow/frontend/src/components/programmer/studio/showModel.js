@@ -197,7 +197,7 @@ export function compileStudio(studio, items) {
           const values = ch.keys.filter((_, k) => k % 2);
           clips.push({ id: `${recipe.id}:${item.id}:${ch.type}`, studioRecipeId: recipe.id, patternBlockId: recipe.id,
             fixtureId: item.id, trackId: ch.trackId, type: ch.type, name: recipe.name, startTime: round(start), duration: round(duration),
-            value: round(Math.max(...values)), keys: ch.keys, color: ch.color, source: 'show-studio' });
+            value: round(Math.max(...values)), keys: ch.keys, ...(ch.keyMode ? { keyMode: ch.keyMode } : {}), color: ch.color, source: 'show-studio' });
         }
       });
       continue;

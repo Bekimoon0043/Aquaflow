@@ -47,6 +47,7 @@ export const SHAPES = [
   ['bump', 'Single crest', 'Stays low, then one rounded crest'],
   ['rise-fall', 'Quick rise, slow fall', 'Jumps up fast, settles slowly'],
   ['pulse', 'Pulse', 'Up, hold, down — a flat-topped hit'],
+  ['triangle', 'Straight up and down', 'Rises and falls in straight lines to a pointed crest'],
   ['drawn', 'Draw your own', 'Drag the points to draw the movement'],
 ];
 export const PATHS = [
@@ -77,6 +78,7 @@ export function shapeValue(f, x, wrap = true) {
   switch (f.shape) {
     case 'bump': { const d = u - 0.5; return Math.exp(-(d * d) / (2 * width * width)); }
     case 'rise-fall': { const r = clamp(num(f.rise, 0.15), 0.03, 0.6); return u < r ? smooth(u / r) : 1 - smooth((u - r) / (1 - r)); }
+    case 'triangle': { const half = clamp(num(f.width, 0.5), 0.02, 0.5); return Math.max(0, 1 - Math.abs(u - 0.5) / half); }
     case 'pulse': { const half = Math.max(0.04, width * 2); const e = Math.min(0.08, half / 2); const d = Math.abs(u - 0.5);
       return d <= half - e ? 1 : d >= half ? 0 : smooth((half - d) / e); }
     case 'drawn': return clamp(drawnValue(f.points, u), 0, 1);
@@ -102,16 +104,32 @@ export function pathPhase(f, g, t) {
   }
 }
 
+/**
+ * Jets moving in groups: every member of a group takes the position of the group's first
+ * jet; with `opposite`, every other group runs half a cycle later (complementary heights).
+ */
+function grouped(f, g) {
+  const size = Math.max(1, Math.round(num(f.group, 1)));
+  if (size === 1 || g.a === undefined) return { g, shift: f.opposite && g.i % 2 ? 0.5 : 0 };
+  const k = Math.floor(g.i / size), i = k * size, d = Math.abs(i - g.a);
+  const s = g.n < 2 ? 0 : g.ring ? Math.min(d, g.n - d) / (g.n / 2) : d / Math.max(1, g.n - 1);
+  return { g: { ...g, i, p: i / g.n, s: clamp(s, 0, 1) }, shift: f.opposite && k % 2 ? 0.5 : 0 };
+}
+
 /** Custom pattern wave value 0..1 at local time t. */
-export function customWave(f, g, t) {
+export function customWave(f, member, t) {
+  const { g, shift } = grouped(f, member);
+  return customWaveAt(f, g, t, shift);
+}
+function customWaveAt(f, g, t, shift) {
   const period = Math.max(0.2, num(f.period, 5));
-  let clock = t / period + (f.grow ? num(f.accel, 0) * t * t : 0);
+  let clock = (t + num(f.offset, 0)) / period + (f.grow ? num(f.accel, 0) * t * t : 0);
   if (f.motion === 'there-and-back') { const u = ((clock % 1) + 1) % 1; clock = u < 0.5 ? 2 * u : 2 - 2 * u; } // 0 → 1 → 0: the crest's position along the path
-  const phase = pathPhase(f, g, t);
+  const phase = pathPhase(f, g, t) + shift;
   const back = f.motion === 'there-and-back';
   const v = shapeValue(f, clock - phase + (back ? 0.5 : 0), !back);
   if (!f.bothWays) return v;
-  const mirror = pathPhase({ ...f, direction: -num(f.direction, 1) }, g, t);
+  const mirror = pathPhase({ ...f, direction: -num(f.direction, 1) }, g, t) + shift;
   return Math.max(v, shapeValue(f, clock - mirror));
 }
 
@@ -153,7 +171,7 @@ export function memberGeometry(members, { origin = 'tip', ring = true } = {}) {
   return members.map((m, i) => {
     const d = Math.abs(i - a);
     const s = n < 2 ? 0 : ring ? Math.min(d, n - d) / half : d / Math.max(1, n - 1);
-    return { id: m.id, i, n, p: i / n, s: clamp(s, 0, 1) };
+    return { id: m.id, i, n, p: i / n, s: clamp(s, 0, 1), a, ring };
   });
 }
 
@@ -252,6 +270,17 @@ export function fieldChannels(recipe, g, item) {
     || tracks.find(tr => tr.type === 'pump_speed') || null;
   if (!level) return [];
   const out = [{ type: level.type, trackId: level.id, keys: levels, color: recipe.color }];
+  if (f.colorMode === 'sequence' && level.type === 'lighting_master') {
+    // Colour sequence: the pattern's time is split evenly between the colours (held steps).
+    const colors = (Array.isArray(f.colors) && f.colors.length ? f.colors : ['#ff0000', '#00ff00', '#0000ff']).filter(c => /^#[0-9a-f]{6}$/i.test(c));
+    const part = duration / colors.length;
+    ['lighting_red', 'lighting_green', 'lighting_blue'].forEach((type, c) => {
+      const track = tracks.find(tr => tr.type === type);
+      if (!track) return;
+      const keys = colors.flatMap((hex, k) => [Math.round(k * part * 100) / 100, Math.round(parseInt(hex.slice(1 + 2 * c, 3 + 2 * c), 16) / 2.55 * 100) / 100]);
+      out.push({ type, trackId: track.id, keys, keyMode: 'step', color: colors[0] });
+    });
+  }
   if (f.colorMode === 'rainbow' && level.type === 'lighting_master') {
     const speed = Math.max(1, num(f.rainbowPeriod, 10));
     ['lighting_red', 'lighting_green', 'lighting_blue'].forEach((type, c) => {

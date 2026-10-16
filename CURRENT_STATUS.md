@@ -1,5 +1,11 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-16: AquaFlow Studio 1.2.39 installed — every Lebu pattern editable**
+
+- Pattern creator gains: "Straight up and down" (triangle) shape, jets moving in groups with every other group opposite, a start point in the cycle, and a light colour sequence.
+- `Downloads\Lebu_Fountain_160s_All_Patterns_Editable.aquapkg`: the user's 160 s show with recorded P2, P3, P4 rebuilt as editable custom patterns (rebuilt at original settings they match the recording within 1–4.5 % average), then raised and sped up: P2 6 s per cycle (0–100 %), P3 40–100 % at 4.5 s, P4 20–100 % with a 12 s lap and red → green → blue lights. P1, P5–P9 unchanged. 6.6 MB (was 33.8 MB).
+- Frontend 1,306 tests passed (run with --no-file-parallelism: parallel jsdom workers crash under Node 26 on this PC).
+
 **2026-10-15: editable 3D show timeline and lean show files — AquaFlow Studio 1.2.38 installed**
 
 - The 3D preview timeline now shows one block per pattern as it plays (move, resize, duplicate, delete, edit in a side inspector); the group/channel rows stay behind "Programming view".

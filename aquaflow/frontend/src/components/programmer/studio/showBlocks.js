@@ -129,7 +129,7 @@ export function fieldUnitRecipes({ kind, start, duration, name, waterGroupId, li
     attribute: 'level', field: f, pattern: { id: unit, role: 'water', kind: f.kind } });
   if (lightGroupId) recipes.push({ ...base(lightGroupId), name: `${name || fieldKind(kind).label} · lights`, color: light.color || '#4f8cff',
     attribute: 'level', field: { ...f, low: light.low ?? 6, high: light.high ?? 20, lowFar: light.low ?? 6, highFar: light.high ?? 20, stairs: 0,
-      colorMode: light.colorMode || 'solid', rainbowPeriod: light.rainbowPeriod ?? 10 },
+      colorMode: light.colorMode || 'solid', rainbowPeriod: light.rainbowPeriod ?? 10, ...(light.colors ? { colors: light.colors } : {}) },
     pattern: { id: unit, role: 'lights', kind: f.kind } });
   return { recipes, unitId: unit };
 }
@@ -160,6 +160,7 @@ export function updateFieldUnit(studio, block, patch) {
       if (L.low !== undefined) field = { ...field, low: L.low, lowFar: L.low };
       if (L.high !== undefined) field = { ...field, high: L.high, highFar: L.high };
       if (L.colorMode) field = { ...field, colorMode: L.colorMode };
+      if (L.colors) field = { ...field, colors: L.colors };
       if (L.color) color = L.color;
     }
     if (!lights && patch.light?.color) color = patch.light.color;

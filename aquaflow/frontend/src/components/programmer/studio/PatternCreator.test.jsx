@@ -49,6 +49,25 @@ describe('patterns built from basic pieces', () => {
     const up = peak - trace.slice(0, peak).lastIndexOf(Math.min(...trace.slice(0, peak)));
     expect(up).toBeLessThan(0.3 * 300 * 0.025 / 0.025); // rises within ~30 % of a lap
   });
+  it('groups, opposite groups, straight up-and-down shape, start point and colour sequence', () => {
+    const f = { kind: 'custom', shape: 'triangle', width: 0.5, path: 'together', group: 3, opposite: true, period: 4, offset: 1, low: 0, high: 100, ease: 0 };
+    const at = (i, t) => fieldLevel(f, geo[i], t, 20);
+    for (const t of [0.3, 1.7, 2.9]) {
+      expect(at(0, t)).toBeCloseTo(at(2, t), 6);            // one group moves together
+      expect(at(0, t) + at(3, t)).toBeCloseTo(100, 6);      // the next group is opposite (heights add up)
+    }
+    expect(at(0, 1)).toBeCloseTo(100, 6);                   // start point 1 s: t=1 is mid-cycle (the crest)
+    expect(at(0, 2) - at(0, 1.5)).toBeCloseTo(-25, 6);      // straight lines: 50 %/s over a 4 s cycle
+    const items = inventory(ring());
+    const studio = readStudio({ studio: { groups, recipes: [{ id: 'r', groupId: 'lamps', name: 'Seq', effect: 'field', start: 0, duration: 9, cycles: 1, spread: 1,
+      intensity: 100, attribute: 'level', order: 'engineering', color: '#ff0000', field: { kind: 'custom', shape: 'sine', path: 'together', low: 10, high: 10, colorMode: 'sequence', colors: ['#ff0000', '#00ff00', '#0000ff'] } }] } });
+    const { clips, issues } = compileStudio(studio, items);
+    expect(issues).toEqual([]);
+    const red = clips.find(c => c.fixtureId === 'lamp-0' && c.type === 'lighting_red');
+    expect(red).toMatchObject({ keyMode: 'step', keys: [0, 100, 3, 0, 6, 0] });
+    expect(clips.find(c => c.fixtureId === 'lamp-0' && c.type === 'lighting_blue').keys).toEqual([0, 0, 3, 0, 6, 100]);
+  });
+
   it('pattern types round-trip through a file', () => {
     const text = exportTypes([EXAMPLES[0], { ...EXAMPLES[4], name: 'Mine' }]);
     const back = importTypes(text);

@@ -79,7 +79,8 @@ function Preview({ field, light }) {
   const local = 1.2 + (t % span); // stay clear of the soft start
   const levels = geo.map(g => fieldLevel({ ...field, ease: 0 }, g, local, local + 100));
   const W = 300, H = 120;
-  const colour = i => light.colorMode === 'rainbow' ? `hsl(${Math.round(((i / PREVIEW_JETS - local / 10) % 1 + 1) % 1 * 360)} 90% 60%)` : light.color;
+  const colour = i => light.colorMode === 'sequence' && light.colors?.length ? light.colors[Math.min(light.colors.length - 1, Math.floor(((t % 12) / 12) * light.colors.length))]
+    : light.colorMode === 'rainbow' ? `hsl(${Math.round(((i / PREVIEW_JETS - local / 10) % 1 + 1) % 1 * 360)} 90% 60%)` : light.color;
   return <div className="pc-preview">
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Live preview of the jets">
       {previewMembers.map((m, i) => {
@@ -98,7 +99,7 @@ const EXAMPLE_FOR_KIND = { rolling: 'Rolling wave', travelling: 'Travelling wave
 /** The pattern creator's version of a block: custom blocks as they are, ready-made ones as their recipe. */
 export function creatorTypeFromBlock(block) {
   const w = block.water.field || {}, lights = block.lights;
-  const light = { color: lights?.color || block.water.color, colorMode: lights?.field?.colorMode, low: lights?.field?.low, high: lights?.field?.high };
+  const light = { color: lights?.color || block.water.color, colorMode: lights?.field?.colorMode, colors: lights?.field?.colors, low: lights?.field?.low, high: lights?.field?.high };
   if (w.kind === 'custom') return cleanType({ name: block.name, field: w, light });
   const example = EXAMPLES.find(x => x.name === EXAMPLE_FOR_KIND[w.kind]) || EXAMPLES[1];
   const same = {};
@@ -125,7 +126,7 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
     const groups = defaultFieldGroups(studio, items);
     if (!groups.water) { setNote('This design has no jets to program.'); return; }
     if (editBlock) {
-      onChange(s => updateFieldUnit(s, editBlock, { kind: 'custom', name: type.name, field: effective, light: { color: L.color, low: L.low, high: L.high, colorMode: L.colorMode } }));
+      onChange(s => updateFieldUnit(s, editBlock, { kind: 'custom', name: type.name, field: effective, light: { color: L.color, low: L.low, high: L.high, colorMode: L.colorMode, colors: L.colors } }));
       setNote('Pattern updated'); return;
     }
     const { recipes } = fieldUnitRecipes({ kind: 'custom', start, duration: 15, name: type.name, field: effective,
@@ -177,7 +178,8 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
           <Choice label="Shape" options={SHAPES} value={f.shape} onChange={shape => set(shape === 'drawn' && !f.points ? { shape, points: resample(undefined) } : { shape })} />
           <ShapeGraph field={f} onDraw={points => set({ points })} />
           {f.shape === 'drawn' && <p className="pc-hint">Drag the dots up and down to draw the movement of one jet during one cycle.</p>}
-          {['bump', 'pulse'].includes(f.shape) && <Slider label="Crest width" value={f.width} min={0.02} max={0.5} step={0.01} onChange={width => set({ width })} hint="How long the jet stays up, as a part of the cycle" />}
+          {['bump', 'pulse', 'triangle'].includes(f.shape) && <Slider label="Crest width" value={f.width} min={0.02} max={0.5} step={0.01} onChange={width => set({ width })}
+            hint={f.shape === 'triangle' ? 'Half the base of the pointed crest, as a part of the cycle (0.5 = straight up and down with no flat part)' : 'How long the jet stays up, as a part of the cycle'} />}
           {f.shape === 'rise-fall' && <Slider label="Rise time" value={f.rise} min={0.03} max={0.6} step={0.01} onChange={rise => set({ rise })} hint="Part of the cycle used to rise; the rest is the slow fall" />}
         </section>
         <section><h4>2 · How it spreads across the jets</h4>
@@ -188,9 +190,12 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
           {f.path === 'together' && <Slider label="Delay to the far end" value={f.spread} min={0} max={1} step={0.01} onChange={spread => set({ spread })} hint="0 = every jet exactly together; higher = the far end follows a little later" />}
           {f.path === 'alternate' && <><Slider label="Jets per block" value={f.block} min={1} max={20} onChange={block => set({ block })} />
             <Slider label="Drift" value={f.drift} min={0} max={60} step={0.5} suffix="s" onChange={drift => set({ drift })} hint="Seconds for the blocks to move one step around (0 = they stay in place)" /></>}
+          <Slider label="Jets per group" value={f.group} min={1} max={20} onChange={group => set({ group })} hint="Neighbouring jets that move exactly together (1 = every jet on its own)" />
+          <label className="pc-check"><input type="checkbox" checked={f.opposite} onChange={e => set({ opposite: e.target.checked })} /> Every other {f.group > 1 ? 'group' : 'jet'} opposite (one rises while the next falls)</label>
         </section>
         <section><h4>3 · Timing</h4>
           <Slider label={f.motion === 'there-and-back' ? 'Seconds there and back' : 'Seconds per cycle'} value={f.period} min={0.5} max={30} step={0.1} suffix="s" onChange={period => set({ period })} />
+          <Slider label="Start point in the cycle" value={Math.min(f.offset || 0, f.period)} min={0} max={f.period} step={0.05} suffix="s" onChange={offset => set({ offset })} hint="Where in its cycle the movement is when the pattern starts" />
           <Choice label="Motion" value={f.motion} onChange={motion => set({ motion })} options={[['repeat', 'Repeat', 'The movement repeats every cycle'], ['there-and-back', 'There and back', 'Runs to the far end, then comes back']]} />
           <label className="pc-check"><input type="checkbox" checked={f.bothWays} onChange={e => set({ bothWays: e.target.checked })} /> Both directions at once (crossing)</label>
           <label className="pc-check"><input type="checkbox" checked={f.grow} onChange={e => set({ grow: e.target.checked, accel: e.target.checked && !f.accel ? 0.00375 : f.accel })} /> Build up (grows taller and faster, then settles)</label>
@@ -205,7 +210,11 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
         </section>
         <section><h4>5 · Lights</h4>
           <label className="pc-field"><span>Colour</span><span className="pc-num"><input type="color" aria-label="Light colour" value={L.color} onChange={e => setLight({ color: e.target.value })} />
-            <select aria-label="Colour mode" value={L.colorMode} onChange={e => setLight({ colorMode: e.target.value })}><option value="solid">Solid colour</option><option value="rainbow">Moving rainbow</option></select></span></label>
+            <select aria-label="Colour mode" value={L.colorMode} onChange={e => setLight({ colorMode: e.target.value })}><option value="solid">Solid colour</option><option value="rainbow">Moving rainbow</option><option value="sequence">Colour sequence</option></select></span></label>
+          {L.colorMode === 'sequence' && <div className="pc-field"><span>Colours in order (the pattern's time is shared equally)</span><span className="pc-num">
+            {L.colors.map((c, k) => <input key={k} type="color" aria-label={`Sequence colour ${k + 1}`} value={c} onChange={e => setLight({ colors: L.colors.map((x, m) => m === k ? e.target.value : x) })} />)}
+            <button onClick={() => setLight({ colors: [...L.colors, '#ffffff'].slice(0, 6) })} disabled={L.colors.length >= 6} aria-label="Add colour">+</button>
+            <button onClick={() => setLight({ colors: L.colors.slice(0, -1) })} disabled={L.colors.length <= 2} aria-label="Remove colour">−</button></span></div>}
           <Slider label="Lights lowest" value={L.low} min={0} max={100} suffix="%" onChange={low => setLight({ low })} />
           <Slider label="Lights highest" value={L.high} min={0} max={100} suffix="%" onChange={high => setLight({ high })} />
         </section>

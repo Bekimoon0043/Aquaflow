@@ -12,13 +12,14 @@ export function cleanField(raw = {}) {
   const d = CUSTOM_KIND.defaults;
   const pick = (k, lo, hi) => Math.min(hi, Math.max(lo, num(raw[k], d[k] ?? lo)));
   const f = {
-    kind: 'custom', shape: ['sine', 'bump', 'rise-fall', 'pulse', 'drawn'].includes(raw.shape) ? raw.shape : d.shape,
+    kind: 'custom', shape: ['sine', 'bump', 'rise-fall', 'pulse', 'triangle', 'drawn'].includes(raw.shape) ? raw.shape : d.shape,
     path: ['together', 'around', 'from-point', 'alternate', 'random'].includes(raw.path) ? raw.path : d.path,
     motion: raw.motion === 'there-and-back' ? 'there-and-back' : 'repeat',
     period: pick('period', 0.5, 60), crests: pick('crests', 0, 12), width: pick('width', 0.02, 0.5), rise: pick('rise', 0.03, 0.6),
     spread: pick('spread', 0, 2), block: Math.round(pick('block', 1, 40)), drift: pick('drift', 0, 120),
     direction: num(raw.direction, 1) < 0 ? -1 : 1, origin: ['tip', 'top', 'bottom', 'left', 'right', 'first'].includes(raw.origin) ? raw.origin : 'tip',
     bothWays: !!raw.bothWays, grow: !!raw.grow, accel: pick('accel', 0, 0.05),
+    group: Math.round(Math.min(40, Math.max(1, num(raw.group, 1)))), opposite: !!raw.opposite, offset: pick('offset', 0, 60),
     low: pick('low', 0, 100), high: pick('high', 0, 100), ease: Math.min(5, Math.max(0, num(raw.ease, 1))),
   };
   if (raw.lowFar !== undefined) f.lowFar = Math.min(100, Math.max(0, num(raw.lowFar, f.low)));
@@ -39,7 +40,8 @@ export function cleanType(raw = {}) {
     id: String(raw.id || `type-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`),
     name: String(raw.name || 'My pattern').slice(0, 60),
     field: cleanField(raw.field),
-    light: { color: /^#[0-9a-f]{6}$/i.test(light.color || '') ? light.color : '#4f8cff', colorMode: light.colorMode === 'rainbow' ? 'rainbow' : 'solid',
+    light: { color: /^#[0-9a-f]{6}$/i.test(light.color || '') ? light.color : '#4f8cff', colorMode: ['rainbow', 'sequence'].includes(light.colorMode) ? light.colorMode : 'solid',
+      colors: (Array.isArray(light.colors) ? light.colors : ['#ff0000', '#00ff00', '#0000ff']).filter(c => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 6),
       low: Math.min(100, Math.max(0, num(light.low, 6))), high: Math.min(100, Math.max(0, num(light.high, 20))) },
   };
 }
