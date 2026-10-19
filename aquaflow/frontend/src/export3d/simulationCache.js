@@ -183,16 +183,25 @@ export function* simulateFrames(prepared, options = {}) {
   }
 }
 
+/** Water fraction of a voxel crossed by a 10 mm stream — the level that reads as density 1. */
+export function densityReference(voxelSize) {
+  return Math.min(1, (Math.PI * 0.005 * 0.005) / (voxelSize * voxelSize));
+}
+
 /**
  * Voxelise one particle snapshot (trilinear splat).
- * `density` = water volume fraction per voxel (0..1); `vel` = mass-weighted velocity.
+ * `density` = water volume fraction per voxel ÷ densityReference(voxel), clamped to 0..1, so a
+ * jet's core reads ≈ 1 and spray stays faint at any voxel size (a raw fraction peaks near
+ * 0.03 in 5 cm voxels and renders invisible). `vel` = mass-weighted velocity.
  */
 export function voxelizeFrame(particles, { voxelSize = 0.05, axes = "yup_m", velocity = false } = {}) {
   const preset = AXIS_PRESETS[axes] || AXIS_PRESETS.yup_m;
   const vs = voxelSize * preset.scale;
-  const voxelVolume = voxelSize ** 3;                       // in metres³ — fraction is unit-free
+  const ref = densityReference(voxelSize);
+  const voxelVolume = voxelSize ** 3 * ref;                 // metres³ — fraction is unit-free
   const density = createGrid("density", { gridClass: "fog volume",
-    metadata: { aquaflow_units: "water volume fraction (0..1)" } });
+    metadata: { aquaflow_units: "water volume fraction / aquaflow_reference_fraction (jet core ≈ 1)",
+      aquaflow_reference_fraction: ref } });
   const vel = velocity ? createGrid("vel", { type: "vec3s", gridClass: "unknown",
     metadata: { aquaflow_units: preset.scale === 100 ? "cm/s" : "m/s" } }) : null;
   const weight = velocity ? createGrid("w") : null;
@@ -307,7 +316,8 @@ export async function exportSimulationCache({ fixtures, plan = null, nozzlePhysi
       ...(o.vdb ? { vdb: `${base}.####.vdb`, grids: ["density", ...(o.velocity ? ["vel"] : [])] } : {}),
       ...(o.ply ? { ply: `${base}_particles.####.ply` } : {}),
     },
-    density: "water volume fraction per voxel, 0..1 (scale it in the shader for thin jets)",
+    density: `water volume fraction ÷ ${o.vdb ? densityReference(o.voxelSize).toFixed(4) : "-"} (a 10 mm jet's core ≈ 1), clamped 0..1`,
+    blender: "Material: Principled Volume, Density 20–50. Frame 1 is empty when the show starts with the jets off.",
     hydraulics: nozzlePhysics ? "jet heights capped by the design's hydraulic solve (pumps included)" : "design jet heights",
     stats,
     notes: [

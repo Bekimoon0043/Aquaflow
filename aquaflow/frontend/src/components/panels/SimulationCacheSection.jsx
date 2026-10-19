@@ -119,7 +119,7 @@ export default function SimulationCacheSection({ fixtures, name }) {
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Simulation cache — OpenVDB / particles</div>
         <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.45 }}>
           The water of the show, frame by frame, from the same emitters and physics as the 3D preview: an
-          OpenVDB volume per frame (<code>density</code> = water volume fraction, optional <code>vel</code>)
+          OpenVDB volume per frame (<code>density</code> ≈ 1 in a jet core — use Density 20–50 in the volume shader; optional <code>vel</code>)
           and/or a PLY particle cache. {show.plan
             ? <>Source: {show.source} ({duration.toFixed(1)} s).</>
             : <>No show loaded — every nozzle runs at 100 % for {SIM_DEFAULTS.staticSeconds} s.</>}

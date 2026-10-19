@@ -1,5 +1,13 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19 (later): AquaFlow Studio 1.2.46 installed — VDB density visible in Blender**
+
+- A user export (5 s of Lebu) showed nothing in Blender. The files were valid, but:
+  - frame 1 is empty (the show starts with the jets off);
+  - the water sits at its design position (about −14, −23 m), not the origin;
+  - the raw water fraction peaked near 0.03–0.05 in 5 cm voxels.
+- `density` is now the water fraction divided by the fraction of a 10 mm stream, so a jet core is about 1 at any voxel size. It renders at Principled Volume Density 20–50, and the manifest records the reference. A ready scene for that export: `Picturesender\Lebu_Fountain_Water.blend`.
+
 **2026-10-19 (afternoon): AquaFlow Studio 1.2.45 installed — OpenVDB simulation export; pumps drive the 3D preview**
 
 - **OpenVDB simulation cache:** new section in 3D Export. It replays the show through the 3D preview's own emitters and physics (fixed 1/60 s step, seeded, so repeat exports are byte-identical) and writes one `.vdb` per frame plus a JSON manifest.

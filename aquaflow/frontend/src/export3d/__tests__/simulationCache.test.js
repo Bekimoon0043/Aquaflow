@@ -1,7 +1,7 @@
 // Simulation cache: the preview's emitters + physics, replayed deterministically from the show.
 import { describe, it, expect } from "vitest";
 import {
-  prepareSimulation, simulateFrames, voxelizeFrame, encodeParticlePLY, exportSimulationCache, frameName, safeBaseName,
+  prepareSimulation, simulateFrames, voxelizeFrame, densityReference, encodeParticlePLY, exportSimulationCache, frameName, safeBaseName,
 } from "../simulationCache";
 import { createFullShowPreview } from "../../utils/fullShowPreview";
 import { createICANPreviewPlan } from "../../utils/icanPatternPreview";
@@ -58,7 +58,7 @@ describe("simulation cache", () => {
     const { grids } = voxelizeFrame(particles, { voxelSize: 0.1 });
     let sum = 0;
     for (const leaf of grids[0].leaves.values()) for (let n = 0; n < 512; n++) sum += leaf.values[n];
-    expect(sum * 0.1 ** 3).toBeCloseTo(3e-6, 12);
+    expect(sum * 0.1 ** 3 * densityReference(0.1)).toBeCloseTo(3e-6, 12);
     // Z-up: the 2 m high particle lands at index z ≈ 20, depth -0.5 → y = +5.
     const z = voxelizeFrame(particles, { voxelSize: 0.1, axes: "zup_m" }).grids[0];
     expect(z.get(3, 5, 20)).toBeGreaterThan(0);
@@ -90,4 +90,21 @@ describe("simulation cache", () => {
   it("refuses an empty design", async () => {
     await expect(exportSimulationCache({ fixtures: [], name: "x", writer: { write() {} } })).rejects.toThrow(/no water nozzles/);
   });
+
+  it("scales density so a jet's core reads about 1 at any voxel size", () => {
+    expect(densityReference(0.05)).toBeCloseTo(Math.PI * 0.005 ** 2 / 0.0025, 9);
+    expect(densityReference(0.005)).toBe(1);
+    const r = maxDensity(prepareSimulation({ fixtures: [jet] }), 0.05);
+    expect(r).toBeGreaterThan(0.5);
+    expect(r).toBeLessThanOrEqual(1);
+  });
 });
+
+function maxDensity(prepared, voxelSize) {
+  let m = 0;
+  for (const s of simulateFrames(prepared, { start: 0, end: 2, fps: 2 })) {
+    const g = voxelizeFrame(s.particles, { voxelSize }).grids[0];
+    for (const leaf of g.leaves.values()) for (const v of leaf.values) m = Math.max(m, v);
+  }
+  return m;
+}
