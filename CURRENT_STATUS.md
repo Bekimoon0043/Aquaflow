@@ -6,8 +6,7 @@
   - frame 1 is empty (the show starts with the jets off);
   - the water sits at its design position (about −14, −23 m), not the origin;
   - the raw water fraction peaked near 0.03–0.05 in 5 cm voxels.
-- `density` is now the water fraction divided by the fraction of a 10 mm stream, so a jet core is about 1 at any voxel size. It renders at Principled Volume Density 20–50, and the manifest records the reference. A ready scene for that export: `Pictures
-ender\Lebu_Fountain_Water.blend`.
+- `density` is now the water fraction divided by the fraction of a 10 mm stream, so a jet core is about 1 at any voxel size. It renders at Principled Volume Density 20–50, and the manifest records the reference. A ready scene for that export: `Pictures/render/Lebu_Fountain_Water.blend`.
 
 **2026-10-19 (afternoon): AquaFlow Studio 1.2.45 installed — OpenVDB simulation export; pumps drive the 3D preview**
 
