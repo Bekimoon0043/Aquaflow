@@ -172,6 +172,8 @@ if (scene.setNozzlePhysics && nozzleConfigs.length) {
   const metrics = geometryMetrics(geometry, params, storeState.depthZones || []);
   const solvePayload = buildHydraulicPreviewPayload({
     fixtures: nozzleFixtures,
+    // All placed pumps, even with the equipment layer hidden — they still feed the jets.
+    pumps: fixtures,
     params,
     volumeLitres: metrics.capacityLitres,
     basins,

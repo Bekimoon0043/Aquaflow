@@ -1,5 +1,25 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19 (afternoon): AquaFlow Studio 1.2.45 installed — OpenVDB simulation export; pumps drive the 3D preview**
+
+- **OpenVDB simulation cache:** new section in 3D Export. It replays the show through the 3D preview's own emitters and physics (fixed 1/60 s step, seeded, so repeat exports are byte-identical) and writes one `.vdb` per frame plus a JSON manifest.
+  - Each frame has a `density` grid (water volume fraction) and an optional `vel` grid.
+  - Optional PLY particle cache.
+  - Axis presets: Y-up metres (Houdini, Maya), Z-up metres (Blender), Z-up centimetres (Unreal).
+  - Native writer (`export3d/openvdb.js`): format 224, active-mask compression.
+  - Verified in Blender 3.3 (real OpenVDB library): grids load, a thresholded test sphere comes back in place, and the Lebu frames sit exactly over the design.
+  - Speed on Lebu: about 64 ms and 0.6 MB per frame at 5 cm voxels, so the full 160 s show at 24 fps takes about 4 minutes and 2.3 GB.
+  - Desktop file writer now accepts `.vdb`, `.ply` and `.json`.
+- **Pump fix:** the preview's hydraulic solve used a fixed supply head (`design_head_m`) and ignored placed pumps. It now:
+  - solves the operating point of the placed pumps' combined curve (generic quadratic from flow and head, run in parallel);
+  - slows a pump when power × efficiency cannot supply its rated duty (affinity laws);
+  - makes the edited Flow (m³/h) win over the library's derived L/min.
+  The pump properties panel shows what the pump delivers. On Lebu, the 4 pumps give 7.8 m of head, so jets now reach their 3 m design height; the old 4 m fixed head had capped them at about 1.9 m.
+- **Basket search really fixed:** the designer's library list dropped `family`, `model` and `tags`, so "basket" found nothing in 1.2.44. 1.2.44 also packaged a stale web build (`npm run build` instead of `build:web`). Both are fixed; the installed app finds 6 basket nozzles.
+- **Engine rebuilt** (`resources/engine-1.2.45`, smoke-tested). The installer had been shipping the 1.2.37 engine, so last session's backend swing-range change also ships now.
+- Tests: frontend all folders pass; backend full suite passes; desktop render-export tests pass.
+- Note for scripted launches: VS Code sets `ELECTRON_RUN_AS_NODE=1`; clear it or the app exits at once.
+
 **2026-10-19: AquaFlow Studio 1.2.43 installed — 132 real catalogue products, solenoid jets, real swing ranges**
 
 - New `frontend/src/data/fixtureReferenceProducts.js`, merged into the library (595 → 728 items). It covers real products from OASE, Safe-Rain, Longxin, Huaxin, Himalaya, Fontana, ICONVINA, TNC, Pudisc, Symphony, Crystal Fountains, Atlantic, LSI, Kasco, Kvant, Christie, Bürkert and Airkert:

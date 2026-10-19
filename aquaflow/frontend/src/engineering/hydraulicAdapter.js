@@ -39,6 +39,32 @@ export function isWaterNozzleFixture(fixture = {}) {
   return LEGACY_WATER_TYPE.test(type) && !NOT_WATER_JET.test(type);
 }
 
+const NOT_FEED_PUMP = /mist|fog|high_pressure|dosing|filter|sump|drain/i;
+
+/**
+ * Pumps that feed the display-water network: library Pumps (or pump_* types),
+ * minus the high-pressure mist, dosing, filtration and drainage pumps.
+ */
+export function isFeedPumpFixture(fixture = {}) {
+  const type = String(fixture.type || "");
+  const entry = getFixtureLibraryEntry(type);
+  const isPump = entry ? entry.category === "Pumps" : /^pump/i.test(type);
+  return isPump && !NOT_FEED_PUMP.test(`${type} ${entry?.family || ""}`);
+}
+
+/** A placed pump for the solver: the library duty data overlaid by the designer's edits. */
+export function engineeringFixtureToSolverPump(fixture = {}) {
+  const entry = getFixtureLibraryEntry(String(fixture.type || ""));
+  return {
+    id: fixture.id,
+    type: fixture.type,
+    x: Number(fixture.x || 0),
+    y: Number(fixture.y || 0),
+    provenance: getFixtureProvenance(fixture),
+    engineering: { ...(entry?.engineering || {}), ...(fixture.engineering || {}) },
+  };
+}
+
 export function engineeringFixtureToSolverNozzle(fixture = {}) {
   const engineering = fixture.engineering || {};
   const flowLpm = Math.max(0, Number(engineering.flowLpm || 0));
@@ -61,12 +87,19 @@ export function engineeringFixtureToSolverNozzle(fixture = {}) {
   };
 }
 
-export function buildHydraulicPreviewPayload({ fixtures = [], params = {}, volumeLitres = 0, basins = null } = {}) {
+export function buildHydraulicPreviewPayload({ fixtures = [], params = {}, volumeLitres = 0, basins = null, pumps = [] } = {}) {
   const nozzles = fixtures
     .filter(isWaterNozzleFixture)
     .map(engineeringFixtureToSolverNozzle);
+  // The design's pumps set the supply head (their curve meets the nozzle network);
+  // without any, the solver keeps the fixed design_head_m source.
+  const seen = new Set();
+  const feedPumps = [...fixtures, ...(pumps || [])]
+    .filter((f) => f && isFeedPumpFixture(f) && !seen.has(f.id) && seen.add(f.id))
+    .map(engineeringFixtureToSolverPump);
   return {
     nozzles,
+    ...(feedPumps.length ? { pumps: feedPumps } : {}),
     params: { ...params, design_head_m: Number(params.design_head_m || params.designHeadM || 40) },
     volume_litres: Math.max(0, Number(volumeLitres || 0)),
     // AF-NEXT-010: with 2+ basins the solver assigns each nozzle to the basin containing it.

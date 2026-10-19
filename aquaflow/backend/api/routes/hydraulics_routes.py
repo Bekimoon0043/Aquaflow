@@ -51,7 +51,8 @@ async def preview_physics(payload: dict):
         { "nozzles": [ {id, x, y, engineering:{design_flow_lps, design_pressure_m,
                                                elevation_m?, discharge_coeff?}} ],
           "params":  { "design_head_m": 40.0 },
-          "volume_litres": 50000 }
+          "volume_litres": 50000,
+          "pumps":   [ {id, type, x, y, engineering:{flowM3Hr, headM, powerKw?, efficiency?}} ]?  }
 
     Response:
         { "nozzle_physics": { "<nozzle id>": {exitVelocityMs, jetHeightM, flowLpm,
@@ -72,6 +73,9 @@ async def preview_physics(payload: dict):
     ]}) if isinstance(raw_basins, list) else []
     try:
         extra = {"basins": basins} if len(basins) > 1 else {}
+        pumps = payload.get("pumps")
+        if isinstance(pumps, list) and pumps:
+            extra["pumps"] = pumps
         res = get_geometry_service()._solve_pool_hydraulics(nozzles, params, volume, **extra)
     except Exception as exc:
         raise HTTPException(500, f"hydraulic solve failed: {exc}")
@@ -85,7 +89,7 @@ async def preview_physics(payload: dict):
         "total_design_flow_lpm": res.get("total_design_flow_lpm"),
         "turnover_time_hours": res.get("turnover_time_hours"),
         "hydraulic_solution": res.get("hydraulic_solution"),
-        **({k: res[k] for k in ("basins", "nozzle_basin", "warnings") if k in res}),
+        **({k: res[k] for k in ("basins", "nozzle_basin", "warnings", "pump_operating_point") if k in res}),
     }
 
 

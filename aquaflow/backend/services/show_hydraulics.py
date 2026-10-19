@@ -50,6 +50,7 @@ from services.equipment_provenance import cite, is_verified, normalize_provenanc
 from services.hydraulic_solver import (GRAVITY, JET_EFFICIENCY, HydraulicNetworkSolver, HydraulicNode,
                                        HydraulicPipe, check_pump_adequacy)
 from services.pump_curve import PUMP_CATALOG, PumpCurve, load_catalog_pump
+from services.pump_duty import pump_rating
 
 CONTRACT = "aquaflow-show-hydraulics"
 VERSION = "1.0.0"
@@ -173,9 +174,8 @@ def _pump_model(f, params, cfg, assumptions):
                 rated_max = max(PUMP_CATALOG[model_key]["flows"])
         except KeyError:
             curve = None
-    q_duty = _num(e.get("flowLpm"))
-    q_duty = q_duty / 60000.0 if q_duty else (_num(e.get("flowM3Hr"), 0.0) or 0.0) / 3600.0
-    h_duty = _num(e.get("headM")) or (_num(e.get("pressureBar"), 0.0) or 0.0) * BAR_TO_M
+    rating = pump_rating(e)
+    q_duty, h_duty = rating["flow_m3s"], rating["head_m"]
     assumed_curve = False
     if curve is None and q_duty > 0 and h_duty > 0:
         c0 = cfg["shutoff_ratio"] * h_duty
@@ -184,6 +184,14 @@ def _pump_model(f, params, cfg, assumptions):
         curve_source, assumed_curve = "duty point (generic quadratic shape)", True
     if curve is None:
         return None
+    if rating["power_limited"]:
+        # Motor power × efficiency is below the duty's water power: the pump runs slower.
+        curve = curve.at_speed(rating["speed_ratio"])
+        assumptions.append({"key": f"pump_power_limited:{pid}", "value": round(rating["speed_ratio"], 3),
+                            "unit": "speed ratio", "source": "CALCULATED",
+                            "note": f"Pump {pid}: {rating['available_water_power_w'] / 1000:.2f} kW water power "
+                                    f"(power × efficiency) < {rating['required_power_w'] * rating['efficiency'] / 1000:.2f} kW "
+                                    "needed at its duty point; curve scaled by the affinity laws."})
     if rated_max is None:
         rated_max = (q_duty or curve.max_flow / 1.7) * cfg["rated_max_flow_factor"]
     duty_ref = q_duty or rated_max / cfg["rated_max_flow_factor"]

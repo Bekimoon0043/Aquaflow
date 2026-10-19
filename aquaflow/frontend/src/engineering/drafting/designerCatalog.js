@@ -23,6 +23,10 @@ export const FIXTURE_TYPES = Array.isArray(FIXTURE_LIBRARY)
       icon: f.icon,
       category: f.category || "Other",
       manufacturer: f.manufacturer || "",
+      // Searchable in the designer's library browser ("basket" → rotating nozzles).
+      family: f.family || "",
+      model: f.model || "",
+      ...(Array.isArray(f.tags) ? { tags: f.tags } : {}),
     }))
   : [
       { key: "nozzle_geyser", label: "Geyser Nozzle", color: "#00ccaa", icon: "⬆" },

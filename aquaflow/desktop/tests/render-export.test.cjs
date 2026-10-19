@@ -12,7 +12,11 @@ test("safe names: numbered frames, WAV and note only; no paths", () => {
   assert.equal(safeFileName("lebu_00007.png"), "lebu_00007.png");
   assert.equal(safeFileName("lebu_audio.wav"), "lebu_audio.wav");
   assert.equal(safeFileName("README.txt"), "README.txt");
-  for (const bad of ["../x.png", "..\\x.png", "a/b.png", "C:\\x.png", "x.exe", ".hidden.png", "x.png.js", "", "a..b.png"]) {
+  // Simulation cache: OpenVDB volumes, PLY particles, JSON manifest.
+  assert.equal(safeFileName("Lebu_Fountain.0001.vdb"), "Lebu_Fountain.0001.vdb");
+  assert.equal(safeFileName("Lebu_Fountain_particles.0001.ply"), "Lebu_Fountain_particles.0001.ply");
+  assert.equal(safeFileName("Lebu_Fountain_manifest.json"), "Lebu_Fountain_manifest.json");
+  for (const bad of ["../x.png", "..\\x.png", "a/b.png", "C:\\x.png", "x.exe", ".hidden.png", "x.png.js", "x.vdb.bat", "../x.vdb", "", "a..b.png"]) {
     assert.equal(safeFileName(bad), null, bad);
   }
 });

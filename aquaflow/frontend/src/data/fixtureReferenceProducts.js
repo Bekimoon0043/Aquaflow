@@ -33,10 +33,11 @@ function equivalentOrificeMm(q, p, n, cd) {
 
 /** Water nozzle from one catalogue operating point (h m · q L/min · p bar). */
 function nozzle({ key, label, family, maker, model, conn, h, q, p, n = 1, outletDia, cd = 0.93, spray = 0,
-  material = "SS304", preview3d, resolverKey, extra = {}, src, note }) {
+  material = "SS304", preview3d, resolverKey, tags, extra = {}, src, note }) {
   return {
     key, category: "Nozzles", family, label, manufacturer: maker, model,
     color: "#3aa8ff", icon: "↑", preview3d, resolverKey,
+    ...(tags ? { tags } : {}),
     engineering: {
       flowLpm: r2(q), pressureBar: r3(p), jetHeightM: r2(h),
       nozzleDiaMm: r2(equivalentOrificeMm(q, p, n, cd)), orificeCount: n, dischargeCoeff: cd,
@@ -50,9 +51,10 @@ function nozzle({ key, label, family, maker, model, conn, h, q, p, n = 1, outlet
 }
 
 function device({ key, label, category, family, maker, model, icon = "▣", color = "#99aabb", preview3d, resolverKey,
-  engineering, src, note }) {
+  tags, engineering, src, note }) {
   return {
     key, category, family, label, manufacturer: maker, model, color, icon, preview3d, resolverKey,
+    ...(tags ? { tags } : {}),
     engineering: { ...engineering, referenceSource: src, referenceNote: note },
   };
 }
@@ -324,32 +326,32 @@ const laminarJets = [
 const ROT = "Rotating Nozzles (catalogue)";
 const rotating = [
   nozzle({ key: "nozzle_dancing_rotary_g1_1_2_saferain", label: "Safe-Rain Dancing rotary G1½ (16+1)", family: ROT, maker: "Safe-Rain", model: "Dancing 1½\" M, 16+1 jets",
-    conn: "DN40", h: 4.5, q: 117, p: 6.5 * MCA, n: 17, spray: 30, preview3d: "pirouette", resolverKey: "rotating_jet",
+    conn: "DN40", h: 4.5, q: 117, p: 6.5 * MCA, n: 17, spray: 30, preview3d: "pirouette", resolverKey: "rotating_jet", tags: ["basket", "spinner"],
     extra: { outletCount: 16, rotationRpm: 20, sprayDiameterM: 5.3, heightRangeM: [3.25, 4.5], flowRangeLpm: [95, 117] },
     src: S.saferain("rotatory-fountain-nozzle_dancing.pdf"),
     note: "95–117 L/min, H 3.25–4.5 m, D 2.8–5.3 m, supply 2.5–9 m.c.a. Pressure at this point and rpm est." }),
   nozzle({ key: "nozzle_dancing_rotary_g2_saferain", label: "Safe-Rain Dancing rotary G2 (24+1)", family: ROT, maker: "Safe-Rain", model: "Dancing 2\" M, 24+1 jets",
-    conn: "DN50", h: 7, q: 255, p: 9 * MCA, n: 25, spray: 30, preview3d: "pirouette", resolverKey: "rotating_jet",
+    conn: "DN50", h: 7, q: 255, p: 9 * MCA, n: 25, spray: 30, preview3d: "pirouette", resolverKey: "rotating_jet", tags: ["basket", "spinner"],
     extra: { outletCount: 16, rotationRpm: 20, sprayDiameterM: 9, heightRangeM: [5, 7], flowRangeLpm: [217, 255] },
     src: S.saferain("rotatory-fountain-nozzle_dancing.pdf"),
     note: "217–255 L/min, H 5–7 m, D 7.5–9 m. 25 jets drawn as 16 streams. rpm est." }),
   nozzle({ key: "nozzle_twister_g3_saferain", label: "Safe-Rain Twister G3 (12 jets)", family: ROT, maker: "Safe-Rain", model: "Twister G3\" 12×Ø8",
-    conn: "DN80", h: 4, q: 345, p: 6 * MCA, n: 12, outletDia: 8, spray: 60, preview3d: "pirouette", resolverKey: "rotating_jet",
+    conn: "DN80", h: 4, q: 345, p: 6 * MCA, n: 12, outletDia: 8, spray: 60, preview3d: "pirouette", resolverKey: "rotating_jet", tags: ["basket", "spinner"],
     extra: { outletCount: 12, rotationRpm: 60, sprayDiameterM: 16, heightRangeM: [2.25, 4], flowRangeLpm: [265, 345] },
     src: S.saferain("rotatory-fountain-nozzle_twister.pdf"),
     note: "265–345 L/min @ 3.5–6 m.c.a, H 2.25–4.0 m, D 9–16 m. Above 6 m.c.a it spins too fast. rpm est." }),
   nozzle({ key: "nozzle_cyclone_g3_saferain", label: "Safe-Rain Cyclone G3 (5 lances)", family: ROT, maker: "Safe-Rain", model: "Cyclone G3\" 5×Ø8",
-    conn: "DN80", h: 3, q: 165, p: 3.5 * MCA, n: 5, outletDia: 8, spray: 12, preview3d: "pirouette", resolverKey: "rotating_jet",
+    conn: "DN80", h: 3, q: 165, p: 3.5 * MCA, n: 5, outletDia: 8, spray: 12, preview3d: "pirouette", resolverKey: "rotating_jet", tags: ["basket", "spinner"],
     extra: { outletCount: 5, rotationRpm: 15, sprayDiameterM: 3.8, heightRangeM: [1.5, 3], flowRangeLpm: [110, 165] },
     src: S.saferain("rotatory-fountain-nozzle_cyclone.pdf"),
     note: "110–165 L/min @ 1.8–3.5 m.c.a, H 1.5–3.0 m, D 2.4–3.8 m, lances tilted 6°. rpm est." }),
   nozzle({ key: "nozzle_double_big_fan_rotary_saferain", label: "Safe-Rain Double Big Fan rotary (22 jets)", family: ROT, maker: "Safe-Rain", model: "Double big fan G1½\" 22×Ø4",
-    conn: "DN40", h: 4.5, q: 168, p: 12 * MCA, n: 22, outletDia: 4, spray: 70, preview3d: "pirouette", resolverKey: "rotating_jet",
+    conn: "DN40", h: 4.5, q: 168, p: 12 * MCA, n: 22, outletDia: 4, spray: 70, preview3d: "pirouette", resolverKey: "rotating_jet", tags: ["basket", "spinner"],
     extra: { outletCount: 2, rotationRpm: 30, sprayDiameterM: 11, heightRangeM: [2, 4.5], flowRangeLpm: [112, 168] },
     src: S.saferain("rotatory-fountain-nozzle_double_fan_rotating_jets.pdf"),
     note: "112–168 L/min @ 5–12 m.c.a, H 2–4.5 m, D 8–11 m. Two fans drawn as two streams. rpm est." }),
   nozzle({ key: "nozzle_hibiscus_rotary_g1_1_2_saferain", label: "Safe-Rain Hibiscus rotary G1½", family: ROT, maker: "Safe-Rain", model: "Hibiscus 1½\"",
-    conn: "DN40", h: 0.8, q: 128, p: 3.2 * MCA, spray: 90, preview3d: "pirouette", resolverKey: "rotating_jet",
+    conn: "DN40", h: 0.8, q: 128, p: 3.2 * MCA, spray: 90, preview3d: "pirouette", resolverKey: "rotating_jet", tags: ["basket", "spinner"],
     extra: { outletCount: 8, rotationRpm: 20, sprayDiameterM: 4.5, flowRangeLpm: [48, 128] },
     src: S.saferain("rotatory-fountain-nozzle_hibiscus.pdf"),
     note: "48–128 L/min @ 0.4–3.2 m.c.a, D 1.5–4.5 m. Rise and rpm est." }),

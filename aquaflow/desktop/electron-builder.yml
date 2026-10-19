@@ -45,7 +45,10 @@ extraResources:
   # engine-1.2.32 stays available through the prior installer for rollback.
   # 1.2.37 engine: keyed (keyframe) clips in show_frame, preflight and the Siemens compilers.
   # Packaged smoke: /api/health 200 before installation. engine-1.2.33 stays for rollback.
-  - from: resources/engine-1.2.37
+  # 1.2.45 engine: placed pumps drive the preview's hydraulic solve (curve + power × efficiency
+  # limit), per-fixture swing ranges in show_frame. Packaged smoke: /api/health 200 and the
+  # pump-efficiency preview solve answered. engine-1.2.37 stays for rollback.
+  - from: resources/engine-1.2.45
     to: engine
     filter: ["**/*"]
   # Bundled license secret (+ update URL). resolveConfig() reads this from

@@ -267,7 +267,7 @@ class GeometryService:
 
 
     def _solve_pool_hydraulics(self, nozzles: list, params: dict, volume_litres: float,
-                               basins: Optional[list] = None) -> dict:
+                               basins: Optional[list] = None, pumps: Optional[list] = None) -> dict:
         """
         Build a supply network from the designed nozzles and solve it with the real
         Hazen-Williams engine (services/hydraulic_solver.solve_network) — replacing the
@@ -284,6 +284,11 @@ class GeometryService:
         its own main + manifold off the shared pump. ``basins`` / ``nozzle_basin`` in
         the result report flow, volume and turnover per basin. With one basin or none
         the network is exactly the historical single-manifold one.
+
+        ``pumps`` (placed pump fixtures): the supply is then their combined curve (in
+        parallel on the common header, derated when power × efficiency cannot drive the
+        duty — services/pump_duty.py) and the head is the pump/network operating point.
+        Without pumps the supply stays the fixed ``design_head_m``.
         """
         default_flow_lps = 0.5      # L/s per nozzle when the fixture carries no spec
         design_head_m = float(params.get("design_head_m", 40.0))
@@ -379,8 +384,13 @@ class GeometryService:
             base["basins"] = per
             base["nozzle_basin"] = {str(n.get("id") or f"NOZ{i}"): assign[i] for i, n in enumerate(nozzles)}
             base["warnings"] = warnings
+        pump_models, pump_validation = self._pump_models(pumps, params)
         try:
-            solution = solve_network(network)
+            if pump_models:
+                solution, op = self._pump_operating_point(network, pump_models)
+                base["pump_operating_point"] = op
+            else:
+                solution = solve_network(network)
         except Exception as exc:                     # solver stays non-fatal for export
             return {**base, "hydraulic_solution": None, "note": f"solver error: {exc}"}
 
@@ -406,7 +416,88 @@ class GeometryService:
                 "converged": solution.get("converged"),
                 "hydraulic_solution": solution,
                 "nozzle_physics": nozzle_physics,
-                "validation": solution.get("validation", [])}
+                "validation": pump_validation + list(solution.get("validation", []))}
+
+    @staticmethod
+    def _pump_models(pumps: Optional[list], params: dict) -> tuple[list, list]:
+        """Curve models for the placed pumps that carry a duty point (flow + head)."""
+        from services.show_hydraulics import DEFAULTS as SH_DEFAULTS, _pump_model
+        from services.pump_duty import pump_rating
+
+        models, validation = [], []
+        for f in pumps or []:
+            if not isinstance(f, dict) or f.get("id") is None:
+                continue
+            pm = _pump_model(f, params, SH_DEFAULTS, [])
+            if not pm:
+                continue
+            rating = pump_rating(f.get("engineering") or {})
+            models.append({"id": str(f["id"]), "type": f.get("type"), "curve": pm["curve"], "rating": rating})
+            if rating["power_limited"]:
+                validation.append({
+                    "severity": "warning", "code": "PUMP_POWER_LIMITED", "element": str(f["id"]),
+                    "message": (f"Pump {f['id']}: power × efficiency gives {rating['available_water_power_w'] / 1000:.2f} kW "
+                                f"of water power but its duty ({rating['flow_m3s'] * 3600:.1f} m3/h @ {rating['head_m']:.1f} m) "
+                                f"needs {rating['flow_m3s'] * rating['head_m'] * 9.81:.2f} kW — it runs at "
+                                f"{rating['speed_ratio'] * 100:.0f}% speed and the jets drop."),
+                })
+        return models, validation
+
+    @staticmethod
+    def _pump_operating_point(network: dict, pump_models: list) -> tuple[dict, dict]:
+        """Head H where the pumps' combined curve meets the network: root of
+        f(H) = H − H_pumps(Q_network(H)) by Illinois regula falsi. f(0) ≤ 0 and
+        f(shutoff) ≥ 0 because network flow rises and pump head falls with H."""
+        from services.pump_curve import PumpSystem
+
+        bank = PumpSystem([m["curve"] for m in pump_models],
+                          mode="parallel" if len(pump_models) > 1 else "single")
+        supply = next(n for n in network["nodes"] if n["id"] == "PUMP")
+
+        def run(head):
+            supply["fixed_head"] = max(0.0, head)
+            sol = solve_network(network)
+            q = sum(p["flow_m3s"] for p in sol["pipes"] if str(p["id"]).startswith("MAIN"))
+            return sol, max(0.0, q)
+
+        shutoff = bank.shutoff_head
+        a, fa = 0.0, -shutoff
+        sol_b, q_b = run(shutoff)
+        b, fb = shutoff, shutoff - bank.head(q_b)
+        best = (sol_b, q_b, b, abs(fb))
+        side = 0
+        if shutoff > 0 and abs(fb) > 1e-3:
+            for _ in range(60):
+                c = (a * fb - b * fa) / (fb - fa) if fb != fa else 0.5 * (a + b)
+                sol_c, q_c = run(c)
+                fc = c - bank.head(q_c)
+                if abs(fc) < best[3]:
+                    best = (sol_c, q_c, c, abs(fc))
+                if abs(fc) < 1e-3 or abs(b - a) < 1e-6:
+                    break
+                if fc * fb > 0:
+                    b, fb = c, fc
+                    if side == -1:
+                        fa /= 2.0
+                    side = -1
+                else:
+                    a, fa = c, fc
+                    if side == 1:
+                        fb /= 2.0
+                    side = 1
+        solution, q, head, resid = best
+        if supply["fixed_head"] != head:             # leave the network at the reported point
+            solution, q = run(head)
+        split = bank.per_pump_flow(q, head)
+        return solution, {
+            "head_m": round(head, 4), "flow_lpm": round(q * 60000.0, 2), "residual_m": round(resid, 5),
+            "pumps": [{"id": m["id"], "type": m["type"], "flow_lpm": round(qi * 60000.0, 2),
+                       "duty_flow_lpm": round(m["rating"]["flow_m3s"] * 60000.0, 2),
+                       "duty_head_m": round(m["rating"]["head_m"], 3),
+                       "speed_ratio": round(m["rating"]["speed_ratio"], 4),
+                       "power_limited": m["rating"]["power_limited"]}
+                      for m, qi in zip(pump_models, split)],
+        }
 
 
 _service: Optional[GeometryService] = None

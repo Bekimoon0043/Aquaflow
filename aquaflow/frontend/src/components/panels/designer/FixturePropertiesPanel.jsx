@@ -13,6 +13,7 @@ import SiemensFixtureLink from "../siemens/SiemensFixtureLink";
 import FixtureTrustPanel from "../FixtureTrustPanel"; // AF-NEXT-012
 import { FIXTURE_TYPES } from "../../../engineering/drafting/designerCatalog";
 import { MIXED, sharedFieldValues } from "../../../engineering/drafting/selection";
+import { deliveredDuty } from "../../../engineering/pumpDuty";
 
 const t = (f) => String(f?.type || "");
 const KNOWN_FAMILY = (type) => /^(nozzle|light|pump|valve|solenoid|air|fuel|flame|motion|sensor|safety|control|power|vfd|filter|uv|dosing)/.test(type)
@@ -34,7 +35,7 @@ export const ENGINEERING_SECTIONS = [
   { key: "pump", match: (y) => y.startsWith("pump"), color: "#00ffaa", fields: [
     ["Flow (m³/hr)", "flowM3Hr", 0, 5000, 1], ["Head (m)", "headM", 0, 200, 0.1], ["Power (kW)", "powerKw", 0, 1000, 0.1],
     ["Voltage (V)", "voltage", 0, 1000, 1], ["Efficiency (%)", "efficiency", 0, 100, 1],
-  ], text: [] },
+  ], text: [], readout: (e) => <PumpReadout engineering={e} /> },
   { key: "valve", match: (y) => y.startsWith("valve") || y.startsWith("solenoid"), color: "#00ffaa", fields: [
     ["Diameter (DN)", "diameterMm", 0, 1000, 1], ["Flow Capacity (m³/hr)", "flowM3Hr", 0, 5000, 1], ["Pressure Rating (bar)", "pressureBar", 0, 100, 0.1],
     ["Voltage (V)", "voltage", 0, 1000, 1], ["Power (W)", "wattage", 0, 5000, 1], ["Response Time (ms)", "responseMs", 0, 10000, 10],
@@ -96,6 +97,29 @@ function TextField({ label, value, onChange, title, placeholder, mixed = false }
   );
 }
 
+/** What the pump delivers to the jets with this power and efficiency (null without a duty point). */
+export function pumpReadoutText(engineering) {
+  const d = deliveredDuty(engineering || {});
+  if (!(d.flowM3s > 0) || !(d.headM > 0)) return null;
+  const head = `Delivers ${d.deliveredHeadM.toFixed(1)} m @ ${d.deliveredFlowM3h.toFixed(1)} m³/h`;
+  if (d.powerLimited) {
+    return { warn: true, text: `${head} — power × efficiency is short of the ${(d.requiredPowerW / 1000).toFixed(2)} kW its duty needs, so it runs at ${Math.round(d.speedRatio * 100)}% speed and the jets drop.` };
+  }
+  return { warn: false, text: d.requiredPowerW
+    ? `${head} (duty needs ${(d.requiredPowerW / 1000).toFixed(2)} kW input — the motor is sufficient).`
+    : `${head} (set Power and Efficiency to check the motor).` };
+}
+
+function PumpReadout({ engineering }) {
+  const r = pumpReadoutText(engineering);
+  if (!r) return null;
+  return (
+    <div data-testid="pump-readout" style={{ color: r.warn ? "#fbbf24" : "#7ab", fontSize: 9, lineHeight: 1.4, margin: "2px 0 6px" }}>
+      {r.text}
+    </div>
+  );
+}
+
 /** Single-fixture engineering fields (the original panel, table-driven). */
 function EngineeringFields({ fixture, engineering, onEngineering }) {
   const type = t(fixture);
@@ -114,6 +138,7 @@ function EngineeringFields({ fixture, engineering, onEngineering }) {
           ))}
         </div>
       )}
+      {section.readout?.(engineering)}
       {section.siemens && <SiemensFixtureLink fixtureId={fixture?.id} />}
     </div>
   ));

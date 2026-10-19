@@ -18,8 +18,9 @@ export function filterFixtureLibrary(fixtures, { tool, query = "", category = "a
     if (!fixtureMatchesTool(fixture, tool)) return false;
     if (category !== "all" && String(fixture.category || "Other") !== category) return false;
     if (!q) return true;
-    return [fixture.label, fixture.key, fixture.category, fixture.manufacturer]
-      .some((value) => String(value || "").toLowerCase().includes(q));
+    const hay = [fixture.label, fixture.key, fixture.category, fixture.manufacturer, fixture.family, fixture.model,
+      ...(Array.isArray(fixture.tags) ? fixture.tags : [])];
+    return hay.some((value) => String(value || "").toLowerCase().includes(q));
   });
 }
 

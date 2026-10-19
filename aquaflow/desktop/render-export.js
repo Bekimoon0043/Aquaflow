@@ -3,14 +3,14 @@
 //
 // Security model: the renderer never sends a path. "render:choose-folder" opens the OS
 // folder dialog and returns an opaque token for the folder the USER picked; every write
-// names that token plus a bare file name (no separators, PNG/WAV/TXT only). A compromised
+// names that token plus a bare file name (no separators, PNG/WAV/TXT/VDB/PLY/JSON only). A compromised
 // page can therefore only drop frame-like files into a folder the user just chose.
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
 const MAX_FILE_BYTES = 256 * 1024 * 1024;           // one 8K PNG is far below this
-const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.(png|wav|txt)$/i;
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.(png|wav|txt|vdb|ply|json)$/i;
 
 function safeFileName(name) {
   const n = String(name || "");

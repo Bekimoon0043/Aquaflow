@@ -82,7 +82,7 @@ contextBridge.exposeInMainWorld("aquaflow", {
   },
 
   // AF-3D-VID-002 — PNG image-sequence export. chooseFolder() opens the OS dialog and returns
-  // { ok, path, token } | { canceled }; writeFile only writes bare *.png/*.wav/*.txt names
+  // { ok, path, token } | { canceled }; writeFile only writes bare *.png/*.wav/*.txt/*.vdb/*.ply/*.json names
   // into the folder behind that token.
   render: {
     chooseFolder(options) { return ipcRenderer.invoke("render:choose-folder", options || {}); },

@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
 import { buildSceneGraph, sceneTriangleCount, exportScene, EXPORT_FORMATS } from "../../export3d";
+import SimulationCacheSection from "./SimulationCacheSection";
 
 const box = { background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6 };
 
@@ -41,6 +42,7 @@ export default function Export3DPanel() {
   const siteSurfaces = useEngineeringStore((s) => s.siteSurfaces);
   const showPool = useShowStore((s) => s.poolGeometry);
   const showName = useShowStore((s) => s.currentShow?.name);
+  const projectName = useEngineeringStore((s) => s.projectName);
 
   const design = useMemo(() => {
     const fixtures = engFixtures || [];
@@ -151,6 +153,8 @@ export default function Export3DPanel() {
           {status && <span style={{ fontSize: 11, color: "#22c55e" }}>{status}</span>}
           {error && <span style={{ fontSize: 11, color: "#ef4444" }}>{error}</span>}
         </div>
+
+        <SimulationCacheSection fixtures={design.fixtures} name={projectName || design.name} />
 
         <div style={{ ...box, padding: 12, fontSize: 10.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
           <strong style={{ color: "var(--text-secondary)" }}>About</strong> — AquaFlow stays control
