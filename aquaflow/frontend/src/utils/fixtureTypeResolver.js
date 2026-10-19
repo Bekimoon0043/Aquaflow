@@ -1394,6 +1394,9 @@ function resolveFromLibrary(key, entry) {
   const category = entry.category;
   const family = `${entry.family || ""} ${entry.engineering?.group || ""}`.toLowerCase();
 
+  // Catalogue products name the runtime type they behave as (rotating basket, swing jet, …).
+  if (entry.resolverKey && FIXTURE_TYPE_MAP[entry.resolverKey]) return FIXTURE_TYPE_MAP[entry.resolverKey];
+
   switch (category) {
     case "Nozzles":
       // Mist / fog heads → fog density; every other nozzle is a water jet

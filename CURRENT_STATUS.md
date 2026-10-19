@@ -1,5 +1,18 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19: AquaFlow Studio 1.2.43 installed — 132 real catalogue products, solenoid jets, real swing ranges**
+
+- New `frontend/src/data/fixtureReferenceProducts.js`, merged into the library (595 → 728 items). It covers real products from OASE, Safe-Rain, Longxin, Huaxin, Himalaya, Fontana, ICONVINA, TNC, Pudisc, Symphony, Crystal Fountains, Atlantic, LSI, Kasco, Kvant, Christie, Bürkert and Airkert:
+  - Water nozzles: clear and hollow jets, foam and frothy columns, bells, flowers, spheres, crowns, fans, willows, laminar, jumping and deck jets, rotating nozzles, water screens, a digital curtain.
+  - Solenoid jets (new family) and 20 1D/2D/3D swing drives.
+  - Effects: air shooters, fire-water, fog, lasers, a projector.
+  - Equipment: lights, DMX pumps, fast solenoid valves and diverters, show control, level and wind control, underwater electrical, strainers.
+- How the data is recorded: each item carries one catalogue operating point, the published range, its source URL and an "est." note. Items stay flagged generic until a datasheet is attached. For water nozzles, the orifice size is the equivalent that reproduces the catalogue flow, so the physics checks hold.
+- Moving nozzles: the JS and Python show frames now clamp pan and tilt to half the fixture's published range (at most 90°) instead of a fixed ±45°. Fixtures without a range are unchanged.
+- Swing drives carry their rated jet (height, flow and pressure), so they draw at real height and count in the water network.
+- Frontend 1,329 tests passed; backend show-frame and motion-range tests passed.
+- Not done: solenoid valves (plant equipment) are still not linked to the jets they feed, so switching a valve does not switch its jet in the preview.
+
 **2026-10-16 (evening): AquaFlow Studio 1.2.42 installed — 3D exports that open in other software**
 
 - FBX was ASCII (Blender, Unity and Unreal refuse ASCII FBX) and malformed. It is now **binary FBX 7.4** (Y-up, metres, materials).

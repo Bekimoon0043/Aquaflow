@@ -30,6 +30,8 @@ export function isWaterNozzleFixture(fixture = {}) {
   const type = String(fixture.type || "");
   const entry = getFixtureLibraryEntry(type);
   if (entry) {
+    // A moving (swing) nozzle sprays water too once it carries a flow rating.
+    if (entry.category === "Motion Systems") return Number((fixture.engineering || entry.engineering)?.flowLpm) > 0;
     if (entry.category !== "Nozzles") return false;
     const fam = `${entry.family || ""} ${entry.engineering?.group || ""}`;
     return !/mist|fog/i.test(fam);

@@ -9,6 +9,7 @@
  *  - whether it's a light (not a water nozzle)
  */
 import { DESIGN_HEIGHT_RANGE_M } from "../components/preview/jetPhysics.js";
+import { REFERENCE_PREVIEW_3D } from "../data/fixtureReferenceProducts.js";
 
 export const NOZZLE_3D = {
   JET_1D:     "jet_1d",
@@ -152,6 +153,12 @@ export function resolveFixtureType(typeString) {
   if (!typeString) return getDefault();
   const key = typeString.toLowerCase().trim();
   if (FIXTURE_MAP[key]) return FIXTURE_MAP[key];
+  // Catalogue products declare how they draw ("pirouette", "ring", or "like:<map key>").
+  const hint = REFERENCE_PREVIEW_3D[key];
+  if (hint) {
+    const like = hint.startsWith("like:") ? hint.slice(5) : hint;
+    return FIXTURE_MAP[like] || { ...getDefault(), nozzleType: like };
+  }
   // Fuzzy match
   if (key.includes("geyser"))   return FIXTURE_MAP["geyser"];
   if (key.includes("laminar"))  return FIXTURE_MAP["laminar_jet"];
@@ -388,6 +395,7 @@ export function classifyFixtureType(typeString) {
     "dosing",
     "uv",
     "junction",
+    "projector",
     "power",
     "cable",
     "pipe",

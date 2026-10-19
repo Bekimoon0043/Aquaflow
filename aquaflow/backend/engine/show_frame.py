@@ -68,6 +68,21 @@ def _clamp(value, low, high):
     return max(low, min(high, value))
 
 
+def motion_limits(fixture):
+    """± limits (degrees) of a moving nozzle: half its published range, at most 90; ±45 when unknown."""
+    eng = (fixture or {}).get("engineering") or {}
+
+    def half(*values):
+        for v in values:
+            n = _finite(v, float("nan"))
+            if math.isfinite(n) and n > 0:
+                return min(90.0, n / 2)
+        return 45.0
+
+    return {"pan": half(eng.get("panRangeDeg"), eng.get("swingRangeDeg"), eng.get("angleRangeDeg")),
+            "tilt": half(eng.get("tiltRangeDeg"), eng.get("swingRangeDeg"), eng.get("angleRangeDeg"))}
+
+
 def _clamp01(value):
     return _clamp(value, 0.0, 1.0)
 
@@ -348,6 +363,7 @@ def prepare_show(project):
     motion = {fid for fid in fixture_ids
               if str((known.get(fid) or {}).get("type", "")).startswith("motion")
               or any(t in _MOTION_POSITION for t in channel_types.get(fid, ()))}
+    motion_range = {fid: motion_limits(known.get(fid)) for fid in motion}
     buckets = {}
     for clip in clips:
         for bucket in range(math.floor(clip["start"] / _BUCKET_SECONDS), math.floor(clip["end"] / _BUCKET_SECONDS) + 1):
@@ -361,6 +377,7 @@ def prepare_show(project):
                 if isinstance(s, dict) and math.isfinite(_finite(s.get("start"), float("nan")))
                 and _finite(s.get("end"), float("nan")) > _finite(s.get("start"), float("nan"))]
     return {"clips": clips, "buckets": buckets, "fixture_ids": fixture_ids, "kinds": kinds, "motion": motion,
+            "motion_range": motion_range,
             "duration": duration, "sections": sections, "diagnostics": diagnostics + overlaps, "overlaps": overlaps}
 
 
@@ -440,10 +457,13 @@ def evaluate_show_frame_at(project, seconds, opts=None, prepared=None):
                 channels[clip["type"]] = {"level": level, "clip": clip}
             if clip["fixtureId"] in prepared["motion"]:
                 pose = poses.setdefault(clip["fixtureId"], {"pan": 0.0, "tilt": 0.0})
+                lim = prepared.get("motion_range", {}).get(clip["fixtureId"]) or {"pan": 45.0, "tilt": 45.0}
                 if clip["type"] in _WATER_MOTION_SOURCES:
-                    pose["pan"], pose["tilt"] = _clamp(clip["pan"], -45, 45), _clamp(clip["tilt"], -45, 45)
+                    pose["pan"] = _clamp(clip["pan"], -lim["pan"], lim["pan"])
+                    pose["tilt"] = _clamp(clip["tilt"], -lim["tilt"], lim["tilt"])
                 elif clip["type"] in _MOTION_POSITION:
-                    pose["tilt" if clip["type"] == "motion_tilt" else "pan"] = _clamp(clip["value"], -45, 45)
+                    axis = "tilt" if clip["type"] == "motion_tilt" else "pan"
+                    pose[axis] = _clamp(clip["value"], -lim[axis], lim[axis])
         diagnostics.extend(dict(o) for o in prepared["overlaps"] if o["start"] <= t < o["end"])
     else:
         diagnostics.append({"code": state, "severity": "info", "message": f"{state}: every output is off."})

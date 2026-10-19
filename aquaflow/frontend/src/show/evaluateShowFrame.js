@@ -17,7 +17,8 @@
 //     channels: { [trackType]: 0..1 },          // winning value per active channel
 //     color: { hex, srgb:{r,g,b}, linear:{r,g,b}, source } | null,
 //     output: { r, g, b } (lights only),       // sRGB-encoded drive = color.srgb × level
-//     motion: { pan, tilt } (motion fixtures),  // degrees, clamped ±45
+//     motion: { pan, tilt } (motion fixtures),  // degrees, clamped to the fixture's own
+//                                                 // range (half of pan/swing/tilt range, ≤90), else ±45
 //     source: { clipId, recipeId, trackId } | null,
 //   } },
 //   pumps:  { [fixtureId]: { speed: 0..1, run: boolean } },
@@ -86,6 +87,16 @@ const finite = (value, fallback = 0) => {
 };
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const clamp01 = value => clamp(value, 0, 1);
+
+/** ± limits (degrees) of a moving nozzle: half its published range, at most 90; ±45 when unknown. */
+export function motionLimits(fixture) {
+  const e = fixture?.engineering || {};
+  const half = (...values) => {
+    for (const v of values) { const n = Number(v); if (Number.isFinite(n) && n > 0) return Math.min(90, n / 2); }
+    return 45;
+  };
+  return { pan: half(e.panRangeDeg, e.swingRangeDeg, e.angleRangeDeg), tilt: half(e.tiltRangeDeg, e.swingRangeDeg, e.angleRangeDeg) };
+}
 
 // ─── Curves and envelopes ──────────────────────────────────────────────────
 
@@ -387,6 +398,7 @@ export function prepareShow(project) {
   const kinds = new Map(fixtureIds.map(id => [id, fixtureKind(known.get(id), [...(channelTypes.get(id) || [])])]));
   const motionFixtures = new Set(fixtureIds.filter(id => String(known.get(id)?.type || "").startsWith("motion")
     || [...(channelTypes.get(id) || [])].some(t => MOTION_POSITION.has(t))));
+  const motionRange = new Map([...motionFixtures].map(id => [id, motionLimits(known.get(id))]));
   const buckets = new Map();
   for (const clip of clips) {
     const first = Math.floor(clip.start / BUCKET_SECONDS), last = Math.floor(clip.end / BUCKET_SECONDS);
@@ -400,7 +412,7 @@ export function prepareShow(project) {
     ? Number(project.duration) : clips.reduce((m, c) => Math.max(m, c.end), 0);
   const sections = (project?.sections || []).filter(s => Number.isFinite(Number(s?.start)) && Number(s?.end) > Number(s?.start))
     .map(s => ({ id: s.id, name: s.name || s.id, start: Number(s.start), end: Number(s.end) }));
-  const prepared = { clips, buckets, fixtureIds, kinds, motionFixtures, duration, sections, tempo,
+  const prepared = { clips, buckets, fixtureIds, kinds, motionFixtures, motionRange, duration, sections, tempo,
     diagnostics: [...diagnostics, ...overlaps], overlaps };
   if (project && typeof project === "object") preparedCache.set(project, prepared);
   return prepared;
@@ -480,8 +492,12 @@ export function evaluateShowFrameAt(project, seconds, opts = {}) {
       if (!current || level >= current.level) channels[clip.type] = { level, clip };
       if (prepared.motionFixtures.has(clip.fixtureId)) {
         const pose = motion.get(clip.fixtureId) || { pan: 0, tilt: 0 };
-        if (WATER_MOTION_SOURCES.has(clip.type)) { pose.pan = clamp(clip.pan, -45, 45); pose.tilt = clamp(clip.tilt, -45, 45); }
-        else if (MOTION_POSITION.has(clip.type)) pose[clip.type === "motion_tilt" ? "tilt" : "pan"] = clamp(clip.value, -45, 45);
+        const lim = prepared.motionRange?.get(clip.fixtureId) || { pan: 45, tilt: 45 };
+        if (WATER_MOTION_SOURCES.has(clip.type)) { pose.pan = clamp(clip.pan, -lim.pan, lim.pan); pose.tilt = clamp(clip.tilt, -lim.tilt, lim.tilt); }
+        else if (MOTION_POSITION.has(clip.type)) {
+          const axis = clip.type === "motion_tilt" ? "tilt" : "pan";
+          pose[axis] = clamp(clip.value, -lim[axis], lim[axis]);
+        }
         motion.set(clip.fixtureId, pose);
       }
     }

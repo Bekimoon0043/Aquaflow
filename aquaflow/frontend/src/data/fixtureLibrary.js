@@ -5,6 +5,7 @@
 // (AQ-S2-011) so FIXTURE_LIBRARY exposes 500+ fixtures, every one carrying both
 // hydraulic (`engineering`) and electrical (`electrical`) metadata.
 import EXPANDED_FIXTURES from "./fixture_library_expanded.json";
+import { REFERENCE_PRODUCTS } from "./fixtureReferenceProducts.js";
 import { equipmentKind, genericProvenance, isVerifiedProvenance, normalizeProvenance, SOURCE_MEASURED } from "./fixtureProvenance.js";
 
 const CURATED_FIXTURES = [
@@ -1548,6 +1549,8 @@ function normalizeFixture(f) {
 export const FIXTURE_LIBRARY = [
   ...CURATED_FIXTURES.map(normalizeFixture),
   ...EXPANDED_FIXTURES.map(normalizeFixture),
+  // Real catalogue products (OASE, Safe-Rain, Longxin, Huaxin, …) — see fixtureReferenceProducts.js.
+  ...REFERENCE_PRODUCTS.map(normalizeFixture),
 ];
 
 const FIXTURE_BY_KEY = new Map(FIXTURE_LIBRARY.map(f => [f.key, f]));
