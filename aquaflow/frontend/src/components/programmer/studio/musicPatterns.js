@@ -26,6 +26,8 @@ import { bandMeans, brightness, readBands } from './stemBands';
 const G = 9.81;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+/** Lowest peak level of a generated pattern, % of the jets' design height. */
+export const PEAK_FLOOR = 70;
 export const SECTION_COLORS = { intro: '#2f6bff', verse: '#35d0c0', chorus: '#ffb347', bridge: '#9b6bff', outro: '#2f6bff' };
 
 /** Seconds the water needs to reach its top: valve opening + 1.2 × ballistic rise time. */
@@ -65,7 +67,8 @@ export function phraseFeatures(analysis, source, t0, t1, beatSec) {
 export function choosePattern(source, f, { label, eRel, beatSec, barSec, members, variant = 0 }) {
   const chorus = label === 'chorus';
   const v = ((variant % 3) + 3) % 3;
-  const level = (lo, hi) => ({ minLevel: lo, maxLevel: Math.round(clamp(hi, lo + 10, 100)) });
+  // Peaks never below 70 % of the design height: tall water on every phrase, louder = higher.
+  const level = (lo, hi) => ({ minLevel: lo, maxLevel: Math.round(clamp(Math.max(hi, PEAK_FLOOR + (100 - PEAK_FLOOR) * eRel), Math.max(lo + 10, PEAK_FLOOR), 100)) });
   if (source.id.startsWith('drums') && source.field !== 'hats') {
     if (eRel < 0.12 || f.hitsPerBeat < 0.15) return null;
     if (chorus || eRel >= 0.7) {

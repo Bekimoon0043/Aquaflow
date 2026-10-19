@@ -1,5 +1,15 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19 (late night 2): AquaFlow Studio 1.2.50 installed — timeline music graph as lines; much higher water**
+
+- Music graph: each lane (Song, Drums, Bass, Vocals) is now one loudness line that rises and falls with the music, with a light fill and faint bar, beat and section lines behind it. The colour band heat map was removed at the user's request.
+- Generated music patterns now peak at no less than 70 % of the jets' design height (`PEAK_FLOOR`), with louder phrases reaching 100 %.
+- New show: `Downloads/Lebu_Fountain_DJ_Milla_Mashup_Vol4_HIGH.aquapkg`.
+  - The Lebu jets were redesigned: perimeter 0.65 → 4 m, back row → 6 m, centre baskets 0.9 → 8 m, with pressure and flow recomputed for the same nozzles.
+  - The pumps became 4 × Inline VFD 18.5 kW (111 m³/h at 37.8 m).
+  - Hydraulic solve: about 22 m of head at the operating point, so every jet can reach about 10 m (design heights reachable).
+  - The solve warns of high pipe velocities on its assumed pipe sizes: real pipework must be sized for about 500 m³/h. Spray may also leave the 16.8 × 10 m basin in wind; check the splash envelope on site.
+
 **2026-10-19 (late night): AquaFlow Studio 1.2.49 installed — music frequency graph in the timeline, patterns from the music**
 
 - Research report: `reports/Music frequency fountain choreography.md` (industry practice, MIR features, hydraulic limits, auto-choreography, timeline UI). Key point: top shows are hand-programmed against a timeline; band-to-nozzle automation alone reads as "jumping water", so a good editor graph and section/phrase-based pattern choice matter most.
