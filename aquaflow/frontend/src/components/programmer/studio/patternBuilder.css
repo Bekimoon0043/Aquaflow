@@ -77,3 +77,15 @@
 .sp-clip-menu button { text-align:left; border:0; background:none; color:var(--text-button); padding:5px 8px; border-radius:4px; cursor:pointer; font:inherit; font-size:12px; }
 .sp-clip-menu button:hover { background:var(--bg-raised); }
 .preview-timeline-song { font-size:10.5px; color:var(--text-muted); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:help; }
+
+/* Stems */
+.pb-stems { display:flex; flex-direction:column; gap:6px; padding:8px 0; border-top:1px solid var(--border-mid); }
+.pb-stems .pb-stem { gap:6px; }
+.pb-stems .pb-row > span.pb-stem-dot { width:10px; height:10px; min-width:10px; border-radius:50%; flex:0 0 10px; }
+.pb-stems .pb-stem select { flex:0 0 92px; }
+.pb-stems .pb-stem .pb-song { width:auto; flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-button); }
+.pb-stems .pb-stem small { white-space:nowrap; color:var(--text-muted); }
+.pb-stem-map { display:flex; flex-direction:column; gap:4px; padding:6px; border:1px solid var(--border-mid); border-radius:6px; }
+.pb-stems .pb-row > span.pb-stem-arrow { width:auto; flex:0 0 auto; }
+.pb-stem-levels input[type=number] { width:52px; padding:0 4px; }
+.pb-stem-levels small { color:var(--text-muted); }

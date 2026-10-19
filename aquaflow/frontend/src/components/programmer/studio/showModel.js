@@ -223,7 +223,9 @@ export function compileStudio(studio, items) {
       };
       if (recipe.effect === 'curve') {
         // One keyed clip per fixture; the show frame interpolates between samples.
-        const samples = Math.min(400, Math.max(20, Math.ceil(duration * 10)));
+        // 10 samples a second by default; stem curves ask for up to 25 (drum hits).
+        const rate = Math.min(25, Math.max(1, Number(recipe.sampleRate) || 10));
+        const samples = Math.min(400, Math.max(20, Math.ceil(duration * rate)));
         const keys = [];
         for (let n = 0; n <= samples; n++) {
           const offset = n * duration / samples;

@@ -11,6 +11,9 @@ import {
 } from './patternLibrary';
 import { fillSong, grid, syncPatternOptions } from './beatSync';
 import { attachSong, useSongBeats } from './musicSync';
+import { useStems } from './stemSync';
+import { STEM_ROLES } from './stemAnalysis';
+import { availableSources, programFromStems, sourceById, suggestRows } from './stemProgram';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -86,6 +89,8 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
   const importRef = useRef(null);
   const beats = useSongBeats();
   const analysis = beats.analysis;
+  const stemsApi = useStems();
+  const [stemRows, setStemRows] = useState(null);   // null = follow the suggestion
 
   const group = groups.find(g => g.id === groupId);
   const lightGroup = groups.find(g => g.id === lights.groupId);
@@ -141,6 +146,29 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     } catch (error) { setNote(error.message); }
   };
   const loadSong = file => { if (file) attachSong(file); };
+
+  // ── Stems: each part of the music drives its own group ──
+  const stemSources = availableSources(stemsApi.stems);
+  const suggested = useMemo(() => suggestRows(stemsApi.stems, waterGroups, lightGroups, membersOf),
+    [stemsApi.stems, groups]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowsNow = (stemRows || suggested).filter(r => stemSources.some(s => s.id === r.sourceId));
+  const editRow = (i, patch) => setStemRows(rowsNow.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  const addRow = () => {
+    const used = new Set(rowsNow.map(r => r.sourceId));
+    const src = stemSources.find(s => !used.has(s.id)) || stemSources[0];
+    const g = waterGroups[0];
+    if (src && g) setStemRows([...rowsNow, { sourceId: src.id, groupId: g.id, min: 15, max: 100, kind: 'water' }]);
+  };
+  const programStems = () => {
+    try {
+      const result = programFromStems(studio, { stems: stemsApi.stems, rows: rowsNow, items, groups });
+      onChange(result.studio);
+      setApplied(list => [...list, { fill: true }]);
+      const parts = new Set(result.recipes.map(r => r.stems.source)).size;
+      setNote(`Programmed from stems · ${parts} part${parts === 1 ? '' : 's'} · ${result.recipes.length} curves`
+        + (result.skipped.length ? ` · skipped: ${result.skipped.join(', ')}` : ''));
+    } catch (error) { setNote(error.message); }
+  };
 
   // ── Saved presets ──
   const cards = presetCards(studio.presets, userPresets);
@@ -301,6 +329,62 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
         <button onClick={fill} disabled={!beats.file || !group || beats.status === 'working'}
           title="Lay patterns over the whole song for this group: calm intro, waves in verses, chase and mirror in choruses, ripple accents, fade-out ending. Levels follow the music. Lights follow if ticked below. Replaces an earlier fill; one Undo removes it.">♫ Fill the song</button>
       </div>
+    </div>
+
+    <div className="pb-stems" aria-label="Stems">
+      <div className="pb-row">
+        <strong title="Separate tracks of the song (drums, bass, vocals, other…) from the producer, a DAW or a stem splitter">Stems</strong>
+        <span className="sp-grow" />
+        {stemsApi.status === 'working' && <small role="status">{stemsApi.total === 100 ? `Splitting… ${stemsApi.done}%` : `Listening… ${stemsApi.done}/${stemsApi.total}`}</small>}
+        <button onClick={() => stemsApi.split(beats.file)} disabled={!beats.file || stemsApi.status === 'working'}
+          title="No stems? Estimate drums (kick, hats), bass and the lead melody straight from the show's song. Clean stems from the producer give a better result.">Split the song</button>
+        <label className="pb-file" title="Load one or more stem files (WAV/MP3). The part is guessed from the file name: drums, bass, vocals, piano, guitar, other.">Load stems
+          <input type="file" accept="audio/*" multiple hidden aria-label="Load stems" onChange={e => { stemsApi.add(e.target.files); e.target.value = ''; }} /></label>
+      </div>
+      {stemsApi.error && <small className="pb-error" role="alert">{stemsApi.error}</small>}
+      {stemsApi.stems.map(st => (
+        <div className="pb-row pb-stem" key={st.id}>
+          <span className="pb-stem-dot" style={{ background: STEM_ROLES[st.role]?.color }} />
+          <select aria-label={`Part of ${st.name}`} value={st.role} onChange={e => stemsApi.setRole(st.id, e.target.value)}>
+            {Object.entries(STEM_ROLES).map(([id, r]) => <option key={id} value={id}>{r.label}</option>)}
+          </select>
+          <span className="pb-song" title={st.name}>{st.name}</span>
+          <small>{Math.round(st.analysis.duration)} s · {(st.analysis.kicks || st.analysis.hits || []).length} hits</small>
+          <button onClick={() => stemsApi.remove(st.id)} title="Remove this stem" aria-label={`Remove ${st.name}`}>×</button>
+        </div>
+      ))}
+      {stemSources.length > 0 && <>
+        {rowsNow.map((row, i) => (
+          <div className="pb-stem-map" key={i}>
+            <div className="pb-row">
+              <select aria-label="Music part" value={row.sourceId} onChange={e => editRow(i, { sourceId: e.target.value })}>
+                {stemSources.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+              <span className="pb-stem-arrow">→</span>
+              <select aria-label="Drives group" value={`${row.kind || 'water'}|${row.groupId}`} onChange={e => { const [kind, id] = e.target.value.split('|'); editRow(i, { kind, groupId: id }); }}>
+                <optgroup label="Water">{waterGroups.map(g => <option key={g.id} value={`water|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>
+                {lightGroups.length > 0 && <optgroup label="Lights">{lightGroups.map(g => <option key={g.id} value={`lights|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>}
+              </select>
+            </div>
+            <div className="pb-row pb-stem-levels">
+              <span>Level</span>
+              <input aria-label="Lowest level" title="Level when the part is quiet / between hits" type="number" min={0} max={100} value={row.min} onChange={e => editRow(i, { min: Number(e.target.value) || 0 })} />
+              <small>to</small>
+              <input aria-label="Highest level" title="Level at the loudest note / strongest hit" type="number" min={0} max={100} value={row.max} onChange={e => editRow(i, { max: Number(e.target.value) || 0 })} />
+              <small>%</small>
+              <span className="sp-grow" />
+              <button onClick={() => setStemRows(rowsNow.filter((_, k) => k !== i))} aria-label="Remove this link" title="Remove">×</button>
+            </div>
+          </div>
+        ))}
+        <div className="pb-row">
+          <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
+          {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
+          <span className="sp-grow" />
+          <button onClick={programStems} disabled={!rowsNow.length}
+            title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>♫ Program from stems</button>
+        </div>
+      </>}
     </div>
 
     <div className="pb-lights">

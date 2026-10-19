@@ -1,5 +1,19 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19 (night): AquaFlow Studio 1.2.48 installed — shows programmed from music stems**
+
+- Pattern builder → **Stems**:
+  - **Load stems** (separate tracks; the part is guessed from the file name) or **Split the song**, which estimates drums, bass and the lead melody from the full mix with no AI model (`stemSplit.js`: STFT, median-filter harmonic/percussive separation, frequency bands).
+  - **Link** each part to a water or light group and set its level range, then **Program from stems**.
+- What each part does (`stemProgram.js`): kicks and hats lift the jets on every hit, then they fall away; bass and other parts follow their loudness; a melody moves the jets with the notes (YIN pitch) and rests where nobody sings.
+- How it is stored: keyed curve recipes in 16 s blocks at 20 per second (`recipe.sampleRate`, new in the show compiler).
+- Suggestions: melody to moving or rotating jets, bass to the tallest jets, kick to the biggest nozzle group. Pump/valve groups and overlapping groups are never suggested.
+- Stems are saved in `programmer.stems` (curves only, about 50 KB per stem).
+- Your song: `Downloads/Lebu_Fountain_DJ_Milla_Mashup_Vol4_Stems.aquapkg` (256 s, 93 BPM).
+  - Links: vocals melody → baskets; bass → back row; kicks → left/right stairs; hats → front point; lights follow the matching parts; pumps run and valves stay open.
+  - Checked: stairs jump on 35/40 strong kicks; baskets rest in 40/40 silent and play in 40/40 sung moments; the song attaches and verifies in the app.
+- Tests: stem analysis, split, programming and builder UI pass; all frontend folders pass.
+
 **2026-10-19 (evening): AquaFlow Studio 1.2.47 installed — whole simulation for 3D software (D5 Render, Max, Maya, C4D, Unreal, Blender, Houdini)**
 
 - 3D Export → "Whole simulation for 3D software" has three one-click targets:
