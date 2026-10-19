@@ -168,7 +168,8 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
       onChange(result.studio);
       setApplied(list => [...list, { fill: true }]);
       const parts = Object.entries(result.counts).map(([k, n]) => `${k} ${n}`).join(' · ');
-      setNote(result.warning || `Patterns from the music · ${result.recipes.filter(r => r.pattern?.role !== 'lights').length} patterns · ${parts}`);
+      setNote(result.warning || `Patterns from the music · ${result.recipes.filter(r => r.pattern?.role !== 'lights').length} patterns · ${parts}`
+        + (result.skipped?.length ? ` · skipped: ${result.skipped.join('; ')}` : ''));
     } catch (error) { setNote(error.message); }
   };
   const programStems = () => {

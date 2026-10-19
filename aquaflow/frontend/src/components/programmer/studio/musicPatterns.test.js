@@ -61,3 +61,39 @@ describe('patterns from the music', () => {
     expect(again.studio.recipes.filter(r => r.pattern?.music).every(r => r.pattern.music === again.fillId)).toBe(true);
   });
 });
+
+import { edgeEase } from './showModel';
+import { EASE_FLOOR, MAX_LEVEL_STEP } from './musicPatterns';
+
+describe('smooth changes between patterns', () => {
+  it('eases the level in and out at the edges towards the floor', () => {
+    const g = edgeEase({ in: 2, out: 2, floor: 0.45 }, 20);
+    expect(g(0)).toBeCloseTo(0.45);
+    expect(g(1)).toBeCloseTo(0.45 + 0.55 * 0.5);
+    expect(g(10)).toBe(1);
+    expect(g(20)).toBeCloseTo(0.45);
+    expect(edgeEase(null, 20)(0)).toBe(1);
+  });
+
+  it('generated patterns change smoothly: no overlap, matching hand-over level, gradual heights', () => {
+    const groups = builderGroups(studio, items);
+    const rows = [{ sourceId: 'drums:kicks', groupId: 'ring', kind: 'water' }, { sourceId: 'vocals:melody', groupId: 'tall', kind: 'water' }];
+    const out = patternsFromMusic(studio, { analysis: song, stems, rows, items, groups });
+    const { clips } = compileStudio(out.studio, items);
+    for (const id of ['ring0', 'tall1']) {
+      const mine = clips.filter(c => c.fixtureId === id && c.type === 'device_intensity').sort((a, b) => a.startTime - b.startTime);
+      for (let k = 1; k < mine.length; k++) {
+        expect(mine[k].startTime).toBeGreaterThanOrEqual(mine[k - 1].startTime + mine[k - 1].duration - 1e-6);   // never overlapping
+      }
+    }
+    const water = out.recipes.filter(r => r.pattern?.music && r.pattern.role !== 'lights' && r.effect === 'curve');
+    expect(water.every(r => r.ease && r.ease.floor === EASE_FLOOR && r.ease.in > 0)).toBe(true);
+    // Each part's peak changes by at most MAX_LEVEL_STEP between consecutive phrases.
+    for (const part of ['drums:kicks', 'vocals:melody']) {
+      const peaks = water.filter(r => r.pattern.part === part).sort((a, b) => a.start - b.start).map(r => r.intensity);
+      for (let k = 1; k < peaks.length; k++) expect(Math.abs(peaks[k] - peaks[k - 1])).toBeLessThanOrEqual(MAX_LEVEL_STEP + 1);
+    }
+    // Patterns last a phrase of 16 bars (8 s at 120 BPM → 32 s), not 8.
+    expect(Math.max(...water.map(r => r.duration))).toBeGreaterThan(20);
+  });
+});

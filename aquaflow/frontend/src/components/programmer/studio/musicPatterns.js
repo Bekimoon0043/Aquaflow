@@ -26,6 +26,12 @@ import { bandMeans, brightness, readBands } from './stemBands';
 const G = 9.81;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+/** Bars per phrase (a chorus uses half): how long one generated pattern lasts. */
+export const PHRASE_BARS = 16;
+/** Smooth hand-over: the level eases over one bar at each pattern edge towards this share. */
+export const EASE_FLOOR = 0.45;
+/** Largest change of a part's peak level from one phrase to the next (percent points). */
+export const MAX_LEVEL_STEP = 15;
 /** Lowest peak level of a generated pattern, % of the jets' design height. */
 export const PEAK_FLOOR = 70;
 export const SECTION_COLORS = { intro: '#2f6bff', verse: '#35d0c0', chorus: '#ffb347', bridge: '#9b6bff', outro: '#2f6bff' };
@@ -73,27 +79,27 @@ export function choosePattern(source, f, { label, eRel, beatSec, barSec, members
     if (eRel < 0.12 || f.hitsPerBeat < 0.15) return null;
     if (chorus || eRel >= 0.7) {
       // Strong kicks: a hit on every beat, a chase that steps on the beat, or ripples on the bar.
-      if (v === 1 && members >= 4) return { preset: 'chase', lapSeconds: barSec, ...level(10, 60 + 40 * eRel), smoothness: 'sharp' };
-      if (v === 2) return { preset: 'ripple', lapSeconds: barSec, ...level(10, 60 + 40 * eRel) };
-      return { preset: 'pulse', lapSeconds: beatSec, ...level(5, 60 + 40 * eRel) };
+      if (v === 1 && members >= 4) return { preset: 'chase', lapSeconds: 2 * barSec, ...level(10, 60 + 40 * eRel), smoothness: 'sharp' };
+      if (v === 2) return { preset: 'ripple', lapSeconds: 2 * barSec, ...level(10, 60 + 40 * eRel) };
+      return { preset: 'pulse', lapSeconds: 2 * beatSec, ...level(5, 60 + 40 * eRel) };
     }
     if (f.hitsPerBeat >= 0.6) return v === 2 ? { preset: 'ripple', lapSeconds: 2 * barSec, ...level(10, 55 + 40 * eRel) }
-      : { preset: 'pulse', lapSeconds: 2 * beatSec, ...level(5, 55 + 40 * eRel) };
+      : { preset: 'pulse', lapSeconds: barSec, ...level(5, 55 + 40 * eRel) };
     return { preset: 'ripple', lapSeconds: 2 * barSec, ...level(10, 55 + 40 * eRel) };
   }
   if (source.field === 'hats') {
     if (f.hitsPerBeat >= 1.5 && members >= 3) return v === 1 && members >= 4
-      ? { preset: 'chase', lapSeconds: barSec, crests: 2, ...level(0, 50 + 40 * eRel), smoothness: 'sharp' }
-      : { preset: 'sparkle', lapSeconds: beatSec, ...level(0, 50 + 40 * eRel) };
-    if (f.hitsPerBeat >= 0.5 && members >= 2) return { preset: 'chase', lapSeconds: barSec, ...level(5, 50 + 40 * eRel), smoothness: 'sharp' };
+      ? { preset: 'chase', lapSeconds: 2 * barSec, crests: 2, ...level(0, 50 + 40 * eRel), smoothness: 'sharp' }
+      : { preset: 'sparkle', lapSeconds: 2 * beatSec, ...level(0, 50 + 40 * eRel) };
+    if (f.hitsPerBeat >= 0.5 && members >= 2) return { preset: 'chase', lapSeconds: 2 * barSec, ...level(5, 50 + 40 * eRel), smoothness: 'sharp' };
     return null;
   }
   if (source.behaviour === 'melody') {
     if (f.voiced < 0.25) return null;
     const crests = f.pitchRange > 0.5 ? 2 : 1;
     if (chorus && members >= 2) {
-      if (v === 1) return { preset: 'wave', lapSeconds: barSec, crests, ...level(25, 60 + 40 * eRel) };
-      if (v === 2) return { preset: 'breathing', lapSeconds: barSec, ...level(30, 60 + 40 * eRel) };
+      if (v === 1) return { preset: 'wave', lapSeconds: 2 * barSec, crests, ...level(25, 60 + 40 * eRel) };
+      if (v === 2) return { preset: 'breathing', lapSeconds: 2 * barSec, ...level(30, 60 + 40 * eRel) };
       return { preset: 'mirror', lapSeconds: 2 * barSec, crests, ...level(25, 55 + 45 * eRel) };
     }
     return v === 2 && members >= 2 ? { preset: 'mirror', lapSeconds: 2 * barSec, crests, ...level(25, 55 + 45 * eRel) }
@@ -103,7 +109,7 @@ export function choosePattern(source, f, { label, eRel, beatSec, barSec, members
   // (pump-speed effects ramp over seconds, so these never chop on the beat).
   if (eRel < 0.08) return null;
   if ((f.brightness > 0.45 && eRel > 0.5 && members >= 2) || (v === 1 && members >= 2)) return { preset: 'wave', lapSeconds: 2 * barSec, ...level(20, 45 + 50 * eRel) };
-  return { preset: 'breathing', lapSeconds: (eRel > 0.6 ? 1 : 2) * barSec, ...level(20, 45 + 50 * eRel) };
+  return { preset: 'breathing', lapSeconds: (eRel > 0.6 ? 2 : 4) * barSec, ...level(20, 45 + 50 * eRel) };
 }
 
 /**
@@ -115,14 +121,15 @@ export function choosePattern(source, f, { label, eRel, beatSec, barSec, members
 export function patternsFromMusic(studio, options) {
   if (!grid(options.analysis)) throw new Error('Find the beats first');
   let result;
-  for (const phraseBars of [8, 16, 32]) {
+  // 16-bar phrases (8 in choruses): a pattern lasts ~30-40 s and the family turns every two.
+  for (const phraseBars of [options.phraseBars || PHRASE_BARS, 32, 64]) {
     result = generateOnce(studio, { ...options, phraseBars });
     if (compileStudio(result.studio, options.items).clips.length <= FILL_CLIP_BUDGET) return result;
   }
   return { ...result, warning: 'Very dense show: link fewer or smaller groups.' };
 }
 
-function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars = 8, lead = true }) {
+function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars = PHRASE_BARS, lead = true }) {
   const g = grid(analysis);
   const end = r3(Math.min(600, analysis.duration));
   const byRole = new Map(stems.map((s) => [s.role, s.analysis]));
@@ -133,16 +140,31 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
   const sync = { bpm: r3(g.bpm), beatsPerBar: g.beatsPerBar };
   const added = [];
   const counts = {};
+  const skipped = [];
   const itemById = new Map(items.map((i) => [i.id, i]));
   const memberItems = (group) => resolveMembers(group, items).map((id) => itemById.get(id)).filter(Boolean);
 
   const water = rows.filter((r) => (r.kind || 'water') === 'water');
   const lightsFor = (sourceId) => rows.find((r) => r.kind === 'lights' && r.sourceId === sourceId);
+  // Each jet / light belongs to one linked part only: a later link gets the fixtures earlier
+  // links have not claimed (two patterns on one output would overlap — the PLC rejects that).
+  const claimed = new Set();
+  const claim = (group, label) => {
+    const ids = resolveMembers(group, items).filter((id) => !claimed.has(id));
+    if (!ids.length) return null;
+    ids.forEach((id) => claimed.add(id));
+    const all = resolveMembers(group, items);
+    if (ids.length === all.length) return group;
+    return { id: `${group.id}:free:${ids.length}`, name: `${group.name} · ${label}`, memberFixtureIds: ids, orderMode: group.orderMode || 'engineering',
+      color: group.color, quick: true };
+  };
   for (const row of water) {
     const source = sourceById(row.sourceId);
     const stem = source && byRole.get(source.stem);
-    const group = groups.find((x) => x.id === row.groupId);
-    if (!source || !stem || !group) continue;
+    const linked = groups.find((x) => x.id === row.groupId);
+    if (!source || !stem || !linked) continue;
+    const group = claim(linked, source.label);
+    if (!group) { skipped.push(`${source.label} → ${linked.name} (jets already used)`); continue; }
     const members = memberItems(group);
     const height = Math.max(0, ...members.map((m) => Number(m.engineering?.jetHeightM) || 0));
     const leadS = lead ? waterLead(height) : 0;
@@ -150,15 +172,21 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
     const sorted = feats.map((f) => f.energy).sort((a, b) => a - b);
     const rank = (e) => (sorted.length > 1 ? sorted.filter((v) => v < e).length / (sorted.length - 1) : 0.5);
     const memo = new Map();
+    let lastMax = null;
+    let lastEnd = 0;          // patterns on one group never overlap (the PLC compiler rejects that)
     const lightRow = lightsFor(row.sourceId);
-    const lightGroup = lightRow && groups.find((x) => x.id === lightRow.groupId);
+    const lightLinked = lightRow && groups.find((x) => x.id === lightRow.groupId);
+    const lightGroup = lightLinked ? claim(lightLinked, source.label) : null;
     phrases.forEach((p, i) => {
       const eRel = rank(feats[i].energy);
       // Every two phrases the effect family rotates; the same section label at the same
       // position gets the same choice, so music that repeats looks the same in water.
       const slot = Math.floor(p.index / 2) % 3;
-      const pick = choosePattern(source, feats[i], { label: p.label, eRel, beatSec: g.beatSec, barSec: g.barSec, members: members.length, variant: slot });
-      if (!pick) return;
+      const raw = choosePattern(source, feats[i], { label: p.label, eRel, beatSec: g.beatSec, barSec: g.barSec, members: members.length, variant: slot });
+      if (!raw) { lastMax = null; return; }
+      // Heights move gradually from phrase to phrase.
+      const pick = lastMax == null ? raw : { ...raw, maxLevel: Math.round(clamp(raw.maxLevel, lastMax - MAX_LEVEL_STEP, lastMax + MAX_LEVEL_STEP)) };
+      lastMax = pick.maxLevel;
       const memoKey = `${p.label}:${slot}:${pick.preset}`;
       if (!memo.has(memoKey)) memo.set(memoKey, pick.preset === 'mirror' ? (memo.size % 2 ? 'outward' : 'inward') : (memo.size % 2 ? 'counter-clockwise' : 'clockwise'));
       const order = memo.get(memoKey);
@@ -171,12 +199,19 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
       // Fire early so the water peaks on the music, not after it.
       const shift = Math.min(leadS, opts.start);
       opts.start = r3(opts.start - shift);
+      if (opts.start < lastEnd) { opts.duration = r3(opts.duration - (lastEnd - opts.start)); opts.start = r3(lastEnd); }
       if (opts.start + opts.duration > 600) opts.duration = r3(600 - opts.start);
+      if (opts.duration < 1) return;
+      lastEnd = r3(opts.start + opts.duration);
       const unit = buildPatternUnit(next, { preset: pick.preset, options: opts, group, items,
         lights: lightGroup ? { group: lightGroup, color, level: Math.round(25 + 65 * eRel) } : null,
         tag: { music: fillId, section: p.label, part: source.id, leadS: shift } });
-      next = unit.studio;
-      added.push(...unit.recipes);
+      // Ease every edge over one bar, so one pattern hands over to the next without a jump.
+      const easeS = r3(Math.min(g.barSec, opts.duration / 4));
+      const ease = { in: easeS, out: easeS, floor: EASE_FLOOR };
+      const ids = new Set(unit.recipes.map((r) => r.id));
+      next = { ...unit.studio, recipes: unit.studio.recipes.map((r) => (ids.has(r.id) && r.effect === 'curve' ? { ...r, ease } : r)) };
+      added.push(...next.recipes.filter((r) => ids.has(r.id)));
       counts[source.label] = (counts[source.label] || 0) + 1;
     });
   }
@@ -191,13 +226,17 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
     phrases.forEach((p, i) => {
       if (i === 0 || p.label !== 'chorus' || p.index !== 0) return;
       if (norm(e[i]) - norm(e[i - 1]) < 0.3) return;
-      const members = memberItems(allWater);
+      // Bursts only use jets no linked part is driving.
+      const freeWater = claim(allWater, 'burst');
+      if (!freeWater) return;
+      const members = memberItems(freeWater);
       const height = Math.max(0, ...members.map((m) => Number(m.engineering?.jetHeightM) || 0));
       const start = r3(Math.max(0, p.start - waterLead(height)));
-      const unit = buildPatternUnit(next, { preset: 'ripple', group: allWater, items,
+      const freeLights = allLights ? claim(allLights, 'flash') : null;
+      const unit = buildPatternUnit(next, { preset: 'ripple', group: freeWater, items,
         options: { start, duration: r3(g.barSec), lapSeconds: r3(g.barSec), minLevel: 0, maxLevel: 100, order: 'center-out', crests: 1,
           smoothness: 'smooth', color: '#ffffff', axis: 'sides', seed: 1, sync: { ...sync, lapBeats: g.beatsPerBar } },
-        lights: allLights ? { group: allLights, color: '#ffffff', level: 100 } : null,
+        lights: freeLights ? { group: freeLights, color: '#ffffff', level: 100 } : null,
         tag: { music: fillId, section: 'accent', part: 'drop' } });
       next = unit.studio;
       added.push(...unit.recipes);
@@ -205,5 +244,5 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
     });
   }
   next = { ...next, tempo: [{ time: r3(g.beatOrigin), bpm: r3(g.bpm) }] };
-  return { studio: next, recipes: added, fillId, counts };
+  return { studio: next, recipes: added, fillId, counts, skipped };
 }

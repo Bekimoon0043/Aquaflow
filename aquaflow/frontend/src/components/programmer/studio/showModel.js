@@ -144,6 +144,25 @@ export function snapBeat(time, tempo = [{ time: 0, bpm: 120 }]) {
   return round(Math.max(0, section.time + Math.round((time - section.time) / step) * step));
 }
 
+/**
+ * Edge ease of a curve recipe: `ease = { in, out, floor }` (seconds, seconds, 0..1). The level
+ * glides from `floor` x to full over the first `in` seconds and back to `floor` x over the last
+ * `out` seconds (smoothstep), so neighbouring patterns hand over at the same height without
+ * overlapping clips. Returns offset -> gain.
+ */
+export function edgeEase(ease, duration) {
+  const fin = Math.max(0, Number(ease?.in) || 0), fout = Math.max(0, Number(ease?.out) || 0);
+  if (!(fin > 0 || fout > 0)) return () => 1;
+  const floor = Math.min(1, Math.max(0, Number.isFinite(Number(ease?.floor)) ? Number(ease.floor) : 0.45));
+  const smooth = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
+  return (offset) => {
+    let g = 1;
+    if (fin > 0) g = Math.min(g, smooth(offset / fin));
+    if (fout > 0) g = Math.min(g, smooth((duration - offset) / fout));
+    return floor + (1 - floor) * g;
+  };
+}
+
 export function compileStudio(studio, items) {
   const groups = new Map(studio.groups.map(g => [g.id, g]));
   const ids = new Set(items.map(i => i.id));
@@ -227,10 +246,11 @@ export function compileStudio(studio, items) {
         const rate = Math.min(25, Math.max(1, Number(recipe.sampleRate) || 10));
         const samples = Math.min(400, Math.max(20, Math.ceil(duration * rate)));
         const keys = [];
+        const easeGain = edgeEase(recipe.ease, duration);
         for (let n = 0; n <= samples; n++) {
           const offset = n * duration / samples;
           const local = ((offset / cycle - phase * spread) % 1 + 1) % 1;
-          keys.push(round(offset), round(Math.max(0, Math.min(100, envelopeValue(recipe.envelope, local) * intensity))));
+          keys.push(round(offset), round(Math.max(0, Math.min(100, envelopeValue(recipe.envelope, local) * intensity * easeGain(offset)))));
         }
         const before = clips.length;
         emit(0, duration, Math.max(...keys.filter((_, k) => k % 2)), false, 0);

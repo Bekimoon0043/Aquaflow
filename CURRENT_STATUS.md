@@ -1,5 +1,20 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-20: AquaFlow Studio 1.2.51 installed — smooth pattern changes**
+
+- Patterns from the music now change smoothly:
+  - Phrases are 16 bars (8 in choruses), and the effect family rotates every 2 phrases.
+  - Laps are calmer: kick pulses every 2 beats, chases over 2 bars, breathing over 2–4 bars.
+  - Each part's peak changes by at most 15 points per phrase.
+  - Every pattern eases in and out over one bar towards 45 % of its level (new `recipe.ease` in the show compiler), so neighbours hand over at the same height.
+- Overlap fixes (the Siemens compiler rejects overlapping clips on one output):
+  - Patterns on one group never overlap after the early-start shift; this was a real bug that left about 6,000 overlaps in the earlier HIGH show.
+  - Each jet or light belongs to one linked part only; later links get the free fixtures and are reported as skipped when none are left.
+  - The chorus burst uses only free jets.
+- New show: `Downloads/Lebu_Fountain_DJ_Milla_Mashup_Vol4_HIGH_Smooth.aquapkg`, with 0 overlaps.
+  - On the stair jets: 12 changes instead of 22; mean jump at a change 10 % instead of 28 %, maximum 44 % instead of 88 %.
+- Checked in the installed app: Load song → Find beats (2 s) → Split the song (15 s) → Create patterns from the music (50 patterns).
+
 **2026-10-19 (late night 2): AquaFlow Studio 1.2.50 installed — timeline music graph as lines; much higher water**
 
 - Music graph: each lane (Song, Drums, Bass, Vocals) is now one loudness line that rises and falls with the music, with a light fill and faint bar, beat and section lines behind it. The colour band heat map was removed at the user's request.
