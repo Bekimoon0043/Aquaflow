@@ -3,14 +3,14 @@
 //
 // Security model: the renderer never sends a path. "render:choose-folder" opens the OS
 // folder dialog and returns an opaque token for the folder the USER picked; every write
-// names that token plus a bare file name (no separators, PNG/WAV/TXT/VDB/PLY/JSON only). A compromised
+// names that token plus a bare file name (no separators; PNG/WAV/TXT and the simulation-cache VDB/PLY/JSON/ABC/GLB/FBX/PY only). A compromised
 // page can therefore only drop frame-like files into a folder the user just chose.
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
 const MAX_FILE_BYTES = 256 * 1024 * 1024;           // one 8K PNG is far below this
-const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.(png|wav|txt|vdb|ply|json)$/i;
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,120}\.(png|wav|txt|vdb|ply|json|abc|glb|fbx|py)$/i;
 
 function safeFileName(name) {
   const n = String(name || "");
@@ -26,7 +26,9 @@ function createRenderExportStore({ fs: fsx = fs } = {}) {
       folders.set(token, path.resolve(folder));
       return token;
     },
-    write(token, name, bytes) {
+    // options.mode: "append" adds to the end of the file (streamed .abc); "patch" overwrites
+    // bytes at options.offset inside an existing file (the Alembic header); default replaces it.
+    write(token, name, bytes, options = {}) {
       const folder = folders.get(String(token || ""));
       if (!folder) throw new Error("Choose an output folder first.");
       const file = safeFileName(name);
@@ -35,6 +37,18 @@ function createRenderExportStore({ fs: fsx = fs } = {}) {
       if (data.byteLength > MAX_FILE_BYTES) throw new Error("Frame is too large.");
       const target = path.join(folder, file);
       if (path.dirname(target) !== folder) throw new Error("Invalid frame path.");
+      const mode = options && options.mode;
+      if (mode === "append") {
+        fsx.appendFileSync(target, data);
+        return { ok: true, size: data.byteLength };
+      }
+      if (mode === "patch") {
+        const offset = Number(options.offset);
+        if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid patch offset.");
+        const fd = fsx.openSync(target, "r+");
+        try { fsx.writeSync(fd, data, 0, data.byteLength, offset); } finally { fsx.closeSync(fd); }
+        return { ok: true, size: data.byteLength };
+      }
       const tmp = `${target}.part`;
       fsx.writeFileSync(tmp, data);
       fsx.renameSync(tmp, target);
@@ -66,7 +80,7 @@ function registerRenderExportIpc({ ipcMain, dialog, getMainWindow, fs: fsx = fs 
     if (!fsx.statSync(folder).isDirectory()) throw new Error("Not a folder.");
     return { ok: true, path: folder, token: store.approve(folder) };
   });
-  handle("render:write-file", async (token, name, bytes) => store.write(token, name, bytes));
+  handle("render:write-file", async (token, name, bytes, options) => store.write(token, name, bytes, options || {}));
   return store;
 }
 

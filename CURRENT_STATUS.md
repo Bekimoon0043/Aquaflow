@@ -1,5 +1,22 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19 (evening): AquaFlow Studio 1.2.47 installed — whole simulation for 3D software (D5 Render, Max, Maya, C4D, Unreal, Blender, Houdini)**
+
+- 3D Export → "Whole simulation for 3D software" has three one-click targets:
+  - **D5 Render · 3ds Max · Maya · Cinema 4D · Unreal:** an Alembic water mesh (`_water.abc`) plus the pool and site (`_scene.fbx`). D5 imports animation only as Alembic.
+  - **Blender — complete scene:**
+    - VDB water with a `Cd` grid of the RGB fixtures' light;
+    - the RGB fixtures as spot lights keyed from the show (identical neighbours merged to stay under EEVEE's 128-light limit);
+    - the pool and site (`.glb`), camera and render settings;
+    - a `.py` that builds and saves the `.blend`.
+  - **Houdini / VFX:** VDB (density, vel, Cd) plus PLY particles.
+- New native Alembic (Ogawa) writer `export3d/alembic.js`, built from the reference library source (Ogawa groups and data, AbcCoreOgawa headers, PolyMesh and Xform schemas). It is streamed frame by frame; the desktop writer gained append and patch modes.
+- Water surface per frame from the density grid (`surfaceNets.js`). A test sphere is closed and outward-facing.
+- Verified with Blender 3.3's Alembic library: import has 0 errors; one animated mesh, 25–151 frames, Cd vertex colours; the water sits inside the FBX basin. Full Blender package built and rendered (548 objects, 120 animated lights). D5, Max and Maya aren't installed here, so they were not tested directly.
+- Size at Standard (5 cm) detail is about 2 MB per frame of Alembic; use Light (8 cm) or shorter ranges for long shows.
+- EEVEE crashed on the GT 730 with 2 px volumetric tiles and 120 lights; the builder now uses 4 px tiles and no light shadows.
+- Ready export of Lebu 0–5 s: `Pictures/render/Lebu_full_export/`.
+
 **2026-10-19 (later): AquaFlow Studio 1.2.46 installed — VDB density visible in Blender**
 
 - A user export (5 s of Lebu) showed nothing in Blender. The files were valid, but:

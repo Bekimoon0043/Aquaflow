@@ -32,6 +32,13 @@ export function resolveShowPlan(previewPlan, timelineClips, fixtures, name) {
 async function openBrowserFolderWriter() {
   const dir = await window.showDirectoryPicker({ mode: "readwrite" });
   let bytes = 0;
+  const at = async (name, data, position) => {
+    const file = await dir.getFileHandle(name, { create: true });
+    const w = await file.createWritable({ keepExistingData: true });
+    await w.write({ type: "write", position, data });
+    await w.close();
+  };
+  const sizes = new Map();
   return {
     where: dir.name,
     async write(name, data) {
@@ -39,8 +46,16 @@ async function openBrowserFolderWriter() {
       const w = await file.createWritable();
       await w.write(data);
       await w.close();
+      sizes.set(name, data.byteLength);
       bytes += data.byteLength;
     },
+    async append(name, data) {
+      const end = sizes.get(name) || 0;
+      await at(name, data, end);
+      sizes.set(name, end + data.byteLength);
+      bytes += data.byteLength;
+    },
+    async patch(name, offset, data) { await at(name, data, offset); },
     async finish() { return null; },
     get bytes() { return bytes; },
   };
@@ -54,17 +69,33 @@ async function openWriter(name) {
   return createZipWriter({ createZip, name });
 }
 
-export default function SimulationCacheSection({ fixtures, name }) {
+/** One-click targets: what each kind of program can read. */
+export const SIM_TARGETS = [
+  { id: "d5", label: "D5 Render · 3ds Max · Maya · Cinema 4D · Unreal",
+    hint: "Alembic water mesh (.abc, animated) + the pool and site (.fbx). Give the water a water material.",
+    opts: { alembic: true, vdb: false, ply: false, blenderScene: false, velocity: false, axes: "yup_m" } },
+  { id: "blender", label: "Blender — complete scene",
+    hint: "VDB water lit by the RGB fixtures, animated RGB lights, pool, site, camera — run the .py once and it saves a .blend.",
+    opts: { alembic: true, vdb: true, ply: false, blenderScene: true, velocity: false, axes: "zup_m" } },
+  { id: "houdini", label: "Houdini · VFX (volumes + particles)",
+    hint: "OpenVDB sequence (density, vel, Cd) and a PLY particle cache with velocities.",
+    opts: { alembic: false, vdb: true, ply: true, blenderScene: false, velocity: true, axes: "yup_m" } },
+];
+
+export default function SimulationCacheSection({ fixtures, name, design = null }) {
   const timelineClips = useProjectStore((s) => s.programmer?.timelineClips);
   const previewPlan = useICANPreviewStore((s) => s.plan);
   const show = useMemo(() => resolveShowPlan(previewPlan, timelineClips, fixtures, name),
     [previewPlan, timelineClips, fixtures, name]);
   const duration = show.plan ? Number(show.plan.duration) || 0 : SIM_DEFAULTS.staticSeconds;
 
-  const [opts, setOpts] = useState({ ...SIM_DEFAULTS, end: null, useHydraulics: true });
+  const [opts, setOpts] = useState({ ...SIM_DEFAULTS, ...SIM_TARGETS[0].opts, end: null, useHydraulics: true });
+  const [target, setTarget] = useState(SIM_TARGETS[0].id);
+  const pickTarget = (t) => { setTarget(t.id); setOpts((o) => ({ ...o, ...t.opts })); };
   const set = (k) => (e) => {
     const v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
-    setOpts((o) => ({ ...o, [k]: e.target.type === "number" || k === "fps" || k === "voxelSize" ? (v === "" ? null : Number(v)) : v }));
+    setTarget("custom");
+    setOpts((o) => ({ ...o, [k]: e.target.type === "number" || ["fps", "voxelSize", "meshVoxelSize"].includes(k) ? (v === "" ? null : Number(v)) : v }));
   };
   const end = opts.end != null && opts.end > 0 ? Math.min(opts.end, duration) : duration;
   const start = Math.max(0, Math.min(Number(opts.start) || 0, end));
@@ -92,7 +123,7 @@ export default function SimulationCacheSection({ fixtures, name }) {
         } catch { nozzlePhysics = null; }
       }
       const manifest = await exportSimulationCache({
-        fixtures, plan: show.plan, nozzlePhysics, name, writer, signal: ctrl.signal,
+        fixtures, plan: show.plan, nozzlePhysics, name, writer, signal: ctrl.signal, design,
         options: { ...opts, start, end },
         onProgress: (p) => setJob(p),
       });
@@ -116,14 +147,24 @@ export default function SimulationCacheSection({ fixtures, name }) {
   return (
     <div style={{ ...box, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
       <div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Simulation cache — OpenVDB / particles</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Whole simulation for 3D software</div>
         <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.45 }}>
-          The water of the show, frame by frame, from the same emitters and physics as the 3D preview: an
-          OpenVDB volume per frame (<code>density</code> ≈ 1 in a jet core — use Density 20–50 in the volume shader; optional <code>vel</code>)
-          and/or a PLY particle cache. {show.plan
+          The water of the show, frame by frame, from the same emitters, physics and RGB lighting as the 3D
+          preview. {show.plan
             ? <>Source: {show.source} ({duration.toFixed(1)} s).</>
             : <>No show loaded — every nozzle runs at 100 % for {SIM_DEFAULTS.staticSeconds} s.</>}
         </div>
+      </div>
+
+      <div role="radiogroup" aria-label="Export for" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+        {SIM_TARGETS.map((t) => (
+          <button key={t.id} type="button" role="radio" aria-checked={target === t.id} onClick={() => pickTarget(t)} style={{
+            ...box, padding: 8, textAlign: "left", cursor: "pointer",
+            borderColor: target === t.id ? "var(--accent)" : "var(--border)", outline: target === t.id ? "1px solid var(--accent)" : "none" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)" }}>{t.label}</div>
+            <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.35 }}>{t.hint}</div>
+          </button>
+        ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
@@ -135,15 +176,20 @@ export default function SimulationCacheSection({ fixtures, name }) {
           <select value={opts.fps} onChange={set("fps")} style={input} aria-label="Simulation frame rate">
             {[24, 25, 30, 50, 60].map((f) => <option key={f} value={f}>{f} fps</option>)}
           </select></div>
-        <div><div style={label}>Voxel size</div>
+        <div><div style={label}>{opts.alembic && !opts.vdb ? "Mesh detail" : "Voxel size"}</div>
+          {opts.alembic && !opts.vdb ? (
+            <select value={opts.meshVoxelSize} onChange={set("meshVoxelSize")} style={input} aria-label="Mesh detail">
+              {[[0.03, "Fine (3 cm, large file)"], [0.05, "Standard (5 cm)"], [0.08, "Light (8 cm)"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          ) : (
           <select value={opts.voxelSize} onChange={set("voxelSize")} style={input} aria-label="Voxel size">
             {[[0.02, "2 cm (fine, large)"], [0.03, "3 cm"], [0.05, "5 cm"], [0.1, "10 cm (draft)"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select></div>
+          </select>)}</div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8 }}>
         <div><div style={label}>Target software (axes and units)</div>
-          <select value={opts.axes} onChange={set("axes")} style={input} aria-label="Target axes">
+          <select value={opts.axes} onChange={set("axes")} disabled={opts.blenderScene} style={input} aria-label="Target axes">
             {Object.entries(AXIS_PRESETS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
           </select></div>
         <div><div style={label}>Particle density</div>
@@ -153,7 +199,10 @@ export default function SimulationCacheSection({ fixtures, name }) {
       </div>
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11, color: "var(--text-secondary)" }}>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={opts.alembic} onChange={set("alembic")} /> Alembic water mesh (.abc)</label>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={opts.vdb} onChange={set("vdb")} /> OpenVDB volumes (.vdb)</label>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={opts.blenderScene} onChange={set("blenderScene")} /> Blender scene builder (.py + lights + pool)</label>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={opts.color} onChange={set("color")} /> RGB light colour on the water</label>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={opts.velocity} disabled={!opts.vdb} onChange={set("velocity")} /> Velocity grid (off for Unreal)</label>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={opts.ply} onChange={set("ply")} /> Particle cache (.ply)</label>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={opts.useHydraulics} onChange={set("useHydraulics")} /> Jet heights from the hydraulic solve (pumps)</label>
@@ -161,7 +210,7 @@ export default function SimulationCacheSection({ fixtures, name }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {!job ? (
-          <button onClick={run} disabled={!fixtures.length || !frames || (!opts.vdb && !opts.ply)} style={{
+          <button onClick={run} disabled={!fixtures.length || !frames || (!opts.vdb && !opts.ply && !opts.alembic)} style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", background: "var(--accent)",
             color: "#04121a", fontWeight: 700, fontSize: 12 }}>
             ⬇ Export {frames} frames
@@ -173,7 +222,7 @@ export default function SimulationCacheSection({ fixtures, name }) {
         <span style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
           {job
             ? `Frame ${job.frame}/${job.total} · ${(job.bytes / 1e6).toFixed(1)} MB · ${job.particles?.toLocaleString?.() ?? 0} droplets`
-            : `${preset.label.split(" — ")[1]} · files named ${safeBaseName(name)}.0001.vdb …`}
+            : `${opts.alembic ? `${safeBaseName(name)}_water.abc` : ""}${opts.alembic && opts.vdb ? " + " : ""}${opts.vdb ? `${safeBaseName(name)}.0001.vdb … (${preset.label.split(" — ")[1]})` : ""}`}
         </span>
       </div>
       {status && <div style={{ fontSize: 11, color: "#22c55e" }}>{status}</div>}

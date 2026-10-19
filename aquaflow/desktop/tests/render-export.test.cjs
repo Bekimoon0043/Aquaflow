@@ -16,6 +16,9 @@ test("safe names: numbered frames, WAV and note only; no paths", () => {
   assert.equal(safeFileName("Lebu_Fountain.0001.vdb"), "Lebu_Fountain.0001.vdb");
   assert.equal(safeFileName("Lebu_Fountain_particles.0001.ply"), "Lebu_Fountain_particles.0001.ply");
   assert.equal(safeFileName("Lebu_Fountain_manifest.json"), "Lebu_Fountain_manifest.json");
+  assert.equal(safeFileName("Lebu_Fountain_water.abc"), "Lebu_Fountain_water.abc");
+  assert.equal(safeFileName("Lebu_Fountain_scene.glb"), "Lebu_Fountain_scene.glb");
+  assert.equal(safeFileName("Lebu_Fountain_blender_scene.py"), "Lebu_Fountain_blender_scene.py");
   for (const bad of ["../x.png", "..\\x.png", "a/b.png", "C:\\x.png", "x.exe", ".hidden.png", "x.png.js", "x.vdb.bat", "../x.vdb", "", "a..b.png"]) {
     assert.equal(safeFileName(bad), null, bad);
   }
@@ -65,4 +68,16 @@ test("IPC: cancelled dialog", async () => {
   });
   const res = await handlers["render:choose-folder"]({ sender: win.webContents, senderFrame: "main" });
   assert.deepEqual(res, { canceled: true });
+});
+
+test("append and patch stream one file inside the approved folder only", () => {
+  const dir = tmpDir();
+  const store = createRenderExportStore();
+  const token = store.approve(dir);
+  store.write(token, "w.abc", new Uint8Array([1, 2, 3, 4]));
+  store.write(token, "w.abc", new Uint8Array([5, 6]), { mode: "append" });
+  store.write(token, "w.abc", new Uint8Array([9]), { mode: "patch", offset: 1 });
+  assert.deepEqual([...fs.readFileSync(path.join(dir, "w.abc"))], [1, 9, 3, 4, 5, 6]);
+  assert.throws(() => store.write(token, "w.abc", new Uint8Array([1]), { mode: "patch", offset: -1 }), /offset/);
+  assert.throws(() => store.write(token, "../w.abc", new Uint8Array([1]), { mode: "append" }), /Refusing/);
 });

@@ -18,6 +18,11 @@ import { launchSpeed as jetLaunchSpeed, normalizePhysics } from "../components/p
 import { fixturesToNozzleConfigs } from "../hooks/fixtureTypeMap.js";
 import { evaluateFullShowPreview } from "../utils/fullShowPreview.js";
 import { createGrid, encodeVDB } from "./openvdb.js";
+import { createLightRig } from "./sceneLights.js";
+import { buildBlenderScript } from "./blenderScene.js";
+import { createAlembicMeshWriter } from "./alembic.js";
+import { meshFromDensity } from "./surfaceNets.js";
+import { exportScene } from "./index.js";
 
 export const AXIS_PRESETS = Object.freeze({
   yup_m: { label: "Houdini / Maya / Nuke — Y-up, metres", scale: 1, map: (x, y, z) => [x, y, z] },
@@ -27,10 +32,13 @@ export const AXIS_PRESETS = Object.freeze({
 
 export const SIM_DEFAULTS = Object.freeze({
   fps: 30, start: 0, end: null, voxelSize: 0.05, particleRate: 4,
-  axes: "yup_m", vdb: true, velocity: false, ply: false, staticSeconds: 5, seed: 1,
+  axes: "yup_m", vdb: true, velocity: false, color: true, ply: false, blenderScene: false,
+  alembic: false, meshVoxelSize: 0.05, meshIso: 0.2, staticSeconds: 5, seed: 1,
 });
 
 const DEFAULT_FLOW_LPM = 100;
+/** Alembic Cd = the fixture light on the water × this gain, clamped to 0..1. */
+export const ABC_COLOR_GAIN = 4;
 const MAX_PARTICLES = 1_000_000;
 
 /** mulberry32 — small, fast, seedable. */
@@ -60,7 +68,7 @@ export function safeBaseName(name) {
  * @param {object} p { fixtures, plan? (ICAN preview plan), nozzlePhysics? ({id: solver record}) }
  */
 export function prepareSimulation({ fixtures = [], plan = null, nozzlePhysics = null } = {}) {
-  const { nozzleConfigs } = fixturesToNozzleConfigs(fixtures);
+  const { nozzleConfigs, lightConfigs } = fixturesToNozzleConfigs(fixtures);
   const configs = nozzleConfigs
     .filter((c) => c.type !== "flame" && c.type !== "laser")
     .map((c) => ({ ...c, physics: normalizePhysics(nozzlePhysics?.[c.id]) }));
@@ -68,10 +76,11 @@ export function prepareSimulation({ fixtures = [], plan = null, nozzlePhysics = 
   const stateAt = plan
     ? (t) => {
       const s = evaluateFullShowPreview(plan, t, fixtures);
-      return { level: (id) => Number(s.fixtureIntensities?.[id]) || 0, motion: (id) => s.fixtureMotion?.[id] || null };
+      return { level: (id) => Number(s.fixtureIntensities?.[id]) || 0, motion: (id) => s.fixtureMotion?.[id] || null,
+        light: (id) => s.fixtureLightStates?.[id] || null };
     }
-    : () => ({ level: () => 1, motion: () => null });
-  return { configs, duration, stateAt };
+    : () => ({ level: () => 1, motion: () => null, light: null });
+  return { configs, lightConfigs, duration, stateAt };
 }
 
 /** Particle store: struct-of-arrays, compacted in place. */
@@ -173,7 +182,7 @@ export function* simulateFrames(prepared, options = {}) {
       for (let i = 0; i < pos.length; i++) pos[i] -= store.vel[i] * lag;
     }
     yield {
-      index: nextFrame, frame: nextFrame + 1, time: frameTime,
+      index: nextFrame, frame: nextFrame + 1, time: frameTime, lightState: prepared.stateAt(frameTime).light,
       particles: {
         count: store.n, pos, vel: store.vel.subarray(0, store.n * 3),
         vol: store.vol.subarray(0, store.n), cls: store.cls.subarray(0, store.n),
@@ -194,7 +203,7 @@ export function densityReference(voxelSize) {
  * jet's core reads ≈ 1 and spray stays faint at any voxel size (a raw fraction peaks near
  * 0.03 in 5 cm voxels and renders invisible). `vel` = mass-weighted velocity.
  */
-export function voxelizeFrame(particles, { voxelSize = 0.05, axes = "yup_m", velocity = false } = {}) {
+export function voxelizeFrame(particles, { voxelSize = 0.05, axes = "yup_m", velocity = false, colors = null } = {}) {
   const preset = AXIS_PRESETS[axes] || AXIS_PRESETS.yup_m;
   const vs = voxelSize * preset.scale;
   const ref = densityReference(voxelSize);
@@ -204,7 +213,9 @@ export function voxelizeFrame(particles, { voxelSize = 0.05, axes = "yup_m", vel
       aquaflow_reference_fraction: ref } });
   const vel = velocity ? createGrid("vel", { type: "vec3s", gridClass: "unknown",
     metadata: { aquaflow_units: preset.scale === 100 ? "cm/s" : "m/s" } }) : null;
-  const weight = velocity ? createGrid("w") : null;
+  const cd = colors ? createGrid("Cd", { type: "vec3s", gridClass: "unknown",
+    metadata: { aquaflow_units: "linear RGB light on the water from the design's fixtures" } }) : null;
+  const weight = velocity || colors ? createGrid("w") : null;
   const { pos, vel: pv, vol, count } = particles;
   for (let p = 0; p < count; p++) {
     const [x, y, z] = preset.map(pos[p * 3], pos[p * 3 + 1], pos[p * 3 + 2]);
@@ -218,15 +229,15 @@ export function voxelizeFrame(particles, { voxelSize = 0.05, axes = "yup_m", vel
       const wgt = (di ? tx : 1 - tx) * (dj ? ty : 1 - ty) * (dk ? tz : 1 - tz);
       if (wgt <= 0) continue;
       density.add(i0 + di, j0 + dj, k0 + dk, m * wgt);
-      if (velocity) {
-        weight.add(i0 + di, j0 + dj, k0 + dk, wgt);
-        vel.add(i0 + di, j0 + dj, k0 + dk, [v[0] * wgt, v[1] * wgt, v[2] * wgt]);
-      }
+      if (weight) weight.add(i0 + di, j0 + dj, k0 + dk, wgt);
+      if (velocity) vel.add(i0 + di, j0 + dj, k0 + dk, [v[0] * wgt, v[1] * wgt, v[2] * wgt]);
+      if (cd) cd.add(i0 + di, j0 + dj, k0 + dk, [colors[p * 3] * wgt, colors[p * 3 + 1] * wgt, colors[p * 3 + 2] * wgt]);
     }
   }
   density.map((d) => Math.min(1, d));
-  if (velocity) {
-    for (const [key, leaf] of vel.leaves) {
+  for (const g of [vel, cd]) {
+    if (!g) continue;
+    for (const [key, leaf] of g.leaves) {
       const wl = weight.leaves.get(key);
       for (let n = 0; n < 512; n++) {
         if (!leaf.active[n]) continue;
@@ -235,7 +246,7 @@ export function voxelizeFrame(particles, { voxelSize = 0.05, axes = "yup_m", vel
       }
     }
   }
-  return { grids: velocity ? [density, vel] : [density], voxelSize: vs };
+  return { grids: [density, ...(vel ? [vel] : []), ...(cd ? [cd] : [])], voxelSize: vs };
 }
 
 /** Binary little-endian PLY of one snapshot: position, velocity, volume, class (0 water, 1 spray). */
@@ -276,19 +287,56 @@ const yieldUI = () => new Promise((r) => setTimeout(r, 0));
  * @returns {Promise<object>} the manifest
  */
 export async function exportSimulationCache({ fixtures, plan = null, nozzlePhysics = null, name, options = {}, writer,
-  onProgress = null, signal = null }) {
+  onProgress = null, signal = null, design = null }) {
   const o = { ...SIM_DEFAULTS, ...options };
-  if (!o.vdb && !o.ply) throw new Error("Choose OpenVDB volumes and/or a particle cache.");
+  // The Blender package is assembled Z-up in metres, so its volumes must be too.
+  if (o.blenderScene) o.axes = "zup_m";
+  if (!o.vdb && !o.ply && !o.alembic) throw new Error("Choose at least one output: Alembic, OpenVDB or particles.");
   const prepared = prepareSimulation({ fixtures, plan, nozzlePhysics });
   if (!prepared.configs.length) throw new Error("The design has no water nozzles to simulate.");
   const base = safeBaseName(name);
   const end = o.end != null && Number.isFinite(Number(o.end)) ? Number(o.end) : (prepared.duration ?? o.staticSeconds);
   const total = Math.floor((end - o.start) * o.fps + 1e-6) + 1;
-  const stats = { frames: 0, bytes: 0, maxParticles: 0, maxActiveVoxels: 0 };
+  const stats = { frames: 0, bytes: 0, maxParticles: 0, maxActiveVoxels: 0, maxTriangles: 0, lights: prepared.lightConfigs.length };
+  const rig = createLightRig(prepared.lightConfigs, fixtures);
+  const lit = o.color && rig.lights.length > 0;
+  const lightKeys = rig.lights.map(() => []);
+  const lastKey = rig.lights.map(() => null);
+  // Alembic: one .abc streamed frame by frame (Y-up metres, the Alembic convention).
+  const abcName = `${base}_water.abc`;
+  let abc = null;
+  if (o.alembic) {
+    if (!writer.append || !writer.patch) throw new Error("This output folder cannot stream an Alembic file.");
+    await writer.write(abcName, new Uint8Array(0));
+    abc = await createAlembicMeshWriter({ append: (b) => writer.append(abcName, b), patch: (at, b) => writer.patch(abcName, at, b) },
+      { fps: o.fps, startTime: 1 / o.fps, name: "Fountain_Water", application: `AquaFlow Studio — ${name || base}`, color: lit });
+  }
   for (const snap of simulateFrames(prepared, { ...o, end })) {
     if (signal?.aborted) throw new Error("Simulation export cancelled.");
+    const states = rig.statesFrom(snap.lightState);
+    if (o.blenderScene) {
+      states.forEach((st, i) => {
+        const key = [snap.frame, ...st.color.map((c) => Math.round(c * 1e4) / 1e4), Math.round(st.level * 1e4) / 1e4];
+        const prev = lastKey[i];
+        if (!prev || key.slice(1).some((v, k) => Math.abs(v - prev[k + 1]) > 1 / 512)) {
+          // Hold the previous value up to the frame before a change, so cuts stay cuts.
+          if (prev && prev[0] < snap.frame - 1) lightKeys[i].push([snap.frame - 1, ...prev.slice(1)]);
+          lightKeys[i].push(key);
+          lastKey[i] = key;
+        } else lastKey[i] = [snap.frame, ...prev.slice(1)];
+      });
+    }
+    const colors = lit && (o.vdb || o.alembic) ? rig.particleColors(snap.particles, states) : null;
+    if (abc) {
+      const { grids, voxelSize } = voxelizeFrame(snap.particles, { voxelSize: o.meshVoxelSize, axes: "yup_m", colors });
+      const mesh = meshFromDensity(grids[0], { iso: o.meshIso, voxelSize, colorGrid: grids.find((g) => g.name === "Cd") || null });
+      // Vertex colours are 8-bit in most readers: lift the fixture light into range.
+      if (mesh.colors) for (let i = 0; i < mesh.colors.length; i++) mesh.colors[i] = Math.min(1, mesh.colors[i] * ABC_COLOR_GAIN);
+      await abc.addFrame(mesh);
+      stats.maxTriangles = Math.max(stats.maxTriangles, mesh.indices.length / 3);
+    }
     if (o.vdb) {
-      const { grids, voxelSize } = voxelizeFrame(snap.particles, o);
+      const { grids, voxelSize } = voxelizeFrame(snap.particles, { ...o, colors });
       const bytes = encodeVDB(grids, { voxelSize, rand: seededRandom(o.seed + snap.frame) });
       await writer.write(frameName(base, snap.frame, "vdb"), bytes);
       stats.bytes += bytes.byteLength;
@@ -313,7 +361,7 @@ export async function exportSimulationCache({ fixtures, plan = null, nozzlePhysi
     axes: o.axes, axesLabel: preset.label, units: preset.scale === 100 ? "centimetres" : "metres",
     voxelSize: o.vdb ? o.voxelSize * preset.scale : null,
     files: {
-      ...(o.vdb ? { vdb: `${base}.####.vdb`, grids: ["density", ...(o.velocity ? ["vel"] : [])] } : {}),
+      ...(o.vdb ? { vdb: `${base}.####.vdb`, grids: ["density", ...(o.velocity ? ["vel"] : []), ...(lit ? ["Cd"] : [])] } : {}),
       ...(o.ply ? { ply: `${base}_particles.####.ply` } : {}),
     },
     density: `water volume fraction ÷ ${o.vdb ? densityReference(o.voxelSize).toFixed(4) : "-"} (a 10 mm jet's core ≈ 1), clamped 0..1`,
@@ -326,6 +374,105 @@ export async function exportSimulationCache({ fixtures, plan = null, nozzlePhysi
       "Unreal 5.3+: import the folder as a Sparse Volume Texture (Heterogeneous Volumes); keep velocity off.",
     ],
   };
+  if (abc) {
+    const r = await abc.finish();
+    if (design) {
+      // The pool, water surface, site and fixture bodies for the same tools (D5, Max, Maya…): Y-up metres.
+      const fbx = exportScene({ ...design, name: base }, "fbx", { includeWater: false });
+      await writer.write(`${base}_scene.fbx`, fbx.data);
+      manifest.files.scene = `${base}_scene.fbx`;
+    }
+    stats.bytes += r.bytes;
+    manifest.files.alembic = abcName;
+    manifest.notes.unshift(`Alembic (D5 Render, 3ds Max, Maya, Cinema 4D, Houdini, Blender, Unreal): import ${abcName} — Y-up, metres, ${o.fps} fps, frame 1 = ${o.start}s of the show. Give it a water material.`);
+  }
+  if (o.blenderScene) {
+    const files = await writeBlenderPackage({ base, design, prepared, rig, lightKeys, lastKey, preset,
+      fps: o.fps, frames: stats.frames, hasColor: lit, exportDir: writer.where, writer, abcName: abc ? abcName : "" });
+    manifest.files.blender = files;
+    manifest.notes.unshift(`Blender: Scripting tab → Open ${base}_blender_scene.py → Run Script. It builds and saves ${base}_scene.blend.`);
+  }
   await writer.write(`${base}_manifest.json`, new TextEncoder().encode(JSON.stringify(manifest, null, 2)));
   return manifest;
+}
+
+/** Blender's EEVEE draws at most 128 lights; keep a margin for the user's own. */
+export const MAX_BLENDER_LIGHTS = 120;
+
+/**
+ * Merge neighbouring fixtures that play exactly the same colour/level track into one light
+ * (centroid, summed wattage, beam widened to cover the group) until at most `max` remain.
+ * Fixtures with different tracks are never merged, so the show reads the same.
+ */
+export function mergeLights(lights, max = MAX_BLENDER_LIGHTS) {
+  if (lights.length <= max) return lights;
+  const groups = new Map();
+  lights.forEach((L) => {
+    const k = JSON.stringify(L.keys.map((key) => key.slice(1))) + "|" + L.dir.map((v) => v.toFixed(2)).join(",");
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push({ ...L });
+  });
+  const pool = [...groups.values()];
+  let total = lights.length;
+  while (total > max) {
+    let best = null;
+    for (let g = 0; g < pool.length; g++) {
+      const list = pool[g];
+      for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) {
+        const d = Math.hypot(...list[a].pos.map((v, i) => v - list[b].pos[i]));
+        if (!best || d < best.d) best = { g, a, b, d };
+      }
+    }
+    if (!best) break;                                   // every remaining track is unique
+    const list = pool[best.g];
+    const A = list[best.a], B = list[best.b];
+    const n = A.count + B.count;
+    const pos = A.pos.map((v, i) => (v * A.count + B.pos[i] * B.count) / n);
+    const spread = Math.atan2(best.d / 2, 1.5) * 360 / Math.PI;
+    list.splice(best.b, 1);
+    list[best.a] = { ...A, id: `${A.id}+${B.id}`.slice(0, 120), pos, count: n, wattage: A.wattage + B.wattage,
+      beamDeg: Math.min(170, Math.max(A.beamDeg, B.beamDeg) + spread) };
+    total--;
+  }
+  return pool.flat();
+}
+
+/** Pool/site/fixtures (.glb), animated RGB lights (.json) and the scene-builder script (.py). */
+async function writeBlenderPackage({ base, design, prepared, rig, lightKeys, lastKey, preset, fps, frames, hasColor,
+  exportDir, writer, abcName = "" }) {
+  const out = [];
+  if (design) {
+    const glb = exportScene({ ...design, name: base }, "glb", { includeWater: false });
+    await writer.write(`${base}_scene.glb`, glb.data);
+    out.push(`${base}_scene.glb`);
+  }
+  const xs = [], ys = [];
+  let top = 0;
+  for (const c of prepared.configs) {
+    const [x, y] = preset.map(Number(c.x) || 0, 0, Number(c.z) || 0);
+    xs.push(x); ys.push(y);
+    top = Math.max(top, Number(c.designHeightM) || 0);
+  }
+  for (const L of rig.lights) { const [x, y] = preset.map(L.x, 0, L.z); xs.push(x); ys.push(y); }
+  const span = (a) => (a.length ? Math.max(...a) - Math.min(...a) : 10);
+  const mid = (a) => (a.length ? (Math.max(...a) + Math.min(...a)) / 2 : 0);
+  const deg = Math.PI / 180;
+  let lights = rig.lights.map((L, i) => {
+    const tx = L.tiltX * deg, tz = L.tiltZ * deg;
+    const dir = preset.map(-Math.sin(tz), Math.cos(tx) * Math.cos(tz), Math.sin(tx));
+    const keys = lightKeys[i];
+    const last = lastKey[i];
+    if (last && keys.length && keys[keys.length - 1][0] !== last[0]) keys.push(last);
+    return { id: String(L.id), pos: preset.map(L.x, -0.05, L.z), dir, beamDeg: L.beamAngle || 56, wattage: L.wattage, keys, count: 1 };
+  });
+  lights = mergeLights(lights, MAX_BLENDER_LIGHTS);
+  const json = { generator: "AquaFlow Studio", fps, frames, center: [mid(xs), mid(ys), 0],
+    size: [Math.max(4, span(xs)), Math.max(4, span(ys)), Math.max(1, top)], lights };
+  await writer.write(`${base}_lights.json`, new TextEncoder().encode(JSON.stringify(json)));
+  out.push(`${base}_lights.json`);
+  const absolute = typeof exportDir === "string" && /^([A-Za-z]:[\\/]|\/)/.test(exportDir) ? exportDir : "";
+  await writer.write(`${base}_blender_scene.py`, new TextEncoder().encode(
+    buildBlenderScript({ base, exportDir: absolute, fps, frames, hasColor, abcName })));
+  out.push(`${base}_blender_scene.py`);
+  return out;
 }

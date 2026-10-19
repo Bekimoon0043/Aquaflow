@@ -459,14 +459,37 @@ export const MAX_BROWSER_ZIP_BYTES = 1.5e9;
 export function createZipWriter({ createZip, name, maxBytes = MAX_BROWSER_ZIP_BYTES }) {
   const entries = [];
   let bytes = 0;
+  const grow = (n) => {
+    bytes += n;
+    if (bytes > maxBytes) throw new Error("Too many frames for a browser ZIP — render a shorter range, or use the desktop app.");
+  };
+  // Streamed files (an .abc) collect their chunks here and join them at finish().
+  const streams = new Map();
   return {
     where: `${name}.zip`,
     async write(file, data) {
-      bytes += data.byteLength;
-      if (bytes > maxBytes) throw new Error("Too many frames for a browser ZIP — render a shorter range, or use the desktop app.");
+      grow(data.byteLength);
+      if (streams.has(file) || data.byteLength === 0) { streams.set(file, { chunks: [data], patches: [] }); return; }
       entries.push({ name: file, data });
     },
-    async finish() { return new Blob([createZip(entries)], { type: "application/zip" }); },
+    async append(file, data) {
+      grow(data.byteLength);
+      const st = streams.get(file) || { chunks: [], patches: [] };
+      st.chunks.push(data.slice());
+      streams.set(file, st);
+    },
+    async patch(file, offset, data) { streams.get(file)?.patches.push([offset, data.slice()]); },
+    async finish() {
+      for (const [file, st] of streams) {
+        const len = st.chunks.reduce((s, c) => s + c.byteLength, 0);
+        const all = new Uint8Array(len);
+        let o = 0;
+        for (const c of st.chunks) { all.set(c, o); o += c.byteLength; }
+        for (const [at, d] of st.patches) all.set(d, at);
+        entries.push({ name: file, data: all });
+      }
+      return new Blob([createZip(entries)], { type: "application/zip" });
+    },
     get bytes() { return bytes; },
   };
 }
@@ -485,6 +508,15 @@ export async function openDesktopFolderWriter(bridge, { title } = {}) {
       const r = await bridge.writeFile(res.token, file, data);
       if (!r?.ok) throw new Error(r?.error || `Could not write ${file}`);
       bytes += data.byteLength;
+    },
+    async append(file, data) {
+      const r = await bridge.writeFile(res.token, file, data, { mode: "append" });
+      if (!r?.ok) throw new Error(r?.error || `Could not write ${file}`);
+      bytes += data.byteLength;
+    },
+    async patch(file, offset, data) {
+      const r = await bridge.writeFile(res.token, file, data, { mode: "patch", offset });
+      if (!r?.ok) throw new Error(r?.error || `Could not write ${file}`);
     },
     async finish() { return null; },
     get bytes() { return bytes; },

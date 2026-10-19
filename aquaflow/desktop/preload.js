@@ -82,10 +82,14 @@ contextBridge.exposeInMainWorld("aquaflow", {
   },
 
   // AF-3D-VID-002 — PNG image-sequence export. chooseFolder() opens the OS dialog and returns
-  // { ok, path, token } | { canceled }; writeFile only writes bare *.png/*.wav/*.txt/*.vdb/*.ply/*.json names
+  // { ok, path, token } | { canceled }; writeFile only writes bare *.png/*.wav/*.txt and simulation-cache (*.vdb/*.ply/*.json/*.abc/*.glb/*.py) names; options.mode "append"/"patch" stream one .abc
   // into the folder behind that token.
   render: {
     chooseFolder(options) { return ipcRenderer.invoke("render:choose-folder", options || {}); },
-    writeFile(token, name, bytes) { return ipcRenderer.invoke("render:write-file", String(token || ""), String(name || ""), bytes); },
+    writeFile(token, name, bytes, options) {
+      const mode = options && (options.mode === "append" || options.mode === "patch") ? options.mode : undefined;
+      return ipcRenderer.invoke("render:write-file", String(token || ""), String(name || ""), bytes,
+        mode ? { mode, offset: Number(options.offset) || 0 } : {});
+    },
   },
 });

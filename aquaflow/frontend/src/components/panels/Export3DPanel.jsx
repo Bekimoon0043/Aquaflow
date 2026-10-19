@@ -154,7 +154,7 @@ export default function Export3DPanel() {
           {error && <span style={{ fontSize: 11, color: "#ef4444" }}>{error}</span>}
         </div>
 
-        <SimulationCacheSection fixtures={design.fixtures} name={projectName || design.name} />
+        <SimulationCacheSection fixtures={design.fixtures} name={projectName || design.name} design={design} />
 
         <div style={{ ...box, padding: 12, fontSize: 10.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
           <strong style={{ color: "var(--text-secondary)" }}>About</strong> — AquaFlow stays control
