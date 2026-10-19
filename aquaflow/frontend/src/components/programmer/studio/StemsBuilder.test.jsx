@@ -35,13 +35,14 @@ describe('Stems in the pattern builder', () => {
     expect(within(box).getByText('Vocals.wav')).toBeTruthy();
     const parts = within(box).getAllByLabelText('Music part');
     expect(parts.length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(within(box).getByRole('button', { name: /Program from stems/ }));
+    fireEvent.click(within(box).getByRole('button', { name: /Follow exactly/ }));
     const studio = useProjectStore.getState().programmer.studio;
     const stemRecipes = studio.recipes.filter(r => r.stems);
     expect(stemRecipes.length).toBeGreaterThan(0);
     expect(stemRecipes.every(r => r.effect === 'curve' && r.sampleRate === 20)).toBe(true);
     expect(useProjectStore.getState().programmer.timelineClips.some(c => Array.isArray(c.keys))).toBe(true);
     expect(within(dialog).getAllByRole('status').some(s => /Programmed from stems/.test(s.textContent))).toBe(true);
+    expect(within(box).getByRole('button', { name: /Create patterns from the music/ })).toBeTruthy();
     // The stems themselves stay in the project.
     expect(useProjectStore.getState().programmer.stems.items).toHaveLength(2);
     fireEvent.click(within(dialog).getByRole('button', { name: /Undo/ }));

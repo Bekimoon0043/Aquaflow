@@ -14,6 +14,7 @@ import { attachSong, useSongBeats } from './musicSync';
 import { useStems } from './stemSync';
 import { STEM_ROLES } from './stemAnalysis';
 import { availableSources, programFromStems, sourceById, suggestRows } from './stemProgram';
+import { patternsFromMusic } from './musicPatterns';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -158,6 +159,17 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     const src = stemSources.find(s => !used.has(s.id)) || stemSources[0];
     const g = waterGroups[0];
     if (src && g) setStemRows([...rowsNow, { sourceId: src.id, groupId: g.id, min: 15, max: 100, kind: 'water' }]);
+  };
+  const musicPatterns = async () => {
+    const song = await findBeats();
+    if (!song) { setNote('Load the song and find its beats first'); return; }
+    try {
+      const result = patternsFromMusic(studio, { analysis: song, stems: stemsApi.stems, rows: rowsNow, items, groups });
+      onChange(result.studio);
+      setApplied(list => [...list, { fill: true }]);
+      const parts = Object.entries(result.counts).map(([k, n]) => `${k} ${n}`).join(' · ');
+      setNote(result.warning || `Patterns from the music · ${result.recipes.filter(r => r.pattern?.role !== 'lights').length} patterns · ${parts}`);
+    } catch (error) { setNote(error.message); }
   };
   const programStems = () => {
     try {
@@ -381,8 +393,10 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
           {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
           <span className="sp-grow" />
+          <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
+            title="Lay real patterns over the song for each linked group, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing (rest when silent). Repeated sections get the same patterns, a jump into a chorus fires a burst with a white flash, and every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards.">♫ Create patterns from the music</button>
           <button onClick={programStems} disabled={!rowsNow.length}
-            title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>♫ Program from stems</button>
+            title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>Follow exactly</button>
         </div>
       </>}
     </div>

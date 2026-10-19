@@ -299,3 +299,6 @@
 .seq-menu-head { font-size:9px; letter-spacing:1.2px; color:var(--text-muted); padding:6px 9px 2px; }
 .show-studio .seq-menu .seq-menu-create { background:var(--accent-pulse); }
 .show-studio .seq-creator-btn { color:var(--text-accent); border-color:var(--border-accent); }
+
+/* Music graph above the pattern lanes */
+.seq-music { position:relative; border-bottom:1px solid var(--sp-border); cursor:pointer; background:#050b11; }

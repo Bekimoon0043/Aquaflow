@@ -13,7 +13,7 @@ describe('splitting a full mix', () => {
   });
 
   it('separates drums, bass and a lead melody from one mixed signal', () => {
-    const seconds = 12, rate = 11025;
+    const seconds = 12, rate = 22050;
     const kicks = Array.from({ length: 22 }, (_, i) => 0.5 + i * 0.5);
     const drums = drumTrack({ seconds, rate, kicks, hats: kicks.map(k => k + 0.25) });
     const voice = toneTrack({ seconds, rate, fromHz: 300, toHz: 600, on: t => t < 5 || t > 7 });

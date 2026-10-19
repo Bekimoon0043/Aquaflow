@@ -4,6 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FIELD_CONTROLS, FIELD_KINDS, ORIGINS, fieldKind } from './wavePatterns';
 import { builderGroups } from './patternPresets';
 import PatternCreator from './PatternCreator';
+import MusicLanes, { MUSIC_LANE_H, useMusicLanes } from './MusicLanes';
+import { useStems } from './stemSync';
+import { useProgrammerSong } from './musicSync';
+import { grid as beatGrid } from './beatSync';
+
+/** Snap a time to the song's beats (when the music has a beat grid), else to quarter seconds. */
+export function snapToMusic(t, g) {
+  if (!g) return snap(t);
+  return Math.round((g.beatOrigin + Math.round((t - g.beatOrigin) / g.beatSec) * g.beatSec) * 1000) / 1000;
+}
 import { myTypes } from './customPatterns';
 import {
   defaultFieldGroups, deleteBlock, duplicateBlock, exportPatterns, fieldUnitRecipes, importPatterns, moveBlock, resizeBlock, showBlocks, updateFieldUnit,
@@ -106,6 +116,13 @@ export default function PreviewSequence({ studio, items, definitions, time, play
   const [context, setContext] = useState(null); // { id, x, y }
   const [note, setNote] = useState('');
   const [creator, setCreator] = useState(null); // null | { block }
+  // Music graph: per-stem frequency bands, bars, beats and sections above the patterns.
+  const music = useMusicLanes();
+  const stemsApi = useStems();
+  const song = useProgrammerSong();
+  const [showMusic, setShowMusic] = useState(true);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const musicH = showMusic ? music.lanes.length * MUSIC_LANE_H : 0;
   const importRef = useRef(null);
   // Menus close on any click outside them, or on Escape.
   useEffect(() => {
@@ -157,8 +174,10 @@ export default function PreviewSequence({ studio, items, definitions, time, play
     if (!drag) return;
     const dx = (e.clientX - drag.x) / pps;
     if (Math.abs(e.clientX - drag.x) > 3) drag.moved = true;
-    setDrag(d => d && (d.mode === 'move' ? { ...d, moved: drag.moved, newStart: Math.max(0, snap(d.start + dx)) }
-      : { ...d, moved: drag.moved, newDuration: Math.max(1, snap(d.duration + dx)) }));
+    // With a beat grid, blocks land on beats (hold Alt for free quarter-second steps).
+    const g = e.altKey ? null : beatGrid(music.analysis);
+    setDrag(d => d && (d.mode === 'move' ? { ...d, moved: drag.moved, newStart: Math.max(0, snapToMusic(d.start + dx, g)) }
+      : { ...d, moved: drag.moved, newDuration: Math.max(1, snapToMusic(d.start + d.duration + dx, g) - d.start) }));
   };
   const onUp = () => {
     if (!drag) return;
@@ -231,18 +250,25 @@ export default function PreviewSequence({ studio, items, definitions, time, play
       {extras}
       {note && <span className="seq-muted seq-note">{note}</span>}
       <span className="sp-grow" />
+      {music.lanes.length > 0
+        ? <button onClick={() => setShowMusic(v => !v)} aria-pressed={showMusic} title="Show or hide the music graph (frequency bands per stem, bars, beats, sections)">♫ Music</button>
+        : <button onClick={() => stemsApi.split(song)} disabled={!song || stemsApi.status === 'working'}
+          title={song ? 'Analyse the song: frequency graph of the whole song and of its drums, bass and vocals (estimated), shown above the patterns' : 'Load the show song first'}>
+          {stemsApi.status === 'working' ? `♫ Analysing… ${stemsApi.done}%` : '♫ Music graph'}</button>}
       <button onClick={() => setZoom(0)} aria-pressed={zoom === 0} title="Fit the whole show">Fit</button>
       <button onClick={() => setZoom(z => Math.max(2, (z || pps) / 1.5))} title="Zoom out">−</button>
       <button onClick={() => setZoom(z => Math.min(200, (z || pps) * 1.5))} title="Zoom in">+</button>
       <button onClick={onProgrammingView} title="Show the group / channel rows used in Show Programming">Programming view</button>
     </div>
     <div className="seq-body">
-      <div className="seq-scroll" ref={scroller} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-        <div className="seq-canvas" style={{ width: length * pps + 24, height: 26 + lanes * LANE_H + 8 }}>
+      <div className="seq-scroll" ref={scroller} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onScroll={e => setScrollLeft(e.currentTarget.scrollLeft)}>
+        <div className="seq-canvas" style={{ width: length * pps + 24, height: 26 + musicH + lanes * LANE_H + 8 }}>
           <div className="seq-ruler" onPointerDown={seekAt}>
             {ticks.map(t => <span key={t} style={{ left: 12 + t * pps }}>{fmt(t)}</span>)}
             {(studio.markers || []).map(m => <i key={m.id} className="seq-marker" style={{ left: 12 + m.time * pps }} title={m.name} />)}
           </div>
+          {showMusic && <MusicLanes lanes={music.lanes} analysis={music.analysis} pps={pps} scrollLeft={scrollLeft} viewWidth={width} onSeek={seekAt} />}
           <div className="seq-lanes" onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); seekAt(e); } }}>
             {blocks.map(raw => { const b = dragged(raw); return <div key={b.id}
               className={`seq-block ${b.type}${b.id === selectedId ? ' selected' : ''}${b.background ? ' background' : ''}${b.muted ? ' muted' : ''}`}

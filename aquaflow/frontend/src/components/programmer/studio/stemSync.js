@@ -5,7 +5,7 @@ import { useCallback, useState } from 'react';
 import useProjectStore from '../../../store/projectStore';
 import { analyzeStem, guessRole, STEM_ROLES, STEM_VERSION } from './stemAnalysis';
 import { decodeSong, hashFile } from './musicSync';
-import { splitSong } from './stemSplit';
+import { splitSong, SPLIT_RATE } from './stemSplit';
 import { uid } from './showModel';
 
 export const MAX_STEMS = 8;
@@ -29,18 +29,25 @@ export function readStems(programmer) {
   return Array.isArray(list) ? list.filter((s) => s?.analysis?.version === STEM_VERSION && STEM_ROLES[s.role]) : [];
 }
 
-/** Programmer document with `stems` replacing the current list. */
-export function withStems(programmer, stems) {
-  return { ...(programmer || {}), stems: { items: stems.slice(0, MAX_STEMS) } };
+/** Programmer document with `stems` replacing the current list (and the mix graph, when given). */
+export function withStems(programmer, stems, mix = undefined) {
+  const keep = mix === undefined ? programmer?.stems?.mix : mix;
+  return { ...(programmer || {}), stems: { items: stems.slice(0, MAX_STEMS), ...(keep ? { mix: keep } : {}) } };
 }
 
-function save(stems) {
+/** The whole-song frequency graph (from Split the song), or null. */
+export function readMix(programmer) {
+  const mix = programmer?.stems?.mix;
+  return mix?.analysis?.bands ? mix : null;
+}
+
+function save(stems, mix = undefined) {
   const project = useProjectStore.getState();
-  project.rememberProgrammer(withStems(project.programmer, stems));
+  project.rememberProgrammer(withStems(project.programmer, stems, mix));
 }
 
 /** Analyse files into stem records; a role is guessed from each file name. */
-export async function analyzeStemFiles(files, { decode = decodeSong, analyze = analyzeStemInWorker, hash = hashFile, roleOf = null } = {}) {
+export async function analyzeStemFiles(files, { decode = (f) => decodeSong(f, SPLIT_RATE), analyze = analyzeStemInWorker, hash = hashFile, roleOf = null } = {}) {
   const out = [];
   for (const file of files) {
     const role = roleOf?.(file) || guessRole(file.name);
@@ -70,13 +77,14 @@ export function splitInWorker(samples, rate, onProgress = null) {
 }
 
 /** Stem records estimated from one song file. */
-export async function splitSongFile(file, { decode = decodeSong, split = splitInWorker, onProgress = null } = {}) {
+export async function splitSongFile(file, { decode = (f) => decodeSong(f, SPLIT_RATE), split = splitInWorker, onProgress = null } = {}) {
   const { samples, rate } = await decode(file);
   const parts = await split(samples, rate, onProgress);
   const name = file?.name || 'song';
-  return ['drums', 'bass', 'vocals'].map((role) => ({
+  const stems = ['drums', 'bass', 'vocals'].map((role) => ({
     id: uid('stem'), role, name: `${STEM_ROLES[role].label} · from ${name}`, split: true, analysis: parts[role], analyzedAt: Date.now(),
   }));
+  return { stems, mix: { name, analysis: parts.mix } };
 }
 
 /** Stems of the show + actions for the builder. */
@@ -114,9 +122,9 @@ export function useStems() {
     if (!file) return;
     setState({ status: 'working', error: '', done: 0, total: 100 });
     try {
-      const parts = await splitSongFile(file, { onProgress: (p) => setState((s) => ({ ...s, done: Math.round(p * 100) })) });
+      const { stems: parts, mix } = await splitSongFile(file, { onProgress: (p) => setState((s) => ({ ...s, done: Math.round(p * 100) })) });
       const roles = new Set(parts.map((s) => s.role));
-      save([...readStems(useProjectStore.getState().programmer).filter((s) => !roles.has(s.role)), ...parts]);
+      save([...readStems(useProjectStore.getState().programmer).filter((s) => !roles.has(s.role)), ...parts], mix);
       setState({ status: 'idle', error: '', done: 0, total: 0 });
     } catch (error) {
       setState({ status: 'error', error: error.message || 'Could not split the song', done: 0, total: 0 });

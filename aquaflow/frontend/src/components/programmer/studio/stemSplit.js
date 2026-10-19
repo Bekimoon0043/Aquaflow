@@ -1,7 +1,7 @@
 // Split a full song into estimated stems for the fountain — no AI model, plain signal
 // processing (so no licence limits on the weights):
 //
-//   STFT (1024 / hop 256 at ~11 kHz) → harmonic / percussive separation by median
+//   STFT (2048 / hop 512 at ~22 kHz) → harmonic / percussive separation by median
 //   filtering (across time = sustained notes, across frequency = hits; soft masks)
 //   drums   = the percussive part: full band (every hit), > 3 kHz (hats); kicks from the
 //             low band (< 150 Hz) of the whole mix
@@ -12,37 +12,16 @@
 // It is an estimate: clean stems from the producer are better when you have them.
 // Output records match stemAnalysis.analyzeStem, so the rest of the pipeline is shared.
 
-import { downsample, TARGET_RATE } from './musicAnalysis';
+import { downsample } from './musicAnalysis';
 import { STEM_RATE, STEM_VERSION, levelCurve, pickOnsets, pitchCurve } from './stemAnalysis';
+import { fft } from './fft';
+import { BANDS, bandOfHz, packBands } from './stemBands';
 
-const N = 1024, HOP = 256, BINS = N / 2 + 1;
+export { fft };
+
+export const SPLIT_RATE = 22050;
+const N = 2048, HOP = 512, BINS = N / 2 + 1;
 const r3 = (v) => Math.round(v * 1000) / 1000;
-
-/** In-place iterative radix-2 FFT (re, im of length n, a power of two). */
-export function fft(re, im, inverse = false) {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = (inverse ? 2 : -2) * Math.PI / len;
-    const wr = Math.cos(ang), wi = Math.sin(ang);
-    for (let i = 0; i < n; i += len) {
-      let cr = 1, ci = 0;
-      for (let k = 0; k < len / 2; k++) {
-        const a = i + k, b = a + len / 2;
-        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
-        re[b] = re[a] - tr; im[b] = im[a] - ti;
-        re[a] += tr; im[a] += ti;
-        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
-      }
-    }
-  }
-  if (inverse) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
-}
 
 const hann = Float64Array.from({ length: N }, (_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
 
@@ -72,7 +51,7 @@ function resample(series, fromRate, toRate) {
  * @returns {{ drums, bass, vocals }} analyses shaped like analyzeStem's
  */
 export function splitSong(samples, rate, onProgress = null) {
-  const red = downsample(samples, rate, TARGET_RATE);
+  const red = downsample(samples, rate, SPLIT_RATE);
   const x = red.samples, sr = red.rate;
   const frames = Math.max(1, Math.floor((x.length - N) / HOP) + 1);
   const mag = new Float32Array(frames * BINS);
@@ -111,11 +90,24 @@ export function splitSong(samples, rate, onProgress = null) {
   const eDrum = new Float64Array(frames), eKick = new Float64Array(frames), eHat = new Float64Array(frames);
   const eBass = new Float64Array(frames), eMel = new Float64Array(frames);
   const melMask = new Float32Array(frames * (melHi - bassHi + 1));
+  // Per-band energies of each estimated stem and of the whole mix (the music graph).
+  const nb = BANDS.length;
+  const band = { mix: BANDS.map(() => new Float64Array(frames)), drums: BANDS.map(() => new Float64Array(frames)),
+    bass: BANDS.map(() => new Float64Array(frames)), vocals: BANDS.map(() => new Float64Array(frames)) };
+  const binBand = Int8Array.from({ length: BINS }, (_, k) => bandOfHz(k * sr / N));
+  void nb;
   for (let f = 0; f < frames; f++) {
     for (let k = 1; k < BINS; k++) {
       const i = f * BINS + k, h2 = H[i] * H[i], p2 = P[i] * P[i], s = mag[i];
       const mh = h2 / (h2 + p2 + 1e-12), mp = 1 - mh;
       const ep = (mp * s) ** 2, eh = (mh * s) ** 2;
+      const b = binBand[k];
+      if (b >= 0) {
+        band.mix[b][f] += s * s;
+        band.drums[b][f] += ep;
+        if (k <= bassHi) band.bass[b][f] += eh;
+        else band.vocals[b][f] += eh;
+      }
       eDrum[f] += ep;
       // A kick is a narrow low thump that median filtering calls "harmonic": find it in
       // the low band of the full mix (bass note starts can also count as kicks).
@@ -157,10 +149,12 @@ export function splitSong(samples, rate, onProgress = null) {
   const duration = r3(x.length / sr);
   const base = { version: STEM_VERSION, rate: STEM_RATE, duration, estimated: true };
   const vocalsLevel = level(eMel);
+  const packed = (key) => packBands(band[key], frameRate, sr / 2);
   const result = {
-    drums: { ...base, role: 'drums', level: level(eDrum, { release: 0.15 }), hits: onsets(eDrum), kicks: onsets(eKick, { minGap: 0.15 }), hats: onsets(eHat, { minGap: 0.07 }) },
-    bass: { ...base, role: 'bass', level: level(eBass), hits: onsets(eBass, { minGap: 0.15 }) },
-    vocals: { ...base, role: 'vocals', level: vocalsLevel, hits: onsets(eMel), pitch: pitchCurve(mel, sr, vocalsLevel) },
+    mix: { ...base, role: 'mix', level: level(eDrum.map((v, i) => v + eBass[i] + eMel[i])), bands: packed('mix') },
+    drums: { ...base, role: 'drums', bands: packed('drums'), level: level(eDrum, { release: 0.15 }), hits: onsets(eDrum), kicks: onsets(eKick, { minGap: 0.15 }), hats: onsets(eHat, { minGap: 0.07 }) },
+    bass: { ...base, role: 'bass', bands: packed('bass'), level: level(eBass), hits: onsets(eBass, { minGap: 0.15 }) },
+    vocals: { ...base, role: 'vocals', bands: packed('vocals'), level: vocalsLevel, hits: onsets(eMel), pitch: pitchCurve(mel, sr, vocalsLevel) },
   };
   onProgress?.(1);
   return result;

@@ -1,5 +1,19 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19 (late night): AquaFlow Studio 1.2.49 installed — music frequency graph in the timeline, patterns from the music**
+
+- Research report: `reports/Music frequency fountain choreography.md` (industry practice, MIR features, hydraulic limits, auto-choreography, timeline UI). Key point: top shows are hand-programmed against a timeline; band-to-nozzle automation alone reads as "jumping water", so a good editor graph and section/phrase-based pattern choice matter most.
+- **Frequency bands** (`stemBands.js`): sub 20–60 / bass 60–250 / low-mid 250–500 / mid 500–2k / high-mid 2–4k / presence 4–6k / brilliance 6k+ Hz, at 20 frames per second, normalised per band, stored compactly (base64). Stems and the split now run at 22 kHz so the hi-hat bands exist; the split also stores the whole-song ("mix") graph.
+- **Music graph in the 3D show timeline** (`MusicLanes.jsx`): Song, Drums, Bass and Vocals lanes as band heat maps (low at the bottom), kick and hat ticks when zoomed in, bar and beat lines, section names. The "♫ Music" toggle shows or hides it; "♫ Music graph" analyses the song when no graph exists. Dragged blocks snap to beats (hold Alt for free movement).
+- **Create patterns from the music** (`musicPatterns.js`): real, editable pattern-builder units per phrase (8 bars, 4 in choruses) and per linked group.
+  - Kick → pulse, chase or ripple; hats → sparkle or chase; bass → breathing or wave (slow, pump-level); melody → wave, mirror or breathing while singing, resting when silent.
+  - The effect family rotates every 2 phrases; repeated sections match; a jump into a chorus fires a 1-bar burst with a white flash.
+  - Every pattern starts early by 0.1 + 1.2·√(2h/g) s for its tallest jet; lights follow in section colours.
+  - "Follow exactly" (the curve mode) is kept as a secondary option.
+- Ready show: `Downloads/Lebu_Fountain_DJ_Milla_Mashup_Vol4_Music_Patterns.aquapkg` — 110 patterns, 6,744 cues.
+  - Kick: 18 pulse / 14 chase / 10 ripple. Hats: 16 sparkle / 7 chase. Melody: 14 mirror / 9 wave / 5 breathing. Bass: 15 breathing / 7 wave.
+- Tests: programmer 20 files / 125 tests pass; other frontend folders pass.
+
 **2026-10-19 (night): AquaFlow Studio 1.2.48 installed — shows programmed from music stems**
 
 - Pattern builder → **Stems**:

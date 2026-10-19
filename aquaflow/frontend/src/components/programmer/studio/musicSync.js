@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import useProjectStore from '../../../store/projectStore';
 import { liveAssetFiles, sha256Hex } from '../../../utils/assetManifest';
 import { apiPost } from '../../../utils/apiClient';
-import { ANALYSIS_VERSION, analyzeSamples, buildAnalysis, downsample, toMono } from './musicAnalysis';
+import { ANALYSIS_VERSION, TARGET_RATE, analyzeSamples, buildAnalysis, downsample, toMono } from './musicAnalysis';
 
 export const SONG_ASSET = 'audio:programmer';
 export const CACHE_LIMIT = 4;
@@ -49,14 +49,14 @@ export function writeCache(hash, analysis) {
 }
 
 /** Decode a song to mono samples at ~11 kHz. */
-export async function decodeSong(file) {
+export async function decodeSong(file, toRate = TARGET_RATE) {
   const Context = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!Context) throw new Error('This browser cannot decode audio');
   const context = new Context();
   try {
     const buffer = await context.decodeAudioData(await file.arrayBuffer());
     const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
-    return downsample(toMono(channels), buffer.sampleRate);
+    return downsample(toMono(channels), buffer.sampleRate, toRate);
   } finally { context.close?.(); }
 }
 

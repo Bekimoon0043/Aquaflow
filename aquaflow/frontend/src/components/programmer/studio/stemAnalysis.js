@@ -10,6 +10,10 @@
 //           -1 where nothing is sung / played
 
 import { downsample, TARGET_RATE } from './musicAnalysis';
+import { fft } from './fft';
+import { computeBands } from './stemBands';
+
+export const BAND_DECODE_RATE = 22050;
 
 export const STEM_RATE = 20;          // curve points per second
 export const STEM_VERSION = 1;
@@ -188,9 +192,10 @@ export function analyzeStem(samples, rate, role = 'other') {
   const s = reduced.samples, sr = reduced.rate;
   const bands = bandEnergies(s, sr);
   const level = levelCurve(bands.full, bands.rate);
+  const wide = downsample(samples, rate, BAND_DECODE_RATE);
   const result = {
     version: STEM_VERSION, role, rate: STEM_RATE, duration: r3(s.length / sr),
-    level, hits: pickOnsets(novelty(bands.full), bands.rate),
+    level, hits: pickOnsets(novelty(bands.full), bands.rate), bands: computeBands(wide.samples, wide.rate, fft),
   };
   if (role === 'drums') {
     result.kicks = pickOnsets(novelty(bands.low), bands.rate, { minGap: 0.15 });
