@@ -14,7 +14,8 @@ import { attachSong, useSongBeats } from './musicSync';
 import { useStems } from './stemSync';
 import { STEM_ROLES } from './stemAnalysis';
 import { availableSources, programFromStems, sourceById, suggestRows } from './stemProgram';
-import { patternsFromMusic } from './musicPatterns';
+import { designRows, patternsFromMusic } from './musicPatterns';
+import { designGroups, readFountainDesign } from './fountainDesign';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -63,7 +64,9 @@ function download(name, text) {
  * `editRecipeId` reopens a builder-made pattern: Update then replaces it in place.
  */
 export default function PatternBuilder({ studio, items, params = {}, showLength = 30, onChange, onUndo, onClose, onEngineeringPatch, editRecipeId = null }) {
-  const groups = useMemo(() => builderGroups(studio, items), [studio, items]);
+  // The Engineering design: areas (front, back, centre …), what feeds them and how they switch.
+  const design = useMemo(() => readFountainDesign(items), [items]);
+  const groups = useMemo(() => [...designGroups(design), ...builderGroups(studio, items)], [design, studio, items]);
   const byId = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
   const membersOf = g => (g ? resolveMembers(g, items).map(id => byId.get(id)).filter(Boolean) : []);
   const waterGroups = groups.filter(g => membersOf(g).some(isWaterItem));
@@ -150,7 +153,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
 
   // ── Stems: each part of the music drives its own group ──
   const stemSources = availableSources(stemsApi.stems);
-  const suggested = useMemo(() => suggestRows(stemsApi.stems, waterGroups, lightGroups, membersOf),
+  const suggested = useMemo(() => (design.areas.length ? designRows(design, stemsApi.stems) : suggestRows(stemsApi.stems, waterGroups, lightGroups, membersOf)),
     [stemsApi.stems, groups]); // eslint-disable-line react-hooks/exhaustive-deps
   const rowsNow = (stemRows || suggested).filter(r => stemSources.some(s => s.id === r.sourceId));
   const editRow = (i, patch) => setStemRows(rowsNow.map((r, k) => (k === i ? { ...r, ...patch } : r)));
@@ -164,11 +167,12 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     const song = await findBeats();
     if (!song) { setNote('Load the song and find its beats first'); return; }
     try {
-      const result = patternsFromMusic(studio, { analysis: song, stems: stemsApi.stems, rows: rowsNow, items, groups });
+      const result = patternsFromMusic(studio, { analysis: song, stems: stemsApi.stems, rows: rowsNow, items, groups, design });
       onChange(result.studio);
       setApplied(list => [...list, { fill: true }]);
       const parts = Object.entries(result.counts).map(([k, n]) => `${k} ${n}`).join(' · ');
       setNote(result.warning || `Patterns from the music · ${result.recipes.filter(r => r.pattern?.role !== 'lights').length} patterns · ${parts}`
+        + (result.muted ? ` · ${result.muted} fixed pump / valve pattern${result.muted === 1 ? '' : 's'} muted (the music drives them now)` : '')
         + (result.skipped?.length ? ` · skipped: ${result.skipped.join('; ')}` : ''));
     } catch (error) { setNote(error.message); }
   };
@@ -366,6 +370,14 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           <button onClick={() => stemsApi.remove(st.id)} title="Remove this stem" aria-label={`Remove ${st.name}`}>×</button>
         </div>
       ))}
+      {design.areas.length > 0 && (
+        <details className="pb-design" aria-label="Your fountain">
+          <summary title="What AquaFlow read from the Engineering design: each area, its nozzles, how they switch and which pump feeds them. Patterns from the music use this.">
+            Your fountain · {design.summary}</summary>
+          <ul>{design.areas.map(a => <li key={a.id}><strong>{a.name}</strong> <small>{a.summary}</small></li>)}</ul>
+          {design.tips.map(t => <p key={t} className="pb-design-tip">💡 {t}</p>)}
+        </details>
+      )}
       {stemSources.length > 0 && <>
         {rowsNow.map((row, i) => (
           <div className="pb-stem-map" key={i}>
@@ -395,7 +407,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
           <span className="sp-grow" />
           <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
-            title="Lay real patterns over the song for each linked group, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing (rest when silent). Repeated sections get the same patterns, a jump into a chorus fires a burst with a white flash, and every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards.">♫ Create patterns from the music</button>
+            title="Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards.">♫ Create patterns from the music</button>
           <button onClick={programStems} disabled={!rowsNow.length}
             title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>Follow exactly</button>
         </div>

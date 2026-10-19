@@ -1,5 +1,35 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-19 (night, after 1.2.51): AquaFlow Studio 1.2.52 installed — patterns from the music understand the fountain design; world-famous looks**
+
+- **Design reader** (`fountainDesign.js`) builds the fountain's structure from the Engineering design:
+  - Nozzle kinds: straight jet, rotating basket, moving, shooter, geyser, mist, curtain/fan, ring/flower, jumping.
+  - Solenoids, pumps and lights, and how they connect: nozzle → `solenoidValveId` / `linkedValveId` / the valve's `controlledFixtureId`; nozzle → `pumpId` / the pump's `servesValveIds`; light → `pairedNozzleId`, else the nearest nozzle.
+  - Areas by where the jets stand (centre / front / back / left / right; a compact centre piece stays whole), and what each area can really do:
+    - `switch`: own solenoid, height from the pump.
+    - `pump`: no valve, shares a pump.
+    - `height`: own height control.
+  - Design tips, e.g. Lebu's 3 rotating baskets share Pump 4 with 33 perimeter jets, so they rise whenever those jets fire.
+- **Design-aware generator** (`musicPatterns.js`, `designRows`, `fitToControl`):
+  - Every area gets a part: melody on moving nozzles, bass on the tallest, kick on the biggest switched area, hats on the low jets; left/right pairs share a part, mirrored.
+  - Lights follow their own area.
+  - Pump-only jets breathe together; solenoid hits are at least 2.2 s apart.
+  - A resting part gives its area a calm slow wave instead of going dark.
+  - Fixed "valves open / pumps 85 %" recipes on the driven hardware are muted (and reported).
+- **World-famous looks** (`famousPatterns.js`, 13): shooter salvo, stadium wave, swaying arcs, peacock fan, crossing waves, rolling sea, see-saw, rain, waterfall steps, heartbeat, lotus bloom, grand swell, and a grand finale for the last chorus.
+  - Every other phrase uses one the area can perform.
+- **Hardware follow** (`hardwareFollow.js`, called by `compileStudio` for recipes with `hardware`):
+  - Each jet's pattern becomes real solenoid open spans (1 s minimum on and off).
+  - Each pump's VFD speed is the highest open jet's level, ramped at 40 %/s up (pre-ramped) and 30 %/s down, and it stops when its outlets are closed.
+  - Nozzle clips are rewritten to the water they will really get (valve × pump) for the preview. Jets with their own solenoid are marked `asBuilt` and skipped by the PLC; valve-less jets keep their clips, which open their implied Siemens valves.
+- PLC: `nozzleLinks` reads `engineering.solenoidValveId`; `clipsForPlc` maps nozzles through the site's `nozzle_ids` too; gaps under one scan (10 ms) are not reported as closings.
+- Lebu result (`Downloads/Lebu_Fountain_DJ_Milla_Mashup_Vol4_Design_Aware.aquapkg`):
+  - Every output is driven: 134/134 jets, 3/3 baskets, 134/134 solenoids, 4/4 pumps, 146/146 lights. Before, the solenoids were held open, the pumps were fixed at 85 % and 40 lights were never used.
+  - 63 patterns, 29 of them famous looks; 5,331 valve openings with no on or off time under 1 s.
+  - PLC check against a site built from the design: 0 errors, 0 warnings.
+- Checked in the installed 1.2.52: Pattern builder → "Your fountain" lists the 5 areas and the tip; links are suggested per area; Create patterns from the music → 63 patterns.
+- Tests: new `fountainDesign.test.js` (10); full frontend suite 137 files / 1392 tests pass.
+
 **2026-10-20: AquaFlow Studio 1.2.51 installed — smooth pattern changes**
 
 - Patterns from the music now change smoothly:

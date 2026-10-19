@@ -398,7 +398,7 @@ export function builderStateFromUnit(unit, groups) {
  * their place and ids, so an Update is an in-place edit; builder-made groups left
  * unused are tidied away. Returns { studio, recipes, recipeIds, unitId, timing }.
  */
-export function buildPatternUnit(studio, { preset, options, group, items, lights = null, unitId = null, replaceIds = [], tag = {} }) {
+export function buildPatternUnit(studio, { preset, options, group, items, lights = null, unitId = null, replaceIds = [], tag = {}, name }) {
   const replace = new Set(replaceIds);
   const removed = studio.recipes.filter(r => replace.has(r.id));
   const firstIndex = studio.recipes.findIndex(r => replace.has(r.id));
@@ -406,7 +406,7 @@ export function buildPatternUnit(studio, { preset, options, group, items, lights
   const index = firstIndex < 0 ? kept.length : studio.recipes.slice(0, firstIndex).filter(r => !replace.has(r.id)).length;
   const id = unitId || uid('pattern');
   const reuse = { water: removed.filter(r => r.pattern?.role !== 'lights').map(r => r.id), lights: removed.filter(r => r.pattern?.role === 'lights').map(r => r.id) };
-  const water = applyPattern({ ...studio, recipes: kept }, { preset, options, group, items });
+  const water = applyPattern({ ...studio, recipes: kept }, { preset, options, group, items, name });
   let next = water.studio;
   const mark = (recipe, role, groupRef, k) => ({ ...recipe, id: reuse[role][k] || recipe.id,
     pattern: { ...recipe.pattern, id, role, group: groupRef,

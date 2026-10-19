@@ -4,6 +4,7 @@
 const LEVEL_TRACKS = new Set(['pump_speed', 'pump_pressure', 'device_intensity', 'device_enable', 'solenoid_open', 'motion_intensity', 'solenoid_duration']);
 const LIGHT_TRACKS = new Set(['lighting_master', 'lighting_red', 'lighting_green', 'lighting_blue']);
 const EPS = 1e-6;
+const SCAN_S = 0.01;   // a gap shorter than one PLC scan is not a closing
 const fmt = seconds => `${Number(seconds.toFixed(2))} s`;
 
 export const TRACK_LABEL = {
@@ -70,7 +71,7 @@ export function checkPlcLimits(clips = [], site = null, links = new Map()) {
   for (const [nozzle, valve] of links) if (channels.get(valve)?.kind === 'valve' && !valveOfNozzle.has(nozzle)) valveOfNozzle.set(nozzle, valve);
   const valveClips = new Map(), pumpClips = new Map(), lightClips = new Map();
   for (const clip of clips) {
-    if (clip.muted || clip.disabled || !(Number(clip.duration) > 0)) continue;
+    if (clip.muted || clip.disabled || clip.asBuilt || !(Number(clip.duration) > 0)) continue;
     const channel = channels.get(clip.fixtureId);
     const valveId = valveOfNozzle.get(clip.fixtureId) || (channel?.kind === 'valve' ? channel.id : null);
     if (valveId && LEVEL_TRACKS.has(clip.type)) {
@@ -102,7 +103,7 @@ export function checkPlcLimits(clips = [], site = null, links = new Map()) {
     });
     for (let i = 1; i < stretched.length; i++) {
       const gap = stretched[i].s[0] - Math.max(...stretched.slice(0, i).map(x => x.s[1]));
-      if (gap > EPS && gap < minOff - EPS) add(stretched[i].clip, 'warn', `Only ${fmt(gap)} after the previous opening of ${valve.name} (minimum off-time ${fmt(minOff)}): the valve stays open through the gap.`);
+      if (gap > SCAN_S && gap < minOff - EPS) add(stretched[i].clip, 'warn', `Only ${fmt(gap)} after the previous opening of ${valve.name} (minimum off-time ${fmt(minOff)}): the valve stays open through the gap.`);
     }
     openSpans.set(valveId, union(stretched.map(x => x.s), minOff));
   }
@@ -132,14 +133,19 @@ export function checkPlcLimits(clips = [], site = null, links = new Map()) {
 // Engineering links nozzle → its valve (linkedValveId). Older Siemens sites do not store
 // nozzle_ids, so the timeline maps nozzle clips onto the valve before checking or playing.
 export function nozzleLinks(items = []) {
-  return new Map(items.filter(i => i.linkedValveId).map(i => [i.id, i.linkedValveId]));
+  const valve = i => i.linkedValveId || i.engineering?.solenoidValveId || i.engineering?.linkedValveId;
+  return new Map(items.filter(valve).map(i => [i.id, valve(i)]));
 }
 
 export function clipsForPlc(clips = [], site = null, links = new Map()) {
   if (!site?.channels?.length) return clips;
   const ids = new Set(site.channels.map(c => c.id));
-  return clips.map(clip => !ids.has(clip.fixtureId) && ids.has(links.get(clip.fixtureId)) && LEVEL_TRACKS.has(clip.type)
-    ? { ...clip, fixtureId: links.get(clip.fixtureId), sourceFixtureId: clip.fixtureId } : clip);
+  // Nozzle → valve from the site (nozzle_ids, incl. implied valves) and from Engineering.
+  const valveOf = new Map(site.channels.filter(c => c.kind === 'valve').flatMap(c => (c.nozzle_ids || []).map(n => [n, c.id])));
+  for (const [nozzle, valve] of links) if (ids.has(valve) && !valveOf.has(nozzle)) valveOf.set(nozzle, valve);
+  // As-built nozzle clips only mirror the valve and pump clips for the preview.
+  return clips.filter(clip => !clip.asBuilt).map(clip => !ids.has(clip.fixtureId) && valveOf.has(clip.fixtureId) && LEVEL_TRACKS.has(clip.type)
+    ? { ...clip, fixtureId: valveOf.get(clip.fixtureId), sourceFixtureId: clip.fixtureId } : clip);
 }
 
 // Show one marker per timeline block: resolved pattern clips report on their pattern.

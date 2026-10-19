@@ -89,3 +89,8 @@
 .pb-stems .pb-row > span.pb-stem-arrow { width:auto; flex:0 0 auto; }
 .pb-stem-levels input[type=number] { width:52px; padding:0 4px; }
 .pb-stem-levels small { color:var(--text-muted); }
+.pb-design { border:1px solid var(--border-mid); border-radius:6px; padding:4px 8px; font-size:11px; }
+.pb-design summary { cursor:pointer; color:var(--text-button); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pb-design ul { margin:6px 0 2px; padding-left:16px; display:flex; flex-direction:column; gap:3px; }
+.pb-design li small { color:var(--text-muted); }
+.pb-design-tip { margin:4px 0; color:var(--amber, #f5c86b); }

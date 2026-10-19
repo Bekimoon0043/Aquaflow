@@ -3,6 +3,7 @@ import { createSiteWaterTrack } from '../../../utils/siteShowCompiler';
 import { getFixtureInfo } from '../../../utils/fixtureTypeResolver';
 import { evaluateShowFrameAt, groupInherits, recipeAudible } from '../../../show/evaluateShowFrame';
 import { fieldChannels, memberGeometry } from './wavePatterns';
+import { followHardware } from './hardwareFollow';
 
 export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve', 'field'];
 export const ORDERS = ['engineering', 'left-to-right', 'right-to-left', 'front-to-back', 'clockwise', 'counter-clockwise', 'center-out'];
@@ -266,6 +267,13 @@ export function compileStudio(studio, items) {
       }
     });
     if (clips.length > 50000) { issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.'); break; }
+  }
+  // Design-aware patterns drive the real solenoids and pumps (hardwareFollow.js).
+  const modes = new Map(studio.recipes.filter(r => (r.hardware === 'hits' || r.hardware === 'open') && recipeAudible(r, groups)).map(r => [r.id, r.hardware]));
+  if (modes.size) {
+    const routed = followHardware(clips, items, modes).clips;
+    if (routed.length > 50000) issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.');
+    return { clips: routed, issues: [...new Set(issues)] };
   }
   return { clips, issues: [...new Set(issues)] };
 }

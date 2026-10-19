@@ -14,13 +14,23 @@
 //   * timing    every pattern starts early by the water's rise time:
 //               lead = 0.1 s (valve) + 1.2 · √(2h/g) for the group's tallest jet
 //   * lights    follow their water in the section's colour, brighter with the part's energy
+//   * design    with the Engineering design (fountainDesign.js) every area of the fountain gets a
+//             part: the melody on moving nozzles, bass on the tallest jets, kicks on the biggest
+//             switched area, hats on the low jets, left and right mirrored. Each area only gets
+//             looks it can perform — jets on one shared pump without valves rise and fall
+//             together, solenoid jets switch on / off no faster than the valves allow — and
+//             every other phrase is a world-famous look (famousPatterns.js). The patterns
+//             drive the real solenoids and pumps (hardwareFollow.js).
 
-import { buildPatternUnit, pruneBuilderGroups, QUICK_LIGHTS, QUICK_WATER } from './patternPresets';
+import { buildPatternUnit, ensureGroup, pruneBuilderGroups, QUICK_LIGHTS, QUICK_WATER } from './patternPresets';
 import { FILL_CLIP_BUDGET, grid, songPhrases, syncPatternOptions } from './beatSync';
 import { compileStudio, resolveMembers, uid } from './showModel';
 import { energyBetween } from './musicAnalysis';
 import { STEM_RATE } from './stemAnalysis';
-import { sourceById } from './stemProgram';
+import { availableSources, sourceById } from './stemProgram';
+import { MIRROR_OF } from './fountainDesign';
+import { famousFor } from './famousPatterns';
+import { fieldUnitRecipes } from './showBlocks';
 import { bandMeans, brightness, readBands } from './stemBands';
 
 const G = 9.81;
@@ -113,6 +123,69 @@ export function choosePattern(source, f, { label, eRel, beatSec, barSec, members
 }
 
 /**
+ * Links from the fountain design: every area gets the part of the music that suits it, its
+ * lights follow it, and a left / right pair dances the same part (mirrored).
+ */
+export function designRows(design, stems) {
+  const sources = availableSources(stems).map((s) => s.id);
+  const has = (id) => sources.includes(id);
+  const areas = (design?.areas || []).filter((a) => a.size);
+  if (!areas.length || !sources.length) return [];
+  const left = new Set(areas.map((a) => a.id));
+  const assign = new Map();
+  const give = (a, sourceId) => { assign.set(a.id, sourceId); left.delete(a.id); };
+  const take = (sourceId, score) => {
+    const pool = areas.filter((a) => left.has(a.id));
+    if (!has(sourceId) || !pool.length) return;
+    const best = pool.reduce((a, b) => (score(b) > score(a) ? b : a));
+    give(best, sourceId);
+    const partner = pool.find((a) => a !== best && MIRROR_OF[best.position] === a.position && ['left', 'right'].includes(a.position)
+      && a.kind === best.kind && a.control === best.control);
+    if (partner) give(partner, sourceId);
+  };
+  const moving = (a) => a.moving || ['ring', 'curtain', 'swing'].includes(a.kind);
+  const tallest = Math.max(...areas.map((a) => a.heightM));
+  take('vocals:melody', (a) => (moving(a) ? 1000 : 0) + (a.position === 'centre' ? 300 : 0) + a.heightM);
+  take('bass', (a) => a.heightM * 10 + (a.control === 'pump' ? 50 : 0) + (a.position === 'back' ? 20 : 0) + (['shooter', 'geyser'].includes(a.kind) ? 40 : 0));
+  take('drums:kicks', (a) => (a.control !== 'pump' ? 500 : 0) + a.size + (a.position === 'front' ? 30 : 0));
+  take('drums:hats', (a) => (a.control !== 'pump' ? 500 : 0) - a.heightM * 10 + (a.kind === 'mist' ? 100 : 0));
+  for (const id of ['other:melody', 'piano:melody', 'guitar:melody', 'other', 'piano', 'guitar', 'vocals']) take(id, (a) => a.size);
+  // Every area dances: the rest take the part that suits them best.
+  for (const a of areas.filter((x) => left.has(x.id))) {
+    const order = moving(a) ? ['vocals:melody', 'other:melody', 'vocals', 'bass', 'drums:kicks']
+      : a.control === 'pump' ? ['bass', 'vocals', 'other', 'drums:kicks']
+        : a.heightM >= tallest ? ['bass', 'drums:kicks', 'vocals'] : ['drums:kicks', 'drums:hats', 'bass', 'vocals'];
+    give(a, order.find(has) || sources[0]);
+  }
+  const rows = [];
+  for (const a of areas) {
+    const sourceId = assign.get(a.id);
+    rows.push({ sourceId, groupId: a.id, min: 15, max: 100, kind: 'water' });
+    if (a.lightIds.length) rows.push({ sourceId, groupId: `${a.id}:lights`, follows: a.id, min: 15, max: 100, kind: 'lights' });
+  }
+  return rows;
+}
+
+/**
+ * What an area can really do with a pick: jets that only move with their shared pump breathe
+ * together (a pump ramps over seconds); solenoid jets hit no faster than a valve can cycle.
+ */
+export function fitToControl(pick, control, { beatSec, barSec }) {
+  if (!pick) return null;
+  if (control === 'pump') {
+    return { preset: 'breathing', lapSeconds: Math.max(2 * barSec, pick.lapSeconds || 0), minLevel: Math.max(30, pick.minLevel || 0), maxLevel: pick.maxLevel };
+  }
+  if (control === 'switch' && pick.preset === 'pulse') {
+    return { ...pick, lapSeconds: Math.max(pick.lapSeconds, beatSec * Math.ceil(2.2 / beatSec)) };
+  }
+  return pick;
+}
+
+/** How a jet's solenoid follows a pattern: on each crest, or open while the pump shapes it. */
+const valveMode = (preset) => (preset === 'breathing' ? 'open' : 'hits');
+const FLIP = { clockwise: 'counter-clockwise', 'counter-clockwise': 'clockwise', 'left-to-right': 'right-to-left', 'right-to-left': 'left-to-right' };
+
+/**
  * Lay patterns across the song for each water link.
  * @param {object} studio
  * @param {object} p { analysis (song: bpm, sections, energy), stems, rows (links), items, groups }
@@ -129,7 +202,7 @@ export function patternsFromMusic(studio, options) {
   return { ...result, warning: 'Very dense show: link fewer or smaller groups.' };
 }
 
-function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars = PHRASE_BARS, lead = true }) {
+function generateOnce(studio, { analysis, stems, rows, items, groups, design = null, phraseBars = PHRASE_BARS, lead = true }) {
   const g = grid(analysis);
   const end = r3(Math.min(600, analysis.duration));
   const byRole = new Map(stems.map((s) => [s.role, s.analysis]));
@@ -145,7 +218,10 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
   const memberItems = (group) => resolveMembers(group, items).map((id) => itemById.get(id)).filter(Boolean);
 
   const water = rows.filter((r) => (r.kind || 'water') === 'water');
-  const lightsFor = (sourceId) => rows.find((r) => r.kind === 'lights' && r.sourceId === sourceId);
+  const lightsFor = (row) => rows.find((r) => r.kind === 'lights' && (r.follows ? r.follows === row.groupId : r.sourceId === row.sourceId));
+  const areaById = new Map((design?.areas || []).map((a) => [a.id, a]));
+  const lastChorus = Math.max(-1, ...phrases.filter((p) => p.label === 'chorus' && p.index === 0).map((p) => p.start));
+  const driven = new Set();      // solenoids and pumps the music now drives
   // Each jet / light belongs to one linked part only: a later link gets the fixtures earlier
   // links have not claimed (two patterns on one output would overlap — the PLC rejects that).
   const claimed = new Set();
@@ -166,6 +242,17 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
     const group = claim(linked, source.label);
     if (!group) { skipped.push(`${source.label} → ${linked.name} (jets already used)`); continue; }
     const members = memberItems(group);
+    const area = areaById.get(linked.area || linked.id) || null;
+    const control = area?.control || 'height';
+    const routed = !!(area && design?.connected && control !== 'height');
+    if (routed) for (const id of resolveMembers(group, items)) {
+      const n = design.nozzleById.get(id);
+      if (n?.valveId) driven.add(n.valveId);
+      if (n?.pumpId) driven.add(n.pumpId);
+    }
+    // The right side of a mirrored left / right pair runs the other way.
+    const flip = !!(area && area.position === 'right' && rows.some((r) => r.sourceId === row.sourceId && r.kind !== 'lights'
+      && areaById.get(r.groupId)?.position === 'left'));
     const height = Math.max(0, ...members.map((m) => Number(m.engineering?.jetHeightM) || 0));
     const leadS = lead ? waterLead(height) : 0;
     const feats = phrases.map((p) => phraseFeatures(stem, source, p.start, p.end, g.beatSec));
@@ -174,22 +261,29 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
     const memo = new Map();
     let lastMax = null;
     let lastEnd = 0;          // patterns on one group never overlap (the PLC compiler rejects that)
-    const lightRow = lightsFor(row.sourceId);
+    const lightRow = lightsFor(row);
     const lightLinked = lightRow && groups.find((x) => x.id === lightRow.groupId);
     const lightGroup = lightLinked ? claim(lightLinked, source.label) : null;
     phrases.forEach((p, i) => {
       const eRel = rank(feats[i].energy);
       // Every two phrases the effect family rotates; the same section label at the same
       // position gets the same choice, so music that repeats looks the same in water.
-      const slot = Math.floor(p.index / 2) % 3;
-      const raw = choosePattern(source, feats[i], { label: p.label, eRel, beatSec: g.beatSec, barSec: g.barSec, members: members.length, variant: slot });
+      // With the design, every other turn is a world-famous look the area can perform.
+      const turn = Math.floor(p.index / 2);
+      const slot = area ? Math.floor(turn / 2) % 3 : turn % 3;
+      const ctx = { label: p.label, eRel, beatSec: g.beatSec, barSec: g.barSec, members: control === 'pump' ? 1 : members.length, variant: slot };
+      // With the design no area goes dark while its part rests: a calm slow wave instead.
+      const rest = !!area && !choosePattern(source, feats[i], ctx);
+      const raw = fitToControl(rest ? { preset: 'wave', lapSeconds: 4 * g.barSec, crests: 2, minLevel: 30, maxLevel: 70 } : choosePattern(source, feats[i], ctx), control, ctx);
       if (!raw) { lastMax = null; return; }
+      const finale = !!area && p.label === 'chorus' && lastChorus >= 0 && p.start >= lastChorus && eRel >= 0.5;
+      const famous = area && !rest && (turn % 2 === 1 || finale) ? famousFor(source, area, { turn: Math.floor(turn / 2) + i, eRel, finale }) : null;
       // Heights move gradually from phrase to phrase.
       const pick = lastMax == null ? raw : { ...raw, maxLevel: Math.round(clamp(raw.maxLevel, lastMax - MAX_LEVEL_STEP, lastMax + MAX_LEVEL_STEP)) };
       lastMax = pick.maxLevel;
       const memoKey = `${p.label}:${slot}:${pick.preset}`;
       if (!memo.has(memoKey)) memo.set(memoKey, pick.preset === 'mirror' ? (memo.size % 2 ? 'outward' : 'inward') : (memo.size % 2 ? 'counter-clockwise' : 'clockwise'));
-      const order = memo.get(memoKey);
+      const order = flip ? FLIP[memo.get(memoKey)] || memo.get(memoKey) : memo.get(memoKey);
       const color = SECTION_COLORS[p.label] || '#35d0c0';
       const base = { start: p.start, duration: r3(p.end - p.start), lapSeconds: pick.lapSeconds, minLevel: pick.minLevel, maxLevel: pick.maxLevel,
         order: pick.preset === 'ripple' ? 'center-out' : order, crests: pick.crests || 1, smoothness: pick.smoothness || (pick.preset === 'pulse' ? 'sharp' : 'smooth'),
@@ -203,16 +297,42 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
       if (opts.start + opts.duration > 600) opts.duration = r3(600 - opts.start);
       if (opts.duration < 1) return;
       lastEnd = r3(opts.start + opts.duration);
-      const unit = buildPatternUnit(next, { preset: pick.preset, options: opts, group, items,
-        lights: lightGroup ? { group: lightGroup, color, level: Math.round(25 + 65 * eRel) } : null,
-        tag: { music: fillId, section: p.label, part: source.id, leadS: shift } });
-      // Ease every edge over one bar, so one pattern hands over to the next without a jump.
+      const tag = { music: fillId, section: p.label, part: source.id, leadS: shift, ...(famous ? { famous: famous.id } : {}) };
+      const lightLevel = Math.round(25 + 65 * eRel);
       const easeS = r3(Math.min(g.barSec, opts.duration / 4));
-      const ease = { in: easeS, out: easeS, floor: EASE_FLOOR };
-      const ids = new Set(unit.recipes.map((r) => r.id));
-      next = { ...unit.studio, recipes: unit.studio.recipes.map((r) => (ids.has(r.id) && r.effect === 'curve' ? { ...r, ease } : r)) };
+      const look = famous ? famous.make({ barSec: g.barSec, beatSec: g.beatSec }) : null;
+      const hardware = routed ? (famous ? famous.valve : valveMode(pick.preset)) : null;
+      let ids;
+      if (look?.field) {
+        // A famous wave field: water + matching lights, levels and soft edges from the music.
+        const field = { ...look.field, low: pick.minLevel, high: pick.maxLevel, lowFar: pick.minLevel, highFar: pick.maxLevel, stairs: 0, ease: easeS, openValves: false,
+          ...(flip ? { direction: -(look.field.direction || 1), ...(look.field.origin === 'left' ? { origin: 'right' } : {}) } : {}) };
+        const w = ensureGroup(next, group);
+        next = w.studio;
+        let lightId = null;
+        if (lightGroup) { const l = ensureGroup(next, lightGroup); next = l.studio; lightId = l.groupId; }
+        const made = fieldUnitRecipes({ kind: field.kind, start: opts.start, duration: opts.duration, name: famous.name, waterGroupId: w.groupId, lightGroupId: lightId,
+          field, light: { color, low: 6, high: lightLevel }, order: order || 'clockwise' });
+        const recipes = made.recipes.map((r) => ({ ...r, pattern: { ...r.pattern, ...tag, group: r.pattern.role === 'lights' ? lightGroup.id : group.id },
+          ...(hardware && r.pattern.role !== 'lights' ? { hardware } : {}) }));
+        next = { ...next, recipes: [...next.recipes, ...recipes] };
+        ids = new Set(recipes.map((r) => r.id));
+      } else {
+        const preset = look?.preset || pick.preset;
+        const lookOpts = look ? { ...look.options, ...(look.floor === 0 ? { minLevel: 0 } : {}),
+          ...(flip && look.options.order ? { order: FLIP[look.options.order] || look.options.order } : {}) } : {};
+        const built = look ? syncPatternOptions(preset, { ...opts, ...lookOpts, start: opts.start, duration: opts.duration }, analysis, { members: members.length }).options : opts;
+        const unit = buildPatternUnit(next, { preset, options: { ...built, start: opts.start, sync: built.sync || sync }, group, items, name: famous?.name,
+          lights: lightGroup ? { group: lightGroup, color, level: lightLevel } : null, tag });
+        // Ease every edge over one bar, so one pattern hands over to the next without a jump.
+        const ease = { in: easeS, out: easeS, floor: EASE_FLOOR };
+        ids = new Set(unit.recipes.map((r) => r.id));
+        next = { ...unit.studio, recipes: unit.studio.recipes.map((r) => (!ids.has(r.id) ? r : {
+          ...r, ...(r.effect === 'curve' ? { ease } : {}), ...(hardware && r.pattern?.role !== 'lights' ? { hardware } : {}) })) };
+      }
       added.push(...next.recipes.filter((r) => ids.has(r.id)));
       counts[source.label] = (counts[source.label] || 0) + 1;
+      if (famous) counts['Famous looks'] = (counts['Famous looks'] || 0) + 1;
     });
   }
 
@@ -243,6 +363,18 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, phraseBars
       counts.Accents = (counts.Accents || 0) + 1;
     });
   }
+  // Recipes that held these solenoids / pumps (e.g. "valves open all show") would fight the
+  // music: mute them (unmute to bring them back).
+  let muted = 0;
+  if (driven.size) {
+    next = { ...next, recipes: next.recipes.map((r) => {
+      if (r.pattern?.music || r.muted) return r;
+      const ids = resolveMembers(next.groups.find((x) => x.id === r.groupId), items);
+      if (!ids.length || !ids.every((id) => driven.has(id))) return r;
+      muted++;
+      return { ...r, muted: true, mutedBy: 'music' };
+    }) };
+  }
   next = { ...next, tempo: [{ time: r3(g.beatOrigin), bpm: r3(g.bpm) }] };
-  return { studio: next, recipes: added, fillId, counts, skipped };
+  return { studio: next, recipes: added, fillId, counts, skipped, muted };
 }
