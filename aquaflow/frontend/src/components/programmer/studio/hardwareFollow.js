@@ -170,8 +170,9 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
         if (o[i] || !valved) target[i] = Math.max(target[i], h[i]);
       }
     }
-    // Valve-less jets (baskets on a shared pump) keep it running between their own crests.
-    if (mine.some((id) => !design.nozzleById.get(id).valveId)) for (let i = 0; i < N; i++) running[i] = running[i] || target[i] > 0 ? 1 : 0;
+    // A valve-less jet (a basket on a shared pump) is an outlet that is always open: the pump
+    // can always run, so it ramps down gently instead of stopping.
+    if (mine.some((id) => !design.nozzleById.get(id).valveId)) running.fill(1);
     const speed = pumpCurve(target, running);
     pumpLevel.set(pumpId, speed);
     const track = pump.item.tracks?.find((t) => t.type === 'pump_speed');
@@ -181,7 +182,7 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
       if (speed[i] <= 0.5) { i++; continue; }
       let j = i;
       while (j + 1 < N && speed[j + 1] > 0.5 && (j + 1 - i) * DT < PUMP_CLIP_S) j++;
-      const keys = simplify(speed, i, j + 1 < N ? j + 1 : j, DT);
+      const keys = simplify(speed, i, j, DT);
       const duration = r3(Math.max(DT, (j + 1 - i) * DT));
       if (i * DT + duration <= 600) out.push({ id: `hw:${pumpId}:${k++}`, studioRecipeId: null, fixtureId: pumpId, trackId: track.id, type: 'pump_speed',
         name: `${pump.name} · follows the music`, startTime: r3(i * DT), duration, value: r2(Math.max(...speed.slice(i, j + 1))), keys, color: '#4f8cff',
