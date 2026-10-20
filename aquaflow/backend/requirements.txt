@@ -42,3 +42,4 @@ cpppo>=5.0
 # Optional: for full AI
 # torch>=2.2.0
 # transformers>=4.40.0
+anthropic>=1.13,<2   # Phase 5 optional AI director (only used when an API key is configured)

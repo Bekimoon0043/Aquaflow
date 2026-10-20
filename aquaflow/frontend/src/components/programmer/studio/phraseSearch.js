@@ -27,14 +27,14 @@ export function sectionPhrases(section, barSec) {
   return out;
 }
 
-function candidates(area, part, { heroLeft, finale }) {
+function candidates(area, part, { heroLeft, finale, prefer = [] }) {
   const fam = partFamily(sourceById(part));
   return LOOKS.filter((l) => {
     if (!l.controls.includes(area.control) || area.size < (l.minJets || 1)) return false;
     if (area.control === 'pump' && !['breathing', 'grand-swell'].includes(l.id)) return false;
     if (l.hero && !(heroLeft > 0 || (finale && l.id === 'grand-finale'))) return false;
     if (l.id === 'grand-finale' && !finale) return false;
-    return l.parts.includes(fam) || l.id === 'breathing';
+    return l.parts.includes(fam) || l.id === 'breathing' || prefer.includes(l.id);
   });
 }
 
@@ -42,7 +42,7 @@ function candidates(area, part, { heroLeft, finale }) {
  * Fill plan.sections[].phrases. `locks`: { "<sectionId>:<phraseIndex>:<areaId>": lookId }.
  * @returns plan (new object)
  */
-export function searchPhrases(plan, { analysis, stems = [], scm, variant = 0, locks = {}, weights = COST_WEIGHTS }) {
+export function searchPhrases(plan, { analysis, stems = [], scm, variant = 0, locks = {}, weights = COST_WEIGHTS, lookBias = {} }) {
   const W = { ...COST_WEIGHTS, ...weights };
   const barSec = plan.analysis.barSec, beatSec = barSec / (plan.analysis.beatsPerBar || 4);
   const byRole = new Map(stems.map((s) => [s.role, s.analysis]));
@@ -74,7 +74,7 @@ export function searchPhrases(plan, { analysis, stems = [], scm, variant = 0, lo
       const density = fam === 'hits' || fam === 'hats' ? Math.min(1, f.hitsPerBeat / 1.5) : fam === 'melody' ? (f.voiced > 0.25 ? 0.5 : 0) : 0.3;
       const finale = s.finale && pi === s.phrases.length - 1;
       const lockKey = `${s.id}:${pi}:${area.id}`;
-      let cands = locks[lockKey] ? [lookById(locks[lockKey])].filter(Boolean) : candidates(area, part, { heroLeft: heroLeft.get(s.id), finale });
+      let cands = locks[lockKey] ? [lookById(locks[lockKey])].filter(Boolean) : candidates(area, part, { heroLeft: heroLeft.get(s.id), finale, prefer: s.prefer || [] });
       if (!cands.length) cands = [lookById('breathing')];
       const original = s.repeatOf ? sections.find((x) => x.id === s.repeatOf) : null;
       const echo = original?.phrases[pi]?.voices.find((v) => v.areaId === area.id)?.look;
@@ -85,6 +85,8 @@ export function searchPhrases(plan, { analysis, stems = [], scm, variant = 0, lo
         if (echo) c += l.id === echo ? -W.structure : 0;
         if (l.hero) c -= W.hero;
         if (others.includes(l.id)) c += W.layering;
+        c -= lookBias[l.id] || 0;                       // the user's taste (preferences.js)
+        if (s.prefer?.includes(l.id)) c -= 0.6;         // the director's preference for this section
         if (variant) c += W.noise * -Math.log(-Math.log(Math.max(1e-9, rand())));   // Gumbel noise per variant
         return { l, c };
       });

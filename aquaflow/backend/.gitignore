@@ -7,3 +7,8 @@ coverage.xml
 
 # AF-PKG-002 — the PyInstaller build spec IS tracked source (overrides *.spec above)
 !aquaflow-engine.spec
+
+# AI director API key saved on this machine — never commit
+data/director_key
+# Deep music analysis cache
+data/deep_music/

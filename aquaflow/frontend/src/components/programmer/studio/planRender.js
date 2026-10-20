@@ -123,6 +123,7 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
             ...r, ...(r.effect === 'curve' ? { ease } : {}), ...(hardware && r.pattern?.role !== 'lights' ? { hardware, hardwareCap } : {}) })) };
         }
         added.push(...next.recipes.filter((r) => ids.has(r.id)));
+        v.rendered = true;
         counts[s.role] = (counts[s.role] || 0) + 1;
         if (famous) counts['Famous looks'] = (counts['Famous looks'] || 0) + 1;
       }

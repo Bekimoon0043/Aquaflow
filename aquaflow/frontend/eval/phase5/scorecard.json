@@ -1,5 +1,5 @@
 {
- "createdAt": "2026-10-20T07:07:43.096Z",
+ "createdAt": "2026-10-20T07:16:21.631Z",
  "summary": [
   {
    "generator": "rules-1.2.52",
@@ -20,15 +20,15 @@
   {
    "generator": "plan-v1",
    "cases": 13,
-   "score": 73.3,
+   "score": 72.877,
    "passRate": 1,
    "metrics": {
-    "eventAlignment": 0.666,
-    "energyTracking": 0.643,
-    "arcFidelity": 0.947,
+    "eventAlignment": 0.653,
+    "energyTracking": 0.653,
+    "arcFidelity": 0.949,
     "coverage": 0.99,
-    "structureConsistency": 0.633,
-    "diversity": 0.687,
+    "structureConsistency": 0.612,
+    "diversity": 0.668,
     "heroDiscipline": 0.768,
     "peakUsage": 0.506
    }
@@ -80,29 +80,29 @@
       "climax": 1
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
       "all": 0.659,
       "climax": 0.609
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
       "all": 0.833,
       "climax": 0.72
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
       "all": 0.439,
       "climax": 0.912
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
       "all": 0.44,
       "climax": 0.912
@@ -121,7 +121,7 @@
     ]
    },
    "clips": 1368,
-   "genMs": 138,
+   "genMs": 144,
    "issues": 0
   },
   {
@@ -169,29 +169,29 @@
       "climax": 0.921
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
       "all": 0.452,
       "climax": 0.566
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
       "all": 0.803,
       "climax": 0.628
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
       "all": 0.659,
       "climax": 0.804
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
       "all": 0.659,
       "climax": 0.804
@@ -206,7 +206,7 @@
     ]
    },
    "clips": 696,
-   "genMs": 69,
+   "genMs": 54,
    "issues": 0
   },
   {
@@ -254,29 +254,29 @@
       "climax": 1
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
       "all": 0.539,
       "climax": 0.608
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
       "all": 0.814,
       "climax": 0.733
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
       "all": 0.699,
       "climax": 0.959
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
       "all": 0.7,
       "climax": 0.959
@@ -295,7 +295,7 @@
     ]
    },
    "clips": 998,
-   "genMs": 82,
+   "genMs": 64,
    "issues": 0
   },
   {
@@ -343,29 +343,29 @@
       "climax": 1
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
       "all": 0.417,
       "climax": 0.443
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
       "all": 0.792,
       "climax": 0.719
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
       "all": 0.388,
       "climax": 0.517
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
       "all": 0.387,
       "climax": 0.515
@@ -383,7 +383,7 @@
     ]
    },
    "clips": 1075,
-   "genMs": 75,
+   "genMs": 66,
    "issues": 0
   },
   {
@@ -493,7 +493,7 @@
     ]
    },
    "clips": 622,
-   "genMs": 104,
+   "genMs": 103,
    "issues": 0
   },
   {
@@ -709,7 +709,7 @@
     ]
    },
    "clips": 448,
-   "genMs": 58,
+   "genMs": 62,
    "issues": 0
   },
   {
@@ -818,7 +818,7 @@
     ]
    },
    "clips": 456,
-   "genMs": 58,
+   "genMs": 57,
    "issues": 0
   },
   {
@@ -928,7 +928,7 @@
     ]
    },
    "clips": 736,
-   "genMs": 229,
+   "genMs": 131,
    "issues": 0
   },
   {
@@ -1034,7 +1034,7 @@
     ]
    },
    "clips": 340,
-   "genMs": 79,
+   "genMs": 52,
    "issues": 0
   },
   {
@@ -1144,7 +1144,7 @@
     ]
    },
    "clips": 536,
-   "genMs": 100,
+   "genMs": 103,
    "issues": 0
   },
   {
@@ -1253,7 +1253,7 @@
     ]
    },
    "clips": 536,
-   "genMs": 97,
+   "genMs": 79,
    "issues": 0
   },
   {
@@ -1343,7 +1343,7 @@
     ]
    },
    "clips": 8826,
-   "genMs": 504,
+   "genMs": 448,
    "issues": 0
   },
   {
@@ -1352,30 +1352,30 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "pop",
    "songName": "Pop 4/4 · 120 BPM",
-   "score": 80.3,
+   "score": 75.3,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.48,
-    "energyTracking": 0.901,
-    "arcFidelity": 0.971,
+    "eventAlignment": 0.142,
+    "energyTracking": 0.935,
+    "arcFidelity": 0.986,
     "coverage": 1,
-    "structureConsistency": 0.404,
-    "diversity": 0.801,
+    "structureConsistency": 0.411,
+    "diversity": 0.721,
     "heroDiscipline": 1,
     "peakUsage": 0.867
    },
    "detail": {
-    "events": 69,
-    "distinctLooks": 9,
-    "looks": 53,
+    "events": 68,
+    "distinctLooks": 6,
+    "looks": 43,
     "heroes": 2,
-    "repeatRate": 0.538,
+    "repeatRate": 0.595,
     "arc": {
      "climaxHighest": true,
      "dipBefore": true,
      "strongEnd": true,
-     "rankAgreement": 0.9047619047619048
+     "rankAgreement": 0.9523809523809523
     },
     "climax": {
      "start": 160,
@@ -1387,52 +1387,52 @@
       "id": "design:centre:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.988,
+      "all": 0.987,
       "climax": 1
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
-      "all": 0.766,
-      "climax": 0.839
+      "all": 0.606,
+      "climax": 0.82
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
-      "all": 0.703,
-      "climax": 0.837
+      "all": 0.486,
+      "climax": 0.81
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
-      "all": 0.526,
+      "all": 0.504,
       "climax": 0.97
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
-      "all": 0.526,
+      "all": 0.504,
       "climax": 0.97
      }
     ],
-    "switchedActive": 0.63,
-    "switchedActiveClimax": 0.904,
+    "switchedActive": 0.525,
+    "switchedActiveClimax": 0.892,
     "sectionMass": [
-     0.282,
-     0.728,
-     0.528,
-     0.751,
-     0.276,
-     0.795,
-     0.343
+     0.114,
+     0.696,
+     0.298,
+     0.71,
+     0.097,
+     0.791,
+     0.107
     ]
    },
-   "clips": 1120,
-   "genMs": 50,
+   "clips": 866,
+   "genMs": 44,
    "issues": 0
   },
   {
@@ -1441,25 +1441,25 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "ballad",
    "songName": "Ballad 4/4 · 72 BPM",
-   "score": 68.1,
+   "score": 64.1,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.271,
-    "energyTracking": 0.474,
+    "eventAlignment": 0.066,
+    "energyTracking": 0.464,
     "arcFidelity": 1,
     "coverage": 1,
-    "structureConsistency": 0.675,
-    "diversity": 0.792,
+    "structureConsistency": 0.6,
+    "diversity": 0.79,
     "heroDiscipline": 0.6,
     "peakUsage": 0.62
    },
    "detail": {
-    "events": 51,
+    "events": 60,
     "distinctLooks": 5,
-    "looks": 19,
+    "looks": 17,
     "heroes": 0,
-    "repeatRate": 0.389,
+    "repeatRate": 0.375,
     "arc": {
      "climaxHighest": true,
      "dipBefore": true,
@@ -1480,44 +1480,44 @@
       "climax": 0.966
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
-      "all": 0.689,
+      "all": 0.429,
       "climax": 0.975
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
-      "all": 0.74,
+      "all": 0.383,
       "climax": 0.975
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
-      "all": 0.537,
+      "all": 0.405,
       "climax": 0.975
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
-      "all": 0.537,
+      "all": 0.405,
       "climax": 0.975
      }
     ],
-    "switchedActive": 0.625,
+    "switchedActive": 0.405,
     "switchedActiveClimax": 0.975,
     "sectionMass": [
-     0.277,
-     0.48,
+     0.087,
+     0.246,
      0.721
     ]
    },
-   "clips": 420,
-   "genMs": 14,
+   "clips": 410,
+   "genMs": 11,
    "issues": 0
   },
   {
@@ -1526,25 +1526,25 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "edm",
    "songName": "EDM build & drop · 128 BPM",
-   "score": 80.6,
+   "score": 81.2,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.461,
-    "energyTracking": 0.813,
+    "eventAlignment": 0.568,
+    "energyTracking": 0.812,
     "arcFidelity": 0.971,
     "coverage": 1,
-    "structureConsistency": 0.605,
-    "diversity": 0.847,
+    "structureConsistency": 0.544,
+    "diversity": 0.726,
     "heroDiscipline": 1,
-    "peakUsage": 0.825
+    "peakUsage": 0.879
    },
    "detail": {
-    "events": 78,
-    "distinctLooks": 9,
-    "looks": 51,
-    "heroes": 1,
-    "repeatRate": 0.42,
+    "events": 28,
+    "distinctLooks": 6,
+    "looks": 42,
+    "heroes": 2,
+    "repeatRate": 0.585,
     "arc": {
      "climaxHighest": true,
      "dipBefore": true,
@@ -1561,52 +1561,52 @@
       "id": "design:centre:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.971,
+      "all": 0.97,
       "climax": 1
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
-      "all": 0.739,
-      "climax": 0.813
+      "all": 0.654,
+      "climax": 0.799
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
-      "all": 0.756,
-      "climax": 0.998
+      "all": 0.563,
+      "climax": 0.795
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
-      "all": 0.534,
+      "all": 0.579,
       "climax": 0.972
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
-      "all": 0.534,
+      "all": 0.579,
       "climax": 0.972
      }
     ],
-    "switchedActive": 0.641,
-    "switchedActiveClimax": 0.939,
+    "switchedActive": 0.593,
+    "switchedActiveClimax": 0.884,
     "sectionMass": [
-     0.28,
-     0.62,
-     0.77,
-     0.297,
-     0.383,
-     0.763,
-     0.34
+     0.111,
+     0.688,
+     0.72,
+     0.105,
+     0.206,
+     0.773,
+     0.186
     ]
    },
-   "clips": 821,
-   "genMs": 31,
+   "clips": 704,
+   "genMs": 32,
    "issues": 0
   },
   {
@@ -1615,25 +1615,25 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "sixEight",
    "songName": "Ethiopian-style 6/8 · 150 eighths/min",
-   "score": 83.8,
+   "score": 86.7,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.513,
-    "energyTracking": 0.811,
+    "eventAlignment": 0.771,
+    "energyTracking": 0.917,
     "arcFidelity": 1,
     "coverage": 1,
-    "structureConsistency": 0.718,
-    "diversity": 0.825,
+    "structureConsistency": 0.575,
+    "diversity": 0.785,
     "heroDiscipline": 1,
-    "peakUsage": 0.9
+    "peakUsage": 0.85
    },
    "detail": {
-    "events": 90,
-    "distinctLooks": 8,
-    "looks": 42,
+    "events": 47,
+    "distinctLooks": 7,
+    "looks": 34,
     "heroes": 2,
-    "repeatRate": 0.488,
+    "repeatRate": 0.485,
     "arc": {
      "climaxHighest": true,
      "dipBefore": true,
@@ -1650,51 +1650,51 @@
       "id": "design:centre:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.959,
+      "all": 0.958,
       "climax": 1
      },
      {
-      "id": "design:ring:ring:front",
-      "name": "Front · rings / flowers",
+      "id": "design:ring:jet:front",
+      "name": "Front · straight jets",
       "control": "switch",
-      "all": 0.808,
-      "climax": 0.832
+      "all": 0.523,
+      "climax": 0.815
      },
      {
-      "id": "design:ring:ring:back",
-      "name": "Back · rings / flowers",
+      "id": "design:ring:jet:back",
+      "name": "Back · straight jets",
       "control": "switch",
-      "all": 0.74,
-      "climax": 0.832
+      "all": 0.486,
+      "climax": 0.807
      },
      {
-      "id": "design:ring:ring:left",
-      "name": "Left · rings / flowers",
+      "id": "design:ring:jet:left",
+      "name": "Left · straight jets",
       "control": "switch",
-      "all": 0.692,
+      "all": 0.553,
       "climax": 0.975
      },
      {
-      "id": "design:ring:ring:right",
-      "name": "Right · rings / flowers",
+      "id": "design:ring:jet:right",
+      "name": "Right · straight jets",
       "control": "switch",
-      "all": 0.692,
+      "all": 0.552,
       "climax": 0.975
      }
     ],
-    "switchedActive": 0.733,
-    "switchedActiveClimax": 0.904,
+    "switchedActive": 0.529,
+    "switchedActiveClimax": 0.893,
     "sectionMass": [
-     0.336,
-     0.517,
-     0.732,
-     0.56,
-     0.809,
-     0.322
+     0.112,
+     0.21,
+     0.742,
+     0.228,
+     0.779,
+     0.105
     ]
    },
-   "clips": 793,
-   "genMs": 28,
+   "clips": 615,
+   "genMs": 23,
    "issues": 0
   },
   {
@@ -1804,7 +1804,7 @@
     ]
    },
    "clips": 422,
-   "genMs": 48,
+   "genMs": 46,
    "issues": 0
   },
   {
@@ -1910,7 +1910,7 @@
     ]
    },
    "clips": 166,
-   "genMs": 14,
+   "genMs": 15,
    "issues": 0
   },
   {
@@ -2129,7 +2129,7 @@
     ]
    },
    "clips": 320,
-   "genMs": 28,
+   "genMs": 29,
    "issues": 0
   },
   {
@@ -2239,7 +2239,7 @@
     ]
    },
    "clips": 732,
-   "genMs": 65,
+   "genMs": 64,
    "issues": 0
   },
   {
@@ -2345,7 +2345,7 @@
     ]
    },
    "clips": 242,
-   "genMs": 19,
+   "genMs": 16,
    "issues": 0
   },
   {
@@ -2455,7 +2455,7 @@
     ]
    },
    "clips": 635,
-   "genMs": 43,
+   "genMs": 42,
    "issues": 0
   },
   {
@@ -2564,7 +2564,7 @@
     ]
    },
    "clips": 536,
-   "genMs": 38,
+   "genMs": 39,
    "issues": 0
   },
   {
@@ -2652,7 +2652,7 @@
     ]
    },
    "clips": 4472,
-   "genMs": 586,
+   "genMs": 592,
    "issues": 0
   }
  ]

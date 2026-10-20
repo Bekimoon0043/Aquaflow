@@ -56,8 +56,14 @@ export function partRole(item) {
 export function nozzleKind(item) {
   const e = item?.engineering || {};
   if (hasTrack(item, /^motion_(pan|tilt|angle)$/)) return NOZZLE_KINDS.find((k) => k.id === 'swing');
-  const text = [item?.type, item?.label, e.nozzleStyle, e.equipmentModel, e.runtimeEffect, e.group].filter(Boolean).join(' ').replace(/_/g, ' ');
-  return NOZZLE_KINDS.find((k) => k.test.test(text));
+  // Type and datasheet fields first; the name only when they say nothing, and without layout
+  // words ("perimeter ring", "front row") that describe where a jet stands, not what it is.
+  const spec = [item?.type, e.nozzleStyle, e.equipmentModel, e.runtimeEffect, e.group].filter(Boolean).join(' ').replace(/_/g, ' ');
+  const byType = NOZZLE_KINDS.find((k) => k.id !== 'jet' && k.test.test(spec));
+  if (byType) return byType;
+  const LAYOUT = /\b(ring|rings|row|rows|line|lines|perimeter|circle|arc|loop|centre|center|front|back|left|right|inner|outer)\b/gi;
+  const name = String(item?.label || '').replace(/_/g, ' ').replace(LAYOUT, ' ');
+  return NOZZLE_KINDS.find((k) => k.test.test(name)) || NOZZLE_KINDS.at(-1);
 }
 
 const shortName = (item) => String(item?.label || item?.id || '').split(/\s+[-–·]\s+/)[0];

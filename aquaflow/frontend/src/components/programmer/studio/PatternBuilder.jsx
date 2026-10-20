@@ -22,6 +22,7 @@ import { writeCache } from './musicSync';
 import { DEFAULT_METER, METER_CHOICES, tapTempo } from './musicMeter';
 import { buildSiteModel } from './siteCapability';
 import CalibrationDialog from './CalibrationDialog';
+import { apiGet, apiPost } from '../../../utils/apiClient';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -120,6 +121,11 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
   };
   const site = studio.site || {};
   const [calibrating, setCalibrating] = useState(false);
+  // Optional AI director: the key is stored by the engine on this machine, never in the project.
+  const [director, setDirector] = useState({ checked: false, configured: false, sdk: false, key: '' });
+  const checkDirector = () => apiGet('/director/status').then(s => setDirector(d => ({ ...d, checked: true, ...s }))).catch(() => setDirector(d => ({ ...d, checked: true, sdk: false })));
+  const saveDirectorKey = () => apiPost('/director/key', { key: director.key }).then(() => { setDirector(d => ({ ...d, key: '', configured: true })); setNote('AI director key saved on this computer'); })
+    .catch(e => setNote(`Could not save the key: ${e.message}`));
   const nozzleTypes = [...new Map(design.nozzles.map(n => [n.item.type, { id: n.item.type, label: `${n.kindLabel} · ${n.item.type}` }])).values()];
   const setSite = patch => onChange({ ...studio, site: { ...site, ...patch } });
   const [stemRows, setStemRows] = useState(null);   // null = follow the suggestion
@@ -460,6 +466,13 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
             <small>{Object.keys(site.calibration || {}).length ? `${Object.keys(site.calibration).length} nozzle type(s) calibrated from video` : 'Timing from physics (not measured yet)'}</small>
             <span className="sp-grow" />
             <button onClick={() => setCalibrating(true)} title="Film a jet side-on and mark its tip: AquaFlow measures its delay and rise so the show fires it exactly early enough">Calibrate from video…</button>
+          </div>
+          <div className="pb-row" title="Optional: Claude (Anthropic) directs the show's arc from a text description of the song and your fountain. Your key is kept by the AquaFlow engine on this computer.">
+            <small>AI director · {!director.checked ? <button onClick={checkDirector}>Check</button> : !director.sdk ? 'not available in this engine' : director.configured ? 'ready (✦ AI director on the plan strip)' : 'needs an Anthropic API key'}</small>
+            <span className="sp-grow" />
+            {director.checked && director.sdk && <>
+              <input aria-label="Anthropic API key" type="password" placeholder={director.configured ? 'Replace key…' : 'sk-ant-…'} value={director.key} onChange={e => setDirector(d => ({ ...d, key: e.target.value }))} />
+              <button onClick={saveDirectorKey} disabled={director.key.length < 10}>Save key</button></>}
           </div>
         </details>
       )}
