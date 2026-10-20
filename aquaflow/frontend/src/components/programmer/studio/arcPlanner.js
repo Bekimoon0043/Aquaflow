@@ -133,9 +133,14 @@ export function planShow({ analysis, stems = [], scm, seed = 0 }) {
     if (rank[i] <= 0.25 && i > 0 && i < secs.length - 1) return 'rest';
     return 'verse';
   });
+  // Deep analysis: a section that starts on a drop hits hard; one that holds a build-up builds.
+  const drops = analysis.drops || [], builds = analysis.builds || [];
+  const dropAt = secs.map((s) => drops.some((d) => Math.abs(d.time - s.start) <= barSec));
+  secs.forEach((s, i) => { if (dropAt[i] && !['climax'].includes(roles[i]) && rank[i] >= 0.4 && i > 0) roles[i] = 'high'; });
   roles.forEach((r, i) => {
     const next = roles[i + 1];
-    if ((r === 'verse' || r === 'rest') && (next === 'high' || next === 'climax') && slope[i] > 0.02) roles[i] = 'build';
+    const holdsBuild = builds.some((b) => b.end > secs[i].start + barSec && b.start < secs[i].end - barSec);
+    if ((r === 'verse' || r === 'rest') && (next === 'high' || next === 'climax') && (slope[i] > 0.02 || holdsBuild || dropAt[i + 1])) roles[i] = 'build';
   });
 
   const cast = castAreas(scm, stems, seed);
@@ -166,9 +171,10 @@ export function planShow({ analysis, stems = [], scm, seed = 0 }) {
     if (!seen.has(key)) seen.set(key, { id: `S${i + 1}`, energy: energy[i] });
     occurrences[role] = (occurrences[role] || 0) + 1;
     return {
-      id: `S${i + 1}`, start: r3(s.start), end: r3(s.end), label: s.label, labelConfidence: 0.75, role, energy: r3(energy[i]), energyRank: r3(rank[i]),
+      id: `S${i + 1}`, start: r3(s.start), end: r3(s.end), label: s.label, labelConfidence: analysis.deepVersion ? 0.8 : 0.75, role, energy: r3(energy[i]), energyRank: r3(rank[i]),
       targets, active, casting: Object.fromEntries(active.map((id) => [id, cast.get(id)])),
-      hero: role === 'climax' ? { budget: 2 } : role === 'high' && roles.slice(0, i).every((x) => x !== 'high' && x !== 'climax') ? { budget: 1 } : { budget: 0 },
+      hero: role === 'climax' ? { budget: 2 } : role === 'high' && (dropAt[i] || roles.slice(0, i).every((x) => x !== 'high' && x !== 'climax')) ? { budget: 1 } : { budget: 0 },
+      drop: dropAt[i],
       finale: role === 'climax' && i >= secs.length - 2,
       contrastBefore: null, light: sectionLight(role, palette, { energy: targets.energy, occurrence: occurrences[role] - 1 }),
       repeatOf, variation: repeatOf ? 'mirror' : null, phrases: [],
@@ -176,14 +182,14 @@ export function planShow({ analysis, stems = [], scm, seed = 0 }) {
   });
   // A dip before the climax (and before the first high section after a build) makes it land.
   sections.forEach((s, i) => {
-    if (i && (s.role === 'climax' || (s.role === 'high' && sections[i - 1].role === 'build')) && !['rest', 'intro'].includes(sections[i - 1].role)) {
+    if (i && (s.role === 'climax' || (s.role === 'high' && (sections[i - 1].role === 'build' || s.drop))) && !['rest', 'intro'].includes(sections[i - 1].role)) {
       sections[i - 1].contrastBefore = null;
       s.contrastBefore = { bars: 1, level: 0.2 };
     }
   });
   return {
     version: PLAN_VERSION, id: `plan-${seed}-${Math.round(end)}`, seed,
-    analysis: { bpm: analysis.bpm, beatsPerBar: analysis.beatsPerBar || 4, barSec: r3(barSec), meter: analysis.meter || null },
+    analysis: { bpm: analysis.bpm, beatsPerBar: analysis.beatsPerBar || 4, barSec: r3(barSec), meter: analysis.meter || null, deep: !!analysis.deepVersion, mood: analysis.mood || null },
     palette, casting: Object.fromEntries(cast), sections,
     site: { front: scm.front, symmetry: scm.symmetry.score, heightScale: scm.heightScale, areas: scm.areas.map((a) => ({ id: a.id, name: a.name, control: a.control, role: a.role })) },
     provenance: { planner: 'rules', plannerVersion: '1.0.0' },

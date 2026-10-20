@@ -17,6 +17,8 @@ import { availableSources, programFromStems, sourceById, suggestRows } from './s
 import { designRows, patternsFromMusic } from './musicPatterns';
 import { designGroups, readFountainDesign } from './fountainDesign';
 import { createShow } from './autoShow';
+import { requestDeepAnalysis } from './deepAnalysis';
+import { writeCache } from './musicSync';
 import { DEFAULT_METER, METER_CHOICES, tapTempo } from './musicMeter';
 import { buildSiteModel } from './siteCapability';
 import './patternBuilder.css';
@@ -153,6 +155,22 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     setNote('Undone');
   };
   const findBeats = async () => (analysis || await beats.analyze());
+  // Deep analysis in the engine: structure with repeats, build-ups, drops, mood (cached per song).
+  const [deep, setDeep] = useState({ status: 'idle', progress: 0 });
+  const runDeep = async () => {
+    const song = await findBeats();
+    if (!song || !beats.file) return;
+    setDeep({ status: 'working', progress: 0 });
+    try {
+      const result = await requestDeepAnalysis(beats.file, song, { onProgress: p => setDeep({ status: 'working', progress: p }) });
+      writeCache(beats.hash, { ...song, deep: result });
+      setDeep({ status: 'idle', progress: 1 });
+      setNote(`Deep analysis · ${result.sections.length} sections · ${result.drops.length} drop${result.drops.length === 1 ? '' : 's'} · ${result.builds.length} build-up${result.builds.length === 1 ? '' : 's'} · ${result.mood.key} · energy ${Math.round(100 * result.mood.arousal)} %`);
+    } catch (error) {
+      setDeep({ status: 'idle', progress: 0 });
+      setNote(/fetch|Failed|HTTP|network/i.test(error.message) ? 'Deep analysis needs the AquaFlow engine (it is not running)' : error.message);
+    }
+  };
   const toggleSync = async on => {
     if (!on) { setSyncOn(false); return; }
     setSyncOn(true);
@@ -355,6 +373,9 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
         {beats.file && (analysis
           ? <output className="pb-bpm" title={`${analysis.sections.length} sections · ${Math.round(analysis.duration)} s · tempo from ${analysis.source === 'backend' ? 'the beat engine' : 'the browser'}`}>♩ {Math.round(analysis.bpm)} BPM</output>
           : <button onClick={() => beats.analyze()} disabled={beats.status === 'working'} title="Find tempo, bars and sections in the song">{beats.status === 'working' ? 'Listening…' : 'Find beats'}</button>)}
+        {analysis && <button onClick={runDeep} disabled={deep.status === 'working'} aria-pressed={!!analysis.deep}
+          title="Deep analysis in the AquaFlow engine (licence-clean, about a second per song): song structure with repeats, build-ups, drops, mood and key, vocal phrases. The show plan then lands drops, builds up to them and picks colours from the mood.">
+          {deep.status === 'working' ? `Deep… ${Math.round(100 * deep.progress)}%` : analysis.deep ? 'Deep ✓' : 'Deep analysis'}</button>}
         <label className="pb-file" title="Choose the show's music">{beats.file ? 'Change' : 'Load song'}
           <input type="file" accept="audio/*" hidden aria-label="Load song" onChange={e => { loadSong(e.target.files?.[0]); e.target.value = ''; }} /></label>
       </div>

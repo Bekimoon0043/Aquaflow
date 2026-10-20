@@ -14,6 +14,7 @@ import { readFountainDesign } from './fountainDesign';
 import { waterLead } from './musicPatterns';
 import { MIN_OFF_S, MIN_ON_S } from './patternPresets';
 import { arcSections, climaxIndex } from './arcPlanner';
+import { songAnalysis } from './deepMerge';
 
 export const METRICS_VERSION = 1;
 export const DT = 0.05;
@@ -129,7 +130,8 @@ export const lookOf = (r) => r.pattern?.famous || r.pattern?.look || r.pattern?.
  * @param {object} p { clips, items, analysis, studio?, design?, plan? }
  * @returns {{ version, score, pass, gates, metrics, detail }}
  */
-export function measureShow({ clips, items, analysis, studio = null, design = readFountainDesign(items), weights = SCORE_WEIGHTS }) {
+export function measureShow({ clips, items, analysis: raw, studio = null, design = readFountainDesign(items), weights = SCORE_WEIGHTS }) {
+  const analysis = songAnalysis(raw);
   const T = Math.min(600, analysis?.duration || Math.max(1, ...clips.map((c) => c.startTime + c.duration)));
   const nozzleIds = new Set(design.nozzles.map((n) => n.id));
   const levels = levelGrids(clips, nozzleIds, T);

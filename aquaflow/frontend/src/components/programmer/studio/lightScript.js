@@ -17,11 +17,13 @@ export function arousalOf(analysis) {
 
 /** Palette for a song: mood picks the family, the seed picks one of its palettes. */
 export function songPalette(analysis, seed = 0) {
-  const a = arousalOf(analysis);
+  // Deep analysis gives arousal and valence; otherwise loudness × tempo stands in for arousal.
+  const a = analysis?.mood?.arousal ?? arousalOf(analysis);
   const family = a < 0.38 ? 'calm' : a < 0.6 ? 'mid' : 'warm';
   const list = PALETTES[family];
-  const colors = list[((seed % list.length) + list.length) % list.length];
-  return { family, arousal: Math.round(a * 100) / 100, base: colors[0], second: colors[1], accent: colors[2], white: '#ffffff' };
+  const lean = analysis?.mood ? Math.min(2, Math.floor(analysis.mood.valence * 3)) : 0;   // sadder → cooler palette
+  const colors = list[(((lean + seed) % list.length) + list.length) % list.length];
+  return { family, arousal: Math.round(a * 100) / 100, valence: analysis?.mood?.valence ?? null, base: colors[0], second: colors[1], accent: colors[2], white: '#ffffff' };
 }
 
 /** Colour and intensity of a section, by its role. Repeats of a section keep its colour. */

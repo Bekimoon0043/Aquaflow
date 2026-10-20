@@ -8,6 +8,7 @@ import { planShow } from './arcPlanner';
 import { searchPhrases } from './phraseSearch';
 import { renderPlan } from './planRender';
 import { readFountainDesign } from './fountainDesign';
+import { songAnalysis } from './deepMerge';
 
 /**
  * @param {object} studio
@@ -17,7 +18,7 @@ import { readFountainDesign } from './fountainDesign';
 export function createShow(studio, { analysis, stems = [], items, groups, design = readFountainDesign(items), seed = studio.plan?.seed ?? 0,
   variant = 0, locks = studio.plan?.locks || {}, meter = studio.meter, site = studio.site, weights }) {
   if (!analysis?.bpm) throw new Error('Find the beats first');
-  const a = applyMeter(analysis, meter);
+  const a = applyMeter(songAnalysis(analysis), meter);
   const scm = buildSiteModel(items, { design, overrides: site || {} });
   const plan = searchPhrases(planShow({ analysis: a, stems, scm, seed }), { analysis: a, stems, scm, variant, locks, weights });
   const out = renderPlan(studio, plan, { analysis: a, items, groups, design, scm });

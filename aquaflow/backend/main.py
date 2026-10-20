@@ -463,6 +463,8 @@ app.include_router(cad_router,              prefix="/api/cad",        tags=["CAD
 app.include_router(cad_exchange_router,     prefix="/api/cad",        tags=["CAD"])
 app.include_router(engineering_router,      prefix="/api/engineering", tags=["Engineering"])
 app.include_router(wind_router,             prefix="/api/wind",       tags=["Wind"])
+from api.routes.music_deep_routes import router as music_deep_router  # Phase 3 deep music analysis
+app.include_router(music_deep_router,       prefix="/api/music",      tags=["Music"])
 app.include_router(beat_router,             prefix="/api/beat",       tags=["Beat"])
 app.include_router(installer_router,        prefix="/api/installer",  tags=["Installer"])
 app.include_router(crash_router,            prefix="/api/crash",      tags=["Crash"])
