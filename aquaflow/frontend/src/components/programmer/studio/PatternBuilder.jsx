@@ -13,7 +13,8 @@ import { fillSong, grid, syncPatternOptions } from './beatSync';
 import { attachSong, useSongBeats } from './musicSync';
 import { useStems } from './stemSync';
 import { STEM_ROLES } from './stemAnalysis';
-import { availableSources, programFromStems, sourceById, suggestRows } from './stemProgram';
+import { availableSources, programFromStems, songStem, sourceById, suggestRows } from './stemProgram';
+import { nameRows, stemShow } from './stemShow';
 import { designRows, patternsFromMusic } from './musicPatterns';
 import { designGroups, readFountainDesign } from './fountainDesign';
 import { createShow } from './autoShow';
@@ -47,8 +48,8 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '', tip, di
 
 const groupLabel = (g, count) => `${g.name} (${count})`;
 /** With a fountain design the planner casts the parts; hand links stay available, folded away. */
-const Advanced = ({ on, note = '', children }) => (on
-  ? <details className="pb-advanced"><summary title="Link each part of the music to a group yourself, or make the jets follow each instrument exactly">Link parts by hand{note && <span className="pb-group-warn"> · ⚠ {note}</span>}</summary>{children}</details>
+const Advanced = ({ on, open = false, note = '', children }) => (on
+  ? <details className="pb-advanced" open={open || undefined}><summary title="Link each part of the music to a group yourself, or make the jets follow each instrument exactly">Link parts by hand{note && <span className="pb-group-warn"> · ⚠ {note}</span>}</summary>{children}</details>
   : <>{children}</>);
 const withoutSync = ({ sync, ...rest }) => rest; // eslint-disable-line no-unused-vars
 const mmss = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
@@ -203,15 +204,23 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
   const loadSong = file => { if (file) attachSong(file); };
 
   // ── Stems: each part of the music drives its own group ──
-  const stemSources = availableSources(stemsApi.stems);
-  const suggested = useMemo(() => (design.areas.length ? designRows(design, stemsApi.stems) : suggestRows(stemsApi.stems, waterGroups, lightGroups, membersOf)),
-    [stemsApi.stems, groups]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The whole song is one more part ("Song"), from its energy curve.
+  const stemsAll = useMemo(() => { const song = analysis ? songStem(analysis) : null; return song ? [...stemsApi.stems, song] : stemsApi.stems; }, [stemsApi.stems, analysis]);
+  const stemSources = availableSources(stemsAll);
+  // Water follows its stem: each linked group plays its own part all song long (stemShow.js).
+  const followStems = !!site.followStems;
+  const suggested = useMemo(() => {
+    // Groups named after a part ("Group 1 · Bass", "Vocals", "Song", "Drums") follow it.
+    const byName = followStems ? nameRows(availableSources(stemsAll), waterGroups) : [];
+    if (byName.length) return byName;
+    return design.areas.length ? designRows(design, stemsApi.stems) : suggestRows(stemsApi.stems, waterGroups, lightGroups, membersOf);
+  }, [stemsApi.stems, stemsAll, groups, followStems]); // eslint-disable-line react-hooks/exhaustive-deps
   const rowsNow = (stemRows || suggested).filter(r => stemSources.some(s => s.id === r.sourceId));
   const editRow = (i, patch) => setStemRows(rowsNow.map((r, k) => (k === i ? { ...r, ...patch } : r)));
   // Group check: groups linked by hand that share jets or pumps cannot each follow their own
   // part. (The suggested links are the design's own areas; the planner already keeps them apart.)
   const linkedWater = [...new Set(rowsNow.filter(r => r.kind !== 'lights').map(r => r.groupId))];
-  const stemConflicts = stemRows || !design.areas.length
+  const stemConflicts = stemRows || followStems || !design.areas.length
     ? groupConflicts({ groups: groups.filter(g => linkedWater.includes(g.id)), membersOf: g => resolveMembers(g, items), design, linked: linkedWater })
     : [];
   const addRow = () => {
@@ -224,10 +233,21 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     const song = await findBeats();
     if (!song) { setNote('Load the song and find its beats first'); return; }
     try {
+      if (followStems) {
+        // Beats just found: the Song part is new, so links by name are made again.
+        const fresh = !analysis && !stemRows ? nameRows(availableSources([...stemsApi.stems, songStem(song)].filter(Boolean)), waterGroups) : [];
+        const result = stemShow(studio, { analysis: song, stems: stemsApi.stems, links: fresh.length ? fresh : rowsNow, items, groups, design, basin });
+        onChange(result.studio);
+        setApplied(list => [...list, { fill: true }]);
+        setNote(result.summary.text
+          + (result.muted ? ` · ${result.muted} fixed pump / valve pattern${result.muted === 1 ? '' : 's'} muted (the music drives them now)` : '')
+          + (result.skipped.length ? ` · skipped: ${result.skipped.join('; ')}` : ''));
+        return;
+      }
       // With a fountain design: the full planner (arc → phrase search → real valves and pumps).
       const result = design.areas.length
         ? createShow(studio, { analysis: song, stems: stemsApi.stems, items, groups, design, site: { ...(studio.site || {}), basin } })
-        : patternsFromMusic(studio, { analysis: song, stems: stemsApi.stems, rows: rowsNow, items, groups, design });
+        : patternsFromMusic(studio, { analysis: song, stems: stemsAll, rows: rowsNow, items, groups, design });
       onChange(result.studio);
       setApplied(list => [...list, { fill: true }]);
       const parts = Object.entries(result.counts).map(([k, n]) => `${k} ${n}`).join(' · ');
@@ -239,7 +259,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
   };
   const programStems = () => {
     try {
-      const result = programFromStems(studio, { stems: stemsApi.stems, rows: rowsNow, items, groups });
+      const result = programFromStems(studio, { stems: stemsAll, rows: rowsNow, items, groups });
       onChange(result.studio);
       setApplied(list => [...list, { fill: true }]);
       const parts = new Set(result.recipes.map(r => r.stems.source)).size;
@@ -300,6 +320,13 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     const patch = raiseJetsPatch(engineering.fixtures, visibility?.jetIds || [], engineering.params || params, raise.height);
     return `${visibility?.jetIds.length || 0} jets → ${patch.heightM} m${patch.headChanged ? `, pump head → ${patch.headM} m` : ''}`;
   };
+
+  const followTip = 'Each linked group follows its own part of the music, all together, all song long: phrase by phrase it gets the next wave of its part’s family (bass → ocean sets, tidal bore, rolling sea …; vocals → swaying arcs, moving spot …; the song → ripples, stadium wave, spiral arms …, grand finale in the climax; drums → heartbeat, firework burst, wall pulse …), and that part’s loudness or hits shape each wave moment by moment. The lights change colour with the song. Uses the links below (groups named Bass, Vocals, Song, Drums are linked by name).';
+  const followCheck = <label className="pb-check" title={followTip}>
+    <input type="checkbox" aria-label="Water follows its stem" checked={followStems} onChange={e => setSite({ followStems: e.target.checked || undefined })} />Water follows its stem</label>;
+  const musicTip = followStems
+    ? `Water follows its stem: ${rowsNow.filter(r => r.kind !== 'lights').map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ') || 'link a part to a group below'}. Replaces earlier music patterns; one Undo removes it.`
+    : null;
 
   const groupOptions = list => {
     const sources = [...new Set(list.map(g => g.source))];
@@ -484,11 +511,12 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
         </details>
       )}
       {design.areas.length > 0 && <div className="pb-row">
+        {followCheck}
         <span className="sp-grow" />
-        <button className="sp-primary" onClick={musicPatterns} disabled={!beats.file}
-          title="Plan the whole show from the music and your fountain: an arc (intro → build → climax → ending) from the song's energy, each area cast as an instrument (melody, rhythm, bass, accents), one look per phrase chosen from the library incl. world-famous looks, a colour story, a dip before the climax — then the real valves and pumps follow within their limits. Works with or without stems (stems make it follow each instrument). Replaces earlier music patterns; one Undo removes it. Variants and phrase locks are on the plan strip in the timeline.">♫ Create patterns from the music</button>
+        <button className="sp-primary" onClick={musicPatterns} disabled={!beats.file || (followStems && !!analysis && !rowsNow.some(r => r.kind !== 'lights'))}
+          title={musicTip || "Plan the whole show from the music and your fountain: an arc (intro → build → climax → ending) from the song's energy, each area cast as an instrument (melody, rhythm, bass, accents), one look per phrase chosen from the library incl. world-famous looks, a colour story, a dip before the climax — then the real valves and pumps follow within their limits. Works with or without stems (stems make it follow each instrument). Replaces earlier music patterns; one Undo removes it. Variants and phrase locks are on the plan strip in the timeline."}>♫ Create patterns from the music</button>
       </div>}
-      {stemSources.length > 0 && <Advanced on={design.areas.length > 0} note={stemConflicts.length ? `${stemConflicts.length} pair${stemConflicts.length === 1 ? '' : 's'} of linked groups share jets or pumps` : ''}>
+      {stemSources.length > 0 && <Advanced on={design.areas.length > 0} open={followStems} note={stemConflicts.length ? `${stemConflicts.length} pair${stemConflicts.length === 1 ? '' : 's'} of linked groups share jets or pumps` : ''}>
         {rowsNow.map((row, i) => (
           <div className="pb-stem-map" key={i}>
             <div className="pb-row">
@@ -517,8 +545,9 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
           {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
           <span className="sp-grow" />
+          {!design.areas.length && followCheck}
           {!design.areas.length && <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
-            title="Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards.">♫ Create patterns from the music</button>}
+            title={musicTip || "Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards."}>♫ Create patterns from the music</button>}
           <button onClick={programStems} disabled={!rowsNow.length}
             title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>Follow exactly</button>
         </div>

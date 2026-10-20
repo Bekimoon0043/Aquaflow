@@ -77,6 +77,7 @@ export async function chooseCodecs({ canVideo, canAudio, withAudio = false }) {
     { container: "mp4",  ext: "mp4",  mime: "video/mp4",  video: ["avc", "hevc", "av1"], audio: ["aac", "opus"] },
     { container: "webm", ext: "webm", mime: "video/webm", video: ["vp9", "av1", "vp8"],  audio: ["opus"] },
   ];
+  let silent = null;   // first container that can carry the picture alone
   for (const o of options) {
     let video = null;
     for (const c of o.video) { if (await canVideo(c)) { video = c; break; } }
@@ -85,11 +86,12 @@ export async function chooseCodecs({ canVideo, canAudio, withAudio = false }) {
     if (withAudio) {
       for (const c of o.audio) { if (await canAudio(c)) { audio = c; break; } }
       // Keep looking for a container that can carry the soundtrack too.
-      if (!audio && o !== options[options.length - 1]) continue;
+      if (!audio) { silent = silent || { container: o.container, ext: o.ext, mime: o.mime, video, audio: null }; continue; }
     }
     return { container: o.container, ext: o.ext, mime: o.mime, video, audio };
   }
-  return null;
+  // No container can carry the soundtrack: keep the preferred (MP4) picture, silent.
+  return silent;
 }
 
 /**
@@ -101,7 +103,9 @@ export async function chooseCodecs({ canVideo, canAudio, withAudio = false }) {
 export function sliceAudioChannels(channels, sampleRate, { startS = 0, durationS = 0, loopS = 0 } = {}) {
   const outLen = Math.max(0, Math.round(durationS * sampleRate));
   const srcLen = channels[0]?.length || 0;
-  const loopLen = loopS > 0 ? Math.min(srcLen, Math.round(loopS * sampleRate)) : 0;
+  // The preview player restarts the song every loopS seconds; a song shorter than the
+  // pass is followed by silence until the next pass (it does not loop on its own).
+  const loopLen = loopS > 0 ? Math.round(loopS * sampleRate) : 0;
   const startIdx = Math.round(startS * sampleRate);
   return channels.map((src) => {
     const out = new Float32Array(outLen);

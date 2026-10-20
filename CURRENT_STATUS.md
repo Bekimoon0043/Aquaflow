@@ -1,5 +1,20 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-20 (late night): AquaFlow Studio 1.2.59 — water follows its stem, and videos with sound**
+
+- **Water follows its stem** (`stemShow.js`):
+  - A tick box next to "♫ Create patterns from the music" builds the stems4-style show in the app.
+  - Every linked group plays all song long with its own family of waves (`STEM_LOOK_FAMILIES`). Each wave's level follows its stem moment by moment (`field.music`).
+  - Lights follow the song.
+  - "Song" (the whole mix) can now be picked as a music part. Links are suggested from group names (bass / vocal / song / drum). The tick is saved in `studio.site.followStems`.
+  - On Lebu it scores 64.2 with every hard gate passing (the script scored 62.4). Checked in the installed app on the new-song Lebu show: 14 waves per group, 26 light phrases.
+- **Video export with sound:**
+  - The song is encoded as AAC 48 kHz stereo with WebCodecs, cut to the export range and in sync with frame 0 (`video/soundtrack.js`, `bakedEncoder.js`).
+  - New "Include music" tick box (setting key `includeMusic`). The old `bakeAudio:false` saved in older projects no longer silences exports.
+  - If audio fails, the video is still saved, with the reason shown.
+  - Checked in the app: a 20 s render from 0:40 gives h264 20.000 s + aac 48000 Hz 2 ch 19.989 s.
+- **Tests:** studio + video + store + preview, 34 files / 434 tests pass. Built with two parallel agents.
+
 **2026-10-20 (late night): AquaFlow Studio 1.2.58 — group check (shared jets and pumps)**
 
 - **`groupAdvisor.js`:** finds pairs of water groups that cannot move on their own:

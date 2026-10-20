@@ -22,6 +22,9 @@ import HydraulicPreviewPanel, { useEngineeringPreview } from "./HydraulicPreview
 // AF-3D-VID-001 - baked (frame-exact) video render.
 import { planBake } from "../../video/bakedTimeline";
 import { createBakeSampler } from "../../video/bakeSignalSampler";
+import { resolveExportSong } from "../../video/soundtrack";
+import { useProgrammerSong, SONG_ASSET } from "../programmer/studio/musicSync";
+import { liveAssetFiles } from "../../utils/assetManifest";
 // AQ-S3-013 — the 3D view as an editing workspace, not just a render.
 import { SceneEditor } from "./editor/sceneEditor";
 import { SceneGraph } from "./editor/sceneGraph";
@@ -211,8 +214,11 @@ export default function PreviewPanel() {
   const setBakeStart = setRenderField("bakeStart");
   const bakeDuration = renderSettings.bakeDuration;   // 0 = whole show
   const setBakeDuration = setRenderField("bakeDuration");
-  const bakeAudio = renderSettings.bakeAudio;
-  const setBakeAudio = setRenderField("bakeAudio");
+  // "Include music" (default on). Its own key: older projects saved bakeAudio:false from the
+  // retired site-audio "♪" box, which must not silently drop the song from new exports.
+  const bakeAudio = renderSettings.includeMusic !== false;
+  const setBakeAudio = setRenderField("includeMusic");
+  const programmerSong = useProgrammerSong();             // the show's song (Show Programmer → Music)
   const [bake, setBake] = useState(null);              // { frame, frames, phase, eta } | null
   const [bakeMsg, setBakeMsg] = useState(null);       // { text, tip, error, file } | null
   // AF-3D-VID-002: "preview" | "high" | "ultra", and "video" | "png" (image sequence).
@@ -709,8 +715,10 @@ if (sitePreview.active && sitePreview.plan) {
     const durationS = Number(bakeDuration) > 0 ? Number(bakeDuration) : Math.max(0.1, total - startS);
     // Final quality warms the water a little longer so dense high/ultra fields are full on frame 0.
     const plan = planBake({ resolution: exportRes, fps: exportFps, startS, durationS, ...(exportQuality !== "preview" ? { prerollS: 4 } : {}) });
-    const audio = bakeAudio && site.active && site.audioFile
-      ? { file: site.audioFile, loopS: site.plan?.passMs ? site.plan.passMs / 1000 : 0 } : null;
+    // The song the preview plays, cut to [startS, startS + length) and aligned to frame 0.
+    const song = resolveExportSong({ source: sampler.source, site, programmerSong: programmerSong || liveAssetFiles.get(SONG_ASSET) || null });
+    const audio = bakeAudio && song ? { file: song.file, loopS: song.loopS } : null;
+    const musicSkipped = !song ? "no song attached" : !bakeAudio ? "Include music is off" : null;
 
     const abort = { aborted: false };
     bakeAbortRef.current = abort;
@@ -729,11 +737,17 @@ if (sitePreview.active && sitePreview.plan) {
       });
       if (r.cancelled) { setBakeMsg(null); return; }
       const mb = r.bytes ? ` · ${(r.bytes / 1e6).toFixed(1)} MB` : "";
+      const music = r.hasAudio
+        ? (r.audioInfo ? `♪ Music included (${r.audioInfo.codec.toUpperCase()} ${r.audioInfo.sampleRate / 1000} kHz stereo, ${r.audioInfo.durationS.toFixed(2)} s)`
+          : "♪ Music included (WAV next to the frames)")
+        : `No music: ${musicSkipped || r.audioNote || "the song could not be added"}`;
       setBakeMsg({
         text: `✓ ${r.width}×${r.height} · ${r.fps} fps · ${r.quality} · ${r.durationS.toFixed(1)} s`,
+        music, musicWarn: !r.hasAudio && !!audio,
         tip: [
           r.format === "png" ? `${r.frames} PNG frames → ${r.file}` : `Saved to Downloads: ${r.file}`,
           `${r.codec}${r.hasAudio ? " + audio" : ""}${mb}${r.supersample > 1 ? ` · ${r.supersample}× supersampled` : ""}`,
+          music,
           `Rendered in ${formatClock(r.tookS)} (${(r.tookS / r.frames).toFixed(2)} s/frame)`,
           ...r.fallbacks,
         ].join("\n"),
@@ -1271,11 +1285,21 @@ if (sitePreview.active && sitePreview.plan) {
                 <span>len</span>
                 <input type="number" min={0} step={1} value={bakeDuration} onChange={e=>setBakeDuration(e.target.value)}
                   title="Length in seconds (0 = to end of show)" style={{ width:44, fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }} />
-                <label title={exportFormat === "png" ? "Write the site preview music as a WAV next to the frames" : "Include the site preview music"} style={{ display:"flex", alignItems:"center", gap:2 }}>
-                  <input type="checkbox" checked={bakeAudio} onChange={e=>setBakeAudio(e.target.checked)} />♪
-                </label>
               </div>
             )}
+            {!bake && (() => {
+              const song = resolveExportSong({ source: sitePreview.active && sitePreview.plan ? "site-preview" : "timeline", site: sitePreview, programmerSong });
+              const hint = !song ? "Attach a song (Show Programmer → Music) to put it in the video."
+                : exportFormat === "png" ? `Write "${song.file.name || "the song"}" as a WAV next to the frames, cut to the same range.`
+                  : `Put "${song.file.name || "the song"}" in the video as its sound track, cut to the same range and in sync with frame 1.`;
+              return (
+                <label title={hint} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color: song ? "#8ea4b8" : "#4f6475", cursor: song ? "pointer" : "default" }}>
+                  <input type="checkbox" checked={bakeAudio && !!song} disabled={!song} onChange={e=>setBakeAudio(e.target.checked)} />
+                  <span>Include music</span>
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:"#5f7f94" }}>{song ? `♪ ${song.file.name || "song"}` : "(no song attached)"}</span>
+                </label>
+              );
+            })()}
             {bake ? (() => {
               const st = renderStats({ frame: bake.frame, frames: bake.frames, frameMs: bake.elapsedMs || 0 });
               const elapsed = formatClock((Date.now() - (bake.startedAt || Date.now())) / 1000);
@@ -1302,7 +1326,7 @@ if (sitePreview.active && sitePreview.plan) {
                 {exportFormat === "png" ? "Render frames" : "Render video"}
               </button>
             )}
-            {bakeMsg && <div title={bakeMsg.tip || ""} style={{ fontSize:9, color: bakeMsg.error ? "#ff8866" : "#8ea4b8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{bakeMsg.text}{bakeMsg.file && <div style={{ color:"#5f7f94", overflow:"hidden", textOverflow:"ellipsis" }}>{String(bakeMsg.file).split(/[\\/]/).pop()}</div>}</div>}
+            {bakeMsg && <div title={bakeMsg.tip || ""} style={{ fontSize:9, color: bakeMsg.error ? "#ff8866" : "#8ea4b8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{bakeMsg.text}{bakeMsg.music && <div style={{ color: bakeMsg.musicWarn ? "#e8c06a" : "#5f9f84", overflow:"hidden", textOverflow:"ellipsis" }}>{bakeMsg.music}</div>}{bakeMsg.file && <div style={{ color:"#5f7f94", overflow:"hidden", textOverflow:"ellipsis" }}>{String(bakeMsg.file).split(/[\\/]/).pop()}</div>}</div>}
           </div>
             </div>
           </details>

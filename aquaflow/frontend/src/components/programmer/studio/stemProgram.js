@@ -24,8 +24,20 @@ export const STEM_SOURCES = [
   { id: 'piano:melody', stem: 'piano', label: 'Piano — melody', behaviour: 'melody' },
   { id: 'guitar', stem: 'guitar', label: 'Guitar', behaviour: 'follow' },
   { id: 'guitar:melody', stem: 'guitar', label: 'Guitar — melody', behaviour: 'melody' },
+  // The whole song as one more part (its loudness): songStem() makes it from the song's analysis.
+  { id: 'mix', stem: 'mix', label: 'Song', behaviour: 'follow' },
 ];
 export const sourceById = (id) => STEM_SOURCES.find((s) => s.id === id);
+
+/** The whole song as a stem record ({ role: 'mix' }): its energy curve as a level, STEM_RATE a second. */
+export function songStem(analysis) {
+  const e = analysis?.deep?.energy?.values?.length ? analysis.deep.energy : analysis?.energy;
+  const duration = Number(analysis?.duration) || 0;
+  if (!e?.values?.length || !(duration > 0)) return null;
+  const n = Math.ceil(Math.min(600, duration) * STEM_RATE);
+  const level = Array.from({ length: n }, (_, i) => e.values[Math.min(e.values.length - 1, Math.floor((i / STEM_RATE) * (e.rate || 1)))] || 0);
+  return { id: 'stem-song', role: 'mix', name: 'Song', analysis: { rate: STEM_RATE, duration, level } };
+}
 
 /** Sources whose stem has been loaded (and, for drums parts, analysed with that part). */
 export function availableSources(stems = []) {

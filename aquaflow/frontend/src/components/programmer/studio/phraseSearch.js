@@ -27,11 +27,14 @@ export function sectionPhrases(section, barSec) {
   return out;
 }
 
+/** Can this area's hardware perform the look (its control, enough jets; a shared pump only swells)? */
+export const canPerform = (l, area) => !!l && l.controls.includes(area.control) && area.size >= (l.minJets || 1)
+  && (area.control !== 'pump' || ['breathing', 'grand-swell'].includes(l.id));
+
 function candidates(area, part, { heroLeft, finale, prefer = [] }) {
   const fam = partFamily(sourceById(part));
   return LOOKS.filter((l) => {
-    if (!l.controls.includes(area.control) || area.size < (l.minJets || 1)) return false;
-    if (area.control === 'pump' && !['breathing', 'grand-swell'].includes(l.id)) return false;
+    if (!canPerform(l, area)) return false;
     if (l.hero && !(heroLeft > 0 || (finale && l.id === 'grand-finale'))) return false;
     if (l.id === 'grand-finale' && !finale) return false;
     return l.parts.includes(fam) || l.id === 'breathing' || prefer.includes(l.id);

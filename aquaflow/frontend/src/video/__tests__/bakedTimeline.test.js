@@ -66,6 +66,14 @@ describe("chooseCodecs", () => {
     const c = await chooseCodecs({ canVideo: async (x) => x === "vp9", canAudio: async () => false });
     expect(c).toMatchObject({ container: "webm", video: "vp9" });
   });
+  it("keeps the MP4 picture (silent) when no container can encode the soundtrack", async () => {
+    const c = await chooseCodecs({ canVideo: async () => true, canAudio: async () => false, withAudio: true });
+    expect(c).toMatchObject({ container: "mp4", video: "avc", audio: null });
+  });
+  it("falls back to Opus in MP4 when AAC is unavailable", async () => {
+    const c = await chooseCodecs({ canVideo: async () => true, canAudio: async (x) => x === "opus", withAudio: true });
+    expect(c).toMatchObject({ container: "mp4", audio: "opus" });
+  });
   it("returns null when nothing can encode", async () => {
     expect(await chooseCodecs({ canVideo: async () => false, canAudio: async () => false })).toBeNull();
   });
@@ -77,6 +85,8 @@ describe("sliceAudioChannels", () => {
     expect(Array.from(sliceAudioChannels(src, 10, { startS: 0.2, durationS: 0.3 })[0])).toEqual([2, 3, 4]);
     expect(Array.from(sliceAudioChannels(src, 10, { startS: 0.3, durationS: 0.4, loopS: 0.5 })[0])).toEqual([3, 4, 0, 1]);
     expect(Array.from(sliceAudioChannels(src, 10, { startS: 0.8, durationS: 0.4 })[0])).toEqual([8, 9, 0, 0]);
+    // A song shorter than the pass is followed by silence, not looped on its own.
+    expect(Array.from(sliceAudioChannels([Float32Array.from([1, 2, 3])], 10, { durationS: 1, loopS: 0.5 })[0])).toEqual([1, 2, 3, 0, 0, 1, 2, 3, 0, 0]);
   });
 });
 

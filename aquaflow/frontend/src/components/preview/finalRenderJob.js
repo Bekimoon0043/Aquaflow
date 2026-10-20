@@ -82,7 +82,7 @@ export async function runBakeJob({
       const sink = createSequenceSink({ writer, capture, prefix, total: plan.frames, scene: s });
       await s.bakeVideo({ plan, sampleSignals: sampler.sample, encoder: sink, abort, pixelRatio: pr, onProgress: progress });
       progress({ frame: plan.frames, frames: plan.frames, phase: "finalize" });
-      let audioName = null;
+      let audioName = null, audioNote = null;
       if (audio?.file) {
         try {
           const { buildSoundtrack } = await import("../../video/bakedEncoder");
@@ -92,14 +92,17 @@ export async function runBakeJob({
             for (let c = 0; c < buf.numberOfChannels; c++) ch.push(buf.getChannelData(c));
             audioName = `${prefix}_audio.wav`;
             await writer.write(audioName, encodeWav(ch, buf.sampleRate));
-          }
-        } catch (e) { onNotice?.(`Frames saved; audio WAV skipped (${e?.message || e}).`); audioName = null; }
+          } else audioNote = "this runtime cannot decode audio";
+        } catch (e) {
+          audioNote = `the song could not be written as WAV (${e?.message || e})`;
+          onNotice?.(`Frames saved; audio WAV skipped (${e?.message || e}).`); audioName = null;
+        }
       }
       await writer.write(`${prefix}_README.txt`, new TextEncoder().encode(sequenceNote({ prefix, plan, tier, audioName, total: plan.frames })));
       const zip = await writer.finish();
       let file = writer.where;
       if (zip) { file = `${prefix}-${stamp}-frames.zip`; download(zip, file); }
-      return { file, bytes: zip ? zip.size : writer.bytes, codec: "PNG", hasAudio: !!audioName, supersample: pr };
+      return { file, bytes: zip ? zip.size : writer.bytes, codec: "PNG", hasAudio: !!audioName, audioNote, supersample: pr };
     }
     const { openBakedEncoder } = await import("../../video/bakedEncoder");
     const capture = pr !== 1 ? createFrameCapture(s.canvas, plan.width, plan.height) : null;
@@ -113,7 +116,10 @@ export async function runBakeJob({
       });
       const file = `aquaflow-${stamp}-${tier}-${Date.now()}.${ext}`;
       download(blob, file);
-      return { file, bytes: blob.size, codec: codec.video.toUpperCase(), hasAudio: encoder.hasAudio, supersample: pr };
+      return {
+        file, bytes: blob.size, codec: codec.video.toUpperCase(), supersample: pr,
+        hasAudio: encoder.hasAudio, audioInfo: encoder.audioInfo || null, audioNote: encoder.audioNote || null,
+      };
     } catch (e) {
       await settleWithin(encoder.cancel?.());   // may never settle after a GPU reset
       throw e;

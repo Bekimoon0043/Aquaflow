@@ -31,7 +31,7 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   exportFps: 60,
   bakeStart: 0,
   bakeDuration: 0,
-  bakeAudio: true,
+  includeMusic: true,
   // AF-3D-VID-002: render quality of the baked export ("preview" = the live tier,
   // "high"/"ultra" = Final render) and output ("video" | "png" image sequence).
   exportQuality: "preview",
