@@ -1,5 +1,53 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-20: Automatic show plan built (Phases 0–5 of reports/Automatic fountain shows for any site.md) — AquaFlow Studio 1.2.54**
+
+- **Research:** `reports/Automatic fountain shows for any site.md` (+ notes). Conclusion: plan the arc, search the phrases, compile the physics; no training data needed; avoid NC-licensed models.
+- **Phase 0 — measurement:**
+  - `showMetrics.js`: hard gates (valve dwell, pump ramp, flow budget, light overlap, splash at the site wind) and 8 metrics on the compiled show.
+  - `evalCorpus.js`: licence-free synthetic songs (pop, ballad, EDM build/drop, 6/8) and sites (ring, lake front, plaza).
+  - `npm run eval:shows`: writes a scorecard to `aquaflow/frontend/eval/`.
+- **Phases 1–2 — the planner:**
+  - `siteCapability.js`: pumps as sources, coupled outlets, layers, audience front, mirror areas, limits, wind.
+  - `arcPlanner.js`: energy-ranked arc, coverage and layer targets, casting rotated by seed, a dip before the climax, hero budget, repeats.
+  - `lightScript.js`: one colour story per song.
+  - `lookLibrary.js`: 22 looks, including the new Running gap and Wall pulse.
+  - `phraseSearch.js`: beam search with costs, locks and variants.
+  - `planRender.js` / `autoShow.js`; `musicMeter.js`: 3/4, 4/4, 6/8 felt in two, 12/8, bar shift, nudge, tap, accent that rises or bends.
+  - UI: plan strip in the 3D timeline (Variant A/B/C, New show, locks), meter row, audience side, wind and allowed splash in the Pattern builder.
+- **Phase 3 — deep analysis:**
+  - Engine `services/deep_music.py` (numpy only, about 1 s per song) and `/api/music/deep`: K-weighted loudness, structure with repeat groups, build-ups and drops, mood and key, vocal phrases.
+  - Merged into the plan: drops land with a hero and a dip before; the palette comes from the mood.
+  - `docs/MODEL_LICENSES.md`: register of model licences.
+- **Phase 4 — physics:**
+  - `preview/waterPhysics.js`: jet column rise with closed-form drag, drops by terminal speed, wind drift, splash footprint, wind-safe height, visible lead, and a calibration fit from video.
+  - The site model keeps every area's water inside the basin (calm air too) and explains lowered areas in tips. Shared pumps never run above the lowest cap of their open jets. The flow budget is counted on the valves' real open times.
+  - New "Calibrate from video…" dialog.
+- **Phase 5 — learning:**
+  - `preferences.js`: A/B choices fit metric weights; look favour from locks and deletions.
+  - Best of 4.
+  - Optional AI director: engine `show_director.py` + `/api/director` (anthropic SDK, claude-opus-5-5, structured JSON limited to the real ids, server-side fallbacks; key stored by the engine on the machine, git-ignored). Merged by `directorPlan.js`; the rule planner remains the fallback.
+- **Scorecard `eval/phase5`:**
+  - New planner: 72.9, 100 % of cases pass every hard gate.
+  - 1.2.52 rules: 56.3, 92 % pass.
+  - Lebu with its real basin: 75.1 vs 48.0 for the old rules, which fail splash on all 137 jets.
+  - The ring-site ballad is the one case where the old rules score higher (71.8 vs 64.1).
+- **Finding on Lebu:** the perimeter jets stand 0.30 m from the basin edge. In calm air the planner keeps them at about 2 m (35–50 % of the 4–6 m design) and the baskets at about 3.2 m; at 4 m/s wind almost everything must be lowered or off. For full height, move or angle the nozzles inward or allow more splash.
+- **Checked in the installed 1.2.54 (Lebu + DJ Milla mashup):**
+  - Find beats 2 s; deep analysis 7 s (9 sections, 4 drops, 4 build-ups, A# minor).
+  - Create patterns: a planned show in 6 s (intro → builds → highs → rest → climax at 3:16, 38 famous looks).
+  - Variant B re-arranges; a locked phrase survives Best of 4 (5 s).
+  - The music graph shows the deep sections with repeat groups.
+  - Engine 1.2.53 packaged smoke: health, deep analysis and director status all answer.
+- **Tests:** frontend 142 files / 1416 tests pass; backend deep music 7 and director 4 pass.
+- **Needs the user / site:**
+  - Legal check before bundling beat_this / HTDemucs.
+  - People to rate A/B videos.
+  - Calibration videos of the real nozzles.
+  - Wind thresholds for the site.
+  - An Anthropic API key, only if the AI director is wanted.
+  - 20–50 annotated Ethiopian / Arabic songs.
+
 **2026-10-19 (night, after 1.2.51): AquaFlow Studio 1.2.52 installed — patterns from the music understand the fountain design; world-famous looks**
 
 - **Design reader** (`fountainDesign.js`) builds the fountain's structure from the Engineering design:

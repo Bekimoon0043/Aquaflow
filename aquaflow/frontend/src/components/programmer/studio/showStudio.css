@@ -309,7 +309,8 @@
 .plan-section.role-climax { background:color-mix(in srgb, var(--hue) 40%, transparent); }
 .plan-phrase { position:absolute; bottom:1px; height:13px; padding:0 3px; font:9px var(--font-mono, monospace); color:var(--text-button); background:transparent; border:0; border-left:1px solid color-mix(in srgb, var(--hue) 45%, transparent); text-align:left; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:pointer; }
 .plan-phrase.locked { color:#ffd166; background:rgba(255,209,102,.12); }
-.plan-tools { position:sticky; left:calc(100% - 330px); float:right; display:flex; gap:3px; padding:2px 4px; z-index:3; }
+.plan-tools { position:sticky; left:calc(100% - 330px); float:right; display:flex; gap:3px; padding:2px 6px; z-index:3; height:26px; align-items:center;
+  background:#070d14; border-left:1px solid var(--sp-border); box-shadow:-8px 0 10px #070d14; }
 .plan-tools button { font-size:9.5px; padding:1px 6px; }
 .plan-tools button[aria-pressed="true"] { background:var(--accent, #35d0c0); color:#001; }
-
+.plan-msg { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted); font-size:9.5px; align-self:center; }

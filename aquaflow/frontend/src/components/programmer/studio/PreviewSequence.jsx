@@ -7,6 +7,7 @@ import PatternCreator from './PatternCreator';
 import MusicLanes, { MUSIC_LANE_H, useMusicLanes } from './MusicLanes';
 import PlanStrip, { PLAN_STRIP_H } from './PlanStrip';
 import { applyMeter } from './musicMeter';
+import { songAnalysis } from './deepMerge';
 import { useStems } from './stemSync';
 import { useProgrammerSong } from './musicSync';
 import { grid as beatGrid } from './beatSync';
@@ -125,7 +126,8 @@ export default function PreviewSequence({ studio, items, definitions, time, play
   const [showMusic, setShowMusic] = useState(true);
   const [scrollLeft, setScrollLeft] = useState(0);
   const musicH = (showMusic ? music.lanes.length * MUSIC_LANE_H : 0) + (studio.plan?.sections?.length ? PLAN_STRIP_H : 0);
-  const songGrid = useMemo(() => applyMeter(music.analysis, studio.meter), [music.analysis, studio.meter]);
+  // The graph shows the same sections the plan uses (deep analysis when the song has it).
+  const songGrid = useMemo(() => applyMeter(songAnalysis(music.analysis), studio.meter), [music.analysis, studio.meter]);
   const importRef = useRef(null);
   // Menus close on any click outside them, or on Escape.
   useEffect(() => {

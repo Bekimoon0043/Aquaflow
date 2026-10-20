@@ -48,7 +48,10 @@ extraResources:
   # 1.2.45 engine: placed pumps drive the preview's hydraulic solve (curve + power × efficiency
   # limit), per-fixture swing ranges in show_frame. Packaged smoke: /api/health 200 and the
   # pump-efficiency preview solve answered. engine-1.2.37 stays for rollback.
-  - from: resources/engine-1.2.45
+  # 1.2.53 engine: deep music analysis (/api/music/deep, numpy only) and the optional AI director
+  # (/api/director, anthropic SDK; key stored on the machine). Packaged smoke: /api/health 200,
+  # deep analysis answered, director status answered. engine-1.2.45 stays for rollback.
+  - from: resources/engine-1.2.53
     to: engine
     filter: ["**/*"]
   # Bundled license secret (+ update URL). resolveConfig() reads this from

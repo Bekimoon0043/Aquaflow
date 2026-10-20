@@ -51,10 +51,11 @@ export default function PlanStrip({ studio, items, analysis, pps, onChange, onNo
   const basins = useEngineeringStore((s) => s.basins);
   const basin = basins?.[0]?.outer?.length >= 3 ? basins[0].outer.map((p) => [Number(p.x), Number(p.y)]) : null;
   const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
   const plan = studio.plan;
   if (!plan?.sections?.length) return null;
   const locked = new Set(Object.keys(plan.locks || {}).map((k) => k.split(':').slice(0, 2).join(':')));
-  const note = (text) => onNote?.(text);
+  const note = (text) => { setMsg(text); onNote?.(text); };
   const run = (patch) => {
     if (!analysis) { note('Find the beats first'); return; }
     try {
@@ -131,7 +132,7 @@ export default function PlanStrip({ studio, items, analysis, pps, onChange, onNo
       })}
     </div>)}
     <div className="plan-tools">
-      {busy && <small role="status">{busy}</small>}
+      {busy ? <small role="status">{busy}</small> : msg && <small className="plan-msg" role="status" title={msg}>{msg}</small>}
       {[0, 1, 2].map((v) => <button key={v} aria-pressed={(plan.variant || 0) === v} onClick={() => run({ variant: v })} disabled={!!busy} title="Another arrangement of the same plan">Variant {'ABC'[v]}</button>)}
       <button onClick={() => run({ seed: (plan.seed || 0) + 1, variant: 0 })} disabled={!!busy} title="Plan the show again with a new casting and palette (locked phrases stay)">New show</button>
       <button onClick={best} disabled={!!busy} title="Try four shows, check every hard limit and keep the one that scores best with your taste">Best of 4</button>
