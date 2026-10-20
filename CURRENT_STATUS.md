@@ -1,5 +1,12 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-20 (night): AquaFlow Studio 1.2.57 — stems drive the waves (music envelope)**
+
+- **`wavePatterns.js`:** a field can carry `music = {rate, values, floor, source}`. `musicGain` scales the wave's level moment by moment by its stem, and the field is sampled at 0.1 s while it is set. Test added (studio 160 tests pass).
+- **Lebu 4 stems show:** `Desktop/Lebu_Fountain_4_Stems_Live_Music.aquapkg`. All 4 groups play together all song long again (G1 bass, G2 vocals, G3 song/mix, G4 drums). Each group gets wave looks from its own family, shaped by its stem. 40 waves shaped; score 62.4; every hard gate passes. Lights follow the song.
+- **Known limit:** every jet belongs to two groups (the user's design), and jets share pumps, so visible per-group following is weaker than the per-group pattern (bass 0.40, vocals 0.18, song 0.40, drums 0.05 correlation).
+- **Full simulation video** rendered in the installed app (Video export, whole show).
+
 **2026-10-20 (evening): AquaFlow Studio 1.2.56 — world wave library**
 
 - **Research:** `reports/Wave pattern catalogue for fountains.md` (+ notes): 21 mathematical, 16 natural / crowd and console / pixel-engine waves; formulas, tempo rules, music parts, solenoid / VFD limits.

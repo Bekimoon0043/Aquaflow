@@ -245,7 +245,22 @@ export function fieldLevel(field, g, t, duration) {
     const mid = (lo + hi) / 2, k = smooth(Math.min(t, duration - t) / ease);
     v = mid + (v - mid) * k;
   }
+  // Music envelope (optional): the stem this wave follows scales its height moment by moment —
+  // the wave keeps its shape, the music decides how much of it rises (floor … full).
+  const m = musicGain(f.music, t);
+  if (m !== null) v *= m;
   return clamp(v, 0, 100);
+}
+
+/** f.music = { rate, values: [0..1 from the pattern start], floor } → gain 0..1 at t, or null. */
+export function musicGain(music, t) {
+  const vals = music?.values;
+  if (!Array.isArray(vals) || !vals.length) return null;
+  const x = Math.max(0, t) * num(music.rate, 10), i = Math.floor(x);
+  const a = vals[Math.min(vals.length - 1, i)], b = vals[Math.min(vals.length - 1, i + 1)];
+  const env = clamp(a + (b - a) * (x - i), 0, 1);
+  const floor = clamp(num(music.floor, 0.15), 0, 1);
+  return floor + (1 - floor) * env;
 }
 
 /** Sample a function over [0, duration] and keep only keys linear interpolation needs. */
@@ -278,7 +293,7 @@ const hsv = h => { const f = n => { const k = (n + h * 6) % 6; return 100 * (1 -
 export function fieldChannels(recipe, g, item) {
   const f = recipe.field || {};
   const duration = num(recipe.duration, 10);
-  const step = clamp(Math.min(0.25, num(f.period, 5) / 16), 0.05, 0.25);
+  const step = f.music?.values ? 0.1 : clamp(Math.min(0.25, num(f.period, 5) / 16), 0.05, 0.25);
   const levels = sampleKeys(t => fieldLevel(f, g, t, duration), duration, step);
   const tracks = item.tracks || [];
   // Waves drive jets and lights only; pumps and valves in the group keep their own clips.

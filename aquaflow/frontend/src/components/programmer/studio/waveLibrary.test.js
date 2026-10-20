@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WAVE_KINDS, flowNoise, libraryWave } from './waveLibrary';
-import { FIELD_KINDS, FIELD_CONTROLS, defaultField, fieldLevel, memberGeometry } from './wavePatterns';
+import { FIELD_KINDS, FIELD_CONTROLS, defaultField, fieldLevel, memberGeometry, musicGain } from './wavePatterns';
 import { FAMOUS_PATTERNS } from './famousPatterns';
 import { LOOKS, lookById } from './lookLibrary';
 
@@ -78,5 +78,16 @@ describe('wave library', () => {
     // The heartbeat now reads on on/off jets (lub and dub on alternating jets).
     expect(lookById('heartbeat').controls).toContain('switch');
     expect(LOOKS.length).toBeGreaterThanOrEqual(37);
+  });
+
+  it('lets a stem shape a wave moment by moment (music envelope)', () => {
+    const f = { ...defaultField('ripple'), low: 20, high: 80, ease: 0 };
+    const loud = { ...f, music: { rate: 10, floor: 0, values: Array(100).fill(1) } };
+    const silent = { ...f, music: { rate: 10, floor: 0, values: Array(100).fill(0) } };
+    const g = ringGeo[2];
+    expect(fieldLevel(loud, g, 1.3, 10)).toBeCloseTo(fieldLevel(f, g, 1.3, 10), 6);
+    expect(fieldLevel(silent, g, 1.3, 10)).toBe(0);
+    expect(musicGain({ rate: 10, floor: 0.2, values: [0, 1] }, 0.05)).toBeCloseTo(0.6, 6);
+    expect(musicGain(null, 1)).toBeNull();
   });
 });
