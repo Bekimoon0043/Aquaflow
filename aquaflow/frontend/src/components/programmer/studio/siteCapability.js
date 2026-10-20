@@ -8,9 +8,13 @@
 //   sources   every pump: rated flow, its outputs, free (valve-less) outlets, ramp limits
 //   front     which way the audience looks (user > seating / plaza > layout axis > default)
 //   symmetry  mirror axis and score
-//   wind      staged height reduction (defaults are unverified — set them on site)
+//   wind      staged height reduction (defaults are unverified — set them on site), and with the
+//             basin outline, the height each area can keep without blowing water out (waterPhysics)
+//   timing    command → visible top per output: valve / drive delay + rise time, calibrated
+//             per nozzle type from video when the site has been measured
 
 import { readFountainDesign } from './fountainDesign';
+import { visibleLead, windSafeScale } from '../../preview/waterPhysics';
 
 export const SCM_VERSION = 1;
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -103,6 +107,8 @@ export function buildSiteModel(items, { design = readFountainDesign(items), over
   const depth = design.nozzles.map((n) => (num(n.item.x) - cx) * fx + (num(n.item.y) - cy) * fy);
   const dMin = Math.min(...depth, 0), dMax = Math.max(...depth, 0);
   const layerOf = (d) => (dMax - dMin < 0.5 ? 'mid' : d > dMin + 0.66 * (dMax - dMin) ? 'front' : d < dMin + 0.33 * (dMax - dMin) ? 'back' : 'mid');
+  const calibration = overrides.calibration || {};
+  const cal = (n) => calibration[n.item.type] || calibration[n.kind] || null;
   const areaOf = new Map();
   for (const a of design.areas) a.nozzleIds.forEach((id, i) => areaOf.set(id, { area: a, order: i }));
 
@@ -116,7 +122,8 @@ export function buildSiteModel(items, { design = readFountainDesign(items), over
       area: areaOf.get(n.id)?.area.id || null, layer: layerOf(depth[k]), chaseOrder: areaOf.get(n.id)?.order ?? 0,
       mirrorOf: symmetry.partner.get(n.id) || null, sourceId: n.pumpId, valveId: n.valveId,
       coupledWith: n.valveId ? [] : pumpSiblings, heightM: n.heightM, flowLpm: num(e.flowLpm),
-      limits: defaultLimits(n.kind, actuator), latency: { commandToVisibleS: 0.1, riseK: 1.2 },
+      limits: defaultLimits(n.kind, actuator), latency: { delayS: cal(n)?.delayS ?? 0.1, leadS: Math.round(visibleLead(n.heightM, { delayS: cal(n)?.delayS ?? 0.1, vt: cal(n)?.vtMs }) * 1000) / 1000,
+        provenance: cal(n) ? 'calibrated' : 'derived' },
       role: { default: FAMILY_ROLE[n.kind] || 'rhythm', hero: HERO_FAMILIES.has(n.kind) }, lightIds: n.lightIds,
     };
     const patch = overrides.outputs?.[n.id];
@@ -129,17 +136,33 @@ export function buildSiteModel(items, { design = readFountainDesign(items), over
   });
   const wind = { ...DEFAULT_WIND, ...(overrides.wind || {}) };
   const windMs = num(overrides.windMs, 0);
+  const stage = windScale(wind, windMs);
+  const basin = Array.isArray(overrides.basin) && overrides.basin.length >= 3 ? overrides.basin : null;
+  const eng = (o) => design.nozzleById.get(o.id)?.item.engineering || {};
+  const splashLimit = Number.isFinite(Number(overrides.splashLimit)) ? Number(overrides.splashLimit) : 0.05;
   const areas = design.areas.map((a) => {
     const outs = outputs.filter((o) => o.area === a.id);
     const layers = outs.map((o) => o.layer);
     const layer = ['front', 'mid', 'back'].sort((x, y) => layers.filter((l) => l === y).length - layers.filter((l) => l === x).length)[0];
     const hero = outs.some((o) => o.role.hero);
     const coupled = a.control === 'pump' && outs.some((o) => o.coupledWith.some((id) => !a.nozzleIds.includes(id)) || sources.find((s) => s.id === o.sourceId)?.valved.length);
+    // Wind: the staged reduction, and with a basin outline the height this area keeps its water in.
+    // (Even in calm air: splash reaches about one jet height sideways.)
+    let heightScale = stage;
+    if (basin && stage > 0) {
+      for (const o of outs) heightScale = Math.min(heightScale, windSafeScale({ x: o.pos[0], y: o.pos[1], heightM: o.heightM, sprayAngleDeg: eng(o).sprayAngleDeg, nozzleDiaMm: eng(o).nozzleDiaMm }, basin, { windMs, windDirDeg: overrides.windDirDeg ?? null, limit: splashLimit }));
+    }
     return { id: a.id, name: a.name, family: a.kind, control: a.control, position: a.position, layer, size: a.size, heightM: a.heightM,
       role: FAMILY_ROLE[a.kind] || 'rhythm', hero, coupled, sources: a.pumpIds, lightIds: a.lightIds, nozzleIds: a.nozzleIds,
-      mirrorArea: null };
+      mirrorArea: null, heightScale: Math.round(heightScale * 100) / 100, leadS: Math.max(0, ...outs.map((o) => o.latency.leadS)) };
   });
   // Mirror areas: most of an area's partners fall in one other area.
+  // Tips: areas the basin cannot hold at full height.
+  const tips = [...(design.tips || [])];
+  for (const a of areas) if (basin && a.heightScale < 1) {
+    tips.push(`${a.name}: ${a.heightScale ? `kept to ${Math.round(100 * a.heightScale)} % of design height (${Math.round(a.heightM * a.heightScale * 10) / 10} m)` : 'switched off'} so no more than ${Math.round(100 * splashLimit)} % of the water lands outside the basin${windMs ? ` at ${windMs} m/s wind` : ''}. `
+      + 'For full height: move or angle these nozzles inward, widen the basin, or allow more splash in the site settings.');
+  }
   for (const a of areas) {
     const hits = {};
     for (const id of a.nozzleIds) { const p = symmetry.partner.get(id); const pa = p && outputs.find((o) => o.id === p)?.area; if (pa && pa !== a.id) hits[pa] = (hits[pa] || 0) + 1; }
@@ -147,7 +170,7 @@ export function buildSiteModel(items, { design = readFountainDesign(items), over
     if (best && best[1] >= 0.5 * a.size) a.mirrorArea = best[0];
   }
   return {
-    version: SCM_VERSION, units: 'm', front, symmetry: { axis: symmetry.axis, score: symmetry.score }, wind, windMs, heightScale: windScale(wind, windMs),
-    outputs, sources, areas, tips: design.tips, design,
+    version: SCM_VERSION, units: 'm', front, symmetry: { axis: symmetry.axis, score: symmetry.score }, wind, windMs, heightScale: stage, basin,
+    outputs, sources, areas, tips, design, splashLimit,
   };
 }

@@ -15,6 +15,7 @@ import { waterLead } from './musicPatterns';
 import { MIN_OFF_S, MIN_ON_S } from './patternPresets';
 import { arcSections, climaxIndex } from './arcPlanner';
 import { songAnalysis } from './deepMerge';
+import { oversprayShare, visibleLead } from '../../preview/waterPhysics';
 
 export const METRICS_VERSION = 1;
 export const DT = 0.05;
@@ -130,7 +131,7 @@ export const lookOf = (r) => r.pattern?.famous || r.pattern?.look || r.pattern?.
  * @param {object} p { clips, items, analysis, studio?, design?, plan? }
  * @returns {{ version, score, pass, gates, metrics, detail }}
  */
-export function measureShow({ clips, items, analysis: raw, studio = null, design = readFountainDesign(items), weights = SCORE_WEIGHTS }) {
+export function measureShow({ clips, items, analysis: raw, studio = null, design = readFountainDesign(items), weights = SCORE_WEIGHTS, basin = null, windMs = 0, splashLimit = 0.05 }) {
   const analysis = songAnalysis(raw);
   const T = Math.min(600, analysis?.duration || Math.max(1, ...clips.map((c) => c.startTime + c.duration)));
   const nozzleIds = new Set(design.nozzles.map((n) => n.id));
@@ -139,13 +140,25 @@ export function measureShow({ clips, items, analysis: raw, studio = null, design
   const gates = showGates(clips, design);
   const flow = flowBudget(levels, design);
   if (flow.length) { gates.violations.push(...flow); gates.pass = false; gates.counts['flow-budget'] = flow.length; }
+  // Splash: at the site's wind, no jet may throw more than `splashLimit` of its water out of the basin.
+  if (basin?.length >= 3) {
+    const splash = [];
+    for (const n of design.nozzles) {
+      const top = Math.max(0, ...levels.get(n.id)) / 100;
+      if (!(top > 0.05) || !(n.heightM > 0)) continue;
+      const e = n.item.engineering || {};
+      const share = oversprayShare({ x: Number(n.item.x) || 0, y: Number(n.item.y) || 0, heightM: n.heightM, sprayAngleDeg: e.sprayAngleDeg, nozzleDiaMm: e.nozzleDiaMm }, basin, { windMs, scale: top });
+      if (share > splashLimit + 0.01) splash.push({ gate: 'splash', id: n.id, t: 0, text: `${n.item.label || n.id}: ${Math.round(100 * share)} % of its water lands outside the basin at ${windMs} m/s` });
+    }
+    if (splash.length) { gates.violations.push(...splash); gates.pass = false; gates.counts.splash = splash.length; }
+  }
 
   // Visible water mass per instant: Σ level × design height, normalised by the fountain's total.
   const totalH = design.nozzles.reduce((s, n) => s + (n.heightM || 1), 0) || 1;
   const mass = new Float32Array(N);
   for (const n of design.nozzles) {
     const g = levels.get(n.id), h = n.heightM || 1;
-    const lag = Math.round(waterLead(h) / DT);
+    const lag = Math.round(visibleLead(h) / DT);
     for (let i = 0; i < N; i++) mass[i] += (g[Math.max(0, i - lag)] / 100) * h;
   }
   for (let i = 0; i < N; i++) mass[i] /= totalH;
@@ -156,7 +169,7 @@ export function measureShow({ clips, items, analysis: raw, studio = null, design
   const nearest = (t) => { let lo = 0, hi = beats.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (beats[m] < t) lo = m + 1; else hi = m; } return Math.min(Math.abs(beats[lo] - t), lo ? Math.abs(beats[lo - 1] - t) : Infinity); };
   const events = [];
   for (const a of design.areas) {
-    const lag = waterLead(a.heightM);
+    const lag = visibleLead(a.heightM);
     const series = new Float32Array(N);
     for (const id of a.nozzleIds) { const g = levels.get(id); for (let i = 0; i < N; i++) series[i] += g[i] / a.nozzleIds.length; }
     // A visible event: the area's water starts a rise of ≥ 15 points within 0.3 s (a jet
@@ -241,13 +254,15 @@ export function measureShow({ clips, items, analysis: raw, studio = null, design
   const heroPerMin = heroes.length / (T / 60);
   const heroDiscipline = heroes.length ? clamp01((heroInClimax / heroes.length) * (heroPerMin <= 2 ? 1 : 2 / heroPerMin)) : 0.6;
 
-  // 8. Peak usage: share of climax time with ≥ 70 % of design height on the active jets.
+  // 8. Peak usage: share of climax time with the active jets at ≥ 70 % of the height they are
+  //    allowed (their own top in this show — wind and splash may cap it below design height).
   let peakUsage = 0;
   if (c) {
+    const topOf = new Map([...nozzleIds].map((id) => [id, Math.max(1, ...levels.get(id))]));
     let hit = 0, n = 0;
     for (let i = Math.floor(c.start / DT); i < Math.min(N, Math.ceil(c.end / DT)); i++) {
-      const on = []; for (const id of nozzleIds) { const v = levels.get(id)[i]; if (v > 5) on.push(v); }
-      if (on.length) { n++; if (mean(on) >= 70) hit++; }
+      const on = []; for (const id of nozzleIds) { const v = levels.get(id)[i]; if (v > 5) on.push(v / topOf.get(id)); }
+      if (on.length) { n++; if (mean(on) >= 0.7) hit++; }
     }
     peakUsage = n ? hit / n : 0;
   }

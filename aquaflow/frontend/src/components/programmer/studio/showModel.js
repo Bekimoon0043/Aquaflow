@@ -271,7 +271,8 @@ export function compileStudio(studio, items) {
     if (clips.length > 50000) { issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.'); break; }
   }
   // Design-aware patterns drive the real solenoids and pumps (hardwareFollow.js).
-  const modes = new Map(studio.recipes.filter(r => (r.hardware === 'hits' || r.hardware === 'open') && recipeAudible(r, groups)).map(r => [r.id, r.hardware]));
+  const modes = new Map(studio.recipes.filter(r => (r.hardware === 'hits' || r.hardware === 'open') && recipeAudible(r, groups))
+    .map(r => [r.id, Number.isFinite(r.hardwareCap) ? { mode: r.hardware, cap: r.hardwareCap } : r.hardware]));
   if (modes.size) {
     const routed = followHardware(clips, items, modes).clips;
     if (routed.length > 50000) issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.');

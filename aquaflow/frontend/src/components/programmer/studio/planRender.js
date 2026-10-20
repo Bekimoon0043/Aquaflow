@@ -62,7 +62,8 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
         const routed = !!(design?.connected && area.control !== 'height');
         if (routed) for (const id of area.nozzleIds) { const n = design.nozzleById.get(id); if (n?.valveId) driven.add(n.valveId); if (n?.pumpId) driven.add(n.pumpId); }
         // Levels: the section's peak target, scaled by the wind stage.
-        const peak = clamp(s.targets.peak * (0.9 + 0.1 * s.energyRank), 0.5, 1) * (scm.heightScale ?? 1);
+        const peak = clamp(s.targets.peak * (0.9 + 0.1 * s.energyRank), 0.5, 1) * (area.heightScale ?? scm.heightScale ?? 1);
+        if (!(peak > 0.02)) continue;                       // wind has taken this area down
         let pick = { preset: look.preset || 'breathing', lapSeconds: presetLap(look.id, s.role, { beatSec, barSec }), minLevel: MIN_LEVEL[look.id] ?? 15, maxLevel: Math.round(100 * peak) };
         if (look.preset) pick = fitToControl(pick, area.control, { beatSec, barSec });
         // Direction: one per section and look (repeats mirror), flipped for the mirror partner.
@@ -86,8 +87,9 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
         const synced = made?.field ? { options: base } : syncPatternOptions(preset, { ...base, ...(made?.options || {}), ...(made?.floor === 0 ? { minLevel: 0 } : {}),
           ...(v.mirrorOf && made?.options?.order ? { order: FLIP[made.options.order] || made.options.order } : {}) }, analysis, { members: members.length });
         const opts = { ...synced.options, sync: synced.options.sync || sync };
+        // Fire early by the area's command → visible-top time (calibrated when measured).
         const height = Math.max(0, ...members.map((m) => Number(m.engineering?.jetHeightM) || 0));
-        const shift = lead ? Math.min(waterLead(height), opts.start) : 0;
+        const shift = lead ? Math.min(area.leadS ?? waterLead(height * peak), opts.start) : 0;
         opts.start = r3(opts.start - shift);
         const le = lastEnd.get(v.areaId) || 0;
         if (opts.start < le) { opts.duration = r3(opts.duration - (le - opts.start)); opts.start = r3(le); }
@@ -96,6 +98,8 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
         lastEnd.set(v.areaId, r3(opts.start + opts.duration));
         const tag = { music: fillId, plan: plan.id, section: s.role, part: v.part, look: look.id, phrase: `${s.id}:${pi}`, leadS: shift, ...(famous ? { famous: famous.id } : {}) };
         const hardware = routed ? (famous ? famous.valve : pick.preset === 'breathing' ? 'open' : 'hits') : null;
+        // Splash / wind ceiling for this area's jets (a shared pump respects the lowest one).
+        const hardwareCap = Math.round(100 * clamp(area.heightScale ?? 1, 0, 1));
         const easeS = r3(Math.min(barSec, opts.duration / 4));
         let ids;
         if (made?.field) {
@@ -107,7 +111,7 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
           const out = fieldUnitRecipes({ kind: field.kind, start: opts.start, duration: opts.duration, name: famous.name, waterGroupId: w.groupId, lightGroupId: lightId,
             field, light: { color, low: 6, high: lightLevel }, order: order || 'clockwise' });
           const recipes = out.recipes.map((r) => ({ ...r, pattern: { ...r.pattern, ...tag, group: r.pattern.role === 'lights' ? lightGroup.id : group.id },
-            ...(hardware && r.pattern.role !== 'lights' ? { hardware } : {}) }));
+            ...(hardware && r.pattern.role !== 'lights' ? { hardware, hardwareCap } : {}) }));
           next = { ...next, recipes: [...next.recipes, ...recipes] };
           ids = new Set(recipes.map((r) => r.id));
         } else {
@@ -116,7 +120,7 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
           const ease = { in: easeS, out: easeS, floor: EASE_FLOOR };
           ids = new Set(unit.recipes.map((r) => r.id));
           next = { ...unit.studio, recipes: unit.studio.recipes.map((r) => (!ids.has(r.id) ? r : {
-            ...r, ...(r.effect === 'curve' ? { ease } : {}), ...(hardware && r.pattern?.role !== 'lights' ? { hardware } : {}) })) };
+            ...r, ...(r.effect === 'curve' ? { ease } : {}), ...(hardware && r.pattern?.role !== 'lights' ? { hardware, hardwareCap } : {}) })) };
         }
         added.push(...next.recipes.filter((r) => ids.has(r.id)));
         counts[s.role] = (counts[s.role] || 0) + 1;

@@ -3,6 +3,7 @@
 // Variant A / B / C re-search the same plan, New show re-plans with another seed.
 import { useMemo } from 'react';
 import useProjectStore from '../../../store/projectStore';
+import useEngineeringStore from '../../../store/engineeringStore';
 import { readStems } from './stemSync';
 import { createShow } from './autoShow';
 import { designGroups, readFountainDesign } from './fountainDesign';
@@ -13,15 +14,17 @@ export const PLAN_STRIP_H = 30;
 const ROLE_LABEL = { intro: 'Intro', verse: 'Verse', build: 'Build', high: 'High', climax: 'Climax', rest: 'Rest', outro: 'Outro' };
 
 /** Regenerate the show from the stored plan settings (seed, variant, locks). */
-export function regenerate(studio, { items, analysis, stems, seed, variant }) {
+export function regenerate(studio, { items, analysis, stems, seed, variant, basin = null }) {
   const design = readFountainDesign(items);
   const groups = [...designGroups(design), ...builderGroups(studio, items)];
-  return createShow(studio, { analysis, stems, items, groups, design, seed, variant, locks: studio.plan?.locks || {} });
+  return createShow(studio, { analysis, stems, items, groups, design, seed, variant, locks: studio.plan?.locks || {}, site: { ...(studio.site || {}), basin } });
 }
 
 export default function PlanStrip({ studio, items, analysis, pps, onChange, onNote }) {
   const programmer = useProjectStore((s) => s.programmer);
   const stems = useMemo(() => readStems(programmer), [programmer]);
+  const basins = useEngineeringStore((s) => s.basins);
+  const basin = basins?.[0]?.outer?.length >= 3 ? basins[0].outer.map((p) => [Number(p.x), Number(p.y)]) : null;
   const plan = studio.plan;
   if (!plan?.sections?.length) return null;
   const locked = new Set(Object.keys(plan.locks || {}).map((k) => k.split(':').slice(0, 2).join(':')));
@@ -31,7 +34,7 @@ export default function PlanStrip({ studio, items, analysis, pps, onChange, onNo
       onChange((s) => {
         const seed = patch.seed ?? s.plan?.seed ?? 0, variant = patch.variant ?? s.plan?.variant ?? 0;
         const base = patch.locks ? { ...s, plan: { ...s.plan, locks: patch.locks } } : s;
-        return regenerate(base, { items, analysis, stems, seed, variant }).studio;
+        return regenerate(base, { items, analysis, stems, seed, variant, basin }).studio;
       });
     } catch (error) { onNote?.(error.message); }
   };

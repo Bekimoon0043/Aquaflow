@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readZip, zipText } from '/src/utils/zipStore.js';
 import { makeSong, SONGS, SITES } from '/src/components/programmer/studio/evalCorpus.js';
-import { GENERATORS, runCase, siteContext } from '/src/components/programmer/studio/showGenerators.js';
+import { GENERATORS, basinOf, runCase, siteContext } from '/src/components/programmer/studio/showGenerators.js';
 import { readStudio } from '/src/components/programmer/studio/showModel.js';
 
 const args = process.argv.slice(2);
@@ -29,7 +29,8 @@ for (const p of pkgs) {
   const analysis = Object.values(proj.programmer?.musicCache || {})[0];
   const stems = proj.programmer?.stems?.items || [];
   if (!analysis || !stems.length) { console.warn(`skip ${p}: no stored song analysis / stems`); continue; }
-  const site = siteContext(proj.engineering.fixtures, { ...readStudio(proj.programmer), recipes: [] });
+  const wind = Number(opt('--wind', 0));
+  const site = siteContext(proj.engineering.fixtures, { ...readStudio(proj.programmer), recipes: [] }, { basin: basinOf(proj.engineering), windMs: wind });
   cases.push({ siteId: path.basename(p, '.aquapkg'), site, siteName: proj.engineering.projectName || path.basename(p), song: { id: 'song', name: analysis.name || 'song', analysis, stems } });
 }
 

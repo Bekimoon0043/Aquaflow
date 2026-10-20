@@ -9,12 +9,18 @@ import { measureShow } from './showMetrics';
 import { createShow } from './autoShow';
 
 /** Everything a generator needs about one site. */
-export function siteContext(fixtures, studio = readStudio({})) {
+export function siteContext(fixtures, studio = readStudio({}), { basin = null, windMs = 0 } = {}) {
   const items = inventory(fixtures);
   const design = readFountainDesign(items);
   const groups = [...designGroups(design), ...builderGroups(studio, items)];
-  return { fixtures, items, design, groups, studio };
+  return { fixtures, items, design, groups, studio: basin || windMs ? { ...studio, site: { ...(studio.site || {}), basin, windMs } } : studio, basin, windMs };
 }
+
+/** The basin outline of an Engineering project ([[x, y]]), or null. */
+export const basinOf = (engineering) => {
+  const b = engineering?.basins?.[0]?.outer || engineering?.geometry?.points;
+  return Array.isArray(b) && b.length >= 3 ? b.map((p) => [Number(p.x), Number(p.y)]) : null;
+};
 
 export const GENERATORS = {
   /** 1.2.52: design rows + rule table + famous looks every other phrase. */
@@ -34,6 +40,6 @@ export function runCase(generator, site, song, extra = {}) {
   const studio = GENERATORS[generator]({ site, song, ...extra });
   const genMs = Date.now() - t0;
   const { clips, issues } = compileStudio(studio, site.items);
-  const result = measureShow({ clips, items: site.items, analysis: song.analysis, studio, design: site.design });
+  const result = measureShow({ clips, items: site.items, analysis: song.analysis, studio, design: site.design, basin: site.basin, windMs: site.windMs });
   return { ...result, issues, clips: clips.length, genMs, studio };
 }

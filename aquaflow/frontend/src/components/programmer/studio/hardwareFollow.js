@@ -4,6 +4,8 @@
 //   valves   a jet with its own solenoid opens where its pattern asks for water
 //            ('hits': on each crest, 'open': whenever it is up) with ≥ MIN_ON_S on and
 //            ≥ MIN_OFF_S off — the same rule the PLC enforces
+//   caps     a recipe may carry `hardwareCap` (0..100): the highest level its jets may reach
+//            (splash / wind). A shared pump never runs above the lowest cap of its open jets.
 //   pumps    each pump runs at the highest level any of its open jets asks for, ramping no
 //            faster than a VFD can (PUMP_UP / PUMP_DOWN % per second), and stops while all its
 //            jets are closed (the PLC never pumps against closed valves)
@@ -65,8 +67,11 @@ export function valveSpans(open, { dt = DT, minOn = MIN_ON_S, minOff = MIN_OFF_S
   return out.map(([a, b]) => [r3(a), r3(b)]);
 }
 
-/** Rate-limited pump speed: rises early enough to reach each target on time, falls slowly. */
-export function pumpCurve(target, running, { dt = DT, up = PUMP_UP, down = PUMP_DOWN } = {}) {
+/**
+ * Rate-limited pump speed: rises early enough to reach each target on time, falls slowly,
+ * and (with `ceiling`) slows down early enough to be under each ceiling when it starts.
+ */
+export function pumpCurve(target, running, { dt = DT, up = PUMP_UP, down = PUMP_DOWN, ceiling = null } = {}) {
   const n = target.length, x = new Float32Array(n);
   const du = up * dt, dd = down * dt;
   // Backward pass: start the ramp up ahead of a rise (only while an outlet is open).
@@ -74,6 +79,12 @@ export function pumpCurve(target, running, { dt = DT, up = PUMP_UP, down = PUMP_
   // Forward pass: never fall faster than the drive ramps down, never jump up.
   for (let i = 1; i < n; i++) x[i] = running[i] ? Math.min(x[i - 1] + du, Math.max(x[i], x[i - 1] - dd)) : 0;
   if (n && !running[0]) x[0] = 0;
+  if (ceiling) {
+    const cb = new Float32Array(n);
+    for (let i = n - 1; i >= 0; i--) cb[i] = Math.min(ceiling[i], i < n - 1 ? cb[i + 1] + dd : Infinity);
+    for (let i = 0; i < n; i++) x[i] = Math.min(x[i], cb[i]);
+    for (let i = 1; i < n; i++) x[i] = Math.min(x[i], x[i - 1] + du);
+  }
   return x;
 }
 
@@ -101,9 +112,11 @@ function simplify(values, i0, i1, dt, tolerance = 0.5) {
  */
 export function followHardware(clips, items, modes, design = readFountainDesign(items)) {
   if (!modes?.size || !design.connected) return { clips, valves: 0, pumps: 0 };
+  const modeOf = (id) => { const m = modes.get(id); return typeof m === 'string' ? m : m?.mode; };
+  const capOf = (id) => { const m = modes.get(id); return typeof m === 'object' && Number.isFinite(m?.cap) ? m.cap : 100; };
   const routed = new Map();             // nozzle id → its clips from hardware recipes
   for (const c of clips) {
-    if (!modes.has(c.studioRecipeId) || !WATER.test(c.type)) continue;
+    if (!modeOf(c.studioRecipeId) || !WATER.test(c.type)) continue;
     const n = design.nozzleById.get(c.fixtureId);
     if (!n || (!n.valveId && !n.pumpId) || n.control === 'height') continue;
     if (!routed.has(n.id)) routed.set(n.id, []);
@@ -117,73 +130,88 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
   const want = new Map();
   for (const [id, list] of routed) {
     const open = new Uint8Array(N), height = new Float32Array(N);
+    const jetCap = Math.min(100, ...list.map((c) => capOf(c.studioRecipeId)));
     for (const c of list) {
-      const mode = modes.get(c.studioRecipeId);
+      const mode = modeOf(c.studioRecipeId), limit = capOf(c.studioRecipeId);
       const i0 = Math.max(0, Math.floor(c.startTime / DT)), i1 = Math.min(N - 1, Math.ceil((c.startTime + c.duration) / DT));
       const lv = [];
       for (let i = i0; i <= i1; i++) lv.push(clipLevel(c, i * DT));
       const hi = Math.max(0, ...lv), lo = Math.min(...lv);
       const thr = mode === 'hits' && hi - lo > 10 ? lo + 0.5 * (hi - lo) : 5;
       lv.forEach((v, k) => {
-        if (v > thr && hi > 5) { open[i0 + k] = 1; height[i0 + k] = Math.max(height[i0 + k], mode === 'hits' ? hi : v); }
+        if (v > thr && hi > 5) { open[i0 + k] = 1; height[i0 + k] = Math.max(height[i0 + k], Math.min(limit, mode === 'hits' ? hi : v)); }
       });
     }
-    want.set(id, { open, height });
+    want.set(id, { open, height, cap: jetCap });
   }
 
-  // 1b. Flow budget: a pump cannot feed more than its rated flow. When too many of its jets
-  //     would be open, some sit out a whole 6 s window (long enough to survive the valve
-  //     minimum on / off), in an order that rotates each window so no jet is always the one
-  //     left out. Valve-less outlets on the pump are fed first.
-  let pruned = 0;
-  for (const pump of design.pumps.values()) {
-    const qMax = Number(pump.item.engineering?.flowLpm) || 0;
-    const mine = pump.nozzleIds.filter((id) => want.has(id));
-    const valved = mine.filter((id) => design.nozzleById.get(id).valveId);
-    if (!(qMax > 0) || !valved.length) continue;
-    const flow = (id) => Number(design.nozzleById.get(id).item.engineering?.flowLpm) || 0;
-    const free = mine.filter((id) => !design.nozzleById.get(id).valveId);
-    const W = Math.round(PRUNE_WINDOW_S / DT);
-    for (let w0 = 0; w0 < N; w0 += W) {
-      const w1 = Math.min(N, w0 + W);
-      // The window's worst moment decides how many jets sit out.
-      let worst = 0, worstOpen = [];
-      for (let i = w0; i < w1; i++) {
-        let total = 0;
-        for (const id of free) if (want.get(id).open[i] || want.get(id).height[i] > 0) total += flow(id);
-        const open = valved.filter((id) => want.get(id).open[i]);
-        for (const id of open) total += flow(id);
-        if (total > worst) { worst = total; worstOpen = open; }
-      }
-      if (worst <= qMax) continue;
-      const rot = Math.floor(w0 / W) * 7;
-      const order = [...worstOpen].sort((a, b) => ((valved.indexOf(a) + rot) % valved.length) - ((valved.indexOf(b) + rot) % valved.length));
-      let total = worst;
-      while (total > qMax && order.length) {
-        const id = order.pop();
-        want.get(id).open.fill(0, w0, w1);
-        total -= flow(id); pruned++;
-      }
-    }
-  }
-
-  // 2. Valves with minimum on / off times; the effective open grid follows the spans.
-  const out = [], seenValves = new Set();
-  const isOpen = new Map();
-  for (const [id, w] of want) {
-    const n = design.nozzleById.get(id);
-    if (!n.valveId) { isOpen.set(id, w.open); continue; }
+  // 1b + 2. Valves with minimum on / off times, within each pump's flow budget. A pump cannot
+  //     feed more than its rated flow: when too many of its jets would be open (counted on
+  //     the valves' real open times, after the minimum on / off), some jets sit out a whole
+  //     6 s window — long enough to survive the valve minimum on / off — in an order that
+  //     rotates each window so no jet is always the one left out. Valve-less outlets on the
+  //     pump are fed first. Repeats until every pump fits (a few passes at most).
+  const isOpen = new Map(), spansOf = new Map();
+  const rebuild = (id) => {
+    const w = want.get(id), n = design.nozzleById.get(id);
+    if (!n.valveId) { isOpen.set(id, w.open); return; }
     const spans = valveSpans(w.open);
     const grid = new Uint8Array(N);
     for (const [a, b] of spans) for (let i = Math.round(a / DT); i < Math.min(N, Math.round(b / DT)); i++) grid[i] = 1;
+    spansOf.set(id, spans);
     isOpen.set(id, grid);
-    if (seenValves.has(n.valveId)) continue;
+  };
+  for (const id of want.keys()) rebuild(id);
+  let pruned = 0;
+  const W = Math.round(PRUNE_WINDOW_S / DT), early = Math.round(MIN_ON_S / DT);
+  for (let pass = 0; pass < 4; pass++) {
+    const touched = new Set();
+    for (const pump of design.pumps.values()) {
+      const qMax = Number(pump.item.engineering?.flowLpm) || 0;
+      const mine = pump.nozzleIds.filter((id) => want.has(id));
+      const valved = mine.filter((id) => design.nozzleById.get(id).valveId);
+      if (!(qMax > 0) || !valved.length) continue;
+      const flow = (id) => Number(design.nozzleById.get(id).item.engineering?.flowLpm) || 0;
+      const free = mine.filter((id) => !design.nozzleById.get(id).valveId);
+      for (let w0 = 0; w0 < N; w0 += W) {
+        const w1 = Math.min(N, w0 + W);
+        // The window's worst moment decides how many jets sit out.
+        let worst = 0, worstOpen = [];
+        for (let i = w0; i < w1; i++) {
+          let total = 0;
+          for (const id of free) if (isOpen.get(id)[i] || want.get(id).height[i] > 0) total += flow(id);
+          const open = valved.filter((id) => isOpen.get(id)[i]);
+          for (const id of open) total += flow(id);
+          if (total > worst) { worst = total; worstOpen = open; }
+        }
+        if (worst <= qMax) continue;
+        const rot = Math.floor(w0 / W) * 7;
+        const order = [...worstOpen].sort((a, b) => ((valved.indexOf(a) + rot) % valved.length) - ((valved.indexOf(b) + rot) % valved.length));
+        let total = worst;
+        while (total > qMax && order.length) {
+          const id = order.pop();
+          // Close a minimum-on time early too, so an opening just before cannot run on into the window.
+          want.get(id).open.fill(0, Math.max(0, w0 - early), w1);
+          touched.add(id);
+          total -= flow(id); pruned++;
+        }
+      }
+    }
+    if (!touched.size) break;
+    for (const id of touched) rebuild(id);
+  }
+
+  // Valve clips from the final spans.
+  const out = [], seenValves = new Set();
+  for (const id of want.keys()) {
+    const n = design.nozzleById.get(id);
+    if (!n.valveId || seenValves.has(n.valveId)) continue;
     seenValves.add(n.valveId);
     const valve = design.valves.get(n.valveId);
     const track = valve?.item.tracks?.find((t) => t.type === 'solenoid_open');
     if (!track) continue;
     const first = routed.get(id)[0];
-    spans.forEach(([a, b], k) => {
+    spansOf.get(id).forEach(([a, b], k) => {
       const duration = r3(Math.min(600, b) - a);
       if (duration <= 0) return;
       const source = routed.get(id).find((c) => a >= c.startTime - 1e-6 && a < c.startTime + c.duration) || first;
@@ -198,15 +226,17 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
   for (const [pumpId, pump] of design.pumps) {
     const mine = pump.nozzleIds.filter((id) => want.has(id));
     if (!mine.length) continue;
-    const target = new Float32Array(N), running = new Uint8Array(N);
+    const target = new Float32Array(N), running = new Uint8Array(N), ceiling = new Float32Array(N).fill(100);
     for (const id of mine) {
-      const o = isOpen.get(id), h = want.get(id).height, valved = !!design.nozzleById.get(id).valveId;
+      const o = isOpen.get(id), w = want.get(id), h = w.height, valved = !!design.nozzleById.get(id).valveId;
       for (let i = 0; i < N; i++) {
         if (valved && !o[i]) continue;
         running[i] = running[i] || (o[i] || h[i] > 0) ? 1 : 0;
-        if (o[i] || !valved) target[i] = Math.max(target[i], h[i]);
+        if (o[i] || !valved) { target[i] = Math.max(target[i], h[i]); if (o[i] || h[i] > 0) ceiling[i] = Math.min(ceiling[i], w.cap); }
       }
     }
+    // A shared pump lifts every open jet together: never above the lowest cap among them.
+    for (let i = 0; i < N; i++) target[i] = Math.min(target[i], ceiling[i]);
     // A valve-less jet (a basket on a shared pump) is an outlet that is open while it has a
     // clip (on a Siemens site it opens an implied valve): the pump may run then and ramps down
     // gently instead of stopping.
@@ -216,7 +246,7 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
         for (let i = i0; i <= i1; i++) running[i] = 1;
       }
     }
-    const speed = pumpCurve(target, running);
+    const speed = pumpCurve(target, running, { ceiling });
     pumpLevel.set(pumpId, speed);
     const track = pump.item.tracks?.find((t) => t.type === 'pump_speed');
     if (!track) continue;

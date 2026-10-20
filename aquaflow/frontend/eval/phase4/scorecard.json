@@ -1,36 +1,36 @@
 {
- "createdAt": "2026-10-20T06:47:33.226Z",
+ "createdAt": "2026-10-20T07:07:43.096Z",
  "summary": [
   {
    "generator": "rules-1.2.52",
    "cases": 13,
-   "score": 56,
-   "passRate": 1,
+   "score": 56.331,
+   "passRate": 0.923,
    "metrics": {
-    "eventAlignment": 0.287,
-    "energyTracking": 0.219,
-    "arcFidelity": 0.678,
+    "eventAlignment": 0.301,
+    "energyTracking": 0.212,
+    "arcFidelity": 0.686,
     "coverage": 0.97,
     "structureConsistency": 0.563,
     "diversity": 0.656,
     "heroDiscipline": 0.753,
-    "peakUsage": 0.515
+    "peakUsage": 0.522
    }
   },
   {
    "generator": "plan-v1",
    "cases": 13,
-   "score": 72.892,
+   "score": 73.3,
    "passRate": 1,
    "metrics": {
-    "eventAlignment": 0.65,
-    "energyTracking": 0.638,
-    "arcFidelity": 0.95,
-    "coverage": 0.989,
+    "eventAlignment": 0.666,
+    "energyTracking": 0.643,
+    "arcFidelity": 0.947,
+    "coverage": 0.99,
     "structureConsistency": 0.633,
-    "diversity": 0.686,
+    "diversity": 0.687,
     "heroDiscipline": 0.768,
-    "peakUsage": 0.498
+    "peakUsage": 0.506
    }
   }
  ],
@@ -41,18 +41,18 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "pop",
    "songName": "Pop 4/4 · 120 BPM",
-   "score": 68.1,
+   "score": 70.9,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.348,
-    "energyTracking": 0.362,
-    "arcFidelity": 0.671,
+    "eventAlignment": 0.521,
+    "energyTracking": 0.358,
+    "arcFidelity": 0.686,
     "coverage": 1,
     "structureConsistency": 0.474,
     "diversity": 0.767,
     "heroDiscipline": 1,
-    "peakUsage": 0.997
+    "peakUsage": 0.998
    },
    "detail": {
     "events": 307,
@@ -64,7 +64,7 @@
      "climaxHighest": true,
      "dipBefore": false,
      "strongEnd": true,
-     "rankAgreement": 0.5714285714285714
+     "rankAgreement": 0.6190476190476191
     },
     "climax": {
      "start": 160,
@@ -112,12 +112,12 @@
     "switchedActiveClimax": 0.788,
     "sectionMass": [
      0.465,
-     0.551,
-     0.494,
-     0.528,
-     0.606,
-     0.742,
-     0.557
+     0.552,
+     0.493,
+     0.529,
+     0.612,
+     0.74,
+     0.551
     ]
    },
    "clips": 1368,
@@ -130,18 +130,18 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "ballad",
    "songName": "Ballad 4/4 · 72 BPM",
-   "score": 70.6,
+   "score": 71.8,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.168,
-    "energyTracking": 0.196,
+    "eventAlignment": 0.256,
+    "energyTracking": 0.183,
     "arcFidelity": 0.9,
     "coverage": 1,
     "structureConsistency": 0.824,
     "diversity": 0.858,
     "heroDiscipline": 1,
-    "peakUsage": 0.991
+    "peakUsage": 0.992
    },
    "detail": {
     "events": 113,
@@ -200,13 +200,13 @@
     "switchedActive": 0.643,
     "switchedActiveClimax": 0.701,
     "sectionMass": [
-     0.57,
-     0.475,
-     0.685
+     0.572,
+     0.477,
+     0.681
     ]
    },
    "clips": 696,
-   "genMs": 73,
+   "genMs": 69,
    "issues": 0
   },
   {
@@ -215,13 +215,13 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "edm",
    "songName": "EDM build & drop · 128 BPM",
-   "score": 70.4,
+   "score": 69.3,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.46,
-    "energyTracking": 0.161,
-    "arcFidelity": 0.9,
+    "eventAlignment": 0.398,
+    "energyTracking": 0.166,
+    "arcFidelity": 0.886,
     "coverage": 1,
     "structureConsistency": 0.433,
     "diversity": 0.822,
@@ -238,7 +238,7 @@
      "climaxHighest": true,
      "dipBefore": true,
      "strongEnd": true,
-     "rankAgreement": 0.6666666666666666
+     "rankAgreement": 0.6190476190476191
     },
     "climax": {
      "start": 101.25,
@@ -285,17 +285,17 @@
     "switchedActive": 0.688,
     "switchedActiveClimax": 0.815,
     "sectionMass": [
-     0.603,
-     0.435,
+     0.607,
+     0.433,
      0.612,
-     0.584,
-     0.424,
-     0.747,
-     0.593
+     0.583,
+     0.428,
+     0.749,
+     0.581
     ]
    },
    "clips": 998,
-   "genMs": 87,
+   "genMs": 82,
    "issues": 0
   },
   {
@@ -304,18 +304,18 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "sixEight",
    "songName": "Ethiopian-style 6/8 · 150 eighths/min",
-   "score": 65.9,
+   "score": 68.5,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.409,
+    "eventAlignment": 0.582,
     "energyTracking": 0.042,
     "arcFidelity": 0.9,
     "coverage": 0.892,
     "structureConsistency": 0.514,
     "diversity": 0.811,
     "heroDiscipline": 1,
-    "peakUsage": 0.932
+    "peakUsage": 0.934
    },
    "detail": {
     "events": 204,
@@ -374,12 +374,12 @@
     "switchedActive": 0.496,
     "switchedActiveClimax": 0.549,
     "sectionMass": [
-     0.435,
-     0.502,
+     0.442,
+     0.501,
      0.363,
-     0.497,
-     0.569,
-     0.434
+     0.498,
+     0.568,
+     0.425
     ]
    },
    "clips": 1075,
@@ -392,13 +392,13 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "pop",
    "songName": "Pop 4/4 · 120 BPM",
-   "score": 60,
+   "score": 56.9,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.7,
-    "energyTracking": 0.17,
-    "arcFidelity": 0.943,
+    "eventAlignment": 0.494,
+    "energyTracking": 0.158,
+    "arcFidelity": 0.957,
     "coverage": 1,
     "structureConsistency": 0.561,
     "diversity": 0.786,
@@ -415,7 +415,7 @@
      "climaxHighest": true,
      "dipBefore": true,
      "strongEnd": true,
-     "rankAgreement": 0.8095238095238095
+     "rankAgreement": 0.8571428571428571
     },
     "climax": {
      "start": 160,
@@ -485,15 +485,15 @@
     "sectionMass": [
      0.44,
      0.497,
-     0.484,
-     0.503,
-     0.476,
-     0.532,
-     0.484
+     0.485,
+     0.502,
+     0.487,
+     0.529,
+     0.478
     ]
    },
    "clips": 622,
-   "genMs": 100,
+   "genMs": 104,
    "issues": 0
   },
   {
@@ -502,12 +502,12 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "ballad",
    "songName": "Ballad 4/4 · 72 BPM",
-   "score": 58.4,
+   "score": 56.7,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.282,
-    "energyTracking": 0.202,
+    "eventAlignment": 0.199,
+    "energyTracking": 0.172,
     "arcFidelity": 1,
     "coverage": 1,
     "structureConsistency": 0.806,
@@ -593,9 +593,9 @@
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.456,
-     0.474,
-     0.516
+     0.458,
+     0.475,
+     0.511
     ]
    },
    "clips": 282,
@@ -608,12 +608,12 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "edm",
    "songName": "EDM build & drop · 128 BPM",
-   "score": 59,
+   "score": 55.6,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.592,
-    "energyTracking": 0.278,
+    "eventAlignment": 0.386,
+    "energyTracking": 0.252,
     "arcFidelity": 0.914,
     "coverage": 1,
     "structureConsistency": 0.443,
@@ -699,17 +699,17 @@
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.433,
-     0.474,
-     0.517,
+     0.435,
+     0.479,
+     0.512,
+     0.511,
+     0.492,
      0.515,
-     0.48,
-     0.519,
-     0.385
+     0.382
     ]
    },
    "clips": 448,
-   "genMs": 59,
+   "genMs": 58,
    "issues": 0
   },
   {
@@ -718,18 +718,18 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "sixEight",
    "songName": "Ethiopian-style 6/8 · 150 eighths/min",
-   "score": 57.7,
+   "score": 63.2,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.318,
-    "energyTracking": 0.307,
+    "eventAlignment": 0.704,
+    "energyTracking": 0.288,
     "arcFidelity": 0.98,
     "coverage": 1,
     "structureConsistency": 0.648,
     "diversity": 0.786,
     "heroDiscipline": 0.806,
-    "peakUsage": 0.016
+    "peakUsage": 0.018
    },
    "detail": {
     "events": 92,
@@ -809,16 +809,16 @@
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.39,
-     0.465,
-     0.475,
-     0.478,
-     0.532,
-     0.339
+     0.4,
+     0.462,
+     0.474,
+     0.484,
+     0.528,
+     0.334
     ]
    },
    "clips": 456,
-   "genMs": 56,
+   "genMs": 58,
    "issues": 0
   },
   {
@@ -827,18 +827,18 @@
    "siteName": "Plaza · 4 crown rings, one VFD pump each",
    "song": "pop",
    "songName": "Pop 4/4 · 120 BPM",
-   "score": 42.7,
+   "score": 42.8,
    "pass": true,
    "gates": {},
    "metrics": {
     "eventAlignment": 0,
     "energyTracking": 0.333,
-    "arcFidelity": 0.393,
+    "arcFidelity": 0.379,
     "coverage": 1,
     "structureConsistency": 0.389,
     "diversity": 0.261,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.484
+    "peakUsage": 0.506
    },
    "detail": {
     "events": 0,
@@ -850,7 +850,7 @@
      "climaxHighest": false,
      "dipBefore": false,
      "strongEnd": true,
-     "rankAgreement": 0.8095238095238095
+     "rankAgreement": 0.7619047619047619
     },
     "climax": {
      "start": 160,
@@ -918,17 +918,17 @@
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.602,
+     0.603,
      0.677,
-     0.659,
+     0.658,
      0.695,
-     0.645,
-     0.647,
-     0.359
+     0.648,
+     0.646,
+     0.355
     ]
    },
    "clips": 736,
-   "genMs": 208,
+   "genMs": 229,
    "issues": 0
   },
   {
@@ -937,18 +937,18 @@
    "siteName": "Plaza · 4 crown rings, one VFD pump each",
    "song": "ballad",
    "songName": "Ballad 4/4 · 72 BPM",
-   "score": 39.3,
+   "score": 41.8,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.001,
-    "energyTracking": 0.116,
-    "arcFidelity": 0.15,
+    "eventAlignment": 0,
+    "energyTracking": 0.12,
+    "arcFidelity": 0.25,
     "coverage": 1,
     "structureConsistency": 1,
     "diversity": 0.298,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.29
+    "peakUsage": 0.352
    },
    "detail": {
     "events": 4,
@@ -960,7 +960,7 @@
      "climaxHighest": false,
      "dipBefore": false,
      "strongEnd": true,
-     "rankAgreement": 0
+     "rankAgreement": 0.3333333333333333
     },
     "climax": {
      "start": 93.333,
@@ -1029,12 +1029,12 @@
     "switchedActiveClimax": 0,
     "sectionMass": [
      0.612,
-     0.612,
-     0.55
+     0.613,
+     0.548
     ]
    },
    "clips": 340,
-   "genMs": 73,
+   "genMs": 79,
    "issues": 0
   },
   {
@@ -1043,18 +1043,18 @@
    "siteName": "Plaza · 4 crown rings, one VFD pump each",
    "song": "edm",
    "songName": "EDM build & drop · 128 BPM",
-   "score": 44.8,
+   "score": 44.9,
    "pass": true,
    "gates": {},
    "metrics": {
     "eventAlignment": 0,
-    "energyTracking": 0.303,
+    "energyTracking": 0.306,
     "arcFidelity": 0.364,
     "coverage": 1,
     "structureConsistency": 0.544,
     "diversity": 0.285,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.567
+    "peakUsage": 0.57
    },
    "detail": {
     "events": 0,
@@ -1134,17 +1134,17 @@
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.577,
-     0.66,
-     0.678,
+     0.579,
+     0.662,
+     0.676,
+     0.668,
+     0.743,
      0.671,
-     0.74,
-     0.671,
-     0.38
+     0.376
     ]
    },
    "clips": 536,
-   "genMs": 95,
+   "genMs": 100,
    "issues": 0
   },
   {
@@ -1244,16 +1244,16 @@
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.449,
-     0.634,
-     0.674,
-     0.692,
-     0.658,
-     0.336
+     0.451,
+     0.633,
+     0.675,
+     0.694,
+     0.657,
+     0.332
     ]
    },
    "clips": 536,
-   "genMs": 83,
+   "genMs": 97,
    "issues": 0
   },
   {
@@ -1262,21 +1262,23 @@
    "siteName": "Lebu Fountain · DJ Milla Mashup Vol 4 · HIGH jets · smooth",
    "song": "song",
    "songName": "DJ MILLA MASHUP VOL 4 FT ASTER AWEKE X OXLADE X MULUKEN MELLESE.mp3",
-   "score": 49.2,
-   "pass": true,
-   "gates": {},
+   "score": 48,
+   "pass": false,
+   "gates": {
+    "splash": 137
+   },
    "metrics": {
-    "eventAlignment": 0.455,
-    "energyTracking": 0.043,
+    "eventAlignment": 0.377,
+    "energyTracking": 0.042,
     "arcFidelity": 0.31,
-    "coverage": 0.717,
+    "coverage": 0.712,
     "structureConsistency": 0.458,
     "diversity": 0.85,
     "heroDiscipline": 0,
-    "peakUsage": 0.885
+    "peakUsage": 0.888
    },
    "detail": {
-    "events": 59,
+    "events": 65,
     "distinctLooks": 15,
     "looks": 63,
     "heroes": 9,
@@ -1304,44 +1306,44 @@
       "id": "design:perimeter-pipe-array:jet:front",
       "name": "Front · straight jets",
       "control": "switch",
-      "all": 0.442,
+      "all": 0.439,
       "climax": 0.062
      },
      {
       "id": "design:perimeter-pipe-array:jet:back",
       "name": "Back · straight jets",
       "control": "switch",
-      "all": 0.738,
-      "climax": 0.555
+      "all": 0.725,
+      "climax": 0.545
      },
      {
       "id": "design:perimeter-pipe-array:jet:left",
       "name": "Left · straight jets",
       "control": "switch",
-      "all": 0.366,
+      "all": 0.359,
       "climax": 0.106
      },
      {
       "id": "design:perimeter-pipe-array:jet:right",
       "name": "Right · straight jets",
       "control": "switch",
-      "all": 0.391,
+      "all": 0.389,
       "climax": 0.107
      }
     ],
-    "switchedActive": 0.484,
-    "switchedActiveClimax": 0.207,
+    "switchedActive": 0.478,
+    "switchedActiveClimax": 0.205,
     "sectionMass": [
-     0.456,
-     0.482,
-     0.617,
-     0.263,
-     0.434,
-     0.522
+     0.451,
+     0.476,
+     0.601,
+     0.261,
+     0.431,
+     0.514
     ]
    },
-   "clips": 8857,
-   "genMs": 410,
+   "clips": 8826,
+   "genMs": 504,
    "issues": 0
   },
   {
@@ -1350,12 +1352,12 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "pop",
    "songName": "Pop 4/4 · 120 BPM",
-   "score": 80.8,
+   "score": 80.3,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.507,
-    "energyTracking": 0.902,
+    "eventAlignment": 0.48,
+    "energyTracking": 0.901,
     "arcFidelity": 0.971,
     "coverage": 1,
     "structureConsistency": 0.404,
@@ -1364,7 +1366,7 @@
     "peakUsage": 0.867
    },
    "detail": {
-    "events": 68,
+    "events": 69,
     "distinctLooks": 9,
     "looks": 53,
     "heroes": 2,
@@ -1385,52 +1387,52 @@
       "id": "design:centre:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.985,
+      "all": 0.988,
       "climax": 1
      },
      {
       "id": "design:ring:ring:front",
       "name": "Front · rings / flowers",
       "control": "switch",
-      "all": 0.771,
-      "climax": 0.846
+      "all": 0.766,
+      "climax": 0.839
      },
      {
       "id": "design:ring:ring:back",
       "name": "Back · rings / flowers",
       "control": "switch",
-      "all": 0.71,
-      "climax": 0.843
+      "all": 0.703,
+      "climax": 0.837
      },
      {
       "id": "design:ring:ring:left",
       "name": "Left · rings / flowers",
       "control": "switch",
-      "all": 0.529,
-      "climax": 0.964
+      "all": 0.526,
+      "climax": 0.97
      },
      {
       "id": "design:ring:ring:right",
       "name": "Right · rings / flowers",
       "control": "switch",
-      "all": 0.529,
-      "climax": 0.964
+      "all": 0.526,
+      "climax": 0.97
      }
     ],
-    "switchedActive": 0.635,
+    "switchedActive": 0.63,
     "switchedActiveClimax": 0.904,
     "sectionMass": [
      0.282,
-     0.729,
-     0.527,
-     0.752,
-     0.279,
-     0.797,
+     0.728,
+     0.528,
+     0.751,
+     0.276,
+     0.795,
      0.343
     ]
    },
-   "clips": 1118,
-   "genMs": 57,
+   "clips": 1120,
+   "genMs": 50,
    "issues": 0
   },
   {
@@ -1439,21 +1441,21 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "ballad",
    "songName": "Ballad 4/4 · 72 BPM",
-   "score": 68.5,
+   "score": 68.1,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.289,
-    "energyTracking": 0.476,
+    "eventAlignment": 0.271,
+    "energyTracking": 0.474,
     "arcFidelity": 1,
     "coverage": 1,
     "structureConsistency": 0.675,
     "diversity": 0.792,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.623
+    "peakUsage": 0.62
    },
    "detail": {
-    "events": 56,
+    "events": 51,
     "distinctLooks": 5,
     "looks": 19,
     "heroes": 0,
@@ -1474,48 +1476,48 @@
       "id": "design:centre:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.962,
-      "climax": 0.959
+      "all": 0.964,
+      "climax": 0.966
      },
      {
       "id": "design:ring:ring:front",
       "name": "Front · rings / flowers",
       "control": "switch",
-      "all": 0.688,
-      "climax": 0.97
+      "all": 0.689,
+      "climax": 0.975
      },
      {
       "id": "design:ring:ring:back",
       "name": "Back · rings / flowers",
       "control": "switch",
-      "all": 0.738,
-      "climax": 0.97
+      "all": 0.74,
+      "climax": 0.975
      },
      {
       "id": "design:ring:ring:left",
       "name": "Left · rings / flowers",
       "control": "switch",
-      "all": 0.539,
-      "climax": 0.97
+      "all": 0.537,
+      "climax": 0.975
      },
      {
       "id": "design:ring:ring:right",
       "name": "Right · rings / flowers",
       "control": "switch",
-      "all": 0.538,
-      "climax": 0.97
+      "all": 0.537,
+      "climax": 0.975
      }
     ],
-    "switchedActive": 0.626,
-    "switchedActiveClimax": 0.97,
+    "switchedActive": 0.625,
+    "switchedActiveClimax": 0.975,
     "sectionMass": [
-     0.276,
-     0.479,
-     0.722
+     0.277,
+     0.48,
+     0.721
     ]
    },
    "clips": 420,
-   "genMs": 13,
+   "genMs": 14,
    "issues": 0
   },
   {
@@ -1524,21 +1526,21 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "edm",
    "songName": "EDM build & drop · 128 BPM",
-   "score": 81.2,
+   "score": 80.6,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.525,
-    "energyTracking": 0.815,
+    "eventAlignment": 0.461,
+    "energyTracking": 0.813,
     "arcFidelity": 0.971,
     "coverage": 1,
     "structureConsistency": 0.605,
     "diversity": 0.847,
     "heroDiscipline": 1,
-    "peakUsage": 0.804
+    "peakUsage": 0.825
    },
    "detail": {
-    "events": 83,
+    "events": 78,
     "distinctLooks": 9,
     "looks": 51,
     "heroes": 1,
@@ -1559,52 +1561,52 @@
       "id": "design:centre:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.967,
+      "all": 0.971,
       "climax": 1
      },
      {
       "id": "design:ring:ring:front",
       "name": "Front · rings / flowers",
       "control": "switch",
-      "all": 0.743,
-      "climax": 0.822
+      "all": 0.739,
+      "climax": 0.813
      },
      {
       "id": "design:ring:ring:back",
       "name": "Back · rings / flowers",
       "control": "switch",
-      "all": 0.758,
-      "climax": 0.997
+      "all": 0.756,
+      "climax": 0.998
      },
      {
       "id": "design:ring:ring:left",
       "name": "Left · rings / flowers",
       "control": "switch",
       "all": 0.534,
-      "climax": 0.966
+      "climax": 0.972
      },
      {
       "id": "design:ring:ring:right",
       "name": "Right · rings / flowers",
       "control": "switch",
-      "all": 0.535,
-      "climax": 0.966
+      "all": 0.534,
+      "climax": 0.972
      }
     ],
-    "switchedActive": 0.642,
-    "switchedActiveClimax": 0.938,
+    "switchedActive": 0.641,
+    "switchedActiveClimax": 0.939,
     "sectionMass": [
-     0.279,
-     0.618,
-     0.774,
-     0.298,
-     0.382,
-     0.765,
+     0.28,
+     0.62,
+     0.77,
+     0.297,
+     0.383,
+     0.763,
      0.34
     ]
    },
    "clips": 821,
-   "genMs": 32,
+   "genMs": 31,
    "issues": 0
   },
   {
@@ -1613,18 +1615,18 @@
    "siteName": "Ring · 24 solenoid jets + baskets",
    "song": "sixEight",
    "songName": "Ethiopian-style 6/8 · 150 eighths/min",
-   "score": 82.6,
+   "score": 83.8,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.44,
-    "energyTracking": 0.806,
+    "eventAlignment": 0.513,
+    "energyTracking": 0.811,
     "arcFidelity": 1,
     "coverage": 1,
     "structureConsistency": 0.718,
     "diversity": 0.825,
     "heroDiscipline": 1,
-    "peakUsage": 0.901
+    "peakUsage": 0.9
    },
    "detail": {
     "events": 90,
@@ -1648,51 +1650,51 @@
       "id": "design:centre:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.958,
+      "all": 0.959,
       "climax": 1
      },
      {
       "id": "design:ring:ring:front",
       "name": "Front · rings / flowers",
       "control": "switch",
-      "all": 0.811,
-      "climax": 0.836
+      "all": 0.808,
+      "climax": 0.832
      },
      {
       "id": "design:ring:ring:back",
       "name": "Back · rings / flowers",
       "control": "switch",
-      "all": 0.743,
-      "climax": 0.835
+      "all": 0.74,
+      "climax": 0.832
      },
      {
       "id": "design:ring:ring:left",
       "name": "Left · rings / flowers",
       "control": "switch",
-      "all": 0.704,
-      "climax": 0.97
+      "all": 0.692,
+      "climax": 0.975
      },
      {
       "id": "design:ring:ring:right",
       "name": "Right · rings / flowers",
       "control": "switch",
-      "all": 0.704,
-      "climax": 0.97
+      "all": 0.692,
+      "climax": 0.975
      }
     ],
-    "switchedActive": 0.74,
-    "switchedActiveClimax": 0.903,
+    "switchedActive": 0.733,
+    "switchedActiveClimax": 0.904,
     "sectionMass": [
      0.336,
      0.517,
-     0.733,
-     0.568,
-     0.808,
+     0.732,
+     0.56,
+     0.809,
      0.322
     ]
    },
    "clips": 793,
-   "genMs": 26,
+   "genMs": 28,
    "issues": 0
   },
   {
@@ -1701,14 +1703,14 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "pop",
    "songName": "Pop 4/4 · 120 BPM",
-   "score": 74,
+   "score": 72.8,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.796,
-    "energyTracking": 0.716,
+    "eventAlignment": 0.718,
+    "energyTracking": 0.715,
     "arcFidelity": 0.986,
-    "coverage": 0.955,
+    "coverage": 0.957,
     "structureConsistency": 0.851,
     "diversity": 0.868,
     "heroDiscipline": 1,
@@ -1737,14 +1739,14 @@
       "name": "Centre · moving nozzles",
       "control": "height",
       "all": 0.615,
-      "climax": 0.956
+      "climax": 0.964
      },
      {
       "id": "design:front-jumpers:jumping:front",
       "name": "Front · jumping jets",
       "control": "height",
       "all": 0.615,
-      "climax": 0.973
+      "climax": 0.978
      },
      {
       "id": "design:mist:mist:front",
@@ -1758,13 +1760,13 @@
       "name": "Back · shooters",
       "control": "height",
       "all": 0.11,
-      "climax": 0.68
+      "climax": 0.688
      },
      {
       "id": "design:swing-line:swing:left",
       "name": "Left · moving nozzles",
       "control": "height",
-      "all": 0.993,
+      "all": 0.994,
       "climax": 1
      },
      {
@@ -1772,13 +1774,13 @@
       "name": "Left · jumping jets",
       "control": "height",
       "all": 0.461,
-      "climax": 0.973
+      "climax": 0.978
      },
      {
       "id": "design:swing-line:swing:right",
       "name": "Right · moving nozzles",
       "control": "height",
-      "all": 0.993,
+      "all": 0.994,
       "climax": 1
      },
      {
@@ -1786,23 +1788,23 @@
       "name": "Right · jumping jets",
       "control": "height",
       "all": 0.461,
-      "climax": 0.973
+      "climax": 0.978
      }
     ],
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.109,
+     0.11,
      0.221,
-     0.203,
+     0.204,
      0.233,
      0.111,
      0.451,
-     0.094
+     0.095
     ]
    },
    "clips": 422,
-   "genMs": 46,
+   "genMs": 48,
    "issues": 0
   },
   {
@@ -1811,14 +1813,14 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "ballad",
    "songName": "Ballad 4/4 · 72 BPM",
-   "score": 69.3,
+   "score": 69.7,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.922,
+    "eventAlignment": 0.949,
     "energyTracking": 0.253,
     "arcFidelity": 1,
-    "coverage": 0.925,
+    "coverage": 0.927,
     "structureConsistency": 1,
     "diversity": 0.908,
     "heroDiscipline": 0.741,
@@ -1847,14 +1849,14 @@
       "name": "Centre · moving nozzles",
       "control": "height",
       "all": 0.674,
-      "climax": 0.964
+      "climax": 0.969
      },
      {
       "id": "design:front-jumpers:jumping:front",
       "name": "Front · jumping jets",
       "control": "height",
       "all": 0.675,
-      "climax": 0.979
+      "climax": 0.981
      },
      {
       "id": "design:mist:mist:front",
@@ -1868,47 +1870,47 @@
       "name": "Back · shooters",
       "control": "height",
       "all": 0.186,
-      "climax": 0.592
+      "climax": 0.597
      },
      {
       "id": "design:swing-line:swing:left",
       "name": "Left · moving nozzles",
       "control": "height",
-      "all": 0.964,
-      "climax": 0.965
+      "all": 0.966,
+      "climax": 0.97
      },
      {
       "id": "design:front-jumpers:jumping:left",
       "name": "Left · jumping jets",
       "control": "height",
       "all": 0.3,
-      "climax": 0.979
+      "climax": 0.981
      },
      {
       "id": "design:swing-line:swing:right",
       "name": "Right · moving nozzles",
       "control": "height",
-      "all": 0.964,
-      "climax": 0.965
+      "all": 0.966,
+      "climax": 0.97
      },
      {
       "id": "design:front-jumpers:jumping:right",
       "name": "Right · jumping jets",
       "control": "height",
       "all": 0.3,
-      "climax": 0.979
+      "climax": 0.981
      }
     ],
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.108,
-     0.188,
+     0.109,
+     0.189,
      0.423
     ]
    },
    "clips": 166,
-   "genMs": 16,
+   "genMs": 14,
    "issues": 0
   },
   {
@@ -1917,14 +1919,14 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "edm",
    "songName": "EDM build & drop · 128 BPM",
-   "score": 73.5,
+   "score": 73.4,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.874,
-    "energyTracking": 0.713,
+    "eventAlignment": 0.868,
+    "energyTracking": 0.712,
     "arcFidelity": 0.957,
-    "coverage": 0.982,
+    "coverage": 0.984,
     "structureConsistency": 0.774,
     "diversity": 0.873,
     "heroDiscipline": 0.833,
@@ -1953,14 +1955,14 @@
       "name": "Centre · moving nozzles",
       "control": "height",
       "all": 0.624,
-      "climax": 0.958
+      "climax": 0.965
      },
      {
       "id": "design:front-jumpers:jumping:front",
       "name": "Front · jumping jets",
       "control": "height",
       "all": 0.625,
-      "climax": 0.975
+      "climax": 0.979
      },
      {
       "id": "design:mist:mist:front",
@@ -1974,13 +1976,13 @@
       "name": "Back · shooters",
       "control": "height",
       "all": 0.168,
-      "climax": 0.711
+      "climax": 0.718
      },
      {
       "id": "design:swing-line:swing:left",
       "name": "Left · moving nozzles",
       "control": "height",
-      "all": 0.969,
+      "all": 0.971,
       "climax": 1
      },
      {
@@ -1988,13 +1990,13 @@
       "name": "Left · jumping jets",
       "control": "height",
       "all": 0.562,
-      "climax": 0.975
+      "climax": 0.979
      },
      {
       "id": "design:swing-line:swing:right",
       "name": "Right · moving nozzles",
       "control": "height",
-      "all": 0.969,
+      "all": 0.971,
       "climax": 1
      },
      {
@@ -2002,23 +2004,23 @@
       "name": "Right · jumping jets",
       "control": "height",
       "all": 0.562,
-      "climax": 0.975
+      "climax": 0.979
      }
     ],
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.11,
+     0.111,
      0.227,
      0.22,
-     0.101,
+     0.102,
      0.157,
      0.463,
      0.083
     ]
    },
    "clips": 390,
-   "genMs": 33,
+   "genMs": 35,
    "issues": 0
   },
   {
@@ -2027,12 +2029,12 @@
    "siteName": "Lake front · swing, jumping, shooters, mist",
    "song": "sixEight",
    "songName": "Ethiopian-style 6/8 · 150 eighths/min",
-   "score": 73.8,
+   "score": 72.4,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.905,
-    "energyTracking": 0.726,
+    "eventAlignment": 0.81,
+    "energyTracking": 0.725,
     "arcFidelity": 0.98,
     "coverage": 1,
     "structureConsistency": 0.662,
@@ -2063,14 +2065,14 @@
       "name": "Centre · moving nozzles",
       "control": "height",
       "all": 0.843,
-      "climax": 0.963
+      "climax": 0.969
      },
      {
       "id": "design:front-jumpers:jumping:front",
       "name": "Front · jumping jets",
       "control": "height",
       "all": 0.844,
-      "climax": 0.978
+      "climax": 0.982
      },
      {
       "id": "design:mist:mist:front",
@@ -2084,13 +2086,13 @@
       "name": "Back · shooters",
       "control": "height",
       "all": 0.189,
-      "climax": 0.685
+      "climax": 0.692
      },
      {
       "id": "design:swing-line:swing:left",
       "name": "Left · moving nozzles",
       "control": "height",
-      "all": 0.959,
+      "all": 0.96,
       "climax": 1
      },
      {
@@ -2098,13 +2100,13 @@
       "name": "Left · jumping jets",
       "control": "height",
       "all": 0.463,
-      "climax": 0.978
+      "climax": 0.982
      },
      {
       "id": "design:swing-line:swing:right",
       "name": "Right · moving nozzles",
       "control": "height",
-      "all": 0.959,
+      "all": 0.96,
       "climax": 1
      },
      {
@@ -2112,22 +2114,22 @@
       "name": "Right · jumping jets",
       "control": "height",
       "all": 0.463,
-      "climax": 0.978
+      "climax": 0.982
      }
     ],
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.108,
+     0.109,
      0.195,
      0.221,
      0.184,
      0.459,
-     0.074
+     0.075
     ]
    },
    "clips": 320,
-   "genMs": 27,
+   "genMs": 28,
    "issues": 0
   },
   {
@@ -2136,18 +2138,18 @@
    "siteName": "Plaza · 4 crown rings, one VFD pump each",
    "song": "pop",
    "songName": "Pop 4/4 · 120 BPM",
-   "score": 61.3,
+   "score": 61.4,
    "pass": true,
    "gates": {},
    "metrics": {
     "eventAlignment": 0,
-    "energyTracking": 0.684,
+    "energyTracking": 0.682,
     "arcFidelity": 1,
     "coverage": 1,
     "structureConsistency": 0.5,
     "diversity": 0.314,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.663
+    "peakUsage": 0.669
    },
    "detail": {
     "events": 0,
@@ -2171,73 +2173,73 @@
       "id": "design:ring-0:ring:front",
       "name": "Front · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.995,
+      "all": 0.996,
       "climax": 1
      },
      {
       "id": "design:ring-1:ring:front",
       "name": "Front · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.995,
+      "all": 0.996,
       "climax": 1
      },
      {
       "id": "design:ring-2:ring:back",
       "name": "Back · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.995,
+      "all": 0.996,
       "climax": 1
      },
      {
       "id": "design:ring-3:ring:back",
       "name": "Back · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.995,
+      "all": 0.996,
       "climax": 1
      },
      {
       "id": "design:ring-0:ring:left",
       "name": "Left · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.995,
+      "all": 0.996,
       "climax": 1
      },
      {
       "id": "design:ring-2:ring:left",
       "name": "Left · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.989,
+      "all": 0.99,
       "climax": 1
      },
      {
       "id": "design:ring-1:ring:right",
       "name": "Right · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.995,
+      "all": 0.996,
       "climax": 1
      },
      {
       "id": "design:ring-3:ring:right",
       "name": "Right · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.989,
+      "all": 0.99,
       "climax": 1
      }
     ],
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
-     0.454,
+     0.453,
      0.682,
      0.502,
      0.69,
      0.452,
      0.747,
-     0.421
+     0.422
     ]
    },
    "clips": 732,
-   "genMs": 61,
+   "genMs": 65,
    "issues": 0
   },
   {
@@ -2246,21 +2248,21 @@
    "siteName": "Plaza · 4 crown rings, one VFD pump each",
    "song": "ballad",
    "songName": "Ballad 4/4 · 72 BPM",
-   "score": 71.4,
+   "score": 70.4,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.945,
-    "energyTracking": 0.472,
+    "eventAlignment": 0.884,
+    "energyTracking": 0.471,
     "arcFidelity": 1,
     "coverage": 1,
     "structureConsistency": 0.5,
     "diversity": 0.344,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.577
+    "peakUsage": 0.578
    },
    "detail": {
-    "events": 8,
+    "events": 12,
     "distinctLooks": 2,
     "looks": 28,
     "heroes": 0,
@@ -2281,69 +2283,69 @@
       "id": "design:ring-0:ring:front",
       "name": "Front · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.967,
-      "climax": 0.974
+      "all": 0.968,
+      "climax": 0.979
      },
      {
       "id": "design:ring-1:ring:front",
       "name": "Front · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.967,
-      "climax": 0.974
+      "all": 0.968,
+      "climax": 0.979
      },
      {
       "id": "design:ring-2:ring:back",
       "name": "Back · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.675,
-      "climax": 0.974
+      "all": 0.674,
+      "climax": 0.979
      },
      {
       "id": "design:ring-3:ring:back",
       "name": "Back · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.675,
-      "climax": 0.974
+      "all": 0.674,
+      "climax": 0.979
      },
      {
       "id": "design:ring-0:ring:left",
       "name": "Left · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.967,
-      "climax": 0.974
+      "all": 0.968,
+      "climax": 0.979
      },
      {
       "id": "design:ring-2:ring:left",
       "name": "Left · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.675,
-      "climax": 0.974
+      "all": 0.674,
+      "climax": 0.979
      },
      {
       "id": "design:ring-1:ring:right",
       "name": "Right · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.967,
-      "climax": 0.974
+      "all": 0.968,
+      "climax": 0.979
      },
      {
       "id": "design:ring-3:ring:right",
       "name": "Right · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.675,
-      "climax": 0.974
+      "all": 0.674,
+      "climax": 0.979
      }
     ],
     "switchedActive": 0,
     "switchedActiveClimax": 0,
     "sectionMass": [
      0.225,
-     0.507,
-     0.712
+     0.508,
+     0.713
     ]
    },
    "clips": 242,
-   "genMs": 16,
+   "genMs": 19,
    "issues": 0
   },
   {
@@ -2352,18 +2354,18 @@
    "siteName": "Plaza · 4 crown rings, one VFD pump each",
    "song": "edm",
    "songName": "EDM build & drop · 128 BPM",
-   "score": 70.8,
+   "score": 71.8,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.892,
-    "energyTracking": 0.626,
-    "arcFidelity": 0.986,
+    "eventAlignment": 0.941,
+    "energyTracking": 0.623,
+    "arcFidelity": 0.971,
     "coverage": 1,
     "structureConsistency": 0.5,
     "diversity": 0.316,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.474
+    "peakUsage": 0.508
    },
    "detail": {
     "events": 12,
@@ -2375,7 +2377,7 @@
      "climaxHighest": true,
      "dipBefore": true,
      "strongEnd": true,
-     "rankAgreement": 0.9523809523809523
+     "rankAgreement": 0.9047619047619048
     },
     "climax": {
      "start": 101.25,
@@ -2387,56 +2389,56 @@
       "id": "design:ring-0:ring:front",
       "name": "Front · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.98,
+      "all": 0.981,
       "climax": 1
      },
      {
       "id": "design:ring-1:ring:front",
       "name": "Front · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.971,
+      "all": 0.973,
       "climax": 1
      },
      {
       "id": "design:ring-2:ring:back",
       "name": "Back · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.871,
+      "all": 0.873,
       "climax": 1
      },
      {
       "id": "design:ring-3:ring:back",
       "name": "Back · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.871,
+      "all": 0.873,
       "climax": 1
      },
      {
       "id": "design:ring-0:ring:left",
       "name": "Left · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.972,
+      "all": 0.974,
       "climax": 1
      },
      {
       "id": "design:ring-2:ring:left",
       "name": "Left · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.871,
+      "all": 0.873,
       "climax": 1
      },
      {
       "id": "design:ring-1:ring:right",
       "name": "Right · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.971,
+      "all": 0.973,
       "climax": 1
      },
      {
       "id": "design:ring-3:ring:right",
       "name": "Right · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.871,
+      "all": 0.873,
       "climax": 1
      }
     ],
@@ -2444,16 +2446,16 @@
     "switchedActiveClimax": 0,
     "sectionMass": [
      0.463,
-     0.636,
+     0.637,
      0.66,
-     0.222,
-     0.394,
-     0.659,
-     0.357
+     0.223,
+     0.391,
+     0.661,
+     0.36
     ]
    },
    "clips": 635,
-   "genMs": 40,
+   "genMs": 43,
    "issues": 0
   },
   {
@@ -2462,18 +2464,18 @@
    "siteName": "Plaza · 4 crown rings, one VFD pump each",
    "song": "sixEight",
    "songName": "Ethiopian-style 6/8 · 150 eighths/min",
-   "score": 72.5,
+   "score": 73.1,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.893,
-    "energyTracking": 0.581,
+    "eventAlignment": 0.941,
+    "energyTracking": 0.576,
     "arcFidelity": 1,
     "coverage": 1,
     "structureConsistency": 0.5,
     "diversity": 0.319,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.615
+    "peakUsage": 0.613
    },
    "detail": {
     "events": 8,
@@ -2497,56 +2499,56 @@
       "id": "design:ring-0:ring:front",
       "name": "Front · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.976,
+      "all": 0.977,
       "climax": 1
      },
      {
       "id": "design:ring-1:ring:front",
       "name": "Front · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.976,
+      "all": 0.977,
       "climax": 1
      },
      {
       "id": "design:ring-2:ring:back",
       "name": "Back · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.976,
+      "all": 0.977,
       "climax": 1
      },
      {
       "id": "design:ring-3:ring:back",
       "name": "Back · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.976,
+      "all": 0.977,
       "climax": 1
      },
      {
       "id": "design:ring-0:ring:left",
       "name": "Left · rings / flowers (ring 0)",
       "control": "pump",
-      "all": 0.976,
+      "all": 0.977,
       "climax": 1
      },
      {
       "id": "design:ring-2:ring:left",
       "name": "Left · rings / flowers (ring 2)",
       "control": "pump",
-      "all": 0.962,
+      "all": 0.963,
       "climax": 1
      },
      {
       "id": "design:ring-1:ring:right",
       "name": "Right · rings / flowers (ring 1)",
       "control": "pump",
-      "all": 0.976,
+      "all": 0.977,
       "climax": 1
      },
      {
       "id": "design:ring-3:ring:right",
       "name": "Right · rings / flowers (ring 3)",
       "control": "pump",
-      "all": 0.962,
+      "all": 0.963,
       "climax": 1
      }
     ],
@@ -2554,15 +2556,15 @@
     "switchedActiveClimax": 0,
     "sectionMass": [
      0.447,
-     0.502,
-     0.687,
-     0.531,
-     0.721,
-     0.405
+     0.501,
+     0.686,
+     0.533,
+     0.72,
+     0.408
     ]
    },
    "clips": 536,
-   "genMs": 36,
+   "genMs": 38,
    "issues": 0
   },
   {
@@ -2571,30 +2573,30 @@
    "siteName": "Lebu Fountain · DJ Milla Mashup Vol 4 · HIGH jets · smooth",
    "song": "song",
    "songName": "DJ MILLA MASHUP VOL 4 FT ASTER AWEKE X OXLADE X MULUKEN MELLESE.mp3",
-   "score": 67.9,
+   "score": 75.1,
    "pass": true,
    "gates": {},
    "metrics": {
-    "eventAlignment": 0.457,
-    "energyTracking": 0.525,
-    "arcFidelity": 0.5,
+    "eventAlignment": 0.827,
+    "energyTracking": 0.601,
+    "arcFidelity": 0.48,
     "coverage": 1,
     "structureConsistency": 0.537,
-    "diversity": 0.808,
+    "diversity": 0.816,
     "heroDiscipline": 0.6,
-    "peakUsage": 0.947
+    "peakUsage": 0.997
    },
    "detail": {
-    "events": 37,
+    "events": 11,
     "distinctLooks": 9,
     "looks": 40,
     "heroes": 0,
-    "repeatRate": 0.487,
+    "repeatRate": 0.462,
     "arc": {
      "climaxHighest": false,
      "dipBefore": true,
      "strongEnd": false,
-     "rankAgreement": 1
+     "rankAgreement": 0.9333333333333333
     },
     "climax": {
      "start": 117.496,
@@ -2606,51 +2608,51 @@
       "id": "design:center-rotating-baskets:basket:centre",
       "name": "Centre · rotating baskets",
       "control": "pump",
-      "all": 0.985,
+      "all": 0.987,
       "climax": 1
      },
      {
       "id": "design:perimeter-pipe-array:jet:front",
       "name": "Front · straight jets",
       "control": "switch",
-      "all": 0.531,
-      "climax": 0.891
+      "all": 0.52,
+      "climax": 0.883
      },
      {
       "id": "design:perimeter-pipe-array:jet:back",
       "name": "Back · straight jets",
       "control": "switch",
-      "all": 0.615,
-      "climax": 0.765
+      "all": 0.713,
+      "climax": 0.762
      },
      {
       "id": "design:perimeter-pipe-array:jet:left",
       "name": "Left · straight jets",
       "control": "switch",
-      "all": 0.41,
-      "climax": 0.779
+      "all": 0.391,
+      "climax": 0.746
      },
      {
       "id": "design:perimeter-pipe-array:jet:right",
       "name": "Right · straight jets",
       "control": "switch",
-      "all": 0.473,
-      "climax": 0.919
+      "all": 0.466,
+      "climax": 0.912
      }
     ],
-    "switchedActive": 0.507,
-    "switchedActiveClimax": 0.839,
+    "switchedActive": 0.522,
+    "switchedActiveClimax": 0.826,
     "sectionMass": [
-     0.027,
-     0.772,
-     0.723,
-     0.722,
-     0.342,
-     0.241
+     0.013,
+     0.324,
+     0.299,
+     0.31,
+     0.181,
+     0.133
     ]
    },
-   "clips": 5766,
-   "genMs": 57,
+   "clips": 4472,
+   "genMs": 586,
    "issues": 0
   }
  ]

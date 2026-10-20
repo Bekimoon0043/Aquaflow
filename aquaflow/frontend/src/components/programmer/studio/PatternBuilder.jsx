@@ -21,6 +21,7 @@ import { requestDeepAnalysis } from './deepAnalysis';
 import { writeCache } from './musicSync';
 import { DEFAULT_METER, METER_CHOICES, tapTempo } from './musicMeter';
 import { buildSiteModel } from './siteCapability';
+import CalibrationDialog from './CalibrationDialog';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -75,7 +76,10 @@ function download(name, text) {
 export default function PatternBuilder({ studio, items, params = {}, showLength = 30, onChange, onUndo, onClose, onEngineeringPatch, editRecipeId = null }) {
   // The Engineering design: areas (front, back, centre …), what feeds them and how they switch.
   const design = useMemo(() => readFountainDesign(items), [items]);
-  const scm = useMemo(() => buildSiteModel(items, { design, overrides: studio.site || {} }), [items, design, studio.site]);
+  // The basin outline from Engineering keeps every jet's water inside (splash / wind).
+  const basins = useEngineeringStore(s => s.basins);
+  const basin = useMemo(() => { const b = basins?.[0]?.outer; return Array.isArray(b) && b.length >= 3 ? b.map(p => [Number(p.x), Number(p.y)]) : null; }, [basins]);
+  const scm = useMemo(() => buildSiteModel(items, { design, overrides: { ...(studio.site || {}), basin } }), [items, design, studio.site, basin]);
   const groups = useMemo(() => [...designGroups(design), ...builderGroups(studio, items)], [design, studio, items]);
   const byId = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
   const membersOf = g => (g ? resolveMembers(g, items).map(id => byId.get(id)).filter(Boolean) : []);
@@ -115,6 +119,8 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     if (bpm) setMeter({ bpm });
   };
   const site = studio.site || {};
+  const [calibrating, setCalibrating] = useState(false);
+  const nozzleTypes = [...new Map(design.nozzles.map(n => [n.item.type, { id: n.item.type, label: `${n.kindLabel} · ${n.item.type}` }])).values()];
   const setSite = patch => onChange({ ...studio, site: { ...site, ...patch } });
   const [stemRows, setStemRows] = useState(null);   // null = follow the suggestion
 
@@ -207,7 +213,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     try {
       // With a fountain design: the full planner (arc → phrase search → real valves and pumps).
       const result = design.areas.length
-        ? createShow(studio, { analysis: song, stems: stemsApi.stems, items, groups, design })
+        ? createShow(studio, { analysis: song, stems: stemsApi.stems, items, groups, design, site: { ...(studio.site || {}), basin } })
         : patternsFromMusic(studio, { analysis: song, stems: stemsApi.stems, rows: rowsNow, items, groups, design });
       onChange(result.studio);
       setApplied(list => [...list, { fill: true }]);
@@ -289,7 +295,9 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     </optgroup>);
   };
 
-  return <div className="pattern-builder" role="dialog" aria-label="Pattern builder">
+  return <>{calibrating && <CalibrationDialog types={nozzleTypes} calibration={site.calibration || {}} onClose={() => setCalibrating(false)}
+    onSave={(type, cal) => { setSite({ calibration: { ...(site.calibration || {}), [type]: cal } }); setCalibrating(false); setNote(`Calibrated ${type}: delay ${cal.delayS} s, apex ${cal.apexM} m`); }} />}
+  <div className="pattern-builder" role="dialog" aria-label="Pattern builder">
     <div className="pb-head"><strong>Pattern builder</strong>{editing && <span className="pb-tag" title="Update replaces this pattern in place">editing</span>}<span className="sp-grow" />
       <button onClick={onClose} aria-label="Close pattern builder" title="Close">✕</button></div>
 
@@ -441,9 +449,18 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
             </select>
             <span>Wind</span>
             <input aria-label="Wind speed" type="number" min={0} max={30} step={0.5} value={site.windMs ?? 0} onChange={e => setSite({ windMs: Math.max(0, Number(e.target.value) || 0) })} />
-            <small>m/s · height × {scm.heightScale}</small>
+            <small>m/s</small>
+            <span>Splash</span>
+            <input aria-label="Allowed splash" title="Share of each jet's water allowed to land outside the basin" type="number" min={0} max={50} step={1}
+              value={Math.round(100 * (site.splashLimit ?? 0.05))} onChange={e => setSite({ splashLimit: Math.min(0.5, Math.max(0, (Number(e.target.value) || 0) / 100)) })} />
+            <small>%</small>
           </div>
-          {design.tips.map(t => <p key={t} className="pb-design-tip">💡 {t}</p>)}
+          {scm.tips.map(t => <p key={t} className="pb-design-tip">💡 {t}</p>)}
+          <div className="pb-row">
+            <small>{Object.keys(site.calibration || {}).length ? `${Object.keys(site.calibration).length} nozzle type(s) calibrated from video` : 'Timing from physics (not measured yet)'}</small>
+            <span className="sp-grow" />
+            <button onClick={() => setCalibrating(true)} title="Film a jet side-on and mark its tip: AquaFlow measures its delay and rise so the show fires it exactly early enough">Calibrate from video…</button>
+          </div>
         </details>
       )}
       {design.areas.length > 0 && <div className="pb-row">
@@ -521,7 +538,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
       <button className="sp-primary" onClick={apply} disabled={!group || !members.length}>{applied.some(a => !a.fill) || editing ? 'Update' : 'Apply'}</button>
       <button onClick={onClose}>Done</button>
     </div>
-  </div>;
+  </div></>;
 }
 
 /** Small timeline badge: shows when any pattern's jets will be hard to see. */
