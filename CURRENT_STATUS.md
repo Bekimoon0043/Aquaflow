@@ -1,5 +1,18 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-20 (evening): AquaFlow Studio 1.2.56 — world wave library**
+
+- **Research:** `reports/Wave pattern catalogue for fountains.md` (+ notes): 21 mathematical, 16 natural / crowd and console / pixel-engine waves; formulas, tempo rules, music parts, solenoid / VFD limits.
+- **`waveLibrary.js`:** 16 new wave kinds, each a closed form in 0..1, with editor controls:
+  - radial ripple (real distance), spiral arms, moving spot (Lissajous), two-source interference, lake / aurora (flowing noise);
+  - standing wave (mode), ocean sets, sawtooth run, wave packet (beats), bounce, ringdown, surf break, tidal bore, firework burst (peony / willow), flame, heartbeat (lub-dub on alternating jets).
+- **Wave engine:** `memberGeometry` now gives every jet its real plan position (nx, ny), radius, angle and distance from the start jet. New origin: "Centre of the group".
+- **Look library:** 15 new looks tied to bars, with music parts, controls and valve mode.
+- **Heartbeat fix:** lub and dub now play on alternating jets. On solenoids the old version merged into one thump.
+- **The planner** picks the new looks automatically: plan-v1 scores 73.4 (was 72.9), 100 % of cases pass (`eval/waves`).
+- **Lebu 4 groups show:** `Desktop/Lebu_Fountain_4_Groups_Wave_Library.aquapkg`. The groups take turns about every 15 s, each with waves from the new library. Score 60.5 (was 54.3); every hard gate passes. Checked in the installed app (moving spot, spiral arms).
+- **Tests:** studio 24 files / 159 tests pass (one parallel run hit a worker out-of-memory crash and passed on the rerun).
+
 **2026-10-20 (later): AquaFlow Studio 1.2.55 — new showpiece site "AquaFlow Grand Lake" designed and programmed to the DJ Milla mashup**
 
 - **Saved show:** `Desktop/AquaFlow_Grand_Lake_DJ_Milla_Mashup.aquapkg`. Rebuild it with `aquaflow/frontend/scripts/build-grand-lake.mjs`.

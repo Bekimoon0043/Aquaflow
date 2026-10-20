@@ -88,6 +88,11 @@ function FieldInspector({ block, studio, items, onPatch, onPatchLive }) {
     {controls.has('drift') && num('drift', 'Drift (seconds per step, 0 = still)', 0, 60, 0.5, 's')}
     {controls.has('lag') && num('lag', 'Front-to-back delay', 0, 3, 0.05, 's')}
     {controls.has('width') && num('width', 'Crest width', 0.02, 0.4, 0.01)}
+    {controls.has('mode') && num('mode', f.kind === 'spiral' ? 'Arms' : 'Mode (nodes)', 1, 8, 1)}
+    {controls.has('twist') && num('twist', 'Twist', 0, 3, 0.1)}
+    {controls.has('fadeOut') && num('fadeOut', 'Fade with distance', 0, 1, 0.05)}
+    {controls.has('sets') && num('sets', f.kind === 'packet' ? 'Waves per group' : 'Waves per set', 2, 12, 1)}
+    {controls.has('decay') && num('decay', 'Decay', 0.2, 10, 0.1, 's')}
     {controls.has('direction') && <label className="seq-field"><span>Direction</span>
       <select value={f.direction < 0 ? -1 : 1} onChange={e => set('direction')(Number(e.target.value))}>
         <option value={1}>Clockwise</option><option value={-1}>Counter-clockwise</option></select></label>}

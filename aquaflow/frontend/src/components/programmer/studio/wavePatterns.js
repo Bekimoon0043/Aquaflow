@@ -10,6 +10,8 @@
 // ramp from the origin values (low/high) to the far-end values (lowFar/highFar),
 // optionally in `stairs` steps.
 
+import { WAVE_KINDS, libraryWave } from './waveLibrary';
+
 const TAU = Math.PI * 2;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
@@ -35,6 +37,9 @@ export const FIELD_KINDS = [
     defaults: { period: 7.5, width: 0.05, direction: 1, low: 20, high: 82 } },
   { id: 'finale', label: 'Finale build', hint: 'A travelling wave that grows taller and faster, then settles',
     defaults: { period: 5, crests: 3, accel: 0.00375, direction: 1, low: 20, high: 82 } },
+  // The wave library (waveLibrary.js): ripple, spiral, spot, interference, lake, standing,
+  // ocean sets, sawtooth, wave packet, bounce, ringdown, surf, bore, firework, flame, heartbeat.
+  ...WAVE_KINDS.map(({ id, label, hint, defaults }) => ({ id, label, hint, defaults })),
 ];
 export const fieldKind = id => id === 'custom' ? CUSTOM_KIND : FIELD_KINDS.find(k => k.id === id) || FIELD_KINDS[1];
 
@@ -143,8 +148,9 @@ export const FIELD_CONTROLS = {
   crossing: ['period', 'crests', 'width'],
   stadium: ['period', 'width', 'direction'],
   finale: ['period', 'crests', 'direction'],
+  ...Object.fromEntries(WAVE_KINDS.map((k) => [k.id, k.controls])),
 };
-export const ORIGINS = [['tip', 'Tip (farthest point)'], ['top', 'Plan top'], ['bottom', 'Plan bottom'], ['left', 'Plan left'], ['right', 'Plan right'], ['first', 'First jet']];
+export const ORIGINS = [['centre', 'Centre of the group'], ['tip', 'Tip (farthest point)'], ['top', 'Plan top'], ['bottom', 'Plan bottom'], ['left', 'Plan left'], ['right', 'Plan right'], ['first', 'First jet']];
 
 export function defaultField(kind, extra = {}) {
   if (kind === 'custom') return { kind: 'custom', ease: 1, ...CUSTOM_KIND.defaults, ...extra };
@@ -168,16 +174,28 @@ export function memberGeometry(members, { origin = 'tip', ring = true } = {}) {
     a = top[Math.floor(top.length / 2)];
   }
   const half = n / 2;
+  // Real plan geometry for the wave library: position about the group's centre (−1..1), radius,
+  // angle, and the real distance from the start jet (0..1).
+  const xs = members.map(m => num(m.x)), ys = members.map(m => num(m.y));
+  const mx = (Math.min(...xs) + Math.max(...xs)) / 2, my = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const R = Math.max(1e-6, ...members.map(m => Math.hypot(num(m.x) - mx, num(m.y) - my)));
+  const ax = num(members[a].x), ay = num(members[a].y);
+  const RO = Math.max(1e-6, ...members.map(m => Math.hypot(num(m.x) - ax, num(m.y) - ay)));
   return members.map((m, i) => {
     const d = Math.abs(i - a);
     const s = n < 2 ? 0 : ring ? Math.min(d, n - d) / half : d / Math.max(1, n - 1);
-    return { id: m.id, i, n, p: i / n, s: clamp(s, 0, 1), a, ring };
+    const nx = (num(m.x) - mx) / R, ny = (num(m.y) - my) / R;
+    return { id: m.id, i, n, p: i / n, s: clamp(s, 0, 1), a, ring,
+      nx: Math.round(nx * 1e4) / 1e4, ny: Math.round(ny * 1e4) / 1e4, r: Math.round(Math.hypot(nx, ny) * 1e4) / 1e4,
+      th: Math.atan2(ny, nx), ro: Math.round((Math.hypot(num(m.x) - ax, num(m.y) - ay) / RO) * 1e4) / 1e4 };
   });
 }
 
 /** Wave value 0..1 of one member at local time t (seconds from the pattern start). */
 export function fieldWave(field, g, t) {
   const f = field || {};
+  const lib = libraryWave(f, g, t);
+  if (lib !== null) return lib;
   const period = Math.max(0.2, num(f.period, 5));
   const dir = num(f.direction, 1) < 0 ? -1 : 1;
   const width = clamp(num(f.width, 0.1), 0.01, 0.5);
