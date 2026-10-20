@@ -94,3 +94,4 @@
 .pb-design ul { margin:6px 0 2px; padding-left:16px; display:flex; flex-direction:column; gap:3px; }
 .pb-design li small { color:var(--text-muted); }
 .pb-design-tip { margin:4px 0; color:var(--amber, #f5c86b); }
+.pb-group-warn { color:#ffd9a8; border-color:#8a6a3c; }

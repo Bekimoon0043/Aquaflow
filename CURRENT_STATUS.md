@@ -1,5 +1,23 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-20 (late night): AquaFlow Studio 1.2.58 — group check (shared jets and pumps)**
+
+- **`groupAdvisor.js`:** finds pairs of water groups that cannot move on their own:
+  - shared jets (a jet can only do one thing at a time);
+  - shared pumps (jets on one pump rise to the same height).
+  It suggests the fix: separate groups, and one pump with a VFD per group.
+- **Which groups it compares:** only groups that matter — groups linked to music parts, groups with patterns, and the group being made. Groups whose patterns never play at the same time, supersets (All jets ⊇ a side) and folder/child pairs are skipped.
+- **Where it shows:**
+  - a one-line warning when a group is created;
+  - a "Group check" box in the Group tab of Show Studio;
+  - in the Pattern builder, only for stem links made by hand, with a count on "Link parts by hand".
+- **On real shows:**
+  - Lebu 4 stems: 6 pairs, e.g. "Group 2 and Group 4 share 44 jets and 4 pumps".
+  - Original Lebu: 1 pair, the baskets share Pump 4.
+  - Grand Lake: none.
+- **Tests:** `groupAdvisor.test.js` (5); studio 165 tests pass. Checked in the installed app (Group 2 → 3 warnings).
+- **Also:** new song show `Desktop/Lebu_Fountain_4_Stems_Live_Music_New_Song.aquapkg` (6493786.mp3, score 66.3) with its video. Test kit for another PC: `Desktop/AquaFlow_Test_Package` (installer 1.2.57 + shows with songs embedded). The crashes come from Windows having no page file (the commit limit equals the RAM).
+
 **2026-10-20 (night): AquaFlow Studio 1.2.57 — stems drive the waves (music envelope)**
 
 - **`wavePatterns.js`:** a field can carry `music = {rate, values, floor, source}`. `musicGain` scales the wave's level moment by moment by its stem, and the field is sampled at 0.1 s while it is set. Test added (studio 160 tests pass).

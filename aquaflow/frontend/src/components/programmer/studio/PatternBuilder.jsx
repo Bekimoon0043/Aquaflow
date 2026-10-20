@@ -21,6 +21,7 @@ import { requestDeepAnalysis } from './deepAnalysis';
 import { writeCache } from './musicSync';
 import { DEFAULT_METER, METER_CHOICES, tapTempo } from './musicMeter';
 import { buildSiteModel } from './siteCapability';
+import { groupConflicts } from './groupAdvisor';
 import CalibrationDialog from './CalibrationDialog';
 import { apiGet, apiPost } from '../../../utils/apiClient';
 import './patternBuilder.css';
@@ -46,8 +47,8 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '', tip, di
 
 const groupLabel = (g, count) => `${g.name} (${count})`;
 /** With a fountain design the planner casts the parts; hand links stay available, folded away. */
-const Advanced = ({ on, children }) => (on
-  ? <details className="pb-advanced"><summary title="Link each part of the music to a group yourself, or make the jets follow each instrument exactly">Link parts by hand</summary>{children}</details>
+const Advanced = ({ on, note = '', children }) => (on
+  ? <details className="pb-advanced"><summary title="Link each part of the music to a group yourself, or make the jets follow each instrument exactly">Link parts by hand{note && <span className="pb-group-warn"> · ⚠ {note}</span>}</summary>{children}</details>
   : <>{children}</>);
 const withoutSync = ({ sync, ...rest }) => rest; // eslint-disable-line no-unused-vars
 const mmss = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
@@ -207,6 +208,12 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     [stemsApi.stems, groups]); // eslint-disable-line react-hooks/exhaustive-deps
   const rowsNow = (stemRows || suggested).filter(r => stemSources.some(s => s.id === r.sourceId));
   const editRow = (i, patch) => setStemRows(rowsNow.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  // Group check: groups linked by hand that share jets or pumps cannot each follow their own
+  // part. (The suggested links are the design's own areas; the planner already keeps them apart.)
+  const linkedWater = [...new Set(rowsNow.filter(r => r.kind !== 'lights').map(r => r.groupId))];
+  const stemConflicts = stemRows || !design.areas.length
+    ? groupConflicts({ groups: groups.filter(g => linkedWater.includes(g.id)), membersOf: g => resolveMembers(g, items), design, linked: linkedWater })
+    : [];
   const addRow = () => {
     const used = new Set(rowsNow.map(r => r.sourceId));
     const src = stemSources.find(s => !used.has(s.id)) || stemSources[0];
@@ -481,7 +488,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
         <button className="sp-primary" onClick={musicPatterns} disabled={!beats.file}
           title="Plan the whole show from the music and your fountain: an arc (intro → build → climax → ending) from the song's energy, each area cast as an instrument (melody, rhythm, bass, accents), one look per phrase chosen from the library incl. world-famous looks, a colour story, a dip before the climax — then the real valves and pumps follow within their limits. Works with or without stems (stems make it follow each instrument). Replaces earlier music patterns; one Undo removes it. Variants and phrase locks are on the plan strip in the timeline.">♫ Create patterns from the music</button>
       </div>}
-      {stemSources.length > 0 && <Advanced on={design.areas.length > 0}>
+      {stemSources.length > 0 && <Advanced on={design.areas.length > 0} note={stemConflicts.length ? `${stemConflicts.length} pair${stemConflicts.length === 1 ? '' : 's'} of linked groups share jets or pumps` : ''}>
         {rowsNow.map((row, i) => (
           <div className="pb-stem-map" key={i}>
             <div className="pb-row">
@@ -505,6 +512,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
             </div>
           </div>
         ))}
+        {stemConflicts.map(c => <p key={`${c.a}|${c.b}`} className="pb-design-tip pb-group-warn">⚠ {c.text} {c.fix}</p>)}
         <div className="pb-row">
           <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
           {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}

@@ -21,6 +21,8 @@ import SpatialPlan from './SpatialPlan';
 import StudioTimeline from './StudioTimeline';
 import EnvelopeEditor from './EnvelopeEditor';
 import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
+import { readFountainDesign } from './fountainDesign';
+import { conflictSummary, groupConflicts } from './groupAdvisor';
 import './showStudio.css';
 
 const StudioPreview = lazy(() => import('./StudioPreview'));
@@ -39,6 +41,9 @@ export default function ShowStudio() {
   const items = useMemo(() => inventory(fixtures, models, poolCenter(geometry, params, poolType)), [fixtures, models, geometry, params, poolType]);
   const doc = useShowDocument(items);
   const { studio, change, layout, clips, issues, pending } = doc;
+  const design = useMemo(() => readFountainDesign(items), [items]);
+  // Groups that share jets or pumps cannot move on their own (shown when a group is made or edited).
+  const conflictsFor = useCallback((groups, focus = []) => groupConflicts({ groups, membersOf: g => resolveMembers(g, items), design, recipes: studio.recipes, focus }), [items, design, studio.recipes]);
   const [selection, setSelection] = useState([]), [groupId, setGroupId] = useState(null), [selectedId, setFocusedId] = useState(null);
   const [clipIds, setClipIds] = useState([]);
   const clipboard = useRef(null);
@@ -58,6 +63,7 @@ export default function ShowStudio() {
   const groups = useMemo(() => dimension === 'custom' ? studio.groups : autoGroups(items, dimension), [items, dimension, studio.groups]);
   const allGroups = useMemo(() => new Map([...autoGroups(items), ...groups, ...studio.groups].map(g => [g.id, g])), [items, groups, studio.groups]);
   const group = allGroups.get(groupId);
+  const groupCheck = useMemo(() => (group ? conflictsFor(studio.groups.some(g => g.id === group.id) ? studio.groups : [...studio.groups, group], [group.id]) : []), [group, studio.groups, conflictsFor]);
   const recipe = studio.recipes.find(r => r.id === selectedId);
   const legacy = studio.legacyClips.find(c => c.id === selectedId);
   // Live PLC limits: the selected Siemens site's rules applied to every resolved clip.
@@ -153,7 +159,8 @@ export default function ShowStudio() {
     if (!selection.length) { setMessage('Select items in the plan or Explorer first.'); return; }
     const g = { id: uid('group'), name: groupName.trim() || `Selection ${studio.groups.length + 1}`, memberFixtureIds: [...selection], orderMode: 'engineering', color: '#65d9d0' };
     change(s => ({ ...s, groups: [...s.groups, g] })); setGroupId(g.id); setDimension('custom'); setTab('group'); setGroupName('');
-    setMessage(`Group “${g.name}” created with ${g.memberFixtureIds.length} item(s). It now has its own timeline row: click ＋ on that row (or double-click the row) to add a pattern.`);
+    const warn = conflictSummary(conflictsFor([...studio.groups, g], [g.id]), g.id);
+    setMessage(`Group “${g.name}” created with ${g.memberFixtureIds.length} item(s). It now has its own timeline row: click ＋ on that row (or double-click the row) to add a pattern.${warn ? ` ${warn}` : ''}`);
   };
   const addPattern = (id = groupId, start = time) => {
     let g = allGroups.get(id);
@@ -354,6 +361,7 @@ export default function ShowStudio() {
             <label>Parent folder<select value={group.parentId || ''} onChange={e => patchGroup(group.id, { parentId: e.target.value || null })}><option value="">Top level</option>{studio.groups.filter(g => g.id !== group.id && !g.parentId && !studio.groups.some(c => c.parentId === group.id)).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
             <p className="sp-help">{group.linkedQuery ? `Live Engineering selection: ${group.linkedQuery.field}. New matching items join automatically.` : 'Saved selection. Use “Replace members” after choosing another set.'}</p>
             <button onClick={() => patchGroup(group.id, { linkedQuery: null, memberFixtureIds: selection })}>Replace members with selection</button><button onClick={() => addPattern()}>+ Pattern for this group</button>
+            <GroupCheck conflicts={groupCheck} />
             {studio.groups.some(g => g.id === group.id) && <button onClick={() => { change(s => ({ ...s, groups: s.groups.filter(g => g.id !== group.id).map(g => g.parentId === group.id ? { ...g, parentId: null } : g) })); setGroupId(null); setMessage('Group removed. Any patterns using it are flagged for repair; Undo restores the group.'); }}>Delete show group</button>}
           </> : <><p className="sp-help">Select a group to edit its membership, order, and parent folder. Scenery stays visible but has no control channels.</p>
             {!!selection.length && <label>Replace an existing group's members<select value="" onChange={e => { if (!e.target.value) return; patchGroup(e.target.value, { linkedQuery: null, memberFixtureIds: [...selection] }); setGroupId(e.target.value); }}><option value="">Choose group to update…</option>{studio.groups.filter(g => !groupFlag(studio.groups, g.id, 'locked')).map(g => <option value={g.id} key={g.id}>{g.name}</option>)}</select></label>}
@@ -401,6 +409,15 @@ export default function ShowStudio() {
       onChange={next => change(next)} onUndo={doc.undo} onClose={() => setBuilder(false)} />}
     <footer className="sp-footer" role="status"><span>{message || (issues.length ? `${issues.length} programming issue(s) — open Compile to review` : 'Engineering linked · Space play/pause · Ctrl+G group · Ctrl+D duplicate · Ctrl+K commands')}</span>{message && <button onClick={() => setMessage('')}>×</button>}<span className="sp-grow" /><span>{items.filter(i => i.tracks.length).length} programmable · {studio.groups.length} show groups</span></footer>
     {palette && <div className="sp-modal" onClick={() => setPalette(false)}><div role="dialog" aria-label="Show commands" onClick={e => e.stopPropagation()}><div className="sp-strip"><strong>Commands</strong><button onClick={() => setPalette(false)}>Close</button></div><input autoFocus aria-label="Find command" placeholder="Find a command…" value={commandSearch} onChange={e => setCommandSearch(e.target.value)} />{commands.filter(([label]) => label.toLowerCase().includes(commandSearch.toLowerCase())).map(([label, run, key]) => <button key={label} onClick={() => { setPalette(false); run(); }}>{label}<kbd>{key}</kbd></button>)}</div></div>}
+  </div>;
+}
+
+/** Group check: groups that share jets or pumps with this one, and how to fix it. */
+function GroupCheck({ conflicts }) {
+  if (!conflicts.length) return <p className="sp-help sp-group-ok">✓ Group check: this group has its own jets and pumps — it can follow its music on its own.</p>;
+  return <div className="sp-group-check" role="note" aria-label="Group check">
+    <strong>⚠ Group check: this group shares jets or pumps with {conflicts.length} other group{conflicts.length === 1 ? '' : 's'}, so they cannot move fully on their own</strong>
+    {conflicts.map(c => <p key={`${c.a}|${c.b}`}>{c.text} <em>{c.fix}</em></p>)}
   </div>;
 }
 

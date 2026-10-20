@@ -314,3 +314,7 @@
 .plan-tools button { font-size:9.5px; padding:1px 6px; }
 .plan-tools button[aria-pressed="true"] { background:var(--accent, #35d0c0); color:#001; }
 .plan-msg { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted); font-size:9.5px; align-self:center; }
+.sp-group-check { color:#ffd9a8; background:#33281c; padding:10px; border:1px solid #8a6a3c; border-radius:6px; font-size:11px; line-height:1.55; }
+.sp-group-check p { margin:6px 0 0; }
+.sp-group-check em { color:#ffe9c9; font-style:normal; font-weight:600; }
+.sp-group-ok { color:#9fe0b0; }
