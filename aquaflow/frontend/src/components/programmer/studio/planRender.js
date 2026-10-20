@@ -3,7 +3,7 @@
 // water's rise time, eased at its edges, with its lights in the plan's colours and tagged so
 // the constraint compiler drives the real solenoids and pumps. Pure.
 
-import { buildPatternUnit, ensureGroup, pruneBuilderGroups } from './patternPresets';
+import { applyPattern, buildPatternUnit, ensureGroup, pruneBuilderGroups } from './patternPresets';
 import { syncPatternOptions } from './beatSync';
 import { resolveMembers, uid } from './showModel';
 import { famousById } from './famousPatterns';
@@ -82,7 +82,13 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
           crests: 1, smoothness: ['pulse', 'chase', 'sparkle'].includes(pick.preset) ? 'sharp' : 'smooth', color, axis: 'sides', seed: si * 10 + pi + 1,
           ...(s.role === 'outro' && lastPhrase && si === plan.sections.length - 1 ? { fade: 'out' } : {}) };
         const famous = look.famous ? famousById(look.famous) : null;
-        const made = famous ? famous.make({ barSec, beatSec }) : null;
+        let made = famous ? famous.make({ barSec, beatSec }) : null;
+        // Shooters must refill between shots (OASE AirNozzle: ~6 s cycle): hits at least one
+        // cycle apart, as a volley from the centre (salvo) or all together (pulse).
+        if (area.family === 'shooter') {
+          const cycle = Math.max(6, ...members.map((m) => Number(m.engineering?.cycleS) || 0));
+          made = { preset: look.id === 'shooter-salvo' ? 'ripple' : 'pulse', options: { lapSeconds: r3(Math.ceil(cycle / barSec) * barSec), smoothness: 'sharp' }, floor: 0 };
+        }
         const preset = made?.preset || pick.preset;
         const synced = made?.field ? { options: base } : syncPatternOptions(preset, { ...base, ...(made?.options || {}), ...(made?.floor === 0 ? { minLevel: 0 } : {}),
           ...(v.mirrorOf && made?.options?.order ? { order: FLIP[made.options.order] || made.options.order } : {}) }, analysis, { members: members.length });
@@ -121,6 +127,18 @@ export function renderPlan(studio, plan, { analysis, items, groups, design, scm,
           ids = new Set(unit.recipes.map((r) => r.id));
           next = { ...unit.studio, recipes: unit.studio.recipes.map((r) => (!ids.has(r.id) ? r : {
             ...r, ...(r.effect === 'curve' ? { ease } : {}), ...(hardware && r.pattern?.role !== 'lights' ? { hardware, hardwareCap } : {}) })) };
+        }
+        // Swing nozzles also sway: a travelling wave on the pan axis (±27°), slower in calm
+        // sections, mirrored on the right-hand side, part of the same pattern block.
+        const panMembers = members.filter((m) => (m.tracks || []).some((t) => t.type === 'motion_pan'));
+        if (area.family === 'swing' && panMembers.length) {
+          const unitId = next.recipes.find((r) => ids.has(r.id))?.pattern?.id;
+          const sway = applyPattern(next, { preset: 'wave', group, items, name: `${famous?.name || look.name} · sway`, attribute: 'motion_pan',
+            options: { start: opts.start, duration: opts.duration, lapSeconds: r3((['climax', 'high'].includes(s.role) ? 2 : 4) * barSec), minLevel: 20, maxLevel: 80,
+              order: v.mirrorOf ? 'counter-clockwise' : 'clockwise', crests: 1, smoothness: 'smooth', color } });
+          const swayIds = new Set(sway.recipes.map((r) => r.id));
+          next = { ...sway.studio, recipes: sway.studio.recipes.map((r) => (swayIds.has(r.id) ? { ...r, pattern: { ...r.pattern, ...tag, id: unitId, role: 'motion' } } : r)) };
+          for (const id of swayIds) ids.add(id);
         }
         added.push(...next.recipes.filter((r) => ids.has(r.id)));
         v.rendered = true;

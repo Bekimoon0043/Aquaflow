@@ -231,7 +231,7 @@ export function measureShow({ clips, items, analysis: raw, studio = null, design
   const coverage = clamp01(0.5 * mean(areaActive.map((a) => a.all)) / 0.6 + 0.5 * mean(areaActive.map((a) => a.climax)) / 0.8);
 
   // 5–7. Looks from the studio recipes: structure consistency, diversity, hero discipline.
-  const made = (studio?.recipes || []).filter((r) => r.pattern?.role !== 'lights' && !r.muted && (r.pattern?.music || r.pattern?.plan));
+  const made = (studio?.recipes || []).filter((r) => !['lights', 'motion'].includes(r.pattern?.role) && !r.muted && (r.pattern?.music || r.pattern?.plan));
   const looks = made.map((r) => ({ look: lookOf(r), t: r.start, label: r.pattern?.section || '' })).sort((a, b) => a.t - b.t);
   const lookSet = (s) => new Set(looks.filter((l) => l.t >= s.start - 4 && l.t < s.end).map((l) => l.look));
   const jac = (A, B) => { const u = new Set([...A, ...B]); if (!u.size) return 1; let i = 0; for (const x of A) if (B.has(x)) i++; return i / u.size; };

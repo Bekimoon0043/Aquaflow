@@ -139,9 +139,15 @@ export function readFountainDesign(items = []) {
     const sx = list.map((n) => num(n.item.x)), sy = list.map((n) => num(n.item.y));
     const mx = sx.reduce((a, b) => a + b, 0) / list.length, my = sy.reduce((a, b) => a + b, 0) / list.length;
     const extent = Math.max((Math.max(...sx) - Math.min(...sx)) / (2 * hw), (Math.max(...sy) - Math.min(...sy)) / (2 * hh));
-    // A compact set near the middle (a centre piece) stays whole; a ring or line is split by side.
-    const whole = Math.hypot((mx - cx) / hw, (my - cy) / hh) < 0.35 && extent < 0.6;
-    for (const n of list) n.position = whole ? 'centre' : positionOf(num(n.item.x), num(n.item.y));
+    // A straight line or a compact cluster is one instrument and stays whole (placed by its
+    // centre); a large ring or perimeter is split by side. A compact set near the middle is the centre.
+    const spanX = Math.max(...sx) - Math.min(...sx), spanY = Math.max(...sy) - Math.min(...sy);
+    const long = Math.max(spanX, spanY), short = Math.min(spanX, spanY);
+    const linear = list.length >= 3 && long > 4 && short < 0.15 * long;
+    const nearMiddle = Math.hypot((mx - cx) / hw, (my - cy) / hh) < 0.35;
+    const whole = linear || extent < 0.4 || (nearMiddle && extent < 0.6);
+    const setPosition = nearMiddle && !linear ? 'centre' : positionOf(mx, my);
+    for (const n of list) n.position = whole ? setPosition : positionOf(num(n.item.x), num(n.item.y));
   }
 
   const areaMap = new Map();

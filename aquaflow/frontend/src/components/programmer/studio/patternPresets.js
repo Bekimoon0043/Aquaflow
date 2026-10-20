@@ -150,6 +150,8 @@ export function isWaterItem(item) {
   if (!item || item.category === 'scenery' || isLightItem(item)) return false;
   const info = getFixtureInfo(item.type);
   if (['pump', 'solenoid'].includes(info?.category)) return true;
+  // Moving (swing) nozzles spray water too: their level is motion_intensity.
+  if (/^motion_[123]d$/.test(info?.category || '') || (item.tracks || []).some(t => t.type === 'motion_intensity')) return true;
   if (/^nozzle_|jet|pump|geyser|valve/i.test(String(item.type || ''))) return true;
   const track = primaryTrack(item, 'level');
   return !!track && WATER_TRACKS.test(track.type) && !['fire', 'fog', 'laser'].includes(info?.category);

@@ -1,5 +1,23 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-20 (later): AquaFlow Studio 1.2.55 — new showpiece site "AquaFlow Grand Lake" designed and programmed to the DJ Milla mashup**
+
+- **Saved show:** `Desktop/AquaFlow_Grand_Lake_DJ_Milla_Mashup.aquapkg`. Rebuild it with `aquaflow/frontend/scripts/build-grand-lake.mjs`.
+- **The site:** a 72 × 36 m lake with 266 fixtures, read by the planner as 9 areas.
+  - 32 front comet jets (5 m, solenoids, 2 pumps), 16 Huaxin 2D swing nozzles (9 m, sway), a 14 m grand geyser and two 10 m geysers (own VFDs).
+  - 2 peacock crowns of 8 (7 m, one pump each), 24 back comet jets (9 m, solenoids, 2 pumps), 5 OASE air shooters (30 m), 105 RGB/RGBW lights.
+  - Promenade, seating steps, lawn and planting beds around the lake.
+- **The show:**
+  - Score 76.7 (best of 6); every hard gate passes.
+  - Arc: intro → drops at 0:34 / 2:07 with shooters → build at 1:41 → climax at 3:17 with a shooter salvo.
+  - Checked in the installed app at 0:44, 2:02 and 3:23.
+- **Fixes this uncovered:**
+  - The planner added a mirror partner twice, so coverage looked met early and the last areas (heroes) never played. Hero areas now always join the climax and drop sections.
+  - Straight lines and compact clusters stay one area; only big rings and perimeters split by side (Lebu unchanged).
+  - Swing nozzles count as water and sway on the pan axis. Keyed motion curves animate in the JS and Python frame evaluators.
+  - Air shooters fire at least one refill cycle apart (≥ 6 s).
+- **Tests:** 629 studio, preview and show-frame tests and the backend frame tests pass.
+
 **2026-10-20: Automatic show plan built (Phases 0–5 of reports/Automatic fountain shows for any site.md) — AquaFlow Studio 1.2.54**
 
 - **Research:** `reports/Automatic fountain shows for any site.md` (+ notes). Conclusion: plan the arc, search the phrases, compile the physics; no training data needed; avoid NC-licensed models.

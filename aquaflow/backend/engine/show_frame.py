@@ -463,7 +463,9 @@ def evaluate_show_frame_at(project, seconds, opts=None, prepared=None):
                     pose["tilt"] = _clamp(clip["tilt"], -lim["tilt"], lim["tilt"])
                 elif clip["type"] in _MOTION_POSITION:
                     axis = "tilt" if clip["type"] == "motion_tilt" else "pan"
-                    pose[axis] = _clamp(clip["value"], -lim[axis], lim[axis])
+                    # A keyed motion curve carries levels 0..100 like every keyed clip: 0 = -45 deg, 100 = +45 deg.
+                    deg = -45 + 0.9 * key_value(clip["keys"], t - clip["start"]) if clip.get("keys") else clip["value"]
+                    pose[axis] = _clamp(deg, -lim[axis], lim[axis])
         diagnostics.extend(dict(o) for o in prepared["overlaps"] if o["start"] <= t < o["end"])
     else:
         diagnostics.append({"code": state, "severity": "info", "message": f"{state}: every output is off."})

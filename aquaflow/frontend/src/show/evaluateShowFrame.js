@@ -496,7 +496,9 @@ export function evaluateShowFrameAt(project, seconds, opts = {}) {
         if (WATER_MOTION_SOURCES.has(clip.type)) { pose.pan = clamp(clip.pan, -lim.pan, lim.pan); pose.tilt = clamp(clip.tilt, -lim.tilt, lim.tilt); }
         else if (MOTION_POSITION.has(clip.type)) {
           const axis = clip.type === "motion_tilt" ? "tilt" : "pan";
-          pose[axis] = clamp(clip.value, -lim[axis], lim[axis]);
+          // A keyed motion curve carries levels 0..100 like every keyed clip: 0 = −45°, 100 = +45°.
+          const deg = clip.keys ? -45 + 0.9 * keyedValue(clip.keys, t - clip.start) : clip.value;
+          pose[axis] = clamp(deg, -lim[axis], lim[axis]);
         }
         motion.set(clip.fixtureId, pose);
       }

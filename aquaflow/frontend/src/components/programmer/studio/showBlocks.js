@@ -24,12 +24,12 @@ export function showBlocks(studio, definitions = []) {
     units.get(key).recipes.push(recipe);
   }
   for (const { key, recipes } of units.values()) {
-    const water = recipes.find(r => !['lights', 'accent'].includes(r.pattern?.role)) || recipes[0];
+    const water = recipes.find(r => !['lights', 'accent', 'motion'].includes(r.pattern?.role)) || recipes[0];
     const lights = recipes.find(r => r.pattern?.role === 'lights' && r !== water) || null;
     const start = Math.min(...recipes.map(r => r.start)), end = Math.max(...recipes.map(r => r.start + r.duration));
     const type = water.effect === 'field' ? 'field' : water.pattern ? 'builder' : 'recipe';
     // A mirror unit is two half-recipes: show it as one pattern.
-    const name = recipes.filter(r => !['lights', 'accent'].includes(r.pattern?.role)).length > 1 ? water.name.replace(/ · (left|right|front|back)$/, '') : water.name;
+    const name = recipes.filter(r => !['lights', 'accent', 'motion'].includes(r.pattern?.role)).length > 1 ? water.name.replace(/ · (left|right|front|back)$/, '') : water.name;
     blocks.push({ id: key, type, name, start, duration: r3(end - start),
       color: (lights || water).color || '#65d9d0', muted: recipes.every(r => r.muted),
       kindLabel: type === 'field' ? fieldKind(water.field?.kind).label : type === 'builder' ? 'Pattern builder' : water.effect,

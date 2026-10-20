@@ -159,11 +159,15 @@ export function planShow({ analysis, stems = [], scm, seed = 0 }) {
     const active = [];
     let jets = 0;
     for (const a of order) {
-      if (a.hero && role !== 'climax' && role !== 'high') continue;
+      if (a.hero || active.includes(a.id)) continue;               // heroes are decided below; partners are already in
       if (jets / total >= targets.coverage && active.length) break;
       active.push(a.id); jets += a.size;
       if (a.mirrorArea && !active.includes(a.mirrorArea)) { active.push(a.mirrorArea); jets += scm.areas.find((x) => x.id === a.mirrorArea)?.size || 0; }
     }
+    // Hero areas (shooters) join the climax and a high section that lands a drop; the hero
+    // budget then decides how often they actually fire.
+    const dropHere = (analysis.drops || []).some((d) => Math.abs(d.time - s.start) <= barSec);
+    if (role === 'climax' || (role === 'high' && dropHere)) for (const a of scm.areas) if (a.hero && !active.includes(a.id)) active.push(a.id);
     // Areas without valves on a pump that also feeds playing areas ride along with that pump.
     for (const a of scm.areas) if (a.coupled && !active.includes(a.id) && a.sources.some((p) => active.some((id) => scm.areas.find((x) => x.id === id)?.sources.includes(p)))) active.push(a.id);
     const key = `${s.label}:${s.part ?? 0}`;
