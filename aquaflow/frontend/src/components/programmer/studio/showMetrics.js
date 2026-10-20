@@ -13,6 +13,7 @@ import { clipLevel } from './hardwareFollow';
 import { readFountainDesign } from './fountainDesign';
 import { waterLead } from './musicPatterns';
 import { MIN_OFF_S, MIN_ON_S } from './patternPresets';
+import { arcSections, climaxIndex } from './arcPlanner';
 
 export const METRICS_VERSION = 1;
 export const DT = 0.05;
@@ -108,13 +109,15 @@ export function flowBudget(levels, design) {
     const jets = pump.nozzleIds.filter((id) => levels.has(id));
     if (!jets.length) continue;
     const N = levels.get(jets[0]).length;
-    let worst = 0, at = 0;
-    for (let i = 0; i < N; i += 4) {
+    // An overload counts when it lasts ≥ 1 s (a valve hand-over is not one).
+    let worst = 0, at = 0, run = 0;
+    for (let i = 0; i < N; i += 2) {
       let q = 0;
       for (const id of jets) if (levels.get(id)[i] > 5) q += Number(design.nozzleById.get(id).item.engineering?.flowLpm) || 0;
-      if (q > worst) { worst = q; at = i * DT; }
+      run = q > qMax * 1.05 ? run + 2 * DT : 0;
+      if (run >= 1 && q > worst) { worst = q; at = i * DT; }
     }
-    if (worst > qMax * 1.05) over.push({ gate: 'flow-budget', id: pid, t: r3(at), text: `${pump.name}: ${Math.round(worst)} of ${Math.round(qMax)} L/min` });
+    if (worst > 0) over.push({ gate: 'flow-budget', id: pid, t: r3(at), text: `${pump.name}: ${Math.round(worst)} of ${Math.round(qMax)} L/min` });
   }
   return over;
 }
@@ -154,9 +157,13 @@ export function measureShow({ clips, items, analysis, studio = null, design = re
     const lag = waterLead(a.heightM);
     const series = new Float32Array(N);
     for (const id of a.nozzleIds) { const g = levels.get(id); for (let i = 0; i < N; i++) series[i] += g[i] / a.nozzleIds.length; }
-    for (let i = 2; i < N - 2; i++) {
-      // A visible change: a local peak that rose ≥ 15 points over the last half second.
-      if (series[i] >= series[i - 1] && series[i] > series[i + 1] && series[i] - Math.min(...series.slice(Math.max(0, i - 10), i)) >= 15) events.push(i * DT + lag);
+    // A visible event: the area's water starts a rise of ≥ 15 points within 0.3 s (a jet
+    // shooting up, a wave front). The audience sees its top one rise time later.
+    let armed = true;
+    for (let i = 1; i < N - 6; i++) {
+      const rise = series[i + 6] - series[i - 1];
+      if (armed && rise >= 15 && series[i] > series[i - 1]) { events.push(i * DT + lag); armed = false; }
+      else if (!armed && series[i] <= series[i - 1]) armed = true;
     }
   }
   const sigma = 0.08;
@@ -175,9 +182,10 @@ export function measureShow({ clips, items, analysis, studio = null, design = re
   const energyTracking = clamp01(pearson(loud, water));
 
   // Sections with their loudness rank.
-  const sections = (analysis?.sections || [{ start: 0, end: T, label: 'verse', energy: 0.5 }]).filter((s) => s.end > s.start);
-  const secE = sections.map((s) => s.energy ?? 0.5);
-  const climaxI = secE.indexOf(Math.max(...secE));
+  // The same sections the planner uses (long ones split; energy from the loudness curve).
+  const sections = analysis?.energy?.values?.length ? arcSections(analysis) : [{ start: 0, end: T, label: 'verse', energy: 0.5 }];
+  const secE = sections.map((s) => s.energy);
+  const climaxI = climaxIndex(secE);
   const secMass = sections.map((s) => massBetween(s.start, s.end));
 
   // 3. Arc fidelity: climax has the most water; a dip before it; the ending ≥ 80 % of it (or a fade-out).

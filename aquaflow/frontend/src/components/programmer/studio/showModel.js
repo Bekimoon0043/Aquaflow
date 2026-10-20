@@ -117,7 +117,9 @@ export function readStudio(draft) {
   return { version: 1, groups: studio.groups || [], recipes: studio.recipes || [], presets: studio.presets || [], tempo: studio.tempo || [{ time: 0, bpm: 120 }],
     legacyClips: studio.legacyClips || (draft?.timelineClips || []).filter(c => !c.studioRecipeId),
     markers: studio.markers || (draft?.cues || []).map(c => ({ ...c, time: c.time ?? c.startTime ?? 0 })),
-    layout: { preset: 'Compose', left: 250, right: 292, timeline: 310, view: 'plan', ...(studio.layout || {}) } };
+    layout: { preset: 'Compose', left: 250, right: 292, timeline: 310, view: 'plan', ...(studio.layout || {}) },
+    // Automatic show: the Show Plan, the song's meter settings and the site settings (front, wind).
+    ...(studio.plan ? { plan: studio.plan } : {}), ...(studio.meter ? { meter: studio.meter } : {}), ...(studio.site ? { site: studio.site } : {}) };
 }
 
 export function primaryTrack(item, attribute = 'level') {

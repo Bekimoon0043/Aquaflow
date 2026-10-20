@@ -18,6 +18,7 @@ import { MIN_OFF_S, MIN_ON_S } from './patternPresets';
 export const DT = 0.1;
 export const PUMP_UP = 40;      // % per second (0 → 100 % in 2.5 s)
 export const PUMP_DOWN = 30;    // % per second
+export const PRUNE_WINDOW_S = 6; // jets left out by the flow budget sit out a whole window
 const PUMP_CLIP_S = 30;
 const WATER = /^(pump_speed|pump_pressure|device_intensity|motion_intensity)$/;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -130,6 +131,42 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
     want.set(id, { open, height });
   }
 
+  // 1b. Flow budget: a pump cannot feed more than its rated flow. When too many of its jets
+  //     would be open, some sit out a whole 6 s window (long enough to survive the valve
+  //     minimum on / off), in an order that rotates each window so no jet is always the one
+  //     left out. Valve-less outlets on the pump are fed first.
+  let pruned = 0;
+  for (const pump of design.pumps.values()) {
+    const qMax = Number(pump.item.engineering?.flowLpm) || 0;
+    const mine = pump.nozzleIds.filter((id) => want.has(id));
+    const valved = mine.filter((id) => design.nozzleById.get(id).valveId);
+    if (!(qMax > 0) || !valved.length) continue;
+    const flow = (id) => Number(design.nozzleById.get(id).item.engineering?.flowLpm) || 0;
+    const free = mine.filter((id) => !design.nozzleById.get(id).valveId);
+    const W = Math.round(PRUNE_WINDOW_S / DT);
+    for (let w0 = 0; w0 < N; w0 += W) {
+      const w1 = Math.min(N, w0 + W);
+      // The window's worst moment decides how many jets sit out.
+      let worst = 0, worstOpen = [];
+      for (let i = w0; i < w1; i++) {
+        let total = 0;
+        for (const id of free) if (want.get(id).open[i] || want.get(id).height[i] > 0) total += flow(id);
+        const open = valved.filter((id) => want.get(id).open[i]);
+        for (const id of open) total += flow(id);
+        if (total > worst) { worst = total; worstOpen = open; }
+      }
+      if (worst <= qMax) continue;
+      const rot = Math.floor(w0 / W) * 7;
+      const order = [...worstOpen].sort((a, b) => ((valved.indexOf(a) + rot) % valved.length) - ((valved.indexOf(b) + rot) % valved.length));
+      let total = worst;
+      while (total > qMax && order.length) {
+        const id = order.pop();
+        want.get(id).open.fill(0, w0, w1);
+        total -= flow(id); pruned++;
+      }
+    }
+  }
+
   // 2. Valves with minimum on / off times; the effective open grid follows the spans.
   const out = [], seenValves = new Set();
   const isOpen = new Map();
@@ -170,9 +207,15 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
         if (o[i] || !valved) target[i] = Math.max(target[i], h[i]);
       }
     }
-    // A valve-less jet (a basket on a shared pump) is an outlet that is always open: the pump
-    // can always run, so it ramps down gently instead of stopping.
-    if (mine.some((id) => !design.nozzleById.get(id).valveId)) running.fill(1);
+    // A valve-less jet (a basket on a shared pump) is an outlet that is open while it has a
+    // clip (on a Siemens site it opens an implied valve): the pump may run then and ramps down
+    // gently instead of stopping.
+    for (const id of mine.filter((x) => !design.nozzleById.get(x).valveId)) {
+      for (const c of routed.get(id)) {
+        const i0 = Math.max(0, Math.floor(c.startTime / DT)), i1 = Math.min(N - 1, Math.floor((c.startTime + c.duration) / DT) - 1);
+        for (let i = i0; i <= i1; i++) running[i] = 1;
+      }
+    }
     const speed = pumpCurve(target, running);
     pumpLevel.set(pumpId, speed);
     const track = pump.item.tracks?.find((t) => t.type === 'pump_speed');
@@ -204,5 +247,5 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
     }
   }
   const merged = clips.map((c) => rewritten.get(c.id) || c);
-  return { clips: [...merged, ...out], valves: seenValves.size, pumps: pumpLevel.size };
+  return { clips: [...merged, ...out], valves: seenValves.size, pumps: pumpLevel.size, pruned };
 }

@@ -5,6 +5,8 @@ import { FIELD_CONTROLS, FIELD_KINDS, ORIGINS, fieldKind } from './wavePatterns'
 import { builderGroups } from './patternPresets';
 import PatternCreator from './PatternCreator';
 import MusicLanes, { MUSIC_LANE_H, useMusicLanes } from './MusicLanes';
+import PlanStrip, { PLAN_STRIP_H } from './PlanStrip';
+import { applyMeter } from './musicMeter';
 import { useStems } from './stemSync';
 import { useProgrammerSong } from './musicSync';
 import { grid as beatGrid } from './beatSync';
@@ -122,7 +124,8 @@ export default function PreviewSequence({ studio, items, definitions, time, play
   const song = useProgrammerSong();
   const [showMusic, setShowMusic] = useState(true);
   const [scrollLeft, setScrollLeft] = useState(0);
-  const musicH = showMusic ? music.lanes.length * MUSIC_LANE_H : 0;
+  const musicH = (showMusic ? music.lanes.length * MUSIC_LANE_H : 0) + (studio.plan?.sections?.length ? PLAN_STRIP_H : 0);
+  const songGrid = useMemo(() => applyMeter(music.analysis, studio.meter), [music.analysis, studio.meter]);
   const importRef = useRef(null);
   // Menus close on any click outside them, or on Escape.
   useEffect(() => {
@@ -268,7 +271,8 @@ export default function PreviewSequence({ studio, items, definitions, time, play
             {ticks.map(t => <span key={t} style={{ left: 12 + t * pps }}>{fmt(t)}</span>)}
             {(studio.markers || []).map(m => <i key={m.id} className="seq-marker" style={{ left: 12 + m.time * pps }} title={m.name} />)}
           </div>
-          {showMusic && <MusicLanes lanes={music.lanes} analysis={music.analysis} pps={pps} scrollLeft={scrollLeft} viewWidth={width} onSeek={seekAt} />}
+          <PlanStrip studio={studio} items={items} analysis={music.analysis} pps={pps} onChange={onChange} />
+          {showMusic && <MusicLanes lanes={music.lanes} analysis={songGrid} pps={pps} scrollLeft={scrollLeft} viewWidth={width} onSeek={seekAt} />}
           <div className="seq-lanes" onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); seekAt(e); } }}>
             {blocks.map(raw => { const b = dragged(raw); return <div key={b.id}
               className={`seq-block ${b.type}${b.id === selectedId ? ' selected' : ''}${b.background ? ' background' : ''}${b.muted ? ' muted' : ''}`}

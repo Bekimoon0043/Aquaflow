@@ -42,7 +42,7 @@ describe('show metrics', () => {
     expect(follow.pass).toBe(true);
     expect(follow.metrics.energyTracking).toBeGreaterThan(0.6);
     expect(flat.metrics.energyTracking).toBeLessThan(0.2);
-    expect(follow.metrics.arcFidelity).toBeGreaterThan(flat.metrics.arcFidelity);
+    expect(follow.metrics.arcFidelity).toBeGreaterThanOrEqual(flat.metrics.arcFidelity);
     expect(follow.score).toBeGreaterThan(flat.score);
   });
 

@@ -6,6 +6,7 @@ import { builderGroups } from './patternPresets';
 import { designGroups, readFountainDesign } from './fountainDesign';
 import { designRows, patternsFromMusic } from './musicPatterns';
 import { measureShow } from './showMetrics';
+import { createShow } from './autoShow';
 
 /** Everything a generator needs about one site. */
 export function siteContext(fixtures, studio = readStudio({})) {
@@ -19,6 +20,11 @@ export const GENERATORS = {
   /** 1.2.52: design rows + rule table + famous looks every other phrase. */
   'rules-1.2.52': ({ site, song }) => patternsFromMusic(site.studio, {
     analysis: song.analysis, stems: song.stems, rows: designRows(site.design, song.stems), items: site.items, groups: site.groups, design: site.design,
+  }).studio,
+  /** Phases 1–2: site model → show-arc plan → phrase search → render. */
+  'plan-v1': ({ site, song, seed = 0, variant = 0 }) => createShow(site.studio, {
+    analysis: song.analysis, stems: song.stems, items: site.items, groups: site.groups, design: site.design, seed, variant,
+    meter: song.meter === 6 ? { beatsPerBar: 6, pulse: 'dotted' } : undefined,
   }).studio,
 };
 

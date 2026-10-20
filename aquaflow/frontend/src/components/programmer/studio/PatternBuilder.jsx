@@ -16,6 +16,9 @@ import { STEM_ROLES } from './stemAnalysis';
 import { availableSources, programFromStems, sourceById, suggestRows } from './stemProgram';
 import { designRows, patternsFromMusic } from './musicPatterns';
 import { designGroups, readFountainDesign } from './fountainDesign';
+import { createShow } from './autoShow';
+import { DEFAULT_METER, METER_CHOICES, tapTempo } from './musicMeter';
+import { buildSiteModel } from './siteCapability';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -38,6 +41,10 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '', tip, di
 }
 
 const groupLabel = (g, count) => `${g.name} (${count})`;
+/** With a fountain design the planner casts the parts; hand links stay available, folded away. */
+const Advanced = ({ on, children }) => (on
+  ? <details className="pb-advanced"><summary title="Link each part of the music to a group yourself, or make the jets follow each instrument exactly">Link parts by hand</summary>{children}</details>
+  : <>{children}</>);
 const withoutSync = ({ sync, ...rest }) => rest; // eslint-disable-line no-unused-vars
 const mmss = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
 const SECTION_COLORS = { intro: '#2f6bff', verse: '#35d0c0', chorus: '#ffb347', bridge: '#9b6bff', outro: '#2f6bff' };
@@ -66,6 +73,7 @@ function download(name, text) {
 export default function PatternBuilder({ studio, items, params = {}, showLength = 30, onChange, onUndo, onClose, onEngineeringPatch, editRecipeId = null }) {
   // The Engineering design: areas (front, back, centre …), what feeds them and how they switch.
   const design = useMemo(() => readFountainDesign(items), [items]);
+  const scm = useMemo(() => buildSiteModel(items, { design, overrides: studio.site || {} }), [items, design, studio.site]);
   const groups = useMemo(() => [...designGroups(design), ...builderGroups(studio, items)], [design, studio, items]);
   const byId = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
   const membersOf = g => (g ? resolveMembers(g, items).map(id => byId.get(id)).filter(Boolean) : []);
@@ -94,6 +102,18 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
   const beats = useSongBeats();
   const analysis = beats.analysis;
   const stemsApi = useStems();
+  // Meter (the user's beat-grid correction) and site settings live on the studio.
+  const meter = { ...DEFAULT_METER, ...(studio.meter || {}) };
+  const setMeter = patch => onChange({ ...studio, meter: { ...meter, ...patch } });
+  const taps = useRef([]);
+  const tap = () => {
+    const now = performance.now() / 1000;
+    taps.current = [...taps.current.filter(t => now - t < 4), now];
+    const bpm = tapTempo(taps.current);
+    if (bpm) setMeter({ bpm });
+  };
+  const site = studio.site || {};
+  const setSite = patch => onChange({ ...studio, site: { ...site, ...patch } });
   const [stemRows, setStemRows] = useState(null);   // null = follow the suggestion
 
   const group = groups.find(g => g.id === groupId);
@@ -167,11 +187,15 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     const song = await findBeats();
     if (!song) { setNote('Load the song and find its beats first'); return; }
     try {
-      const result = patternsFromMusic(studio, { analysis: song, stems: stemsApi.stems, rows: rowsNow, items, groups, design });
+      // With a fountain design: the full planner (arc → phrase search → real valves and pumps).
+      const result = design.areas.length
+        ? createShow(studio, { analysis: song, stems: stemsApi.stems, items, groups, design })
+        : patternsFromMusic(studio, { analysis: song, stems: stemsApi.stems, rows: rowsNow, items, groups, design });
       onChange(result.studio);
       setApplied(list => [...list, { fill: true }]);
       const parts = Object.entries(result.counts).map(([k, n]) => `${k} ${n}`).join(' · ');
-      setNote(result.warning || `Patterns from the music · ${result.recipes.filter(r => r.pattern?.role !== 'lights').length} patterns · ${parts}`
+      const climax = result.plan?.sections.find(x => x.role === 'climax');
+      setNote(result.warning || `${result.plan ? `Show planned · ${result.plan.sections.length} sections${climax ? ` · climax at ${mmss(climax.start)}` : ''} · ` : 'Patterns from the music · '}${result.recipes.filter(r => r.pattern?.role !== 'lights').length} patterns · ${parts}`
         + (result.muted ? ` · ${result.muted} fixed pump / valve pattern${result.muted === 1 ? '' : 's'} muted (the music drives them now)` : '')
         + (result.skipped?.length ? ` · skipped: ${result.skipped.join('; ')}` : ''));
     } catch (error) { setNote(error.message); }
@@ -335,6 +359,17 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           <input type="file" accept="audio/*" hidden aria-label="Load song" onChange={e => { loadSong(e.target.files?.[0]); e.target.value = ''; }} /></label>
       </div>
       {beats.error && <small className="pb-error" role="alert">{beats.error}</small>}
+      {analysis && <div className="pb-row pb-meter" aria-label="Meter" title="Correct the beat grid when the detector is unsure — e.g. 6/8 songs felt in two">
+        <span>Meter</span>
+        <select aria-label="Beats per bar" value={String(meter.beatsPerBar)} onChange={e => setMeter({ beatsPerBar: e.target.value === 'auto' ? 'auto' : Number(e.target.value), pulse: [6, 12].includes(Number(e.target.value)) ? 'dotted' : 'beat' })}>
+          {METER_CHOICES.map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}</select>
+        <select aria-label="Accent" value={meter.accent} onChange={e => setMeter({ accent: e.target.value })} title="Rise: the water jumps up on the beat. Bend: it dips on the beat and rises between (like bending the knee).">
+          <option value="rise">Rise on the beat</option><option value="bend">Bend on the beat</option></select>
+        <button onClick={() => setMeter({ downbeat: (meter.downbeat || 0) + 1 })} title="Move the bar start one beat later">Bar +1</button>
+        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) - 0.02) * 1000) / 1000 })} title="Beats 20 ms earlier">◀</button>
+        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) + 0.02) * 1000) / 1000 })} title="Beats 20 ms later">▶</button>
+        <button onClick={tap} title="Tap along with the beat (4+ taps) to set the tempo">Tap{meter.bpm ? ` · ${Math.round(meter.bpm)}` : ''}</button>
+      </div>}
       {analysis?.sections?.length > 0 && <div className="pb-sections" aria-label="Song sections">
         {analysis.sections.map((s, i) => <span key={i} style={{ flexGrow: Math.max(.1, s.end - s.start), background: SECTION_COLORS[s.label] || '#35d0c0', opacity: .35 + .65 * (s.energy || 0) }}
           title={`${s.label} · ${mmss(s.start)}–${mmss(s.end)}`} />)}
@@ -375,10 +410,27 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           <summary title="What AquaFlow read from the Engineering design: each area, its nozzles, how they switch and which pump feeds them. Patterns from the music use this.">
             Your fountain · {design.summary}</summary>
           <ul>{design.areas.map(a => <li key={a.id}><strong>{a.name}</strong> <small>{a.summary}</small></li>)}</ul>
+          <div className="pb-row" title="Which way the audience looks at the fountain: front rows get the low, close effects, the back gets the tall ones">
+            <span>Audience</span>
+            <select aria-label="Audience side" value={site.front?.vector ? site.front.vector.join(',') : 'auto'}
+              onChange={e => setSite({ front: e.target.value === 'auto' ? undefined : { vector: e.target.value.split(',').map(Number) } })}>
+              <option value="auto">Auto · {scm.front.source === 'user' ? 'set' : `${scm.front.source}`}</option>
+              <option value="0,1">Plan bottom (+y)</option><option value="0,-1">Plan top (−y)</option>
+              <option value="1,0">Plan right (+x)</option><option value="-1,0">Plan left (−x)</option>
+            </select>
+            <span>Wind</span>
+            <input aria-label="Wind speed" type="number" min={0} max={30} step={0.5} value={site.windMs ?? 0} onChange={e => setSite({ windMs: Math.max(0, Number(e.target.value) || 0) })} />
+            <small>m/s · height × {scm.heightScale}</small>
+          </div>
           {design.tips.map(t => <p key={t} className="pb-design-tip">💡 {t}</p>)}
         </details>
       )}
-      {stemSources.length > 0 && <>
+      {design.areas.length > 0 && <div className="pb-row">
+        <span className="sp-grow" />
+        <button className="sp-primary" onClick={musicPatterns} disabled={!beats.file}
+          title="Plan the whole show from the music and your fountain: an arc (intro → build → climax → ending) from the song's energy, each area cast as an instrument (melody, rhythm, bass, accents), one look per phrase chosen from the library incl. world-famous looks, a colour story, a dip before the climax — then the real valves and pumps follow within their limits. Works with or without stems (stems make it follow each instrument). Replaces earlier music patterns; one Undo removes it. Variants and phrase locks are on the plan strip in the timeline.">♫ Create patterns from the music</button>
+      </div>}
+      {stemSources.length > 0 && <Advanced on={design.areas.length > 0}>
         {rowsNow.map((row, i) => (
           <div className="pb-stem-map" key={i}>
             <div className="pb-row">
@@ -406,12 +458,12 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
           {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
           <span className="sp-grow" />
-          <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
-            title="Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards.">♫ Create patterns from the music</button>
+          {!design.areas.length && <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
+            title="Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards.">♫ Create patterns from the music</button>}
           <button onClick={programStems} disabled={!rowsNow.length}
             title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>Follow exactly</button>
         </div>
-      </>}
+      </Advanced>}
     </div>
 
     <div className="pb-lights">

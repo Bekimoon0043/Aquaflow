@@ -302,3 +302,14 @@
 
 /* Music graph above the pattern lanes */
 .seq-music { position:relative; border-bottom:1px solid var(--sp-border); cursor:pointer; background:#050b11; }
+/* Show plan strip (arc + phrases) above the music graph */
+.plan-strip { position:relative; border-bottom:1px solid var(--sp-border); background:#070d14; }
+.plan-section { position:absolute; top:2px; bottom:2px; border-radius:4px; background:color-mix(in srgb, var(--hue) 22%, transparent); border:1px solid color-mix(in srgb, var(--hue) 55%, transparent); overflow:hidden; }
+.plan-section > b { position:absolute; left:4px; top:1px; font:600 9px var(--font-mono, monospace); color:var(--text-muted); text-transform:uppercase; pointer-events:none; }
+.plan-section.role-climax { background:color-mix(in srgb, var(--hue) 40%, transparent); }
+.plan-phrase { position:absolute; bottom:1px; height:13px; padding:0 3px; font:9px var(--font-mono, monospace); color:var(--text-button); background:transparent; border:0; border-left:1px solid color-mix(in srgb, var(--hue) 45%, transparent); text-align:left; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:pointer; }
+.plan-phrase.locked { color:#ffd166; background:rgba(255,209,102,.12); }
+.plan-tools { position:sticky; left:calc(100% - 330px); float:right; display:flex; gap:3px; padding:2px 4px; z-index:3; }
+.plan-tools button { font-size:9.5px; padding:1px 6px; }
+.plan-tools button[aria-pressed="true"] { background:var(--accent, #35d0c0); color:#001; }
+
