@@ -1,5 +1,6 @@
 """Isolated Siemens site API. GETs and Verify never send actuator commands."""
 from pathlib import Path
+from typing import Optional
 import asyncio
 import os
 
@@ -48,6 +49,9 @@ class CompileRequest(BaseModel):
     # True: clips come from the Show Programmer design (nozzles, pumps, lights) and are
     # translated into valve/pump commands. Unknown fixture ids also switch translation on.
     translate: bool = False
+    # Site sync summary (siteSync.js): the clips are already shifted; this says when the music
+    # starts on site. Kept with the show and written into the TIA package.
+    sync: Optional[dict] = None
 
 
 class DesignRequest(BaseModel):
@@ -302,7 +306,10 @@ async def compile_site_show(sid: str, request: CompileRequest):
                     f"None of the {report['input']} timeline clips are on devices of \"{site['name']}\". "
                     "Open the design this site was created from, or create a Siemens site from the open design "
                     "(Devices → PLC → Siemens Setup → New site from my design).")
-        show = store.save_show(sid, clips, request.revision)
+        sync = request.sync
+        if sync is None and request.clips == site.get("previous_show_clips"):
+            sync = site.get("previous_show_sync")
+        show = store.save_show(sid, clips, request.revision, sync)
         # Warnings/info from the same preflight the compile just passed (errors would have raised).
         preflight = run_preflight({"clips": clips}, siemens_target(store.get(sid)))
         show = {**show, "preflight": {"ok": preflight["ok"], "issues": preflight["issues"],

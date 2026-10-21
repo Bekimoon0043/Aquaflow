@@ -54,7 +54,9 @@ extraResources:
   # 1.2.61 engine: AI features on one shared call (ai_common): words → patterns (/api/ai/compose),
   # show critic (/api/ai/critique), design review and commissioning help; AI key kept in
   # ~/.aquaflow. engine-1.2.53 stays for rollback.
-  - from: resources/engine-1.2.61
+  # 1.2.62 engine: compiled shows keep their Site sync summary (music start offset, shift per
+  # output); the TIA package carries SITE-SYNC.txt and siteSync in AquaFlowShow.json.
+  - from: resources/engine-1.2.62
     to: engine
     filter: ["**/*"]
   # Bundled license secret (+ update URL). resolveConfig() reads this from

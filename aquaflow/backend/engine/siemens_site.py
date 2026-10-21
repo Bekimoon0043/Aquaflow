@@ -380,6 +380,7 @@ class SiteStore:
             # the operator can recompile them against the new revision in one click.
             if old.get("show"):
                 site["previous_show_clips"] = old["show"]["clips"]
+                site["previous_show_sync"] = old["show"].get("sync")
             site["show"] = None
             # Lab observations and observations for a different cabinet/mapping
             # cannot authorize the new installation. Text is retained for history.
@@ -390,7 +391,7 @@ class SiteStore:
         self._write([s for s in sites if s["id"] != site["id"]] + [site])
         return site
 
-    def save_show(self, sid, clips, revision):
+    def save_show(self, sid, clips, revision, sync=None):
         sites = self.all()
         site = next((s for s in sites if s["id"] == sid), None)
         if not site:
@@ -398,6 +399,8 @@ class SiteStore:
         if revision != site["revision"]:
             raise ValueError("Site changed; reload before compiling")
         site["show"] = compile_show(site, clips)
+        if clean_sync(sync):
+            site["show"]["sync"] = clean_sync(sync)
         self._write(sites)
         return site["show"]
 
@@ -406,6 +409,27 @@ class SiteStore:
         temporary = self.path.with_suffix(".pending")
         temporary.write_text(json.dumps({"version": 1, "sites": sites}, indent=2), encoding="utf-8")
         os.replace(temporary, self.path)
+
+
+def clean_sync(sync):
+    """Site sync summary sent with a compiled show (numbers only): the clips were already
+    shifted by the Show Programmer; this records when the music must start on site."""
+    if not isinstance(sync, dict):
+        return None
+    def ms(value, limit=600000):
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return 0
+        return round(max(-limit, min(limit, number)), 1) if math.isfinite(number) else 0
+    by_kind = {}
+    for kind, row in list((sync.get("byKind") or {}).items())[:12]:
+        if isinstance(row, dict):
+            by_kind[str(kind)[:24]] = {"clips": int(ms(row.get("clips"), 10**6)),
+                                       "minShiftMs": ms(row.get("minShiftMs")), "maxShiftMs": ms(row.get("maxShiftMs"))}
+    return {"enabled": bool(sync.get("enabled")), "audioStartMs": ms(sync.get("audioStartMs")),
+            "recommendedAudioStartMs": ms(sync.get("recommendedAudioStartMs")),
+            "trimmed": int(ms(sync.get("trimmed"), 10**6)), "dropped": int(ms(sync.get("dropped"), 10**6)), "byKind": by_kind}
 
 
 def compile_show(site, clips):

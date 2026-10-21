@@ -34,6 +34,32 @@ def _bit_set_scl(array: str, index: int, condition: str) -> str:
     return (f"   IF {condition} THEN {array}[{byte}] := {array}[{byte}] OR B#16#{mask:02X}; END_IF;")
 
 
+def site_sync_text(sync):
+    """Plain-language Site sync sheet for site staff (sound ↔ fountain timing)."""
+    if not sync.get("enabled"):
+        return ("AquaFlow Site sync was OFF when this show was compiled.\n"
+                "Cue times in ShowTimeline.csv are exactly as programmed. Start the music together with the PLC show.\n")
+    lines = [
+        "AquaFlow Site sync — sound and fountain timing",
+        "",
+        f"START THE MUSIC {sync['audioStartMs']:.0f} ms AFTER THE PLC SHOW STARTS.",
+        "",
+        "The cue times in ShowTimeline.csv / AquaFlowShow.json already fire every output early by its own",
+        "delay (PLC frame and cycle, network, valve or VFD, water rise, DMX) minus the music's delay to the",
+        "audience (player, processor, amplifier and the sound's travel through the air).",
+        f"Recommended music start: {sync['recommendedAudioStartMs']:.0f} ms.",
+    ]
+    if sync.get("byKind"):
+        lines += ["", "Shift applied per output (negative = earlier than programmed):"]
+        for kind, row in sync["byKind"].items():
+            lines.append(f"  {kind:<8} {row['clips']:>6} cues  {row['minShiftMs']:+.0f} … {row['maxShiftMs']:+.0f} ms")
+    if sync.get("trimmed") or sync.get("dropped"):
+        lines += ["", f"{sync.get('trimmed', 0)} cue(s) were shortened and {sync.get('dropped', 0)} dropped because they would have had to start before the show."]
+    lines += ["", "On site: run the Sync test (Show Studio → Site sync) from the audience position and save the",
+              "measured correction before the first public show. Recompile and export this package again afterwards."]
+    return "\n".join(lines) + "\n"
+
+
 def build_tia_package(site):
     issues = unsupported_input_bindings(site)
     if issues:
@@ -354,6 +380,9 @@ drive trips, level/pressure protection and safe CPU-STOP substitute values indep
             "the timeline is not an autonomous PLC-resident show."
         ),
         "show": compiled_show,
+        # Site sync: the cue times above already fire each output early (PLC, valve, water rise,
+        # DMX) against the music's path to the audience; the music must start at audioStartMs.
+        "siteSync": (compiled_show or {}).get("sync"),
     }
     show_schedule = io.StringIO()
     show_writer = csv.writer(show_schedule)
@@ -566,6 +595,9 @@ terminal, drive, valve, feedback, fault input and independent protection circuit
                              "" if point["module_channel"] is None else point["module_channel"],
                              point["db_address"], point["note"]])
         files["WIRING-SCHEDULE.csv"] = wiring.getvalue()
+        site_sync = (compiled_show or {}).get("sync")
+        if site_sync:
+            files["SITE-SYNC.txt"] = site_sync_text(site_sync)
         if lab_profile:
             files["CPU-1215C-LARGE-IO-PLCSIM-GUIDE.txt"] = lab_guide
             files["lab-profile.json"] = json.dumps(lab_profile, indent=2)

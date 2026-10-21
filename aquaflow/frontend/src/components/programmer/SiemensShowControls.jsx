@@ -4,6 +4,7 @@ import { explainS7Error } from "../../utils/siemensDevices";
 import { apiGet, apiPost } from "../../utils/apiClient";
 import useProjectStore from "../../store/projectStore";
 import "./siemensShowControls.css";
+import { currentPlcShow, syncMessage } from "./studio/plcSync"; // Site sync: fire early vs the music
 import AiCommissioningHelp from "../panels/AiCommissioningHelp"; // ✦ Ask AI about PLC faults (advice only)
 
 export function SiemensLinkStatus({ status, mode }) {
@@ -150,9 +151,10 @@ export default function SiemensShowControls({ clips, onLoadExample, selectedSite
       }, status?.running)}
       {networked && button("Reconnect safely", () => siemensRequest(`/${id}/reconnect`, "POST"), status?.running)}
       {button("Compile current clips", async () => {
-        const result = await siemensRequest(`/${id}/compile`, "POST", { revision: site.revision, clips, translate: site?.source?.kind === "engineering" });
+        const show = currentPlcShow(clips);
+        const result = await siemensRequest(`/${id}/compile`, "POST", { revision: site.revision, clips: show.clips, translate: site?.source?.kind === "engineering", sync: show.sync });
         if (!selectedSite) setSites((await siemensRequest()).sites);
-        return { message: compileMessage(result) };
+        return { message: compileMessage(result) + syncMessage(show.sync) };
       }, !clips?.length || status?.running)}
       {onLoadExample && button("Load 60-second example", async () => {
         const response = await siemensRequest(`/${id}/example`);

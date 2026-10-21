@@ -7,6 +7,7 @@ import { compileMessage } from '../SiemensShowControls';
 import SiemensPlcMonitor from '../../panels/siemens/SiemensPlcMonitor';
 import { clipsForPlc, nozzleLinks } from './plcLimits';
 import { compileForSite, readStudio } from './showModel';
+import { syncSummary } from './plcSync';
 import { applySiteSync, buildSyncModel, clickTrackWav, patchSync, readSync, syncTestClips } from './siteSync';
 import SiteSyncDialog from './SiteSyncDialog';
 import '../../panels/siemens/siemensSetup.css';
@@ -15,13 +16,13 @@ export const PLAY_STEPS = ['Compile', 'Verify', 'Safety arm', 'Arm PLC', 'Start'
 
 // One click from the Show Programming timeline to a running PLC (PLCSIM or real).
 // Every step is the normal guarded API call; the first failure stops the chain and says why.
-export async function playOnPlc({ site, clips, confirmed, request = siemensRequest, safety = { get: apiGet, post: apiPost }, onStep = () => {} }) {
+export async function playOnPlc({ site, clips, sync = null, confirmed, request = siemensRequest, safety = { get: apiGet, post: apiPost }, onStep = () => {} }) {
   if (!site) throw new Error('Choose a Siemens site first.');
   if (site.mode === 'simulated') throw new Error('This site is an AquaFlow animation only. Switch it to the PLCSIM test PLC in Devices → PLC → Siemens Setup → Connect.');
   if (!confirmed) throw new Error(site.mode === 'plcsim' ? 'Tick “this is the isolated PLCSIM simulator” first.' : 'Confirm a person is watching and every outlet has a safe water path.');
   if (!clips?.length) throw new Error('The timeline has no clips yet. Add a pattern first.');
   onStep(0);
-  const compiled = await request(`/${site.id}/compile`, 'POST', { revision: site.revision, clips, translate: true });
+  const compiled = await request(`/${site.id}/compile`, 'POST', { revision: site.revision, clips, translate: true, ...(sync ? { sync } : {}) });
   onStep(1);
   await request(`/${site.id}/verify`, 'POST');
   onStep(2);
@@ -107,7 +108,7 @@ export default function StudioPlcPanel({ clips, items = [], pending, onPlcStatus
       const show = test ? syncTestShow(items, site0) : sync;
       if (test && !show.clips.length) throw new Error('The sync test found no jets or lights to drive.');
       const music = prepareMusic(test);
-      const compiled = await playOnPlc({ site, clips: clipsForPlc(show.clips, site, nozzleLinks(items)), confirmed, onStep: setStep });
+      const compiled = await playOnPlc({ site, clips: clipsForPlc(show.clips, site, nozzleLinks(items)), sync: syncSummary(show), confirmed, onStep: setStep });
       setStep(PLAY_STEPS.length);
       startMusic(music, show.audioStartMs);
       const start = show.enabled ? ` ${music ? 'The music plays from this PC' : 'Start the music'} ${show.audioStartMs} ms after the PLC show starts.` : '';

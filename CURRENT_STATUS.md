@@ -1,5 +1,13 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-21 (evening): AquaFlow Studio 1.2.62 — Site sync on every PLC path**
+
+- **One helper for every path** (`studio/plcSync.js`): every way of sending the timeline to the PLC now applies Site sync — "Play on PLC" and Advanced PLC controls → "Compile current clips" (Show Studio and Show Programmer).
+- **Never twice:** already-shifted clips (marked with `siteShiftMs`) are not shifted again. The 60-second device test and "Recompile previous show" are left unshifted on purpose.
+- **Engine keeps the timing:** a compiled show keeps a numbers-only `sync` summary (music start offset, shift per output kind). An edit keeps it as `previous_show_sync`, so a recompile reuses it.
+- **TIA package:** carries `siteSync` in AquaFlowShow.json and a plain `SITE-SYNC.txt` ("START THE MUSIC N ms AFTER THE PLC SHOW STARTS"). ShowTimeline.csv holds the shifted cue times.
+- **Tests:** frontend 1,510 pass; backend 1,322 pass (21 skipped). Engine 1.2.62 rebuilt and installed; it starts with the AI configured.
+
 **2026-10-21 (later): AquaFlow Studio 1.2.61 — React 19, Claude in four more places, sound ↔ fountain sync**
 
 - **React 19.3.1:** no source changes needed. Frontend 1,506 tests pass (149 files).

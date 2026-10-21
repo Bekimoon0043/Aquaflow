@@ -918,3 +918,51 @@ def test_api_create_edit_export_and_compile_use_persisted_mapping(tmp_path, monk
         assert client.post(f"/api/siemens-sites/{sid}/compile", json={"revision": 1, "clips": clips}).status_code == 400
         assert client.post(f"/api/siemens-sites/{sid}/start").status_code == 400
         assert client.post(f"/api/siemens-sites/{sid}/verify").json()["quality"] == "SIMULATED_NOT_HARDWARE"
+
+
+SYNC = {"enabled": True, "audioStartMs": 127, "recommendedAudioStartMs": 127, "trimmed": 0, "dropped": 0,
+        "byKind": {"water": {"clips": 40, "minShiftMs": -837, "maxShiftMs": -26}, "light": {"clips": 8, "minShiftMs": 56, "maxShiftMs": 56}}}
+
+
+def test_site_sync_travels_with_the_show_into_the_tia_package_and_a_recompile(tmp_path):
+    from engine.siemens_site import clean_sync
+    store, site = saved(tmp_path)
+    show = store.save_show(site["id"], bench_clips(site), 1, {**SYNC, "secret": "x", "audioStartMs": "127"})
+    assert show["sync"]["audioStartMs"] == 127 and "secret" not in show["sync"]
+    assert clean_sync({"audioStartMs": float("nan"), "byKind": {"water": {"clips": "7"}}})["audioStartMs"] == 0
+    assert clean_sync("nope") is None
+    with zipfile.ZipFile(io.BytesIO(build_tia_package(store.get(site["id"])))) as archive:
+        sheet = archive.read("SITE-SYNC.txt").decode()
+        payload = json.loads(archive.read("AquaFlowShow.json"))
+    assert "START THE MUSIC 127 ms AFTER THE PLC SHOW STARTS" in sheet and "water" in sheet
+    assert payload["siteSync"]["audioStartMs"] == 127
+    # An edit keeps the clips and the timing for the one-click recompile.
+    site["channels"][1]["name"] = "Left jet"
+    updated = store.save(site, 1)
+    assert updated["previous_show_sync"]["audioStartMs"] == 127
+    # Without Site sync there is no sheet.
+    other, plain = saved(tmp_path / "plain")
+    other.save_show(plain["id"], bench_clips(plain), 1)
+    with zipfile.ZipFile(io.BytesIO(build_tia_package(other.get(plain["id"])))) as archive:
+        assert "SITE-SYNC.txt" not in archive.namelist()
+
+
+def test_api_compile_keeps_site_sync_and_recompile_of_the_previous_show_reuses_it(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from api.routes import siemens_sites
+    store = SiteStore(tmp_path / "api-sites.json")
+    monkeypatch.setattr(siemens_sites, "store", store)
+    monkeypatch.setattr(siemens_sites, "siemens_runtime", SiemensRuntime(store))
+    app = FastAPI()
+    app.include_router(siemens_sites.router, prefix="/api/siemens-sites")
+    with TestClient(app) as client:
+        site = client.post("/api/siemens-sites", json={"name": "Sync bench"}).json()
+        sid = site["id"]
+        clips = client.get(f"/api/siemens-sites/{sid}/example").json()["clips"]
+        compiled = client.post(f"/api/siemens-sites/{sid}/compile", json={"revision": 1, "clips": clips, "sync": SYNC}).json()
+        assert compiled["sync"]["audioStartMs"] == 127
+        site["channels"][1]["name"] = "Front left"
+        updated = client.put(f"/api/siemens-sites/{sid}", json=site).json()
+        again = client.post(f"/api/siemens-sites/{sid}/compile", json={"revision": 2, "clips": updated["previous_show_clips"]}).json()
+        assert again["sync"]["audioStartMs"] == 127
