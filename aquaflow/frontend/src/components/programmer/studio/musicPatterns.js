@@ -357,7 +357,7 @@ function generateOnce(studio, { analysis, stems, rows, items, groups, design = n
         options: { start, duration: r3(g.barSec), lapSeconds: r3(g.barSec), minLevel: 0, maxLevel: 100, order: 'center-out', crests: 1,
           smoothness: 'smooth', color: '#ffffff', axis: 'sides', seed: 1, sync: { ...sync, lapBeats: g.beatsPerBar } },
         lights: freeLights ? { group: freeLights, color: '#ffffff', level: 100 } : null,
-        tag: { music: fillId, section: 'accent', part: 'drop' } });
+        tag: { music: fillId, section: 'accent', part: 'drop', leadS: r3(p.start - start) } });
       next = unit.studio;
       added.push(...unit.recipes);
       counts.Accents = (counts.Accents || 0) + 1;

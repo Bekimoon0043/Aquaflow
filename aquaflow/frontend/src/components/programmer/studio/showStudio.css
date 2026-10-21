@@ -309,7 +309,7 @@
 .plan-section.role-climax { background:color-mix(in srgb, var(--hue) 40%, transparent); }
 .plan-phrase { position:absolute; bottom:1px; height:13px; padding:0 3px; font:9px var(--font-mono, monospace); color:var(--text-button); background:transparent; border:0; border-left:1px solid color-mix(in srgb, var(--hue) 45%, transparent); text-align:left; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:pointer; }
 .plan-phrase.locked { color:#ffd166; background:rgba(255,209,102,.12); }
-.plan-tools { position:sticky; left:calc(100% - 330px); float:right; display:flex; gap:3px; padding:2px 6px; z-index:3; height:26px; align-items:center;
+.plan-tools { position:sticky; left:calc(100% - 390px); float:right; display:flex; gap:3px; padding:2px 6px; z-index:3; height:26px; align-items:center;
   background:#070d14; border-left:1px solid var(--sp-border); box-shadow:-8px 0 10px #070d14; }
 .plan-tools button { font-size:9.5px; padding:1px 6px; }
 .plan-tools button[aria-pressed="true"] { background:var(--accent, #35d0c0); color:#001; }
@@ -318,3 +318,16 @@
 .sp-group-check p { margin:6px 0 0; }
 .sp-group-check em { color:#ffe9c9; font-style:normal; font-weight:600; }
 .sp-group-ok { color:#9fe0b0; }
+/* ✦ AI critic panel (PlanStrip) */
+.plan-critic { position:absolute; right:0; top:28px; text-align:left; z-index:6; width:min(440px, calc(100% - 12px)); max-height:320px; overflow:auto; padding:8px 10px;
+  background:#0b1520; border:1px solid var(--sp-border); border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.45); font-size:11px; }
+.plan-critic-head { display:flex; gap:8px; align-items:center; }
+.plan-critic-head small { flex:1; color:var(--text-muted); }
+.plan-critic p { margin:6px 0; }
+.plan-critic ul { list-style:none; margin:0; padding:0; }
+.plan-critic li { padding:5px 0; border-top:1px solid var(--sp-border); }
+.plan-critic li button { display:block; margin-top:4px; font-size:10px; }
+.plan-critic-sev { text-transform:uppercase; font-size:9px; padding:0 4px; border-radius:3px; background:#2a3542; }
+.plan-critic .sev-high .plan-critic-sev { background:#7a2330; }
+.plan-critic .sev-medium .plan-critic-sev { background:#6b5320; }
+.plan-critic-advice, .plan-critic-stale { color:var(--text-muted); }

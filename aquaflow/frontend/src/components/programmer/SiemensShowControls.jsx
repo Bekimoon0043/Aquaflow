@@ -4,6 +4,7 @@ import { explainS7Error } from "../../utils/siemensDevices";
 import { apiGet, apiPost } from "../../utils/apiClient";
 import useProjectStore from "../../store/projectStore";
 import "./siemensShowControls.css";
+import AiCommissioningHelp from "../panels/AiCommissioningHelp"; // ✦ Ask AI about PLC faults (advice only)
 
 export function SiemensLinkStatus({ status, mode }) {
   const simulated = mode === "simulated";
@@ -185,5 +186,9 @@ export default function SiemensShowControls({ clips, onLoadExample, selectedSite
       {status.error && <div role="alert" style={{ color: "#ff919a" }}>{status.error}</div>}
     </div></details>}
     {message && <p role="status" style={{ color: "#f6d795" }}>{message}</p>}
+    {/* Advice only: explains the fault in plain words; never sends, arms or starts anything. */}
+    {id && (status?.fault || status?.error || ["lost", "failed", "stop_unconfirmed"].includes(status?.connection_state) || (status?.plc_running && !status?.running)
+      || Object.values(status?.feedback || {}).some(v => v?.fault) || (!status && message))
+      && <AiCommissioningHelp label="✦ Ask AI about this fault" plc={status} mode={site?.mode} note={message} site={`Siemens site ${site?.name || id} (${site?.mode || "unknown mode"})`} />}
   </section>;
 }

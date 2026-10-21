@@ -1,6 +1,16 @@
 // Plays the show's song in step with the 3D preview clock (useICANPreviewStore).
 import { useEffect } from 'react';
 import { useICANPreviewStore } from '../../../store/icanPreviewStore';
+import useProjectStore from '../../../store/projectStore';
+
+/**
+ * Seconds the song lags the picture when "Preview as heard at the audience" is on (Site sync):
+ * the audio chain to the listener, stored by the Site sync panel. 0 when off.
+ */
+export function heardDelayS(programmer = useProjectStore.getState().programmer) {
+  const sync = programmer?.studio?.site?.sync;
+  return sync?.previewAsHeard && Number(sync.previewDelayMs) > 0 ? Number(sync.previewDelayMs) / 1000 : 0;
+}
 
 /**
  * Bring an <audio> element in line with the preview: play/pause, seek on jumps, and
@@ -11,6 +21,12 @@ export function syncAudioElement(audio, { position = 0, playback = 'stopped' } =
   if (!audio) return 'none';
   const length = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Infinity;
   const target = Math.max(0, Number(position) || 0);
+  // "As heard at the audience": the song runs behind the picture; before it starts, wait at 0.
+  if (playback === 'playing' && Number(position) < 0) {
+    if (!audio.paused) audio.pause();
+    if (audio.currentTime !== 0) audio.currentTime = 0;
+    return 'waiting';
+  }
   if (playback === 'playing') {
     if (target >= length) { if (!audio.paused) audio.pause(); return 'ended'; }
     const drift = audio.currentTime - target;
@@ -37,7 +53,8 @@ export function usePreviewSongPlayback(file, { yieldTo = () => false } = {}) {
     audio.preload = 'auto';
     const sync = state => {
       if (yieldTo(state)) { if (!audio.paused) audio.pause(); return; }
-      syncAudioElement(audio, state);
+      const delay = heardDelayS();
+      syncAudioElement(audio, delay ? { ...state, position: (Number(state.position) || 0) - delay } : state, delay ? { tolerance: .04 } : undefined);
     };
     sync(useICANPreviewStore.getState());
     const unsubscribe = useICANPreviewStore.subscribe(sync);

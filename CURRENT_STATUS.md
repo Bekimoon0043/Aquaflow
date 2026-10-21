@@ -1,5 +1,21 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-21 (later): AquaFlow Studio 1.2.61 — React 19, Claude in four more places, sound ↔ fountain sync**
+
+- **React 19.3.1:** no source changes needed. Frontend 1,506 tests pass (149 files).
+- **One AI call for every feature:** `backend/services/ai_common.py`. The key is kept in `~/.aquaflow/director_key`; a key saved from the UI now also goes there.
+  - **Words → patterns** (Show Studio AI tab, `/api/ai/compose`): plain words become placements, rendered through `renderPlan` so they respect the hardware. The rule-based composer is the fallback.
+  - **AI critic** (plan strip, `/api/ai/critique`): findings with one-click fixes (swap look / retime / mute / level). Checked in the installed app on Lebu: 16 s, real findings (weak climax, idle centre baskets).
+  - **AI design review** (Design → Engineering Tools, `/api/ai/design-review`): on Lebu it flagged pumps at 118–147 % of rated flow, wind height loss, overlapping groups and the baskets on Pump 4.
+  - **Commissioning helper** ("✦ Ask AI" in Preflight and on PLC faults, `/api/ai/commissioning-help`): secrets are redacted and fixed safety rules apply (never bypass interlocks, never remote start). Advice only.
+- **Site sync** (`siteSync.js`, "⏱ Site sync" in Show Studio and in the PLC panel):
+  - **Model:** every output's delay (PLC frame, network, valve / VFD, water rise, DMX) against the music's delay (player, DSP, amplifier, speakers → listener at c = 331.3 + 0.606·T).
+  - **Applied** only to what is sent to the PLC (`compileForSite`), without counting the water lead twice. Recommended music start offset; optional "play the music from this PC when the PLC show starts"; "Preview as heard at the audience".
+  - **On site:** sync test (click track WAV + PLC test cues) and a video / tap measurement that saves corrections.
+  - **Lebu defaults:** jets +763 ms, baskets +837 ms, lights +71 ms; audience spread 60 ms; music starts 127 ms after the PLC.
+  - **Defaults need measuring on site.** PLC frames are about 100 ms, so cue jitter is about ±75 ms.
+- **Engine 1.2.61** rebuilt (PyInstaller); backend full test suite passes.
+
 **2026-10-21: AquaFlow Studio 1.2.60 — AI director key survives updates**
 
 - The desktop app reads `%USERPROFILE%\.aquaflow\director_key` (next to the licence) and gives it to the engine only, as `ANTHROPIC_API_KEY` (`desktop/main.js` `directorKeyEnv`). The engine's own `data/director_key` is lost on reinstall.

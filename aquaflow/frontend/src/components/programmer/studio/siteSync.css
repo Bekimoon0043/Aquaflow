@@ -1,0 +1,18 @@
+/* Site sync dialog (SiteSyncDialog.jsx) — builds on .pattern-builder (patternBuilder.css). */
+.pattern-builder.site-sync { right:16px; left:auto; }
+.site-sync .ss-group { display:flex; flex-wrap:wrap; gap:6px 12px; margin:0; padding:6px 8px 8px; border:1px solid var(--border-mid); border-radius:6px; }
+.site-sync .ss-group legend { padding:0 4px; color:var(--text-muted); font-weight:600; }
+.site-sync .ss-num { display:flex; align-items:center; gap:6px; }
+.site-sync .ss-num > span { color:var(--text-muted); }
+.site-sync .ss-num input { width:74px; }
+.site-sync .ss-num small { color:var(--text-muted); }
+.site-sync .ss-wide { flex-basis:100%; }
+.site-sync .ss-wide textarea { flex:1; font:inherit; color:var(--text-primary); background:var(--bg-raised); border:1px solid var(--border-mid); border-radius:5px; }
+.site-sync .ss-table { width:100%; border-collapse:collapse; }
+.site-sync .ss-table th, .site-sync .ss-table td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--border-mid); vertical-align:top; }
+.site-sync .ss-table td:nth-child(3), .site-sync .ss-table td:nth-child(4) { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.site-sync .ss-table small { color:var(--text-muted); }
+.site-sync .ss-result { display:flex; flex-direction:column; gap:3px; padding:8px; border-radius:6px; background:var(--bg-raised); }
+.site-sync .ss-result small { color:var(--text-muted); }
+.site-sync .ss-steps { margin:4px 0; padding-left:20px; }
+.site-sync button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }

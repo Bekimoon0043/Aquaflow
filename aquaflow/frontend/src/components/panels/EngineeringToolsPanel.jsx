@@ -11,6 +11,7 @@ import { apiGet, apiPost, apiPostText, apiUrl } from "../../utils/apiClient";
 // AF-NEXT-012 — data source / confidence badges, BOM provenance, verified models.
 import ProvenanceBadge from "./ProvenanceBadge";
 import VerifiedModelsTool from "./VerifiedModelsTool";
+import AiDesignReview from "./AiDesignReview"; // ✦ AI design review (advice only)
 import { getFixtureProvenance } from "../../data/fixtureLibrary";
 import { GENERIC_LABEL } from "../../data/fixtureProvenance";
 import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
@@ -18,7 +19,7 @@ import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
 const TABS = [
   ["hydraulics", "Hydraulics"], ["sizing", "Pipe Sizing"], ["nozzles", "Nozzles"],
   ["bom", "BOM"], ["pid", "P&ID"], ["energy", "Energy"], ["weather", "Weather"],
-  ["verified", "Verified Models"],
+  ["verified", "Verified Models"], ["ai", "✦ AI design review"],
 ];
 
 const SAMPLE = {
@@ -324,6 +325,7 @@ export default function EngineeringToolsPanel() {
         {tab === "energy" && <JsonTool endpoint="/energy/model" sample={SAMPLE.energy} hint="Energy consumption + cost model" />}
         {tab === "weather" && <WeatherTool />}
         {tab === "verified" && <VerifiedModelsTool />}
+        {tab === "ai" && <AiDesignReview />}
       </div>
     </div>
   );

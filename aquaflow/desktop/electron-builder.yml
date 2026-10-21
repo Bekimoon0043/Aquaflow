@@ -51,7 +51,10 @@ extraResources:
   # 1.2.53 engine: deep music analysis (/api/music/deep, numpy only) and the optional AI director
   # (/api/director, anthropic SDK; key stored on the machine). Packaged smoke: /api/health 200,
   # deep analysis answered, director status answered. engine-1.2.45 stays for rollback.
-  - from: resources/engine-1.2.53
+  # 1.2.61 engine: AI features on one shared call (ai_common): words → patterns (/api/ai/compose),
+  # show critic (/api/ai/critique), design review and commissioning help; AI key kept in
+  # ~/.aquaflow. engine-1.2.53 stays for rollback.
+  - from: resources/engine-1.2.61
     to: engine
     filter: ["**/*"]
   # Bundled license secret (+ update URL). resolveConfig() reads this from

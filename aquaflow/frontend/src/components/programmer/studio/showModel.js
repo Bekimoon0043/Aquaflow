@@ -4,6 +4,7 @@ import { getFixtureInfo } from '../../../utils/fixtureTypeResolver';
 import { evaluateShowFrameAt, groupInherits, recipeAudible } from '../../../show/evaluateShowFrame';
 import { fieldChannels, memberGeometry } from './wavePatterns';
 import { followHardware } from './hardwareFollow';
+import { applySiteSync, buildSyncModel } from './siteSync';
 
 export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve', 'field'];
 export const ORDERS = ['engineering', 'left-to-right', 'right-to-left', 'front-to-back', 'clockwise', 'counter-clockwise', 'center-out'];
@@ -271,6 +272,10 @@ export function compileStudio(studio, items) {
     });
     if (clips.length > 50000) { issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.'); break; }
   }
+  // Generated patterns already start early by the water's rise (pattern.leadS): every clip of
+  // such a pattern carries it, so the site sync never adds the rise twice (siteSync.js).
+  const leads = new Map(studio.recipes.filter(r => Number(r.pattern?.leadS) > 0).map(r => [r.id, Number(r.pattern.leadS)]));
+  if (leads.size) for (let i = studio.legacyClips.length; i < clips.length; i++) if (leads.has(clips[i].studioRecipeId)) clips[i].leadS = leads.get(clips[i].studioRecipeId);
   // Design-aware patterns drive the real solenoids and pumps (hardwareFollow.js).
   const modes = new Map(studio.recipes.filter(r => (r.hardware === 'hits' || r.hardware === 'open') && recipeAudible(r, groups))
     .map(r => [r.id, Number.isFinite(r.hardwareCap) ? { mode: r.hardware, cap: r.hardwareCap } : r.hardware]));
@@ -280,6 +285,16 @@ export function compileStudio(studio, items) {
     return { clips: routed, issues: [...new Set(issues)] };
   }
   return { clips, issues: [...new Set(issues)] };
+}
+
+/**
+ * The clips the PLC / DMX get on the real site: compiled clips shifted by the site sync model
+ * (siteSync.js) so the audience hears each beat as it sees the water peak / light hit.
+ * Returns { clips, audioStartMs, recommendedAudioStartMs, trimmed, dropped, byKind, enabled, model }.
+ */
+export function compileForSite(studio, items, clips = compileStudio(studio, items).clips, site = studio?.site) {
+  const model = buildSyncModel(items, site || {});
+  return { ...applySiteSync(clips, model), model };
 }
 
 // Timeline/plan sampler. Evaluated by the canonical show frame (AF-NEXT-004):

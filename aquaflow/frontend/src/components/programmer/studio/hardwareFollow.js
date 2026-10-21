@@ -217,7 +217,7 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
       const source = routed.get(id).find((c) => a >= c.startTime - 1e-6 && a < c.startTime + c.duration) || first;
       out.push({ id: `${source.studioRecipeId}:${valve.id}:hw:${k}`, studioRecipeId: source.studioRecipeId, patternBlockId: source.patternBlockId,
         fixtureId: valve.id, trackId: track.id, type: 'solenoid_open', name: `${source.name} · valve`, startTime: a, duration, value: 100,
-        color: source.color, source: 'show-studio', hardware: true });
+        color: source.color, source: 'show-studio', hardware: true, ...(source.leadS > 0 ? { leadS: source.leadS } : {}) });
     });
   }
 
@@ -250,6 +250,8 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
     pumpLevel.set(pumpId, speed);
     const track = pump.item.tracks?.find((t) => t.type === 'pump_speed');
     if (!track) continue;
+    // The rise lead its jets' patterns were started early by (site sync must not add it again).
+    const pumpLead = Math.max(0, ...mine.flatMap((id) => routed.get(id).map((c) => Number(c.leadS) || 0)));
     let i = 0, k = 0;
     while (i < N) {
       if (speed[i] <= 0.5) { i++; continue; }
@@ -259,7 +261,7 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
       const duration = r3(Math.max(DT, (j + 1 - i) * DT));
       if (i * DT + duration <= 600) out.push({ id: `hw:${pumpId}:${k++}`, studioRecipeId: null, fixtureId: pumpId, trackId: track.id, type: 'pump_speed',
         name: `${pump.name} · follows the music`, startTime: r3(i * DT), duration, value: r2(Math.max(...speed.slice(i, j + 1))), keys, color: '#4f8cff',
-        source: 'show-studio', hardware: true });
+        source: 'show-studio', hardware: true, ...(pumpLead > 0 ? { leadS: pumpLead } : {}) });
       i = j + 1;
     }
   }

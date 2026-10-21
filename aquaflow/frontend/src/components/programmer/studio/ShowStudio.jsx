@@ -9,6 +9,7 @@ import { useICANPreviewStore } from '../../../store/icanPreviewStore';
 import { poolCenter } from '../../../engineering/geometryContract';
 import SiemensShowControls from '../SiemensShowControls';
 import StudioPlcPanel from './StudioPlcPanel';
+import SiteSyncButton from './SiteSyncButton';
 import { checkPlcLimits, issuesByBlock, nozzleLinks } from './plcLimits';
 import { siemensRequest } from '../../../utils/siemensSite';
 import { takePendingFocus } from '../../../preflight/preflight';
@@ -23,6 +24,8 @@ import EnvelopeEditor from './EnvelopeEditor';
 import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
 import { readFountainDesign } from './fountainDesign';
 import { conflictSummary, groupConflicts } from './groupAdvisor';
+import { useMusicLanes } from './MusicLanes';
+import { composeContext, composeProposal, readPrompt, rememberPrompt, requestCompose } from './aiCompose';
 import './showStudio.css';
 
 const StudioPreview = lazy(() => import('./StudioPreview'));
@@ -54,8 +57,10 @@ export default function ShowStudio() {
   const [commandSearch, setCommandSearch] = useState(''), [builder, setBuilderState] = useState(null);
   // null = closed; { key, editId } = open (editId reopens a builder-made pattern in place).
   const setBuilder = (open, editId = null) => setBuilderState(open ? { key: Date.now(), editId } : null);
-  const [groupName, setGroupName] = useState(''), [prompt, setPrompt] = useState('A flowing blue wave, then a strong pulse finale');
+  const [groupName, setGroupName] = useState(''), [prompt, setPrompt] = useState(() => readPrompt('Back row slow blue wave in the chorus, drums fireworks on the drop, everything white at the end'));
   const [aiDuration, setAiDuration] = useState(24), [proposal, setProposal] = useState(null), [proposalIds, setProposalIds] = useState([]), [ghost, setGhost] = useState(false), [busy, setBusy] = useState(false);
+  // ✦ AI compose: the song analysis and basin it reads, and its status line.
+  const songForAi = useMusicLanes().analysis, basins = useEngineeringStore(s => s.basins), [aiNote, setAiNote] = useState('');
   const [audioFile, setAudioFile] = useState(null), [audioName, setAudioName] = useState('');
   const [audioBuffer, setAudioBuffer] = useState(null);
   const audio = useRef(null), host = useRef(null), searchRef = useRef(null), timeRef = useRef(time), abort = useRef(null);
@@ -87,10 +92,17 @@ export default function ShowStudio() {
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const tracks = useMemo(() => items.flatMap(i => i.tracks), [items]);
   const end = Math.max(1, ...clips.map(c => c.startTime + c.duration), ...studio.recipes.map(r => r.start + r.duration));
+  const fixtureSignature = JSON.stringify({ fixtures: fixtures.map(f => [f.id, f.type, f.groupId, f.x, f.y]) });
   const proposalSignature = JSON.stringify({ fixtures: fixtures.map(f => [f.id, f.type, f.groupId, f.x, f.y]), group, groupId });
-  const proposalValid = proposal?.signature === proposalSignature;
-  const ghostClips = useMemo(() => ghost && proposalValid ? compileStudio({ ...studio, recipes: proposal.recipes.filter(r => proposalIds.includes(r.id)), legacyClips: [] }, items).clips : clips,
-    [ghost, proposalValid, proposal, proposalIds, studio, items, clips]);
+  // AI proposals span many groups: only an Engineering change makes them stale.
+  const proposalValid = proposal?.signature === (proposal?.source === 'ai' ? fixtureSignature : proposalSignature);
+  const proposalRecipes = useMemo(() => {
+    if (!proposal) return [];
+    const ids = new Set(proposal.items.filter(i => proposalIds.includes(i.id)).flatMap(i => i.recipeIds));
+    return proposal.recipes.filter(r => ids.has(r.id));
+  }, [proposal, proposalIds]);
+  const ghostClips = useMemo(() => ghost && proposalValid ? compileStudio({ ...studio, groups: [...studio.groups, ...(proposal.groups || [])], recipes: proposalRecipes, legacyClips: [] }, items).clips : clips,
+    [ghost, proposalValid, proposal, proposalRecipes, studio, items, clips]);
   const levels = useMemo(() => sampleClips(ghostClips, time), [ghostClips, time]);
   useEffect(() => { setSelection([]); setGroupId(null); setSelectedId(null); clipboard.current = null; setPlaying(false); setTime(0); setProposal(null); setAudioFile(takePendingAsset('audio:programmer')); setAudioName(useProjectStore.getState().programmer?.audioFileReference?.name || ''); }, [revision]);
   // AF-NEXT-006: audio verified against the project's asset manifest (or relinked from the asset report) arrives here.
@@ -271,9 +283,35 @@ export default function ShowStudio() {
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'AI generation failed.');
       const recipes = aiRecipes(data, group.id, prompt, time, aiDuration);
       if (!recipes.length) throw new Error('No usable sections returned. Try another duration.');
-      setProposal({ recipes, signature, notes: data.show?.notes }); setProposalIds(recipes.map(r => r.id));
+      setProposal({ recipes, groups: [], items: recipes.map(r => ({ id: r.id, name: r.name, start: r.start, end: r.start + r.duration, recipeIds: [r.id] })), source: 'rules', signature, notes: data.show?.notes }); setProposalIds(recipes.map(r => r.id));
     } catch (error) { setMessage(controller.signal.aborted ? 'Generation cancelled.' : error.message); }
     finally { if (abort.current === controller) setBusy(false); }
+  };
+  // ✦ Words → patterns: Claude places looks on the fountain's groups (aiCompose.js). The rule-based
+  // composer (propose) is the fallback when no key is set or the AI fails.
+  const composeAi = async () => {
+    if (!prompt.trim()) { setMessage('Describe what the water should do.'); return; }
+    rememberPrompt(prompt);
+    abort.current?.abort(); const controller = new AbortController(); abort.current = controller;
+    const signature = fixtureSignature; setBusy(true); setProposal(null); setGhost(false); setAiNote('');
+    let failed = null;
+    try {
+      const basin = basins?.[0]?.outer?.length >= 3 ? basins[0].outer.map(p => [Number(p.x), Number(p.y)]) : null;
+      const ctx = composeContext(studio, items, songForAi, { basin, showEnd: Math.max(end, time + 60) });
+      if (!ctx.groups.length) throw new Error('AI compose needs fountain areas (Engineering) or a show group with water jets');
+      const answer = await requestCompose(ctx, prompt, time);
+      if (controller.signal.aborted) return;
+      const made = composeProposal(studio, answer, ctx, items);
+      if (!made.items.length) throw new Error('The AI returned no usable patterns — try other words');
+      setProposal({ ...made, source: 'ai', signature, notes: made.summary }); setProposalIds(made.items.map(i => i.id));
+      setAiNote(`✦ Claude: ${made.summary || 'patterns proposed'}${made.dropped ? ` · ${made.dropped} unusable placement${made.dropped === 1 ? '' : 's'} dropped` : ''}${made.adapted ? ` · ${made.adapted} look${made.adapted === 1 ? '' : 's'} changed to suit the hardware` : ''}${made.skipped ? ` · ${made.skipped} too short or held down by wind` : ''}`);
+    } catch (error) {
+      if (controller.signal.aborted) { setMessage('Generation cancelled.'); return; }
+      failed = /HTTP 404|Failed to fetch|NetworkError/i.test(error.message) ? 'AI compose needs the AquaFlow engine and an API key (Your fountain → AI director)' : error.message.replace(/^HTTP \d+ — /, '');
+    } finally { if (abort.current === controller) setBusy(false); }
+    if (!failed) return;
+    if (group) { setAiNote(`${failed} — used the rule-based composer on ${group.name} instead.`); await propose(); }
+    else setAiNote(`${failed}. Select a group to use the rule-based composer instead.`);
   };
   const resize = (key, e) => {
     const origin = e.clientX, originY = e.clientY, initial = studio.layout[key];
@@ -297,7 +335,7 @@ export default function ShowStudio() {
     </header>
     <div className="sp-transport"><button onClick={() => { setPlaying(false); seek(0); }} title="Stop preview">■</button><button className="sp-play" onClick={() => { if (time >= end) seek(0); setPlaying(!playing); }} disabled={pending || !clips.length}>{playing ? 'Ⅱ Pause' : '▶ Play preview'}</button>
       <output>{clock(time)}</output><button aria-pressed={loop} onClick={() => setLoop(!loop)}>Loop</button><span className="sp-divider" />
-      <button onClick={() => addPattern()}>+ Pattern</button><button onClick={() => setBuilder(true)} title="Build a wave, chase, ripple… with live preview">✦ Pattern builder</button><button onClick={createGroup}>+ Group</button><button onClick={() => setTab('ai')}>AI compose</button><button onClick={() => setTab('compile')}>Compile / Siemens</button><button className={plcPlaying ? 'sp-primary' : ''} onClick={() => setTab('compile')} title="Send this show to PLCSIM or the PLC">{plcPlaying ? `PLC ▶ ${plcPlaying.elapsed.toFixed(1)}s` : '▶ Play on PLC'}</button>
+      <button onClick={() => addPattern()}>+ Pattern</button><button onClick={() => setBuilder(true)} title="Build a wave, chase, ripple… with live preview">✦ Pattern builder</button><button onClick={createGroup}>+ Group</button><button onClick={() => setTab('ai')}>AI compose</button><button onClick={() => setTab('compile')}>Compile / Siemens</button><button className={plcPlaying ? 'sp-primary' : ''} onClick={() => setTab('compile')} title="Send this show to PLCSIM or the PLC">{plcPlaying ? `PLC ▶ ${plcPlaying.elapsed.toFixed(1)}s` : '▶ Play on PLC'}</button><SiteSyncButton items={items} studio={studio} change={change} clips={clips} audio={audio} time={time} playing={playing} />
       <span className="sp-grow" /><button aria-pressed={!studio.layout.hideExplorer} onClick={() => layout({ hideExplorer: !studio.layout.hideExplorer })}>Explorer</button><button aria-pressed={!studio.layout.hideInspector} onClick={() => layout({ hideInspector: !studio.layout.hideInspector })}>Inspector</button><label className="sp-inline">Layout<select value={studio.layout.preset} onChange={e => { layout({ preset: e.target.value }); if (e.target.value === 'AI') setTab('ai'); }}>{['Compose', 'Spatial', 'Timing', 'AI'].map(p => <option key={p}>{p}</option>)}</select></label>
     </div>
     <div className="sp-main">
@@ -369,13 +407,15 @@ export default function ShowStudio() {
             <button onClick={createGroup} disabled={!selection.length}>Save selection as new group</button>
             <div className="sp-selection-list">{selectedFixtures.slice(0, 30).map(f => <div key={f.id}><span>{f.label}</span><small>{f.status}</small></div>)}{selection.length > 30 && <small>and {selection.length - 30} more</small>}</div>
           </>}
-          {tab === 'ai' && <><span className="sp-eyebrow">AI CO-DESIGNER</span><h2>Compose for your selection.</h2><p className="sp-help">Target: {group?.name || 'Select a group first'}. Uses AquaFlow’s existing choreography engine. Proposed sections become editable recipes.</p>
-            <label>Describe the movement<textarea rows={5} value={prompt} onChange={e => { setPrompt(e.target.value); setProposal(null); setGhost(false); }} /></label><NumberField label="Duration (s)" value={aiDuration} min={1} onChange={setAiDuration} />
-            <button className="sp-primary" disabled={busy || !group} onClick={propose}>{busy ? 'Composing…' : 'Generate proposal'}</button>{busy && <button onClick={() => abort.current?.abort()}>Cancel</button>}
-            {proposal && <><strong>{proposal.recipes.length} proposed patterns</strong>{!proposalValid && <p className="sp-error">Engineering or target group changed. Generate a new proposal.</p>}
-              {proposal.recipes.map(r => <label className="sp-checkbox" key={r.id}><input type="checkbox" checked={proposalIds.includes(r.id)} onChange={e => setProposalIds(ids => e.target.checked ? [...ids, r.id] : ids.filter(id => id !== r.id))} />{r.name} · {r.start.toFixed(1)}–{(r.start + r.duration).toFixed(1)}s</label>)}
-              <button disabled={!proposalValid || !proposalIds.length} onClick={() => { setGhost(!ghost); seek(proposal.recipes[0].start); }}>{ghost ? 'Return to saved show' : 'Preview proposed patterns'}</button>
-              <button className="sp-primary" disabled={!proposalValid || !proposalIds.length || groupFlag(studio.groups, groupId, 'locked')} onClick={() => { change(s => ({ ...s, recipes: [...s.recipes, ...proposal.recipes.filter(r => proposalIds.includes(r.id))] })); setProposal(null); setGhost(false); setMessage('Applied proposed patterns. Undo restores the previous show.'); }}>Apply selected patterns</button>
+          {tab === 'ai' && <><span className="sp-eyebrow">AI CO-DESIGNER</span><h2>Describe the show in words.</h2><p className="sp-help">✦ Claude turns your words into editable patterns on your fountain's groups, with AquaFlow's own looks, so every hardware limit still applies. Text only (no audio) · uses your Anthropic key (Your fountain → AI director) · about half a minute. Without a key, AquaFlow's rule-based composer works on the selected group{group ? ` (${group.name})` : ''}.</p>
+            <label>What should the water do?<textarea rows={5} value={prompt} placeholder="e.g. back row slow blue wave in the chorus, drums fireworks on the drop, everything white at the end" onChange={e => { setPrompt(e.target.value); setProposal(null); setGhost(false); }} /></label>
+            <button className="sp-primary" disabled={busy} onClick={composeAi}>{busy ? 'Composing…' : '✦ Compose with AI'}</button>{busy && <button onClick={() => abort.current?.abort()}>Cancel</button>}
+            <details><summary>Rule-based composer (no AI)</summary><NumberField label="Duration (s)" value={aiDuration} min={1} onChange={setAiDuration} /><button disabled={busy || !group} onClick={() => { setAiNote(''); rememberPrompt(prompt); propose(); }}>{group ? `Compose on ${group.name} from the playhead` : 'Select a group first'}</button></details>
+            {aiNote && <p className="sp-help" role="status">{aiNote}</p>}
+            {proposal && <><strong>{proposal.items.length} proposed patterns</strong>{!proposalValid && <p className="sp-error">Engineering or target group changed. Generate a new proposal.</p>}
+              {proposal.items.map(it => <label className="sp-checkbox" key={it.id} title={it.why || ''}><input type="checkbox" checked={proposalIds.includes(it.id)} onChange={e => setProposalIds(ids => e.target.checked ? [...ids, it.id] : ids.filter(id => id !== it.id))} />{it.name} · {it.start.toFixed(1)}–{it.end.toFixed(1)}s{it.why ? <small> — {it.why}</small> : null}</label>)}
+              <button disabled={!proposalValid || !proposalRecipes.length} onClick={() => { setGhost(!ghost); seek(Math.min(...proposalRecipes.map(r => r.start))); }}>{ghost ? 'Return to saved show' : 'Preview proposed patterns'}</button>
+              <button className="sp-primary" disabled={!proposalValid || !proposalRecipes.length || (proposal.source !== 'ai' && groupFlag(studio.groups, groupId, 'locked'))} onClick={() => { const add = proposalRecipes, extra = proposal.groups || []; change(s => ({ ...s, groups: [...s.groups, ...extra.filter(g => !s.groups.some(x => x.id === g.id))], recipes: [...s.recipes, ...add] })); setProposal(null); setGhost(false); setMessage('Applied proposed patterns. Undo restores the previous show.'); }}>Apply selected patterns</button>
             </>}
           </>}
           {tab === 'compile' && <><span className="sp-eyebrow">RESOLVED SHOW</span><strong>{clips.length} fixture clips</strong><p className="sp-help">Group patterns resolve in the background. Preview and Siemens compilation receive these same timed clips.</p>

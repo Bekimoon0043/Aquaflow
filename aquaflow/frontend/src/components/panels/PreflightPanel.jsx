@@ -6,6 +6,8 @@ import {
   PREVIEW_ONLY_LABEL, buildPreflightProject, fixLabel, groupBySeverity, openDiagnosticFix, runPreflight,
   publishPreflightResult, // AF-NEXT-014: the workspace guidance reads the last result
 } from "../../preflight/preflight";
+import AiCommissioningHelp from "./AiCommissioningHelp"; // ✦ Ask AI (advice only)
+import { siteSummary } from "../../preflight/aiCommissioning";
 
 // AF-NEXT-009 — Preflight panel. Runs the backend preflight gate (read-only) for the chosen
 // controller and lists EVERY issue grouped by severity; each issue jumps to its fix location
@@ -125,5 +127,7 @@ export default function PreflightPanel() {
       </div>
       <PreflightIssueList issues={result.issues} />
     </>}
+    {(result?.issues?.length > 0 || error) && <AiCommissioningHelp issues={result?.issues || []} note={error ? `Preflight could not run: ${error}` : ""}
+      site={siteSummary({ fixtures: fixtures || [], target: kind })} />}
   </div>;
 }

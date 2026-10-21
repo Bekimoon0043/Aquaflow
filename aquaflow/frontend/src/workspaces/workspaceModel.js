@@ -69,6 +69,7 @@ export const WORKSPACES = Object.freeze([
       entry("design-hydraulics", "Hydraulics", "engtools", tab("engtools", "hydraulics")),
       entry("design-verified", "Verified equipment models", "engtools", tab("engtools", "verified")),
       entry("design-bom", "Bill of materials", "engtools", tab("engtools", "bom")),
+      entry("design-ai-review", "✦ AI design review", "engtools", tab("engtools", "ai")),
       entry("design-engtools", "All engineering tools", "engtools"),
       entry("design-preview", "3D preview", "preview"),
     ],
