@@ -42,17 +42,25 @@ def sdk_available() -> bool:
         return False
 
 
+# Kept next to the licence (~/.aquaflow) so the key survives app updates; the engine's own
+# data/ folder (KEY_FILE) is still read for keys saved by older versions.
+HOME_KEY_FILE = Path.home() / ".aquaflow" / "director_key"
+
+
 def saved_key() -> Optional[str]:
-    try:
-        key = KEY_FILE.read_text(encoding="utf-8").strip()
-        return key or None
-    except OSError:
-        return None
+    for f in (HOME_KEY_FILE, KEY_FILE):
+        try:
+            key = f.read_text(encoding="utf-8").strip()
+            if key:
+                return key
+        except OSError:
+            continue
+    return None
 
 
 def save_key(key: str) -> None:
-    KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    KEY_FILE.write_text(key.strip(), encoding="utf-8")
+    HOME_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    HOME_KEY_FILE.write_text(key.strip(), encoding="utf-8")
 
 
 def credentials_configured() -> bool:

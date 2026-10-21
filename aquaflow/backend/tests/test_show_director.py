@@ -71,6 +71,7 @@ def test_refusal_and_cut_off_answers_raise():
 
 def test_key_is_saved_locally_and_never_returned(tmp_path, monkeypatch):
     monkeypatch.setattr(show_director, "KEY_FILE", tmp_path / "director_key")
+    monkeypatch.setattr(show_director, "HOME_KEY_FILE", tmp_path / "home" / "director_key")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
     from main import app
@@ -79,4 +80,8 @@ def test_key_is_saved_locally_and_never_returned(tmp_path, monkeypatch):
     assert c.post("/api/director/key", json={"key": "sk-ant-test-0123456789"}).json() == {"configured": True}
     status = c.get("/api/director/status").json()
     assert status["configured"] is True and "sk-ant" not in json.dumps(status)
-    assert (tmp_path / "director_key").read_text() == "sk-ant-test-0123456789"
+    assert (tmp_path / "home" / "director_key").read_text() == "sk-ant-test-0123456789"
+    # A key saved by an older version in the engine's data/ folder is still read.
+    (tmp_path / "home" / "director_key").unlink()
+    (tmp_path / "director_key").write_text("sk-ant-old-0123456789")
+    assert show_director.saved_key() == "sk-ant-old-0123456789"
