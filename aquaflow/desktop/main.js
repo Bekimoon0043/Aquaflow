@@ -79,6 +79,14 @@ let ui = null;       // loopback UI server { server, port, url, close }
 let shuttingDown = false;
 let sessionInfo = null;     // AF-NEXT-006 — { uncleanExit, previous } from the session lock
 const recoveryDir = () => path.join(app.getPath("userData"), "project-recovery");
+// AI director key kept with the licence (%USERPROFILE%\.aquaflow\director_key) so it survives
+// updates (the engine's own data/ folder is replaced on reinstall). Given to the engine only.
+function directorKeyEnv() {
+  try {
+    const key = fs.readFileSync(path.join(os.homedir(), ".aquaflow", "director_key"), "utf8").trim();
+    return key ? { ANTHROPIC_API_KEY: key } : {};
+  } catch { return {}; }
+}
 
 // AF-PKG-006 — extract a .aquashow path from a launch/second-instance argv.
 function showPathFromArgv(argv) {
@@ -364,6 +372,7 @@ async function boot() {
       // Belt-and-braces: the backend regex already allows any 127.0.0.1 port, but list the
       // UI server's exact origin too so CORS holds even if the regex ever changes.
       corsOrigins: ui ? [`http://127.0.0.1:${ui.port}`] : [],
+      extraEnv: directorKeyEnv(),
       onLog: (line) => process.stdout.write(`[engine] ${line}`),
     });
 

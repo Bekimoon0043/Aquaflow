@@ -1,5 +1,10 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-21: AquaFlow Studio 1.2.60 — AI director key survives updates**
+
+- The desktop app reads `%USERPROFILE%\.aquaflow\director_key` (next to the licence) and gives it to the engine only, as `ANTHROPIC_API_KEY` (`desktop/main.js` `directorKeyEnv`). The engine's own `data/director_key` is lost on reinstall.
+- Key installed for this PC; the engine reports `/api/director/status` configured (claude-opus-5-5). The key is never in the repo.
+
 **2026-10-20 (late night): AquaFlow Studio 1.2.59 — water follows its stem, and videos with sound**
 
 - **Water follows its stem** (`stemShow.js`):
