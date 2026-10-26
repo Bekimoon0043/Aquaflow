@@ -15,6 +15,7 @@
 
 import { readFountainDesign } from './fountainDesign';
 import { visibleLead, windSafeScale } from '../../preview/waterPhysics';
+import { isVfdPump, jetFlowLpm, pumpRatedLpm } from '../../../engineering/pumpFlow';
 
 export const SCM_VERSION = 1;
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -121,8 +122,11 @@ export function buildSiteModel(items, { design = readFountainDesign(items), over
       id: n.id, family: n.kind, actuator, pos: [num(n.item.x), num(n.item.y), num(n.item.z)],
       area: areaOf.get(n.id)?.area.id || null, layer: layerOf(depth[k]), chaseOrder: areaOf.get(n.id)?.order ?? 0,
       mirrorOf: symmetry.partner.get(n.id) || null, sourceId: n.pumpId, valveId: n.valveId,
-      coupledWith: n.valveId ? [] : pumpSiblings, heightM: n.heightM, flowLpm: num(e.flowLpm),
-      limits: defaultLimits(n.kind, actuator), latency: { delayS: cal(n)?.delayS ?? 0.1, leadS: Math.round(visibleLead(n.heightM, { delayS: cal(n)?.delayS ?? 0.1, vt: cal(n)?.vtMs }) * 1000) / 1000,
+      coupledWith: n.valveId ? [] : pumpSiblings, heightM: n.heightM,
+      ...(n.mountHeightM ? { mountHeightM: n.mountHeightM } : {}),
+      ...(n.aimDeg != null ? { aimDeg: n.aimDeg, aimAzimuthDeg: n.aimAzimuthDeg } : {}),
+      ...(n.catchAtM != null ? { catchAtM: n.catchAtM } : {}), flowLpm: num(e.flowLpm) || Math.round(jetFlowLpm(n.item) * 10) / 10,
+      limits: defaultLimits(n.kind, actuator), latency: { delayS: cal(n)?.delayS ?? 0.1, leadS: Math.round(visibleLead(n.heightM, { delayS: cal(n)?.delayS ?? 0.1, vt: cal(n)?.vtMs, aimDeg: n.aimDeg ?? null }) * 1000) / 1000,
         provenance: cal(n) ? 'calibrated' : 'derived' },
       role: { default: FAMILY_ROLE[n.kind] || 'rhythm', hero: HERO_FAMILIES.has(n.kind) }, lightIds: n.lightIds,
     };
@@ -131,7 +135,7 @@ export function buildSiteModel(items, { design = readFountainDesign(items), over
   });
   const sources = [...design.pumps.values()].map((p) => {
     const free = p.nozzleIds.filter((id) => !design.nozzleById.get(id).valveId);
-    return { id: p.id, name: p.name, kind: 'vfd_pump', qMaxLpm: num(p.item.engineering?.flowLpm), outputs: p.nozzleIds, valved: p.valveIds,
+    return { id: p.id, name: p.name, kind: 'vfd_pump', vfd: isVfdPump(p.item), qMaxLpm: num(pumpRatedLpm(p.item)) || num(p.item.engineering?.flowLpm), outputs: p.nozzleIds, valved: p.valveIds,
       freeOutlets: free, upPctPerS: 40, downPctPerS: 30, openCountFeedForward: [[1, 1]], provenance: 'derived' };
   });
   const wind = { ...DEFAULT_WIND, ...(overrides.wind || {}) };
@@ -150,7 +154,8 @@ export function buildSiteModel(items, { design = readFountainDesign(items), over
     // (Even in calm air: splash reaches about one jet height sideways.)
     let heightScale = stage;
     if (basin && stage > 0) {
-      for (const o of outs) heightScale = Math.min(heightScale, windSafeScale({ x: o.pos[0], y: o.pos[1], heightM: o.heightM, sprayAngleDeg: eng(o).sprayAngleDeg, nozzleDiaMm: eng(o).nozzleDiaMm }, basin, { windMs, windDirDeg: overrides.windDirDeg ?? null, limit: splashLimit }));
+      for (const o of outs) heightScale = Math.min(heightScale, windSafeScale({ x: o.pos[0], y: o.pos[1], heightM: o.heightM, sprayAngleDeg: eng(o).sprayAngleDeg, nozzleDiaMm: eng(o).nozzleDiaMm,
+        mountHeightM: o.mountHeightM, aimDeg: o.aimDeg, aimAzimuthDeg: o.aimAzimuthDeg, catchAtM: o.catchAtM, fanAngleDeg: eng(o).fanAngleDeg }, basin, { windMs, windDirDeg: overrides.windDirDeg ?? null, limit: splashLimit }));
     }
     return { id: a.id, name: a.name, family: a.kind, control: a.control, position: a.position, layer, size: a.size, heightM: a.heightM,
       role: FAMILY_ROLE[a.kind] || 'rhythm', hero, coupled, sources: a.pumpIds, lightIds: a.lightIds, nozzleIds: a.nozzleIds,

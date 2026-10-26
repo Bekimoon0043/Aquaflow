@@ -26,6 +26,7 @@ import { readFountainDesign } from './fountainDesign';
 import { conflictSummary, groupConflicts } from './groupAdvisor';
 import { useMusicLanes } from './MusicLanes';
 import { composeContext, composeProposal, readPrompt, rememberPrompt, requestCompose } from './aiCompose';
+import { waveformEnvelope } from '../../../utils/waveformEnvelope';
 import './showStudio.css';
 
 const StudioPreview = lazy(() => import('./StudioPreview'));
@@ -132,7 +133,7 @@ export default function ShowStudio() {
     const url = URL.createObjectURL(audioFile), element = new Audio(url); audio.current = element;
     setAudioName(audioFile.name);
     const context = new AudioContext();
-    audioFile.arrayBuffer().then(buffer => context.decodeAudioData(buffer)).then(buffer => { if (alive) setAudioBuffer(buffer); })
+    audioFile.arrayBuffer().then(buffer => context.decodeAudioData(buffer)).then(buffer => { if (alive) setAudioBuffer(waveformEnvelope(buffer)); })
       .catch(error => { if (alive) setMessage(`Could not read the waveform: ${error.message}`); }).finally(() => context.close());
     const project = useProjectStore.getState();
     project.rememberProgrammer({ ...project.programmer, audioFile });

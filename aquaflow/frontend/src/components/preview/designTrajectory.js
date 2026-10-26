@@ -51,16 +51,19 @@ const physKey = (p) => `${p.gravity}/${p.drag}`;
 
 /**
  * Fly one droplet with the renderer's semi-implicit Euler step (v then p), launched from
- * height 0. Lands when it falls back through the launch height.
+ * height 0. Lands when it falls back through the launch height — or, with `dropM` > 0
+ * (an elevated nozzle: engineering.mountHeightM), when it has fallen `dropM` below it.
+ * `apex` stays relative to the launch point; `range` is the horizontal landing distance.
  * @returns {{apex:number, range:number, tApex:number, tLand:number, xApex:number}}
  */
-export function simulateFlight(vh, vy, phys = RENDER_PHYSICS.water, dt = SOLVER_DT) {
+export function simulateFlight(vh, vy, phys = RENDER_PHYSICS.water, dt = SOLVER_DT, dropM = 0) {
+  const drop = dropM > 0 ? dropM : 0;
   // Emitters re-ask for the same (memoised) launches every frame.
-  if (dt === SOLVER_DT) return memo(`F|${vh}|${vy}|${physKey(phys)}`, () => fly(vh, vy, phys, dt));
-  return fly(vh, vy, phys, dt);
+  if (dt === SOLVER_DT) return memo(`F|${vh}|${vy}|${physKey(phys)}${drop ? `|${drop.toFixed(3)}` : ""}`, () => fly(vh, vy, phys, dt, drop));
+  return fly(vh, vy, phys, dt, drop);
 }
 
-function fly(vh, vy, phys, dt) {
+function fly(vh, vy, phys, dt, drop = 0) {
   const g = phys.gravity, k = phys.drag;
   let x = 0, y = 0, u = vh, w = vy, t = 0;
   let apex = 0, xApex = 0, tApex = 0;
@@ -71,9 +74,9 @@ function fly(vh, vy, phys, dt) {
     const nx = x + u * dt, ny = y + w * dt;
     t += dt;
     if (ny > apex) { apex = ny; xApex = nx; tApex = t; }
-    if (ny < 0 && w < 0) {
+    if (ny < -drop && w < 0) {
       // Interpolate the crossing inside the last step.
-      const f = y / (y - ny);
+      const f = (y + drop) / (y - ny);
       return { apex, range: x + (nx - x) * f, tApex, tLand: t - dt + dt * f, xApex };
     }
     x = nx; y = ny;

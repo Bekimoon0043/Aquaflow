@@ -13,6 +13,7 @@ import { groupConflicts } from '../components/programmer/studio/groupAdvisor';
 import { builderGroups } from '../components/programmer/studio/patternPresets';
 import { windSafeScale } from '../components/preview/waterPhysics';
 import { pumpRating } from './pumpDuty';
+import { jetFlowLpm } from './pumpFlow';
 import { basinArea } from './basins';
 
 export const REVIEW_WIND_MS = 6; // a fresh breeze: how much height each area keeps outdoors
@@ -26,7 +27,7 @@ export function pumpFlowBudget(design) {
     const e = p.item.engineering || {};
     const rating = pumpRating(e);
     const ratedLpm = rating.flowM3s > 0 ? Math.round(rating.flowM3s * 60000) : null;
-    const known = p.nozzleIds.map((id) => Number(design.nozzleById.get(id)?.item.engineering?.flowLpm) || 0);
+    const known = p.nozzleIds.map((id) => jetFlowLpm(design.nozzleById.get(id)?.item)); // flowLpm, else k-factor × √p
     const demandLpm = known.some((q) => q > 0) ? Math.round(known.reduce((a, b) => a + b, 0)) : null;
     return { id: p.id, name: p.name, powerKw: Number(e.powerKw) || (rating.powerW ? rating.powerW / 1000 : null), vfd: isVfd(p.item),
       ratedLpm, demandLpm, missingFlow: known.filter((q) => !(q > 0)).length, jets: p.nozzleIds.length, valved: p.valveIds.length,

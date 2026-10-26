@@ -32,7 +32,9 @@ const queryApiBase = readBrowserOverride("api");
 const storedApiBase = readStorageOverride("aquaflow.apiBaseUrl");
 const fallbackApiBase = `${inferBackendOrigin()}/api`;
 
-const rawApiBase = trimTrailingSlash(envApiBase || queryApiBase || storedApiBase || fallbackApiBase);
+// The desktop app passes the engine it started (?api=…&ws=…). That always wins: the engine
+// moves to another port when 8000 is taken, and a build-time .env must not point elsewhere.
+const rawApiBase = trimTrailingSlash(queryApiBase || envApiBase || storedApiBase || fallbackApiBase);
 const rawOrigin = rawApiBase.endsWith("/api") ? rawApiBase.slice(0, -4) : rawApiBase;
 const envWsUrl = import.meta.env.VITE_WS_URL || "";
 const queryWsUrl = readBrowserOverride("ws");
@@ -41,5 +43,5 @@ const fallbackWsUrl = `${rawOrigin.replace(/^http/, "ws")}/ws`;
 
 export const API_BASE_URL = rawApiBase;
 export const BACKEND_ORIGIN = trimTrailingSlash(rawOrigin);
-export const WS_URL = trimTrailingSlash(envWsUrl || queryWsUrl || storedWsUrl || fallbackWsUrl);
+export const WS_URL = trimTrailingSlash(queryWsUrl || (queryApiBase ? "" : envWsUrl) || storedWsUrl || fallbackWsUrl);
 export const HEALTH_URL = `${BACKEND_ORIGIN}/api/health`;

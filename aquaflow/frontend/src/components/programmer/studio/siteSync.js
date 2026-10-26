@@ -9,9 +9,14 @@
 //
 //   audio     player/output buffer + DSP/processor + amplifier (ms, user-set) + acoustic travel
 //             from the nearest speaker to the listener at c = 331.3 + 0.606·T m/s
-//   control   AquaFlow PC → PLC: the show frame is sampled every `frameMs` (≈ 100 ms sleep + the
-//             S7 commit) and the PLC cyclic OB runs every `plcCycleMs`: on average half of each,
-//             plus the S7 write (`networkMs`) and the output card (`outputMs`, relay ≈ 10 ms)
+//   control   AquaFlow PC → PLC. Streamed (PLC program contract v2): the show frame is sampled
+//             every `frameMs` (≈ 100 ms sleep + the S7 commit) and the PLC cyclic OB runs every
+//             `plcCycleMs`: on average half of each, plus the S7 write (`networkMs`) and the output
+//             card (`outputMs`, relay ≈ 10 ms). Frame-accurate (contract v3, "buffered"): the PLC
+//             applies timestamped banks on its own clock in a `fastCycleMs` OB, so only half a fast
+//             cycle and the output card remain; the network is ahead of time and drops out.
+//             `control.mode`: 'auto' (follow the PLC program the runtime reported, `plcTiming`,
+//             streamed until known) | 'streamed' | 'buffered'.
 //   water     control + actuator (valve opening: calibrated `delayS` of the nozzle type when the
 //             site was measured, else `valveMs`; VFD pump: `vfdMs` — its ramp is already started
 //             early by hardwareFollow; swing motor: `motorMs`) + rise to the visible top
@@ -37,7 +42,7 @@
 // shifted by D − extra. With a fixed offset set by the user, clips that still fall before 0 are
 // trimmed and reported.
 
-import { COLUMN_VT, riseTime, visibleLead } from '../../preview/waterPhysics';
+import { COLUMN_VT, travelTime, visibleLead } from '../../preview/waterPhysics';
 import { readFountainDesign } from './fountainDesign';
 import { inferFront } from './siteCapability';
 import { getFixtureInfo } from '../../../utils/fixtureTypeResolver';
@@ -58,7 +63,7 @@ export const SYNC_DEFAULTS = Object.freeze({
   // Audience area in front of the fountain: from `frontM` to `frontM + depthM` beyond its front
   // edge, `widthM` wide (null → the fountain's width). Seating / plaza scenery wins when present.
   audience: { frontM: 6, depthM: 20, widthM: null },
-  control: { frameMs: 150, networkMs: 10, plcCycleMs: 100, outputMs: 10 },
+  control: { mode: 'auto', frameMs: 150, networkMs: 10, plcCycleMs: 100, fastCycleMs: 10, outputMs: 10 },
   valveMs: 100,
   vfdMs: 100,
   motorMs: 50,
@@ -119,16 +124,44 @@ export function audioChain(settings, distanceM) {
   return { parts, totalMs: r1(parts.reduce((s, p) => s + p.ms, 0)), speedMs: c };
 }
 
+export const PLC_TIMING_MODES = ['auto', 'streamed', 'buffered'];
+
+/** The PLC timing the control path is modelled for: 'streamed' | 'buffered'. */
+export function plcTimingMode(settings) {
+  const c = settings?.control || {};
+  if (c.mode === 'streamed' || c.mode === 'buffered') return c.mode;
+  return c.plcTiming === 'buffered' ? 'buffered' : 'streamed';
+}
+
+/**
+ * The site with the PLC timing the runtime reported (status.timing.mode) for 'auto' mode.
+ * Not stored in the show: it describes the PLC program, which can change under the show.
+ */
+export function withPlcTiming(site, mode) {
+  if (mode !== 'buffered' && mode !== 'streamed') return site || {};
+  const sync = isObj(site?.sync) ? site.sync : {};
+  if (isObj(sync.control) && sync.control.plcTiming === mode) return site;
+  return { ...(site || {}), sync: { ...sync, control: { ...(isObj(sync.control) ? sync.control : {}), plcTiming: mode } } };
+}
+
 /** AquaFlow PC → PLC → output card, average (ms). */
 export function controlPath(settings) {
   const c = settings.control || {};
+  if (plcTimingMode(settings) === 'buffered') {
+    const fast = num(c.fastCycleMs, 10);
+    const parts = [
+      { key: 'plc', label: `PLC clock (cues applied in the ${num(fast)} ms OB, ½ on average)`, ms: fast / 2 },
+      { key: 'card', label: 'Output card', ms: num(c.outputMs) },
+    ];
+    return { mode: 'buffered', parts, totalMs: r1(parts.reduce((s, p) => s + p.ms, 0)) };
+  }
   const parts = [
     { key: 'frame', label: `Show frame (every ${num(c.frameMs)} ms, ½ on average)`, ms: num(c.frameMs) / 2 },
     { key: 'network', label: 'Network / S7 write', ms: num(c.networkMs) },
     { key: 'plc', label: `PLC cycle (${num(c.plcCycleMs)} ms, ½ on average)`, ms: num(c.plcCycleMs) / 2 },
     { key: 'card', label: 'Output card', ms: num(c.outputMs) },
   ];
-  return { parts, totalMs: r1(parts.reduce((s, p) => s + p.ms, 0)) };
+  return { mode: 'streamed', parts, totalMs: r1(parts.reduce((s, p) => s + p.ms, 0)) };
 }
 
 /** Calibration of a nozzle (by type, then by kind) from studio.site.calibration. */
@@ -136,9 +169,10 @@ const calOf = (calibration, n) => (calibration && (calibration[n.item?.type] || 
 
 /**
  * The chain of one output (ms). `actuator`: 'valve' | 'vfd' | 'servo' | 'light' | 'other'.
- * Water: { heightM, cal } for the rise and the calibrated valve delay.
+ * Water: { heightM, cal } for the rise and the calibrated valve delay; an aimed nozzle
+ * (aimDeg) travels heightM along its aim instead of rising.
  */
-export function outputChain(settings, { actuator, heightM = 0, cal = null, fixtureMs = null }) {
+export function outputChain(settings, { actuator, heightM = 0, cal = null, fixtureMs = null, aimDeg = null }) {
   const control = controlPath(settings);
   const parts = [];
   let riseMs = 0;
@@ -156,8 +190,8 @@ export function outputChain(settings, { actuator, heightM = 0, cal = null, fixtu
     else if (actuator === 'vfd') parts.push({ key: 'vfd', label: 'VFD response (ramp started early by the show)', ms: num(settings.vfdMs) });
     else if (actuator === 'servo') parts.push({ key: 'motor', label: 'Swing motor response', ms: num(settings.motorMs) });
     if ((actuator === 'valve' || actuator === 'vfd') && heightM > 0) {
-      riseMs = 1000 * riseTime(heightM, num(cal?.vtMs, COLUMN_VT) || COLUMN_VT);
-      parts.push({ key: 'rise', label: `Rise to the top (${r1(heightM)} m)`, ms: r1(riseMs) });
+      riseMs = 1000 * travelTime(heightM, { vt: num(cal?.vtMs, COLUMN_VT) || COLUMN_VT, aimDeg });
+      parts.push({ key: 'rise', label: aimDeg != null ? `Travel to the end of the stream (${r1(heightM)} m)` : `Rise to the top (${r1(heightM)} m)`, ms: r1(riseMs) });
     }
     const corr = num(settings.correctionMs?.water);
     if (corr && actuator !== 'other') parts.push({ key: 'correction', label: 'Measured correction', ms: corr });
@@ -234,7 +268,7 @@ export function buildSyncModel(items = [], site = {}, { design = readFountainDes
   const outputs = new Map();
   const nozzleOut = (n, actuator) => {
     const cal = calOf(calibration, n);
-    const chain = outputChain(settings, { actuator, heightM: n.heightM, cal });
+    const chain = outputChain(settings, { actuator, heightM: n.heightM, cal, aimDeg: n.aimDeg ?? null });
     return { kind: 'water', family: n.kind, familyLabel: n.kindLabel || n.kind, actuator, heightM: n.heightM, calibrated: !!cal, ...chain };
   };
   for (const n of design.nozzles) outputs.set(n.id, nozzleOut(n, n.valveId ? 'valve' : n.pumpId ? 'vfd' : 'valve'));
@@ -401,7 +435,7 @@ export function syncTestClips(items = [], { site = {}, design = readFountainDesi
     const track = (n.item.tracks || []).find((t) => LEVEL_TRACK.test(t.type));
     if (!track) continue;
     const cal = calOf(calibration, n);
-    const lead = r3(visibleLead(n.heightM, { delayS: cal?.delayS ?? 0.1, vt: cal?.vtMs }));
+    const lead = r3(visibleLead(n.heightM, { delayS: cal?.delayS ?? 0.1, vt: cal?.vtMs, aimDeg: n.aimDeg ?? null }));
     // Open from `lead` before the beep until `afterS` after it (at least the valve's 1 s minimum
     // on time), then at least 1 s closed: a tall jet pulses on every second (third…) beep.
     const on = Math.max(1, lead + afterS);

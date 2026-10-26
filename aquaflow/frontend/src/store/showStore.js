@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { current, isDraft } from "immer";
 import { nanoid } from "nanoid";
 import { buildRuntimeSignature } from "../utils/runtimeSync";
 import { generateAutoTracks } from "../runtime/autoTrackGenerator.js";
@@ -126,7 +127,19 @@ const getBeatStep = (show, subdivision = 0.25) => {
 const getDefaultClipSpan = (show) => Math.max(0.5, getBeatStep(show, 1));
 const getMinClipDuration = (show) => Math.max(0.1, getBeatStep(show, 0.25));
 const MAX_HISTORY_ENTRIES = 80;
+// Undo snapshots of a long show (10k+ compiled clips) are large; past this many clips in
+// total the oldest steps are dropped even before MAX_HISTORY_ENTRIES (always keeps one).
+export const MAX_HISTORY_CLIPS = 400000;
+const historyWeight = (snapshot) => (Array.isArray(snapshot?.timelineTracks)
+  ? snapshot.timelineTracks.reduce((n, t) => n + 1 + (Array.isArray(t?.clips) ? t.clips.length : 0), 0) : 0);
 const cloneHistoryValue = (value) => {
+  // Immer state is immutable and structurally shared, so a snapshot keeps the current values
+  // by reference: unchanged parts of a draft come back as the frozen originals and only what
+  // this action already changed is copied. (structuredClone cannot clone a draft Proxy, so
+  // the old path fell back to a JSON copy of every clip: ~33 MB and ~0.8 s per step on an
+  // 11k-cue show, up to 80 steps kept.)
+  if (isDraft(value)) return current(value);
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
   try {
     return structuredClone(value); // Modern browser API — preserves audio, dates, etc.
   } catch (err) {
@@ -158,8 +171,11 @@ const syncHistoryFlags = (state) => {
   state.canRedo = state.redoStack.length > 0;
 };
 const pushUndoSnapshot = (state, snapshot = buildHistorySnapshot(state)) => {
+  snapshot.historyWeight = historyWeight(snapshot);
   state.undoStack.push(snapshot);
   if (state.undoStack.length > MAX_HISTORY_ENTRIES) state.undoStack.shift();
+  let weight = state.undoStack.reduce((n, entry) => n + (entry.historyWeight || 0), 0);
+  while (weight > MAX_HISTORY_CLIPS && state.undoStack.length > 1) weight -= state.undoStack.shift().historyWeight || 0;
   state.redoStack = [];
   state.pendingHistorySnapshot = null;
   syncHistoryFlags(state);

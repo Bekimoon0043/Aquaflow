@@ -237,6 +237,18 @@ export const TRACK_CAPABILITY_PRESETS = Object.freeze({
 
 export const FIXTURE_TYPE_MAP = {
   // ═══════════════════════════════════════════════════════════
+  // SCENERY — steel frames carrying elevated nozzles (no channels, never an output)
+  // ═══════════════════════════════════════════════════════════
+
+  steel_frame: {
+    runtimeType: "scenery", category: "scenery", deviceType: "steel_frame",
+    group: "scenery", protocol: "virtual", latencyMs: 0,
+    channels: [],
+    engineering: {},
+    previewCategory: "scenery",
+  },
+
+  // ═══════════════════════════════════════════════════════════
   // WATER / NOZZLES — CENTER JETS
   // ═══════════════════════════════════════════════════════════
 

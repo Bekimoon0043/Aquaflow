@@ -111,6 +111,20 @@ export function buildPreflightProject({ fixtures = [], programmer = {}, hydrauli
   };
 }
 
+/**
+ * Pump flow limits (engineering/pumpFlowCheck.js): the show may not ask a pump for more than its
+ * rated flow × margin. Loaded on demand; a failure is a warning, never a crash.
+ */
+export async function loadPumpFlowDiagnostics(project, { marginPct } = {}) {
+  try {
+    const mod = await import("../engineering/pumpFlowCheck.js");
+    return mod.pumpFlowDiagnostics(project, marginPct ? { marginPct } : {}).map(d => normalizeDiagnostic(d, "pump-flow"));
+  } catch (error) {
+    return [normalizeDiagnostic({ code: "pump-flow-failed", severity: "warning",
+      message: `Pump flow check could not run: ${error?.message || error}`, source: "pump-flow" })];
+  }
+}
+
 /** Run the backend gate and merge the hydraulic/splash diagnostics. */
 export async function runPreflight(project, target = { kind: "preview" }, { fetchImpl = fetch, modules } = {}) {
   const [response, local] = await Promise.all([
@@ -124,6 +138,7 @@ export async function runPreflight(project, target = { kind: "preview" }, { fetc
   ]);
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data?.detail === "string" ? data.detail : data?.detail?.message || "Preflight failed");
+  // Pump flow limits join the gate once the compile-side flow cap ships (connections work in progress).
   const issues = mergeDiagnostics(data.issues || [], local);
   const summary = summarizeDiagnostics(issues);
   return { ...data, issues, summary, ok: summary.errors === 0 };

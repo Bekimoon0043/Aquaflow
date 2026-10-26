@@ -17,6 +17,7 @@ import { buildHydraulicPreviewPayload } from "../engineering/hydraulicAdapter";
 import { geometryMetrics } from "../engineering/poolGeometry";
 import { selectEngineeringPipes } from "../engineering/engineeringProject";
 import { toPreviewSiteSurfaces } from "../engineering/siteSurfaces";
+import { isSteelFrameType } from "../components/preview/elevatedNozzles";
 
 export function useEngineeringSync(sceneRef) {
   const lastKeyRef   = useRef(null);
@@ -157,6 +158,14 @@ if (scene.setEngineeringEquipment) {
 
 if (scene.setEngineeringEffects) {
   scene.setEngineeringEffects(effectFixtures);
+}
+
+// Steel frames (scenery that carries elevated nozzles): drawn with the nozzles or the
+// equipment layer, in the same centred frame as the nozzles.
+if (scene.setSteelFrames) {
+  const framesVisible = visibleLayers.has("nozzles") || visibleLayers.has("equipment");
+  scene.setSteelFrames(framesVisible ? fixtures.filter(f => isSteelFrameType(f?.type)) : [],
+    shouldCenterFor3D ? center : null);
 }
 
 if (scene.setEngineeringPipes) {

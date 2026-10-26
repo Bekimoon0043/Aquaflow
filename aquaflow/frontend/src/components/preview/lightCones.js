@@ -178,8 +178,14 @@ export class LightConeSet {
       cone.visible = true;
       const radius = Math.max(1, Number(L.radius || 6));
       const height = Math.min(6.5, 2.0 + radius * 0.55);
-      cone.position.set(L.x || 0, 0.04, L.z || 0);
+      cone.position.set(L.x || 0, (Number(L.y) > 0 ? Number(L.y) : 0) + 0.04, L.z || 0);
       cone.scale.set(radius * 0.16, height, radius * 0.16);
+      // Aimed light: the unit-height beam (+y) turns to the aim; upright otherwise.
+      const a = L.aimDir;
+      if (Array.isArray(a)) {
+        this._aim = this._aim || { up: cone.up.clone().set(0, 1, 0), d: cone.up.clone() };
+        cone.quaternion.setFromUnitVectors(this._aim.up, this._aim.d.set(a[0], a[1], a[2]).normalize());
+      } else cone.quaternion.identity();
       const u = cone.material.uniforms;
       u.uColor.value.copy(L.color);
       u.uIntensity.value = Math.min(0.9, beamI);

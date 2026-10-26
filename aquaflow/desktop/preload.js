@@ -81,6 +81,12 @@ contextBridge.exposeInMainWorld("aquaflow", {
     readAsset(filePath) { return ipcRenderer.invoke("asset:read", String(filePath || "")); },
   },
 
+  // Startup check of Windows virtual memory (page file / free commit) for the UI banner:
+  // resolves { ok, warn, reasons[], hasPageFile, freeCommitMB, commitLimitMB, ... }.
+  system: {
+    memoryStatus() { return ipcRenderer.invoke("system:memory-status"); },
+  },
+
   // AF-3D-VID-002 — PNG image-sequence export. chooseFolder() opens the OS dialog and returns
   // { ok, path, token } | { canceled }; writeFile only writes bare *.png/*.wav/*.txt and simulation-cache (*.vdb/*.ply/*.json/*.abc/*.glb/*.py) names; options.mode "append"/"patch" stream one .abc
   // into the folder behind that token.

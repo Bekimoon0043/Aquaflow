@@ -6,6 +6,7 @@ import useEngineeringStore from '../../../store/engineeringStore';
 import useProjectStore from '../../../store/projectStore';
 import { poolCenter } from '../../../engineering/geometryContract';
 import { compileForSite, inventory } from './showModel';
+import { withPlcTiming } from './siteSync';
 
 const r1 = (v) => Math.round(Number(v) * 10) / 10;
 
@@ -31,15 +32,51 @@ export function plcShowFor(clips = [], { items = [], site } = {}) {
   return { clips: result.clips, sync: syncSummary(result), result };
 }
 
-/** The current design's fixtures and the open project's Site sync settings (outside React). */
-export function currentSyncContext() {
-  const e = useEngineeringStore.getState();
-  const items = inventory(e.fixtures || [], e.siteModels, poolCenter(e.geometry, e.params, e.poolType));
-  return { items, site: useProjectStore.getState().programmer?.studio?.site || {} };
+// PLC timing per Siemens site, as the engine last reported it (status.timing.mode):
+// 'buffered' = frame-accurate PLC clock (contract v3), 'streamed' = older program (v2).
+const knownTiming = new Map();
+
+/** Remember the timing a Siemens site's runtime status reported (null/unknown are ignored). */
+export function rememberPlcTiming(siteId, timing) {
+  const mode = typeof timing === 'string' ? timing : timing?.mode;
+  if (siteId && (mode === 'buffered' || mode === 'streamed')) knownTiming.set(siteId, mode);
 }
 
-/** plcShowFor with the open project's design and settings. */
-export const currentPlcShow = (clips) => plcShowFor(clips, currentSyncContext());
+/** Last reported timing mode of a Siemens site, or null. */
+export const plcTimingOf = (siteId) => (siteId && knownTiming.get(siteId)) || null;
+
+/** The current design's fixtures and the open project's Site sync settings (outside React). */
+export function currentSyncContext({ plcTiming } = {}) {
+  const e = useEngineeringStore.getState();
+  const items = inventory(e.fixtures || [], e.siteModels, poolCenter(e.geometry, e.params, e.poolType));
+  const project = useProjectStore.getState();
+  const mode = plcTiming || plcTimingOf(project.integrations?.siemensSiteId);
+  return { items, site: withPlcTiming(project.programmer?.studio?.site || {}, mode) };
+}
+
+/** plcShowFor with the open project's design and settings (and the PLC's timing mode). */
+export const currentPlcShow = (clips, options = {}) => plcShowFor(clips, currentSyncContext(options));
+
+/**
+ * One status line for the PLC timing: { text, tone: 'ok' | 'warn' | '', title }.
+ * `timing` is the runtime status block { mode, accuracyMs, worstLateMs, aheadMs, underruns, notice }.
+ */
+export function plcTimingLabel(timing) {
+  const mode = timing?.mode;
+  const worst = Number.isFinite(timing?.worstLateMs) ? ` · worst ${Math.round(timing.worstLateMs)} ms late` : '';
+  if (mode === 'buffered') {
+    const ahead = Number.isFinite(timing.aheadMs) ? ` · ${(timing.aheadMs / 1000).toFixed(1)} s buffered` : '';
+    const under = timing.underruns ? ` · ${timing.underruns} buffer underrun${timing.underruns === 1 ? '' : 's'}` : '';
+    return { text: `Frame-accurate (PLC clock) · ±${Math.round(timing.accuracyMs ?? 10)} ms${worst}${ahead}${under}`,
+      tone: under ? 'warn' : 'ok', title: "Cues fire on the PLC's own clock from a timestamped buffer, independent of PC and network jitter." };
+  }
+  if (mode === 'streamed') {
+    return { text: `Streamed · ±${Math.round(timing.accuracyMs ?? 75)} ms${worst} — update the PLC program`,
+      tone: 'warn', title: timing.notice || 'Download the current AquaFlow TIA package to the PLC for frame-accurate timing.' };
+  }
+  if (mode === 'preview') return { text: 'Preview only — no PLC timing', tone: '', title: '' };
+  return { text: 'PLC timing: verify the PLC to check', tone: '', title: '' };
+}
 
 /** One line for compile messages: where the music must start. */
 export function syncMessage(sync) {

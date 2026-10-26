@@ -1,5 +1,29 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-26: AquaFlow Studio 1.2.63 — front-facing water sculptures (Odaa tree in the sun)**
+
+- **Elevated and aimed nozzles** (`components/preview/elevatedNozzles.js`), all under `engineering.*` and all optional:
+  - `mountHeightM`; `aimDeg` (0 up, 90 level, 180 down) + `aimAzimuthDeg` (plan degrees from +x); `reachM`; `fanAngleDeg` / `fanPlane`;
+  - `catchAtM` (catch tray: the water stops there);
+  - true dandelion spheres (`sphereRadiusM`, `sphereCoverageDeg`);
+  - `steel_frame` fixtures (`tubes`), and automatic support pipes.
+  - Absent fields give emitters identical to before (snapshot test).
+- **New site:** `Desktop/Odaa_Tree_in_the_Sun.aquapkg`, built by `frontend/scripts/build-odaa-tree.mjs` and traced from the user's emblem.
+  - A 24-ray sun: fans aimed inward from a 6 m ring, plus a disc that is a curtain caught by a curved gutter.
+  - A canopy of 28 dandelion lobes plus green mist, and a trunk of 3 downward fans caught by a tray.
+  - 256 fixtures, 9 VFD pumps of ≤ 15 kW each, and a 75 s presentation show.
+  - Video: `Desktop/Odaa_Tree_in_the_Sun_Simulation.mp4`.
+- **Fixes:**
+  - The frontend now prefers the engine URL passed by the desktop app (`?api=`) over `.env.local`. The licence screen failed when port 8000 was taken by another program.
+  - `crash-log.js` / `memory-check.js` are now packaged; they were missing, so the 1.2.63 build hung on start.
+  - A stray apostrophe in plcSync.js.
+- **Also shipped, partly finished (from the 3 interrupted agents):**
+  - The stability work: main-process log, crash records, memory banner, save-with-song.
+  - The Connections editor files.
+  - The pump-flow preflight check, not yet wired into the gate.
+  - The PLC frame-accurate timing: frontend only. The backend contract-v3 changes are uncommitted and not in the engine (engine stays 1.2.62).
+- **Tests:** frontend all chunks pass.
+
 **2026-10-21 (evening): AquaFlow Studio 1.2.62 — Site sync on every PLC path**
 
 - **One helper for every path** (`studio/plcSync.js`): every way of sending the timeline to the PLC now applies Site sync — "Play on PLC" and Advanced PLC controls → "Compile current clips" (Show Studio and Show Programmer).

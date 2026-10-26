@@ -229,3 +229,22 @@ test("a truncated snapshot is listed as corrupt (never offered for recovery)", (
   const store = createSnapshotStore({ dir: snapsDir });
   assert.equal(store.list("A")[0].corrupt, true);
 });
+
+test("renderer crash in this session: recovery-info reports it; a package saved as the project records a clean save", async () => {
+  const dir = tmpDir(), handlers = new Map(), frame = {}, sender = { mainFrame: frame }, win = { webContents: sender };
+  const sessionInfo = { uncleanExit: false, previous: null };
+  registerProjectIpc({ ipcMain: { handle: (n, fn) => handlers.set(n, fn) }, dialog: {}, getMainWindow: () => win, userDataDir: dir, sessionInfo });
+  const ok = { sender, senderFrame: frame };
+  let info = await handlers.get("session:recovery-info")(ok);
+  assert.equal(info.uncleanExit, false);
+  assert.equal(info.rendererCrashAt, null);
+  // main.js marks the live session object when the window's renderer process is gone.
+  Object.assign(sessionInfo, { uncleanExit: true, rendererCrashAt: "2026-10-22T08:00:00.000Z" });
+  info = await handlers.get("session:recovery-info")(ok);
+  assert.equal(info.uncleanExit, true);
+  assert.equal(info.rendererCrashAt, "2026-10-22T08:00:00.000Z");
+  const pkg = path.join(dir, "show.aquapkg");
+  assert.equal((await handlers.get("project:save")(ok, { path: pkg, kind: "package", bytes: new Uint8Array([0x50, 0x4b]), projectKey: "p9" })).ok, true);
+  assert.ok((await handlers.get("session:recovery-info")(ok)).cleanSaves.p9.savedAt);
+  assert.equal((await handlers.get("project:save")(ok, { path: path.join(dir, "export.aquapkg"), kind: "package", bytes: new Uint8Array([1]) })).ok, true);
+});

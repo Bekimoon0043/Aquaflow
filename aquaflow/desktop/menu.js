@@ -7,6 +7,16 @@
 
 const { app, Menu, dialog, shell, BrowserWindow } = require("electron");
 const path = require("path");
+const fs = require("fs");
+
+// Help > Open Logs Folder — the rotating main-process log and crash records (crash-log.js).
+function openLogsFolder() {
+  let dir;
+  try { app.setAppLogsPath(); } catch { /* already set */ }
+  try { dir = app.getPath("logs"); } catch { dir = path.join(app.getPath("userData"), "logs"); }
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+  shell.openPath(dir).catch(() => {});
+}
 
 function sendToRenderer(channel, payload) {
   const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
@@ -82,6 +92,7 @@ function buildMenu() {
       submenu: [
         { label: "Documentation", click: () => shell.openExternal("https://luxuryconworld.com/aquaflow/docs") },
         { label: "Check for Updates…", click: () => checkForUpdatesHook() },
+        { label: "Open Logs Folder", click: openLogsFolder },
         { type: "separator" },
         { label: "About AquaFlow Studio", click: showAbout },
       ],

@@ -12,12 +12,13 @@ import { apiGet, apiPost, apiPostText, apiUrl } from "../../utils/apiClient";
 import ProvenanceBadge from "./ProvenanceBadge";
 import VerifiedModelsTool from "./VerifiedModelsTool";
 import AiDesignReview from "./AiDesignReview"; // ✦ AI design review (advice only)
+import ConnectionsEditor from "./connections/ConnectionsEditor"; // pumps ↔ valves ↔ nozzles ↔ lights
 import { getFixtureProvenance } from "../../data/fixtureLibrary";
 import { GENERIC_LABEL } from "../../data/fixtureProvenance";
 import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
 
 const TABS = [
-  ["hydraulics", "Hydraulics"], ["sizing", "Pipe Sizing"], ["nozzles", "Nozzles"],
+  ["connections", "🔗 Connections"], ["hydraulics", "Hydraulics"], ["sizing", "Pipe Sizing"], ["nozzles", "Nozzles"],
   ["bom", "BOM"], ["pid", "P&ID"], ["energy", "Energy"], ["weather", "Weather"],
   ["verified", "Verified Models"], ["ai", "✦ AI design review"],
 ];
@@ -326,6 +327,7 @@ export default function EngineeringToolsPanel() {
         {tab === "weather" && <WeatherTool />}
         {tab === "verified" && <VerifiedModelsTool />}
         {tab === "ai" && <AiDesignReview />}
+        {tab === "connections" && <ConnectionsEditor />}
       </div>
     </div>
   );

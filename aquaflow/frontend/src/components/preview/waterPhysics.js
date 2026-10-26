@@ -13,6 +13,8 @@
 //   timing    command → visible top = valve delay + rise time with drag (calibrated per nozzle)
 //   calibrate fit delay, launch speed and drag from jet-tip points measured on video
 
+import { solveReachSpeed, reachTime } from "./elevatedNozzles.js";
+
 export const G = 9.81;
 /** Effective terminal speed of a rising coherent jet column (m/s) — default until calibrated. */
 export const COLUMN_VT = 30;
@@ -68,6 +70,20 @@ export function riseTime(h, vt = COLUMN_VT) {
   return (vt / G) * Math.atan(launchForApex(h, vt) / vt);
 }
 
+/**
+ * In-air travel time to the visible end of the stream: the rise for an upright jet, or —
+ * for an aimed nozzle (aimDeg, elevatedNozzles.js) — the time the stream takes to travel
+ * its reach `h` along the aim under gravity and the column's drag.
+ */
+export function travelTime(h, { vt = COLUMN_VT, aimDeg = null } = {}) {
+  if (!(h > 0)) return 0;
+  const a = Number(aimDeg);
+  if (aimDeg == null || !Number.isFinite(a) || Math.abs(a) < 1e-6) return riseTime(h, vt);
+  const phys = { gravity: G, drag: G / (vt * vt) };
+  const t = reachTime(solveReachSpeed(h, a, phys), a, h, phys);
+  return t ?? riseTime(h, vt);
+}
+
 /** Fall time of a drop from height h at rest (terminal speed vt) — closed form. */
 export function fallTime(h, vt) {
   return h > 0 ? (vt / G) * Math.acosh(Math.exp((G * h) / (vt * vt))) : 0;
@@ -75,14 +91,20 @@ export function fallTime(h, vt) {
 
 /**
  * Landing points of one nozzle's water.
- * @param {object} n { x, y, heightM, sprayAngleDeg?, tiltDeg?, azimuthDeg?, nozzleDiaMm?, aerated? }
+ * @param {object} n { x, y, heightM, sprayAngleDeg?, tiltDeg?, azimuthDeg?, nozzleDiaMm?, aerated?,
+ *                     mountHeightM?, aimDeg?, aimAzimuthDeg?, catchAtM? } — an elevated nozzle's
+ *                     water falls the extra mount height; an aimed one ends its stream `heightM`
+ *                     along the aim; a caught one (catchAtM below the mount) lands nowhere.
  * @param {object} o { windMs, windDirDeg (direction the wind blows TO; plan degrees from +x), scale }
  */
 export function footprint(n, { windMs = 0, windDirDeg = 0, scale = 1, samples = 8, columnVt = COLUMN_VT } = {}) {
   const h = Math.max(0, (Number(n.heightM) || 0) * scale);
   if (!(h > 0.05)) return [];
+  const mount = Math.max(0, Number(n.mountHeightM) || 0);
+  if (Number(n.catchAtM) > 0 && Number(n.catchAtM) < mount) return [];   // a tray takes it all
   const wr = (windDirDeg * Math.PI) / 180;
   const wind = [windMs * Math.cos(wr), windMs * Math.sin(wr)];
+  if (n.aimDeg != null && Number.isFinite(Number(n.aimDeg))) return aimedFootprint(n, h, mount, wind, samples, columnVt);
   const half = ((Number(n.sprayAngleDeg) || 6) / 2) * Math.PI / 180;
   const tilt = ((Number(n.tiltDeg) || 0) * Math.PI) / 180, az = ((Number(n.azimuthDeg) || 0) * Math.PI) / 180;
   // Column phase: rises to h in t_rise; it leans with its tilt / spray cone and drifts a little
@@ -102,7 +124,27 @@ export function footprint(n, { windMs = 0, windDirDeg = 0, scale = 1, samples = 
     const ax = n.x + reach * hx + 0.3 * wind[0] * tr, ay = n.y + reach * hy + 0.3 * wind[1] * tr;
     // Drop phase: from the top, each drop size falls and drifts with the wind.
     for (const [d, w] of dropSpectrum(n.nozzleDiaMm, n.aerated)) {
-      const land = flyDrop({ x: ax, y: ay, z: h, vx: 0.4 * vh * hx, vy: 0.4 * vh * hy, vz: 0, vt: terminalSpeed(d), wind, dt: 0.04 });
+      const land = flyDrop({ x: ax, y: ay, z: h + mount, vx: 0.4 * vh * hx, vy: 0.4 * vh * hy, vz: 0, vt: terminalSpeed(d), wind, dt: 0.04 });
+      pts.push({ x: land.x, y: land.y, w: w / samples, d });
+    }
+  }
+  return pts;
+}
+
+/** An aimed stream: drops released where it ends (reach h along the aim, spread by the fan). */
+function aimedFootprint(n, h, mount, wind, samples, columnVt) {
+  const aim = (Number(n.aimDeg) * Math.PI) / 180, az = ((Number(n.aimAzimuthDeg) || 0) * Math.PI) / 180;
+  const half = ((Number(n.fanAngleDeg) || Number(n.sprayAngleDeg) || 6) / 2) * Math.PI / 180;
+  const phys = { gravity: G, drag: G / (columnVt * columnVt) };
+  const v0 = solveReachSpeed(h, Number(n.aimDeg), phys);
+  const pts = [];
+  for (let k = 0; k < samples; k++) {
+    const t = samples > 1 ? -half + (2 * half * k) / (samples - 1) : 0;
+    const a = aim + t;   // spread within the aim's plane
+    const ex = Math.sin(a) * Math.cos(az), ey = Math.sin(a) * Math.sin(az), ez = Math.cos(a);
+    const ax = n.x + h * ex, ay = n.y + h * ey, az0 = Math.max(0, mount + h * ez);
+    for (const [d, w] of dropSpectrum(n.nozzleDiaMm, n.aerated)) {
+      const land = flyDrop({ x: ax, y: ay, z: az0, vx: 0.4 * v0 * ex, vy: 0.4 * v0 * ey, vz: 0.4 * v0 * ez, vt: terminalSpeed(d), wind, dt: 0.04 });
       pts.push({ x: land.x, y: land.y, w: w / samples, d });
     }
   }
@@ -157,8 +199,8 @@ export function windSafeScale(n, basin, { windMs = 0, windDirDeg = null, limit =
  * Command → visible top for a nozzle: valve / drive delay + rise time with drag.
  * Calibration (fitted from video) wins over the defaults.
  */
-export function visibleLead(heightM, { delayS = 0.1, vt = COLUMN_VT } = {}) {
-  return Math.min(4, delayS + riseTime(Number(heightM) || 0, vt || COLUMN_VT));
+export function visibleLead(heightM, { delayS = 0.1, vt = COLUMN_VT, aimDeg = null } = {}) {
+  return Math.min(4, delayS + travelTime(Number(heightM) || 0, { vt: vt || COLUMN_VT, aimDeg }));
 }
 
 /**

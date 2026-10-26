@@ -49,8 +49,8 @@
 import { billboardFrag, fieldLightUniformStubs, FIELD_LIGHT_VARYING } from "./particlesBillboard";
 import { emitterOpacityScale } from './waterOptics';
 
-/** Rows of the emitter parameter texture. Must match EMIT_ROWS in the shaders. */
-const EMIT_ROWS = 6;
+/** Rows of the emitter parameter texture. Must match the rows the shaders read. */
+const EMIT_ROWS = 7;
 
 /**
  * Push the basin shape into a simulation material's uniforms (AF-3D-017).
@@ -134,7 +134,7 @@ void spawnState(float emitIdx, float seed, out vec3 pos, out vec3 vel, out float
   vec4 e2 = emitTexel(emitIdx, 2.0);   // spread, speedJitter, spawnRadius, density
   vec4 e3 = emitTexel(emitIdx, 3.0);   // color.rgb,  life
   vec4 e4 = emitTexel(emitIdx, 4.0);   // scale, scaleJitter, stretch, p1
-  vec4 e5 = emitTexel(emitIdx, 5.0);   // p2, class, -, -
+  vec4 e5 = emitTexel(emitIdx, 5.0);   // p2, aux, opacity, extraLife
 
   float mode   = e0.w;
   float speed  = e1.w;
@@ -171,7 +171,35 @@ void spawnState(float emitIdx, float seed, out vec3 pos, out vec3 vel, out float
     vec2  ax  = normalize(vec2(e1.x, e1.z) + vec2(1e-5, 0.0));
     vel = vec3(vh * ax.x, vy, vh * ax.y) + vec3(r2.x - 0.5, 0.0, r2.y - 0.5) * spread;
     pos += vec3(r2.x - 0.5, 0.0, r2.y - 0.5) * sRad * 2.0;
-    life = max(0.12, vy / 9.81 * 2.0 * 1.05);
+    // extraLife: the additional fall of an elevated fan below its launch height.
+    life = max(0.12, vy / 9.81 * 2.0 * 1.05) + e5.w;
+  } else if (mode > 4.5) {
+    // Elevated / aimed primitives (elevatedNozzles.js). Their life is solved on the CPU.
+    vec3 u = emitTexel(emitIdx, 6.0).xyz;
+    if (mode < 5.5) {
+      // AIM_FAN: a sheet swept cos(th)*dir + sin(th)*u — a fan pointing anywhere.
+      float th = mix(p1, p2, r.x);
+      vec3 d = normalize(cos(th) * e1.xyz + sin(th) * u + vec3(0.0, 1e-6, 0.0));
+      vel = d * speed * (1.0 + (r.y - 0.5) * sJit) + vec3(r2.x - 0.5, 0.0, r2.y - 0.5) * spread;
+      pos += vec3(r2.x - 0.5, 0.0, r2.y - 0.5) * sRad * 2.0;
+    } else if (mode < 6.5) {
+      // SPHERE: streams uniform over a cap of the axis u (p1 = cos of the half-opening);
+      // aux 1 releases droplets at the rim (radius p2).
+      float ct = 1.0 - r.x * (1.0 - p1);
+      float st = sqrt(max(0.0, 1.0 - ct * ct));
+      float ph = r.y * 6.2831853;
+      vec3 hx = abs(u.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+      vec3 b1 = normalize(cross(hx, u));
+      vec3 b2 = cross(u, b1);
+      vec3 d = u * ct + b1 * (cos(ph) * st) + b2 * (sin(ph) * st);
+      vel = d * speed * (1.0 + (r.z - 0.5) * sJit) + vec3(r2.x - 0.5, 0.0, r2.y - 0.5) * spread;
+      pos += d * (e5.y > 0.5 ? p2 : sRad);
+    } else {
+      // CURTAIN: an aimed cascade — a lip of width p1 along u, launched along dir.
+      pos += u * ((r.x - 0.5) * p1);
+      vel = normalize(e1.xyz + vec3(0.0, 1e-6, 0.0)) * speed * (0.6 + r.z * 0.8)
+          + vec3(r2.x - 0.5, 0.0, r2.y - 0.5) * spread;
+    }
   } else if (mode < 3.5) {
     // CASCADE — a curtain spawned above the water and falling.
     pos += vec3((r.x - 0.5) * p1, 0.0, (r.y - 0.5) * sRad * 2.0);
@@ -236,6 +264,16 @@ void simulate(vec2 uv, out vec3 outPos, out vec3 outVel, out float outLife, out 
 
   v += (vec3(0.0, uGravity, 0.0) - v * dragF + turb) * uDt;
   vec3 np = p + v * uDt;
+
+  // Catch tray (engineering.catchAtM): the water stops at the tray with a small
+  // splash and never reaches the basin. catchY < 0 = no tray.
+  float catchY = emitTexel(emitIdx, 6.0).w;
+  if (catchY > 0.0 && v.y < 0.0 && np.y < catchY && p.y >= catchY - 0.02) {
+    np.y = catchY;
+    v.y  = abs(v.y) * 0.12;
+    v.xz *= 0.45;
+    life = min(life, 0.12);
+  }
 
   // Impact. Water into water punches in and throws a compact splash back up; water
   // onto stone loses its vertical momentum and shears sideways into a low sheet.
@@ -555,7 +593,8 @@ export class GPUParticleField {
       put(2, i, e.spread, e.speedJitter, e.spawnRadius, Math.max(0, Math.min(1, e.density)));
       put(3, i, e.color[0], e.color[1], e.color[2], e.life);
       put(4, i, e.scale, e.scaleJitter, e.stretch, e.p1);
-      put(5, i, e.p2, 0, emitterOpacityScale(e, this._ranges?.[i]?.count || 0), 0);
+      put(5, i, e.p2, e.aux || 0, emitterOpacityScale(e, this._ranges?.[i]?.count || 0), e.extraLife || 0);
+      put(6, i, e.ux || 0, e.uy ?? 1, e.uz || 0, Number.isFinite(e.catchY) ? e.catchY : -1);
     }
     for (let i = n; i < W; i++) {
       // Density 0 parks any particle still assigned to a removed emitter.

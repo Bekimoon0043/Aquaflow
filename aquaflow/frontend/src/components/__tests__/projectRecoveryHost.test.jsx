@@ -4,20 +4,24 @@
 // report is a non-blocking toast, while missing/changed assets keep the blocking dialog.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const openProjectPath = vi.fn(() => Promise.resolve());
+const relinkAsset = vi.fn(() => Promise.resolve(null));
+let songPrompt = null;
+const recoveryState = { info: { uncleanExit: false, snapshots: [] }, candidate: null, bridge: null };
 vi.mock("../../utils/projectPersistence", async () => {
   const notify = (text, level = "info") => window.dispatchEvent(new CustomEvent("aquaflow:project-status", { detail: { text, level } }));
   return {
     restoreSnapshot: vi.fn(), openProjectPath: (...a) => openProjectPath(...a), saveProject: vi.fn(() => Promise.resolve()),
-    packageProject: vi.fn(() => Promise.resolve()), relinkAsset: vi.fn(), notify,
+    packageProject: vi.fn(() => Promise.resolve()), relinkAsset: (...a) => relinkAsset(...a), notify,
+    setSongPrompt: (fn) => { songPrompt = fn; return () => { if (songPrompt === fn) songPrompt = null; }; },
   };
 });
 vi.mock("../../utils/projectRecovery", () => ({
-  findRecoveryCandidate: () => null,
-  getSnapshotBackend: () => ({ recoveryInfo: () => Promise.resolve({ uncleanExit: false, snapshots: [] }), markClean: () => Promise.resolve() }),
-  desktopProjectBridge: () => null,
+  findRecoveryCandidate: () => recoveryState.candidate,
+  getSnapshotBackend: () => ({ recoveryInfo: () => Promise.resolve(recoveryState.info), markClean: () => Promise.resolve() }),
+  desktopProjectBridge: () => recoveryState.bridge,
 }));
 
 globalThis.React = React;
@@ -30,8 +34,12 @@ const report = (statuses) => ({
 const dispatchReport = (detail) => act(() => { window.dispatchEvent(new CustomEvent("aquaflow:asset-report", { detail })); });
 
 describe("ProjectRecoveryHost", () => {
-  beforeEach(() => { openProjectPath.mockClear(); });
-  afterEach(() => { cleanup(); delete window.aquaflow; });
+  beforeEach(() => { openProjectPath.mockClear(); relinkAsset.mockClear(); });
+  afterEach(() => {
+    cleanup(); delete window.aquaflow;
+    Object.assign(recoveryState, { info: { uncleanExit: false, snapshots: [] }, candidate: null, bridge: null });
+    window.sessionStorage.clear();
+  });
 
   it("signals ready-for-open after subscribing to open-show, and opens what the shell delivers", async () => {
     const order = [];
@@ -76,5 +84,45 @@ describe("ProjectRecoveryHost", () => {
     dispatchReport(report(["ok"]));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("status").textContent).toBe("1 asset verified");
+  });
+
+  it("missing song: says which song is missing and offers Locate the file…", async () => {
+    render(<ProjectRecoveryHost />);
+    dispatchReport({ projectPath: "D:/Copied/Lebu.aqua", kind: "aqua", report: { total: 2, items: [
+      { id: "model:custom:x", name: "Scene.glb", role: "site_model", status: "ok" },
+      { id: "audio:programmer", name: "6493786.mp3", role: "audio", source: "file", status: "missing", sha256: "ab" },
+    ] } });
+    expect(screen.getByRole("dialog").textContent).toMatch(/The song 6493786\.mp3 is missing/);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Locate the file…" })); });
+    expect(relinkAsset).toHaveBeenCalledWith(expect.objectContaining({ id: "audio:programmer" }), expect.anything());
+  });
+
+  it("asks 'Keep the song inside the project file?' for Save and answers with the choice", async () => {
+    render(<ProjectRecoveryHost />);
+    expect(typeof songPrompt).toBe("function");
+    let answer;
+    act(() => { songPrompt({ song: { name: "song.mp3" }, projectKey: "p1" }).then((a) => { answer = a; }); });
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toMatch(/Keep the song inside the project file\?/);
+    expect(dialog.textContent).toMatch(/song\.mp3/);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Keep the song inside (.aquapkg)" })); });
+    expect(answer).toBe("embed");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("after the window crashed and reloaded, the recovery prompt is offered again in the same session", async () => {
+    recoveryState.bridge = {};
+    recoveryState.candidate = { snapshot: { id: "s1", name: "Lebu", savedAt: "2026-10-22T08:00:00Z", projectKey: "p1" }, lastCleanSaveAt: null };
+    recoveryState.info = { uncleanExit: true, snapshots: [], rendererCrashAt: "2026-10-22T08:05:00Z" };
+    window.sessionStorage.setItem("aquaflow.recoveryPromptHandled", "1"); // handled before the crash
+    render(<ProjectRecoveryHost />);
+    await act(async () => {});
+    expect(screen.getByRole("dialog").textContent).toMatch(/did not close normally/);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Discard" })); });
+    expect(window.sessionStorage.getItem("aquaflow.recoveryPromptHandled")).toBe("2026-10-22T08:05:00Z");
+    cleanup();
+    render(<ProjectRecoveryHost />); // same crash again (e.g. a plain reload): not offered twice
+    await act(async () => {});
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

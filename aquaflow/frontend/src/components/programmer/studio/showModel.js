@@ -25,9 +25,10 @@ export function inventory(fixtures, models = [], center = { cx: 0, cy: 0 }) {
     const water = createSiteWaterTrack(f);
     const available = water ? [water] : byFixture.get(f.id) || [];
     const unknown = !info || info.deviceType === 'unknown';
-    const readOnly = unknown || info.category === 'sensor' || info.runtimeType === 'sensor';
+    const scenery = info?.category === 'scenery';   // steel frames: structure, no channels
+    const readOnly = unknown || scenery || info.category === 'sensor' || info.runtimeType === 'sensor';
     return { ...f, label: f.label || f.name || f.type, tracks: readOnly ? [] : available,
-      status: unknown ? 'Needs mapping' : readOnly ? 'Read only' : available.length ? 'Programmable' : 'Read only',
+      status: scenery ? 'Scenery' : unknown ? 'Needs mapping' : readOnly ? 'Read only' : available.length ? 'Programmable' : 'Read only',
       category: info?.category || 'unknown' };
   }), ...models.map(m => ({ ...m, id: `scenery:${m.id}`, label: m.name || m.label || 'Site model',
     x: (m.transform?.position?.x ?? m.position?.x ?? m.position?.[0] ?? m.x ?? 0) + center.cx,
@@ -280,9 +281,11 @@ export function compileStudio(studio, items) {
   const modes = new Map(studio.recipes.filter(r => (r.hardware === 'hits' || r.hardware === 'open') && recipeAudible(r, groups))
     .map(r => [r.id, Number.isFinite(r.hardwareCap) ? { mode: r.hardware, cap: r.hardwareCap } : r.hardware]));
   if (modes.size) {
-    const routed = followHardware(clips, items, modes).clips;
+    // Pump flow limits: the report says which pumps were kept inside their rated flow and how.
+    const followed = followHardware(clips, items, modes, undefined, { marginPct: Number(studio.site?.flowMarginPct) || undefined });
+    const routed = followed.clips;
     if (routed.length > 50000) issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.');
-    return { clips: routed, issues: [...new Set(issues)] };
+    return { clips: routed, issues: [...new Set(issues)], ...(followed.flowCap ? { flowCap: followed.flowCap } : {}) };
   }
   return { clips, issues: [...new Set(issues)] };
 }

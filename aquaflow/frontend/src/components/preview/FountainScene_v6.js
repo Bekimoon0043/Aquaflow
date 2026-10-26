@@ -90,6 +90,11 @@ import { GPUParticleField, gpuParticlesSupported } from "./particlesGPU";
 import { describeNozzleEmitters, allocatePool, EMIT_CLASS, spawnDesignNozzle } from "./nozzleEmitters";
 // AF-3D-014 (Phase R4) — real nozzle and luminaire bodies, drawn instanced.
 import { FixtureInstances, LightMarkerInstances, fixtureKindFor } from "./fixtureModels";
+// Elevated / aimed nozzles and the stainless frames that carry them.
+import {
+  mountHeightOf, aimOf, parseFrameTubes, tubeSegments, autoSupportSegments, SPHERE_TYPE,
+} from "./elevatedNozzles";
+import { SteelFrameMesh } from "./steelFrames3D";
 import { buildVenue, disposeVenue } from "./venueModels";
 import { ModelLayer } from "./modelLibrary";
 import { QUALITY_CONFIG, CPU_SAMPLE_FRACTION } from "./sceneQuality";
@@ -109,7 +114,7 @@ export const NOZZLE_TYPES = {
     GEYSER:"geyser", MIST:"mist", LAMINAR:"laminar", PIROUETTE:"pirouette",
   FAN:"fan_jet", FLAME:"flame", LASER:"laser",
   MOTION_1D:"motion_1d", MOTION_2D:"motion_2d", MOTION_3D:"motion_3d",
-  SCREEN:"screen",
+  SCREEN:"screen", SPHERE:"sphere",
 };
 export const ENVIRONMENTS = RE_ENVIRONMENTS;   // sourced from the rendering engine (AQ-S3-004)
 export const CAMERA_MODES  = {
@@ -330,6 +335,9 @@ export class NozzleV2 {
     this.flameSys = flameSys;
     this.config   = config;
     this.intensity = 0;
+    // Elevated nozzle: the core column, glow and accents start at the mount.
+    this._mount = mountHeightOf(config);
+    this._aimed = aimOf(config) != null;
 
     this._buildMarker();
     this._buildCoreColumn(sharedLightUniforms);
@@ -350,7 +358,9 @@ export class NozzleV2 {
     const type = this.config.type || 'jet_3d';
 
     // Skip core mesh for layer-style nozzles that don't have a vertical column
-        if (type === 'mist' || type === 'cascade' || type === 'ring' || type === 'arch' || type === 'fan_jet' || type === 'flame' || type === 'laser' || type === 'screen') {
+        if (type === 'mist' || type === 'cascade' || type === 'ring' || type === 'arch' || type === 'fan_jet' || type === 'flame' || type === 'laser' || type === 'screen'
+        || type === SPHERE_TYPE || this._aimed) {
+      // (An aimed jet is drawn by its particles alone: the core column is vertical-only.)
       this.core = null;
       return;
     }
@@ -474,7 +484,7 @@ export class NozzleV2 {
       const uns = this.core.material.uniforms;
       uns.uTime.value = elapsed;
       uns.uIntensity.value = ix;
-      uns.uOrigin.value.set(ox, 0.05, oz);
+      uns.uOrigin.value.set(ox, 0.05 + this._mount, oz);
       uns.uWind.value.set(wind.x||0, wind.z||0);
       // The core ends before the spray's apex, where a pressurised stream breaks
       // into droplets. Use the same solved/fallback launch speed as the emitters.
@@ -497,7 +507,7 @@ export class NozzleV2 {
       const uns = this.glow.material.uniforms;
       uns.uTime.value = elapsed;
       uns.uIntensity.value = ix * 0.55;
-      uns.uOrigin.value.set(ox, 0.1, oz);
+      uns.uOrigin.value.set(ox, 0.1 + this._mount, oz);
       // Light scatters most visibly where the jet meets the water. A full-height
       // billboard made every stream look like a rectangular blue beam.
       uns.uHeight.value = 0.9 + ix * (type === 'geyser' ? 1.2 : 0.65);
@@ -1024,14 +1034,14 @@ case 'screen': {
     }
   }
 
-  _spawnApexMist(ox, apexH, oz, ix, spread) {
+  _spawnApexMist(ox, apexH, oz, ix, spread, baseY = 0) {
     if (Math.random() > ix*0.5) return;
     const n = 3 + Math.floor(ix*5);
     for (let i=0; i<n; i++) {
       const angle = Math.random()*Math.PI*2;
       const r = Math.random()*spread;
       this.spraySys.spawn(
-        ox+Math.cos(angle)*r, apexH*0.85, oz+Math.sin(angle)*r,
+        ox+Math.cos(angle)*r, baseY + apexH*0.85, oz+Math.sin(angle)*r,
         (Math.random()-0.5)*0.8*ix, Math.random()*0.5*ix, (Math.random()-0.5)*0.8*ix,
         0.88, 0.95, 1.0, 0.6, 0.3+Math.random()*0.4, 0.10+ix*0.08, 0.15
       );
@@ -1051,13 +1061,14 @@ case 'screen': {
     }
   }
 
-  _spawnImpactFoam(ox, oz, ix) {
+  // `y`: where the water lands, the basin (default) or an elevated catch tray.
+  _spawnImpactFoam(ox, oz, ix, y = 0.06) {
     const n = Math.floor(ix*6);
     for (let i=0; i<n; i++) {
       const angle = Math.random()*Math.PI*2;
       const r = 0.1 + Math.random()*0.4*ix;
       this.foamSys.spawn(
-        ox+Math.cos(angle)*r, 0.06, oz+Math.sin(angle)*r,
+        ox+Math.cos(angle)*r, y, oz+Math.sin(angle)*r,
         Math.cos(angle)*0.5*ix, 0.12, Math.sin(angle)*0.5*ix,
         1.0, 1.0, 1.0, 0.55, 0.3+Math.random()*0.3, 0.14, 0.3
       );
@@ -1080,7 +1091,7 @@ const IDLE = {
   arch:0.02, ring:0.02, cascade:0.08,
   geyser:0.04, mist:0.10, laminar:0.02, pirouette:0.02,
   fan_jet:0.02, flame:0.04, laser:0.0, screen:0.06,
-  motion_1d:0.03, motion_2d:0.03, motion_3d:0.03,
+  motion_1d:0.03, motion_2d:0.03, motion_3d:0.03, sphere:0.02,
 };
 
 // Pattern definitions — delta-driven, not setInterval
@@ -1278,6 +1289,9 @@ export class FountainScene {
     this._buildLasers();
     this._fixtureInstances = new FixtureInstances(this.THREE);
     this.scene.add(this._fixtureInstances.group);
+    // Steel frames + automatic support pipes for elevated nozzles (two draw calls).
+    this._steelFrames = new SteelFrameMesh(this.THREE);
+    this.scene.add(this._steelFrames.group);
     // AF-3D-019: every engineering light is an instance (body + lens), not a mesh.
     this._lightMarkers = new LightMarkerInstances(this.THREE);
     this.scene.add(this._lightMarkers.group);
@@ -1688,6 +1702,7 @@ export class FountainScene {
     return [
       ...(this._modelLayer?.root.children || []),
       ...(this._fixtureInstances?.group.children || []),
+      ...(this._steelFrames?.group.children || []),
       ...(this._engLightMeshes || []),
       ...(this._lightMarkers?.bodies.group.children || []),
     ];
@@ -2151,16 +2166,20 @@ export class FountainScene {
       if (nz.core) this.scene.add(nz.core);
       if (nz.glow) this.scene.add(nz.glow);
       this.nozzles.push(nz);
+      const aim = aimOf(finalCfg);
       fixtureBodies.push({
         id: finalCfg.id,
         kind: fixtureKindFor(finalCfg.type),
-        x: finalCfg.x, y: 0, z: finalCfg.z,
+        // An elevated nozzle's body sits at its mount, pointing along its aim.
+        x: finalCfg.x, y: mountHeightOf(finalCfg), z: finalCfg.z,
         rotationX: finalCfg.tiltX,
         rotationY: finalCfg.rotationY,
         rotationZ: finalCfg.tiltZ,
+        ...(aim ? { up: aim.dir } : {}),
       });
     });
     this._fixtureInstances?.setFixtures(fixtureBodies);
+    this._rebuildSteel();
 
     // Re-attach any solved hydraulics to the freshly built nozzle instances, so a
     // re-layout does not silently drop back to the estimated jet heights.
@@ -2261,6 +2280,24 @@ export class FountainScene {
   }
 
   setEngineeringLights(lightConfigs) { return setEngineeringLights(this, lightConfigs); }
+
+  /**
+   * Steel frames (steel_frame fixtures: engineering.tubes, PLAN coordinates), drawn as
+   * brushed-stainless tubes. `center` is the same {cx, cy} shift the nozzles get.
+   */
+  setSteelFrames(frameFixtures = [], center = null) {
+    const tubes = [];
+    for (const f of frameFixtures || []) tubes.push(...parseFrameTubes(f).tubes);
+    this._frameSegs = tubeSegments(tubes, center);
+    this._rebuildSteel();
+  }
+
+  _rebuildSteel() {
+    if (!this._steelFrames) return;
+    const frames = this._frameSegs || [];
+    const supports = autoSupportSegments(this.nozzles.map(n => n.config), frames);
+    this._steelFrames.setSegments(frames.length || supports.length ? [...frames, ...supports] : []);
+  }
 
   _uploadLightField() {
     // AF-3D-022: every fixture goes into the light texture; the cluster grid is only
@@ -2366,7 +2403,7 @@ export class FountainScene {
 
         const jets = [
           'jet_1d','jet_2d','jet_3d','geyser','laminar','pirouette',
-          'fan_jet','motion_1d','motion_2d','motion_3d'
+          'fan_jet','motion_1d','motion_2d','motion_3d','sphere'
         ];
 
         if (jets.includes(t)) {
@@ -2391,7 +2428,7 @@ export class FountainScene {
         live = patternValue * runtimeValue;
       } else {
         const jets = ['jet_1d','jet_2d','jet_3d','geyser','laminar','pirouette',
-                      'fan_jet','motion_1d','motion_2d','motion_3d'];
+                      'fan_jet','motion_1d','motion_2d','motion_3d','sphere'];
         if (jets.includes(t)) live = I.pump || 0;
         else if (['arch','ring','cascade'].includes(t)) live = Math.max((I.pump||0)*0.65, I.valve||0);
         else if (t === 'mist')   live = Math.max(I.fog||0, (I.pump||0)*0.35);
@@ -3171,6 +3208,8 @@ export class FountainScene {
     this._modelLayer = null;
     this._fixtureInstances?.dispose?.();
     this._fixtureInstances = null;
+    this._steelFrames?.dispose?.();
+    this._steelFrames = null;
     this._lightMarkers?.dispose?.();
     this._lightMarkers = null;
     if (this._particleTex) {

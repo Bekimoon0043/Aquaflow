@@ -28,8 +28,13 @@
 
 import {
   RENDER_PHYSICS, speedForApex, solveArc, simulateFlight, fallTime, designLevel,
-  designHeightOf, designThrowM, elevationOf, MIN_DESIGN_ELEVATION,
+  designHeightOf, designThrowM, elevationOf, MIN_DESIGN_ELEVATION, SOLVER_DT,
 } from "./designTrajectory";
+import {
+  SPHERE_TYPE, hasSpatialFeatures, mountHeightOf, catchHeightOf, aimOf, fanAxis, fanPlaneOf,
+  fanAngleOf, reachOf, solveReachSpeed, reachTime, aimDegOfVector, sphereRadiusOf,
+  sphereCoverageCos, sphereStreamSpeed, sphereDirection,
+} from "./elevatedNozzles";
 
 /** Emission primitives, shared with the simulation shader. */
 export const EMIT_MODE = {
@@ -38,6 +43,12 @@ export const EMIT_MODE = {
   FAN: 2,
   CASCADE: 3,
   MIST: 4,
+  // Elevated / aimed nozzles (elevatedNozzles.js). Descriptors of these modes carry
+  // ux/uy/uz (a second axis), aux, and their life is solved on the CPU.
+  AIM_FAN: 5,   // a sheet swept cos θ·dir + sin θ·u, θ ∈ [p1, p2] — any aim
+  SPHERE: 6,    // crystal ball: streams over a cap round axis u (p1 = cos half-opening,
+                //   p2 = radius); aux 1 = droplets released at the rim
+  CURTAIN: 7,   // an aimed cascade: a line source along u (width p1) launched along dir
 };
 
 /** Particle classes — they differ in gravity, drag and blending. */
@@ -55,6 +66,7 @@ export const TYPE_WEIGHT = {
   jet_1d: 280, jet_2d: 320, jet_3d: 260, geyser: 380, arch: 380, ring: 300,
   laminar: 200, mist: 500, cascade: 450, pirouette: 360, fan_jet: 400,
   motion_1d: 380, motion_2d: 400, motion_3d: 420, screen: 1800,
+  sphere: 600,
   flame: 0, laser: 0,
 };
 
@@ -113,8 +125,11 @@ function emitter(base) {
 export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) {
   const descs = describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed);
   // A fixture with a design height is drawn to it (see applyDesign); one without keeps
-  // exactly the per-type behaviour above.
-  return designHeightOf(cfg) == null ? descs : applyDesign(descs, cfg, ix, launchSpeed);
+  // exactly the per-type behaviour above. A crystal ball sizes itself (sphere case).
+  const designed = designHeightOf(cfg) == null || cfg?.type === SPHERE_TYPE
+    ? descs : applyDesign(descs, cfg, ix, launchSpeed);
+  // Mount height / aim / catch tray (elevatedNozzles.js) — only when the fixture has them.
+  return hasSpatialFeatures(cfg) ? applySpatial(designed, cfg, ix, launchSpeed) : designed;
 }
 
 function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) {
@@ -307,6 +322,31 @@ function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) 
       ];
     }
 
+    case "sphere": {
+      // Crystal ball / dandelion: fine glassy streams radiating over a cap round the axis
+      // (up, or the aim), ending at the rim, plus droplets that fall from the rim. Seen
+      // from the front it fills a bright disc. Radius scales with the delivered level.
+      const level = designHeightOf(cfg) != null ? designLevel(cfg, ix, launchSpeed) : ix;
+      const R = sphereRadiusOf(cfg) * Math.max(0.05, level);
+      const v = sphereStreamSpeed(R);
+      const cov = sphereCoverageCos(cfg);
+      const axis = aimOf(cfg)?.dir || [0, 1, 0];
+      const glass = [Math.min(1, cr * 0.9 + 0.12), Math.min(1, cg * 0.9 + 0.12), Math.min(1, cb * 0.9 + 0.12)];
+      // Streams live only R/v (~0.15 s): weight them up so the ball reads as a filled bright
+      // disc. From the FULL radius, so the pool split stays stable while the level moves.
+      const R0 = sphereRadiusOf(cfg);
+      const streamWeight = Math.round(weight * Math.min(6, Math.max(1, 0.6 / (R0 / Math.max(1e-3, sphereStreamSpeed(R0))))));
+      const base = { mode: EMIT_MODE.SPHERE, ox, oz, p1: cov, p2: R, ux: axis[0], uy: axis[1], uz: axis[2] };
+      return [
+        emitter({ ...base, speed: v, speedJitter: 0.03, spread: 0.02, spawnRadius: 0.02, aux: 0,
+                  life: Math.max(0.05, R / Math.max(v, 1e-3)), color: glass,
+                  scale: 0.05 + ix * 0.03, stretch: 0.95, density: ix, weight: streamWeight }),
+        emitter({ ...base, speed: v * 0.12, speedJitter: 0.2, spread: 0.12, spawnRadius: 0.02, aux: 1,
+                  life: Math.max(0.12, fallTime(R + 0.08) * LIFE_MARGIN), color,
+                  scale: 0.06 + ix * 0.03, stretch: 0.45, density: ix * 0.5, weight: 180 }),
+      ];
+    }
+
     case "motion_1d":
     case "motion_2d":
     case "motion_3d": {
@@ -363,18 +403,25 @@ const ARCH_ELEVATION = { min: 30 * DEG, max: 75 * DEG };
 /** Lifetime margin over the flight time: the shader trims lives by up to 15 %. */
 const LIFE_MARGIN = 1.15;
 
-/** Drawn rise and landing distance of one emitter's nominal particle. Pure. */
-export function emitterFlight(e) {
+/**
+ * Drawn rise and landing distance of one emitter's nominal particle. Pure.
+ * `dropM` > 0: it lands that far below its launch point (an elevated nozzle).
+ */
+export function emitterFlight(e, dropM = 0) {
   const W = RENDER_PHYSICS.water, S = RENDER_PHYSICS.spray;
   const phys = e.cls === EMIT_CLASS.SPRAY ? S : W;
+  const fly = (vh, vy) => (dropM > 0 ? simulateFlight(vh, vy, phys, SOLVER_DT, dropM) : simulateFlight(vh, vy, phys));
   switch (e.mode) {
-    case EMIT_MODE.RING: return simulateFlight(e.p1, e.speed, phys);
-    case EMIT_MODE.FAN: return simulateFlight(0, e.speed, phys);
+    case EMIT_MODE.RING: return fly(e.p1, e.speed);
+    case EMIT_MODE.FAN: return fly(0, e.speed);
     case EMIT_MODE.CASCADE: return { apex: e.oy, range: 0, tApex: 0, tLand: fallTime(e.oy, e.speed, phys), xApex: 0 };
-    case EMIT_MODE.MIST: return simulateFlight(0, e.speed * 1.2, phys);
+    case EMIT_MODE.MIST: return fly(0, e.speed * 1.2);
+    case EMIT_MODE.SPHERE: return { apex: e.p2, range: 0, tApex: 0, tLand: fallTime(Math.max(0, dropM) + e.p2, 0, phys), xApex: 0 };
+    case EMIT_MODE.AIM_FAN:
+    case EMIT_MODE.CURTAIN:
     default: {
       const el = elevationOf(e.dx, e.dy, e.dz);
-      return simulateFlight(e.speed * Math.cos(el), e.speed * Math.sin(el), phys);
+      return fly(e.speed * Math.cos(el), e.speed * Math.sin(el));
     }
   }
 }
@@ -477,6 +524,152 @@ function applyDesign(descs, cfg, ix, launchSpeed) {
   return descs;
 }
 
+// ─── Elevated, aimed, caught (elevatedNozzles.js) ───────────────────────────
+//
+//   aim      jets (cones), fans and cascades take engineering.aimDeg / aimAzimuthDeg;
+//            launch speed solved so the stream reaches `reachM` along the aim
+//            (solveReachSpeed). A fan becomes an AIM_FAN sheet of fanAngleDeg around the
+//            aim, cut where it breaks up at the reach, with a droplet layer flying on to
+//            the water. A cascade becomes a CURTAIN launched along the aim.
+//   mount    every emitter starts mountHeightM higher; lives grow by the extra fall.
+//   catch    a tray at catchAtM collects the water: lives end there (the GPU field also
+//            stops particles at catchY explicitly).
+
+/** Types that keep their own aiming (animated, radial or a fixed wall). */
+const NOT_AIMED = new Set(["mist", "ring", "pirouette", "motion_1d", "motion_2d", "motion_3d",
+  "screen", SPHERE_TYPE, "flame", "laser"]);
+
+function aimEmitters(descs, cfg, ix, launchSpeed, aim, type) {
+  const W = RENDER_PHYSICS.water;
+  const R0 = reachOf(cfg);
+  let R = null;
+  if (R0 != null) {
+    const level = designHeightOf(cfg) != null ? designLevel(cfg, ix, launchSpeed)
+      : Math.round(Math.max(0, Math.min(1, Number(ix) || 0)) * 400) / 400;
+    R = Math.max(0.02, level * R0);
+  }
+  const [dx, dy, dz] = aim.dir;
+  const cut = new Set();
+
+  if (type === "fan_jet") {
+    const [main, ...rest] = descs;
+    const legacyHalf = (main.p2 - main.p1) / 2;
+    const angle = fanAngleOf(cfg);
+    const half = angle != null ? (angle / 2) * DEG : legacyHalf;
+    const plane = fanPlaneOf(cfg);
+    const u = fanAxis(aim.aimDeg, aim.azimuthDeg, plane);
+    let speed = main.speed;
+    if (R != null) {
+      // Every edge of the sheet must reach too: solve for the hardest of aim and both edges.
+      speed = 0;
+      for (let s = -1; s <= 1; s++) {
+        const c = Math.cos(half * s), sn = Math.sin(half * s);
+        const edgeAim = aimDegOfVector(c * dx + sn * u[0], c * dy + sn * u[1], c * dz + sn * u[2]);
+        speed = Math.max(speed, solveReachSpeed(R, edgeAim, W));
+      }
+    }
+    const sheet = (e, h, sp) => {
+      e.mode = EMIT_MODE.AIM_FAN;
+      e.dx = dx; e.dy = dy; e.dz = dz; e.ux = u[0]; e.uy = u[1]; e.uz = u[2];
+      e.p1 = -h; e.p2 = h; e.speed = sp;
+    };
+    sheet(main, half, speed);
+    if (R != null) {
+      // The sheet breaks up where it reaches: its particles end there...
+      const t = reachTime(speed, aim.aimDeg, R, W);
+      if (t != null) { main.life = Math.max(0.05, t); cut.add(main); }
+    }
+    for (const e of rest) {
+      // ...and the droplet layer carries on to the water (or the tray).
+      sheet(e, Math.min(Math.PI * 0.49, half * 1.1), speed * 0.85);
+      if (R != null) { e.density = ix * 0.6; e.spread = 0.25; }
+    }
+    return cut;
+  }
+
+  if (type === "cascade") {
+    const u = fanAxis(aim.aimDeg, aim.azimuthDeg, "cross");
+    for (const e of descs) {
+      if (e.mode !== EMIT_MODE.CASCADE) continue;
+      e.mode = EMIT_MODE.CURTAIN;
+      e.dx = dx; e.dy = dy; e.dz = dz; e.ux = u[0]; e.uy = u[1]; e.uz = u[2];
+      if (R != null) e.speed = Math.max(e.speed, solveReachSpeed(R, aim.aimDeg, W) * 0.5);
+    }
+    return cut;
+  }
+
+  // Jets: every directed cone of the nozzle follows the aim; shells keep their ratio.
+  const main = descs.find((e) => e.mode === EMIT_MODE.CONE);
+  if (!main) return cut;
+  const ratio = R != null && main.speed > 0 ? solveReachSpeed(R, aim.aimDeg, W) / main.speed : 1;
+  for (const e of descs) {
+    if (e.mode !== EMIT_MODE.CONE) continue;
+    e.dx = dx; e.dy = dy; e.dz = dz;
+    e.speed *= ratio;
+  }
+  return cut;
+}
+
+function applySpatial(descs, cfg, ix, launchSpeed) {
+  if (!descs.length) return descs;
+  const type = cfg?.type || "jet_3d";
+  const mount = mountHeightOf(cfg);
+  const catchY = catchHeightOf(cfg);
+  const floorY = catchY ?? 0;
+  const aim = aimOf(cfg);
+  const aimed = aim != null && !NOT_AIMED.has(type);
+  const cut = aimed ? aimEmitters(descs, cfg, ix, launchSpeed, aim, type) : null;
+  const W = RENDER_PHYSICS.water, S = RENDER_PHYSICS.spray;
+  const caught = catchY != null;
+
+  for (const e of descs) {
+    const phys = e.cls === EMIT_CLASS.SPRAY ? S : W;
+    // An elevated cascade is released at its lip (the mount), not at a design drop.
+    if (mount > 0 && (e.mode === EMIT_MODE.CASCADE || e.mode === EMIT_MODE.CURTAIN)) e.oy = 0.08;
+    e.oy += mount;
+    if (caught) e.catchY = catchY;
+    if (cut?.has(e)) continue;
+    const drop = Math.max(0, e.oy - floorY);
+    switch (e.mode) {
+      case EMIT_MODE.MIST: break;   // mist hangs and drifts; it never "lands"
+      case EMIT_MODE.SPHERE:
+        if (e.aux === 1) e.life = Math.max(0.12, fallTime(drop + e.p2, 0, phys) * (caught ? 1 : LIFE_MARGIN));
+        break;
+      case EMIT_MODE.CASCADE:
+        e.life = Math.max(0.12, fallTime(drop, e.speed * 0.6, phys) * (caught ? 1 : LIFE_MARGIN / 0.85));
+        break;
+      case EMIT_MODE.FAN: {
+        // Legacy elevation sweep: the shader derives the rise time per particle; add the
+        // extra fall below the launch height.
+        const base = simulateFlight(0, e.speed, phys).tLand;
+        const full = simulateFlight(0, e.speed, phys, SOLVER_DT, drop).tLand;
+        e.extraLife = Math.max(0, full - base) * (caught ? 1 : LIFE_MARGIN);
+        break;
+      }
+      default: {
+        // CONE, RING, AIM_FAN, CURTAIN: the slowest-landing direction of the emitter.
+        let vh, vy;
+        if (e.mode === EMIT_MODE.RING) { vh = e.p1; vy = e.speed; }
+        else {
+          let ny = e.dy / (Math.hypot(e.dx, e.dy, e.dz) || 1);
+          if (e.mode === EMIT_MODE.AIM_FAN) {
+            const h = Math.max(Math.abs(e.p1), Math.abs(e.p2));
+            const nu = e.uy / (Math.hypot(e.ux, e.uy, e.uz) || 1);
+            ny = Math.max(ny, ny * Math.cos(h) + Math.abs(nu) * Math.sin(h));
+          }
+          ny = Math.max(-1, Math.min(1, ny));
+          vy = e.speed * ny; vh = e.speed * Math.sqrt(1 - ny * ny);
+        }
+        const tl = simulateFlight(vh, vy, phys, SOLVER_DT, drop).tLand;
+        if (caught) e.life = Math.max(0.12, tl);
+        else if (aimed) e.life = Math.max(0.12, tl * LIFE_MARGIN);
+        else e.life = Math.max(0.12, e.life + Math.max(0, tl - simulateFlight(vh, vy, phys).tLand) * LIFE_MARGIN);
+      }
+    }
+  }
+  return descs;
+}
+
 /**
  * One particle from an emitter descriptor — the JS twin of the simulation shader's
  * spawnState(), so the CPU field (low tier, and the splash-map sample) launches exactly
@@ -503,7 +696,34 @@ export function sampleEmitterParticle(e, rand = Math.random, wind = null, out = 
       vx = vh * (e.dx + 1e-5) / n + (sx - 0.5) * spread;
       vz = vh * e.dz / n + (sy - 0.5) * spread;
       x += (sx - 0.5) * sRad * 2; z += (sy - 0.5) * sRad * 2;
-      life = Math.max(0.12, vy / 9.81 * 2.0 * 1.05);
+      life = Math.max(0.12, vy / 9.81 * 2.0 * 1.05) + (e.extraLife || 0);
+      break;
+    }
+    case EMIT_MODE.AIM_FAN: {
+      const th = e.p1 + (e.p2 - e.p1) * rx;
+      const c = Math.cos(th), s = Math.sin(th);
+      const ddx = c * e.dx + s * e.ux, ddy = c * e.dy + s * e.uy, ddz = c * e.dz + s * e.uz;
+      const sp = e.speed * (1 + (ry - 0.5) * sJit) / (Math.hypot(ddx, ddy, ddz) || 1);
+      vx = ddx * sp + (sx - 0.5) * spread; vy = ddy * sp; vz = ddz * sp + (sy - 0.5) * spread;
+      x += (sx - 0.5) * sRad * 2; z += (sy - 0.5) * sRad * 2;
+      break;
+    }
+    case EMIT_MODE.SPHERE: {
+      SPHERE_AXIS[0] = e.ux; SPHERE_AXIS[1] = e.uy; SPHERE_AXIS[2] = e.uz;
+      const d = sphereDirection(rx, ry, e.p1, SPHERE_AXIS, SPHERE_TMP);
+      const sp = e.speed * (1 + (rz - 0.5) * sJit);
+      vx = d[0] * sp + (sx - 0.5) * spread; vy = d[1] * sp; vz = d[2] * sp + (sy - 0.5) * spread;
+      // Streams leave the head; droplets are released at the rim.
+      const r0 = e.aux === 1 ? e.p2 : sRad;
+      x += d[0] * r0; y += d[1] * r0; z += d[2] * r0;
+      break;
+    }
+    case EMIT_MODE.CURTAIN: {
+      // A line source along u (the lip), launched along dir.
+      const w = (rx - 0.5) * e.p1;
+      x += e.ux * w; y += e.uy * w; z += e.uz * w;
+      const sp = e.speed * (0.6 + rz * 0.8) / (Math.hypot(e.dx, e.dy, e.dz) || 1);
+      vx = e.dx * sp + (sx - 0.5) * spread; vy = e.dy * sp; vz = e.dz * sp + (sy - 0.5) * spread;
       break;
     }
     case EMIT_MODE.CASCADE: {
@@ -534,6 +754,8 @@ export function sampleEmitterParticle(e, rand = Math.random, wind = null, out = 
   return out;
 }
 
+const SPHERE_TMP = [0, 0, 0], SPHERE_AXIS = [0, 1, 0];
+
 /** Apex mist the CPU path hangs at a jet's top: [min intensity, spread, strength]. */
 const APEX_MIST = { jet_1d: [0.4, 0.14, 1], jet_2d: [0.35, 0.20, 1], jet_3d: [0, 0.36, 1], laminar: [0.5, 0.08, 0.4] };
 
@@ -545,7 +767,9 @@ const APEX_MIST = { jet_1d: [0.4, 0.14, 1], jet_2d: [0.35, 0.20, 1], jet_3d: [0,
  */
 export function spawnDesignNozzle(nz, delta, elapsed, wind, tint) {
   const cfg = nz.config, type = cfg?.type || "jet_3d";
-  if (designHeightOf(cfg) == null || CPU_ONLY_TYPES.has(type)) return false;
+  if (CPU_ONLY_TYPES.has(type)) return false;
+  const spatial = hasSpatialFeatures(cfg);
+  if (designHeightOf(cfg) == null && !spatial) return false;
   const ix = nz.intensity;
   const descs = describeNozzleEmitters(cfg, ix, elapsed, wind, tint, (d, f) => nz._launchSpeed(d, f));
   if (!descs.length) return false;
@@ -562,6 +786,7 @@ export function spawnDesignNozzle(nz, delta, elapsed, wind, tint) {
     }
   }
   const main = descs[0];
+  if (spatial) return spatialAccents(nz, main, type, ix, delta);
   const f = emitterFlight(main);
   let lx = main.ox, lz = main.oz, ax = main.ox, az = main.oz;
   if (main.mode === EMIT_MODE.CONE) {
@@ -575,6 +800,34 @@ export function spawnDesignNozzle(nz, delta, elapsed, wind, tint) {
   }
   if (type === "geyser" && ix > 0.5) nz._spawnBaseSplash?.(main.ox, main.oz, ix, 1.8);
   if (ix > 0.25 && Math.random() < ix * delta * 18) nz._spawnImpactFoam?.(lx, lz, ix);
+  return true;
+}
+
+/**
+ * Apex mist, base boil and impact foam of an elevated / aimed / caught nozzle: the mist
+ * at the drawn apex (only when the stream rises), the boil only when the nozzle sits at
+ * the water, the foam where the water actually lands: the basin, or the catch tray.
+ */
+function spatialAccents(nz, main, type, ix, delta) {
+  const tray = Number.isFinite(main.catchY) ? main.catchY : null;
+  const drop = Math.max(0, main.oy - (tray ?? 0));
+  const f = emitterFlight(main, drop);
+  let lx = main.ox, lz = main.oz, ax = main.ox, az = main.oz;
+  if (main.mode === EMIT_MODE.CONE || main.mode === EMIT_MODE.AIM_FAN || main.mode === EMIT_MODE.CURTAIN) {
+    const hn = Math.hypot(main.dx, main.dz);
+    if (hn > 1e-6) {
+      lx += main.dx / hn * f.range; lz += main.dz / hn * f.range;
+      ax += main.dx / hn * f.xApex; az += main.dz / hn * f.xApex;
+    }
+    const m = APEX_MIST[type];
+    if (main.mode === EMIT_MODE.CONE && m && ix > m[0] && f.apex > 0.2) {
+      nz._spawnApexMist?.(ax, f.apex, az, ix * m[2], m[1], main.oy);
+    }
+  }
+  if (type === "geyser" && ix > 0.5 && main.oy < 0.5) nz._spawnBaseSplash?.(main.ox, main.oz, ix, 1.8);
+  if (ix > 0.25 && Math.random() < ix * delta * 18) {
+    nz._spawnImpactFoam?.(lx, lz, ix, tray != null ? tray + 0.03 : undefined);
+  }
   return true;
 }
 

@@ -10,13 +10,20 @@
  *    ("3 assets verified") and the view stays usable.
  *  - Non-blocking status toasts ("aquaflow:project-status"), e.g. autosave failures.
  *  - Desktop menu wiring: File > Save / Save As / Package / Open (window.aquaflow events).
+ *  - "Keep the song inside the project file?" — asked once per project on Save when the show
+ *    has a song (projectPersistence.setSongPrompt); a missing song on open gets its own
+ *    headline and a "Locate the file…" button in the asset report.
+ *  - After the window's renderer crashed and was reloaded, the recovery prompt is offered
+ *    again (the shell reports rendererCrashAt) even if one was handled earlier in the session.
+ *  - The Windows memory / page-file banner (MemoryBanner).
  */
 import { useEffect, useRef, useState } from "react";
 import { findRecoveryCandidate, getSnapshotBackend, desktopProjectBridge } from "../utils/projectRecovery";
 import {
-  restoreSnapshot, openProjectPath, saveProject, packageProject, relinkAsset, notify,
+  restoreSnapshot, openProjectPath, saveProject, packageProject, relinkAsset, notify, setSongPrompt,
 } from "../utils/projectPersistence";
 import { assetReportNeedsAttention, verifiedAssetSummary } from "../utils/assetManifest";
+import MemoryBanner from "./MemoryBanner";
 
 const PROMPT_DONE_KEY = "aquaflow.recoveryPromptHandled";
 
@@ -49,7 +56,12 @@ export default function ProjectRecoveryHost() {
   const [assetReport, setAssetReport] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [songAsk, setSongAsk] = useState(null); // { song, resolve }
   const toastId = useRef(0);
+
+  // Save: "Keep the song inside the project file?" (once per project; the answer is remembered).
+  useEffect(() => setSongPrompt(({ song }) => new Promise((resolve) => setSongAsk({ song, resolve }))), []);
+  const answerSong = (choice) => { songAsk?.resolve(choice); setSongAsk(null); };
 
   // Toasts.
   useEffect(() => {
@@ -67,8 +79,12 @@ export default function ProjectRecoveryHost() {
   // Crash-recovery check on startup.
   useEffect(() => {
     let alive = true;
-    try { if (window.sessionStorage.getItem(PROMPT_DONE_KEY)) return undefined; } catch { /* ignore */ }
+    let handled = null;
+    try { handled = window.sessionStorage.getItem(PROMPT_DONE_KEY); } catch { /* ignore */ }
+    // Handled earlier in this session: only a renderer crash since then (window reloaded) asks again.
+    if (handled && !desktopProjectBridge()) return undefined;
     getSnapshotBackend().recoveryInfo().then((info) => {
+      if (handled && (!info?.rendererCrashAt || handled === info.rendererCrashAt)) return;
       const candidate = findRecoveryCandidate(info);
       if (alive && candidate) setRecovery({ ...candidate, info });
     }).catch((e) => notify(`Crash-recovery check failed: ${e.message}`, "warn"));
@@ -115,7 +131,7 @@ export default function ProjectRecoveryHost() {
   }, []);
 
   const closeRecovery = () => {
-    try { window.sessionStorage.setItem(PROMPT_DONE_KEY, "1"); } catch { /* ignore */ }
+    try { window.sessionStorage.setItem(PROMPT_DONE_KEY, recovery?.info?.rendererCrashAt || "1"); } catch { /* ignore */ }
     setRecovery(null);
   };
 
@@ -145,6 +161,7 @@ export default function ProjectRecoveryHost() {
 
   const items = assetReport?.report?.items || [];
   const problems = items.filter((i) => i.status === "missing" || i.status === "changed");
+  const missingSong = items.find((i) => i.id === "audio:programmer" && i.status === "missing") || null;
 
   return (
     <>
@@ -177,8 +194,15 @@ export default function ProjectRecoveryHost() {
         <div style={overlay} role="dialog" aria-modal="true" aria-labelledby="af-assets-title">
           <div style={card}>
             <h2 id="af-assets-title" style={{ margin: "0 0 6px", fontSize: 16 }}>
-              {problems.length ? `${problems.length} project asset${problems.length > 1 ? "s" : ""} need attention` : "All project assets resolved"}
+              {missingSong ? `The song ${missingSong.name} is missing`
+                : problems.length ? `${problems.length} project asset${problems.length > 1 ? "s" : ""} need attention` : "All project assets resolved"}
             </h2>
+            {missingSong && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", margin: "6px 0 10px", flexWrap: "wrap" }}>
+                <span style={{ flex: 1, minWidth: 220 }}>The show opened without its music. Find the song file on this PC to play the show with music{missingSong.sha256 ? " — AquaFlow checks it is the same file" : ""}.</span>
+                <button className="btn primary" onClick={() => relink(missingSong)}>Locate the file…</button>
+              </div>
+            )}
             <p style={muted}>
               {assetReport.projectPath || "Project"} · checked {items.length} referenced asset{items.length === 1 ? "" : "s"} by path and SHA-256
               {assetReport.kind === "package" ? " (embedded package)" : ""}. Review before playback; the show itself has loaded.
@@ -195,6 +219,7 @@ export default function ProjectRecoveryHost() {
                         <div>{item.name}</div>
                         <div style={muted}>{item.resolvedPath || item.relativePath || item.path || item.locator?.assetId || ""}{item.resolvedVia ? ` · via ${item.resolvedVia}` : ""}</div>
                         {item.status === "changed" && <div style={{ ...muted, color: "var(--amber, #f0b429)" }}>Content differs from the saved hash (size {item.size ?? "?"} → {item.actualSize ?? "?"} bytes).</div>}
+                        {item.warning && <div style={{ ...muted, color: "var(--amber, #f0b429)" }}>{item.warning}</div>}
                       </td>
                       <td style={{ padding: 6 }}>{item.role}</td>
                       <td style={{ padding: 6, textAlign: "right" }}>
@@ -215,6 +240,29 @@ export default function ProjectRecoveryHost() {
           </div>
         </div>
       )}
+
+      {songAsk && (
+        <div style={overlay} role="dialog" aria-modal="true" aria-labelledby="af-song-title">
+          <div style={card}>
+            <h2 id="af-song-title" style={{ margin: "0 0 8px", fontSize: 16 }}>Keep the song inside the project file?</h2>
+            <p style={{ margin: "0 0 10px" }}>
+              This show uses the song <strong>{songAsk.song.name}</strong>. A plain .aqua file only remembers where the song is on this PC,
+              so a copy on another PC opens without music.
+            </p>
+            <p style={muted}>
+              Recommended: save as an AquaFlow package (.aquapkg) with the song inside. It opens anywhere with its music; later saves
+              update the same package. AquaFlow remembers your answer for this project.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+              <button className="btn primary" autoFocus onClick={() => answerSong("embed")}>Keep the song inside (.aquapkg)</button>
+              <button className="btn" onClick={() => answerSong("reference")}>Save without the song (.aqua)</button>
+              <button className="btn" onClick={() => answerSong("cancel")}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <MemoryBanner />
 
       {toasts.length > 0 && (
         <div style={{ position: "fixed", right: 16, bottom: 36, zIndex: 3100, display: "flex", flexDirection: "column", gap: 8, maxWidth: "min(420px, calc(100vw - 32px))" }} aria-live="polite">

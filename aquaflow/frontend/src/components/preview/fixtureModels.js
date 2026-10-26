@@ -193,7 +193,8 @@ export function buildFixtureGeometry(THREE, kind) {
 export function fixtureKindFor(type) {
   switch (type) {
     case "laminar": return "laminar";
-    case "geyser":  return "geyser";
+    case "geyser":
+    case "sphere":  return "geyser";
     case "ring":    return "ring";
     case "mist":    return "mist";
     case "flame":   return "flame";
@@ -245,7 +246,9 @@ export class FixtureInstances {
 
   /**
    * Rebuild the instance set.
-   * @param {Array} items [{id, kind, x, y, z, rotationX, rotationY, rotationZ, scale}]
+   * @param {Array} items [{id, kind, x, y, z, rotationX, rotationY, rotationZ, scale, up?}]
+   *   `up` ([x, y, z]): the body's axis points along it (an aimed / elevated nozzle or
+   *   light); it wins over the Euler rotations.
    */
   setFixtures(items) {
     const T = this.T;
@@ -267,6 +270,7 @@ export class FixtureInstances {
     const q = new T.Quaternion();
     const pos = new T.Vector3();
     const scl = new T.Vector3();
+    const yAxis = new T.Vector3(0, 1, 0), axis = new T.Vector3();
     for (const [kind, list] of byKind) {
       const mesh = new T.InstancedMesh(this._geometryFor(kind), [this.metal, this.lens], list.length);
       mesh.castShadow = true;
@@ -275,11 +279,15 @@ export class FixtureInstances {
       for (let i = 0; i < list.length; i++) {
         const it = list[i];
         pos.set(it.x || 0, it.y || 0, it.z || 0);
-        q.setFromEuler(new T.Euler(
-          (it.rotationX || 0) * Math.PI / 180,
-          (it.rotationY || 0) * Math.PI / 180,
-          (it.rotationZ || 0) * Math.PI / 180,
-        ));
+        if (Array.isArray(it.up) && Math.hypot(it.up[0], it.up[1], it.up[2]) > 1e-6) {
+          q.setFromUnitVectors(yAxis, axis.set(it.up[0], it.up[1], it.up[2]).normalize());
+        } else {
+          q.setFromEuler(new T.Euler(
+            (it.rotationX || 0) * Math.PI / 180,
+            (it.rotationY || 0) * Math.PI / 180,
+            (it.rotationZ || 0) * Math.PI / 180,
+          ));
+        }
         const s = it.scale || 1;
         scl.set(s, s, s);
         m.compose(pos, q, scl);
@@ -342,11 +350,16 @@ export class LightMarkerInstances {
     this._tmp = new THREE.Color();
   }
 
-  /** Rebuild for a new fixture list: [{ id, x, z, y?, color: THREE.Color }]. */
+  /** Rebuild for a new fixture list: [{ id, x, z, y?, aimDir?, color: THREE.Color }].
+   *  `y` > 0: an elevated light (mountHeightM) — body and lens sit there, along aimDir. */
   setLights(lights = []) {
     const T = this.T;
     const n = lights.length;
-    this.bodies.setFixtures(lights.map(l => ({ id: l.id, kind: "light", x: l.x || 0, y: -0.12, z: l.z || 0 })));
+    const lifted = (l) => Number(l.y) > 0;
+    this.bodies.setFixtures(lights.map(l => ({
+      id: l.id, kind: "light", x: l.x || 0, y: lifted(l) ? Number(l.y) - 0.12 : -0.12, z: l.z || 0,
+      ...(Array.isArray(l.aimDir) ? { up: l.aimDir } : {}),
+    })));
     if (!this.disc || this.disc.instanceMatrix.count < n) {
       if (this.disc) { this.group.remove(this.disc); this.disc.dispose(); }
       this.disc = new T.InstancedMesh(this._discGeo, this._discMat, Math.max(1, n));
@@ -355,10 +368,16 @@ export class LightMarkerInstances {
       this.disc.name = "light-lenses";
       this.group.add(this.disc);
     }
-    const m = new T.Matrix4(), q = new T.Quaternion().setFromEuler(new T.Euler(-Math.PI / 2, 0, 0));
-    const p = new T.Vector3(), s = new T.Vector3(1, 1, 1);
+    const flat = new T.Quaternion().setFromEuler(new T.Euler(-Math.PI / 2, 0, 0));
+    const m = new T.Matrix4(), q = new T.Quaternion();
+    const p = new T.Vector3(), s = new T.Vector3(1, 1, 1), zAxis = new T.Vector3(0, 0, 1), dir = new T.Vector3();
     for (let i = 0; i < n; i++) {
-      p.set(lights[i].x || 0, 0.03, lights[i].z || 0);
+      const L = lights[i];
+      const a = Array.isArray(L.aimDir) ? L.aimDir : null;
+      // The lens faces along the aim (a disc's normal is +z); upright lights stay flat.
+      if (a) q.setFromUnitVectors(zAxis, dir.set(a[0], a[1], a[2]).normalize()); else q.copy(flat);
+      p.set(L.x || 0, (lifted(L) ? Number(L.y) : 0) + 0.03, L.z || 0);
+      if (a) p.addScaledVector(dir, 0.05);
       m.compose(p, q, s);
       this.disc.setMatrixAt(i, m);
       this.disc.setColorAt(i, lights[i].color || this._tmp.set(1, 1, 1));

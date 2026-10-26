@@ -404,7 +404,7 @@ function registerProjectIpc({ ipcMain, dialog, getMainWindow, userDataDir, sessi
     const size = typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
     if (size > MAX_PROJECT_BYTES) throw new Error("Project is larger than 512 MB.");
     const result = atomicWriteFile(target, data, { fs: fsx });
-    if (kind === "aqua" && request.projectKey) recordCleanSave(stateDir, request.projectKey, { path: target }, { fs: fsx });
+    if (request.projectKey) recordCleanSave(stateDir, request.projectKey, { path: target }, { fs: fsx });
     addRecentFile(stateDir, { path: target, name: request.name || path.basename(target) }, { fs: fsx });
     return { ok: true, ...result };
   });
@@ -452,6 +452,8 @@ function registerProjectIpc({ ipcMain, dialog, getMainWindow, userDataDir, sessi
     ok: true,
     uncleanExit: !!(sessionInfo && sessionInfo.uncleanExit),
     previousSession: sessionInfo ? sessionInfo.previous : null,
+    // Set by main.js when the window's renderer crashed in this session (then reloaded).
+    rendererCrashAt: (sessionInfo && sessionInfo.rendererCrashAt) || null,
     cleanSaves: readJson(path.join(stateDir, "clean-saves.json"), {}, fsx),
     snapshots: snapshots.list(null),
     snapshotDir: snapshots.dir,

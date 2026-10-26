@@ -13,14 +13,22 @@
 //            (valve open × its pump's speed). Jets with their own solenoid are marked
 //            `asBuilt` — the PLC skips those and plays the valve and pump clips instead; a
 //            valve-less jet keeps its clip, which opens its implied valve on the Siemens site
+//   flow     no pump is ever asked for more than its rated flow × margin (pumpFlow.js): too
+//            many open jets on one pump → some jets sit out a window (fixed-speed pumps), or a
+//            VFD pump runs a little slower (its jets' flow falls with the speed) and only sits
+//            jets out when slowing would cost more than VFD_MIN_SPEED of the asked speed.
+//            The result's `flowCap` reports per pump the peak before / after and what changed.
 
 import { readFountainDesign } from './fountainDesign';
 import { MIN_OFF_S, MIN_ON_S } from './patternPresets';
+import { DEFAULT_FLOW_MARGIN_PCT, isVfdPump, jetFlowLpm, pumpCapLpm } from '../../../engineering/pumpFlow';
 
 export const DT = 0.1;
 export const PUMP_UP = 40;      // % per second (0 → 100 % in 2.5 s)
 export const PUMP_DOWN = 30;    // % per second
 export const PRUNE_WINDOW_S = 6; // jets left out by the flow budget sit out a whole window
+export const VFD_MIN_SPEED = 0.85; // a VFD pump may slow to 85 % of the asked speed to stay in its flow rating
+const FLOW_HEADROOM = 0.99;        // the drive's ramp keys are simplified (±0.5 %): aim 1 % under
 const PUMP_CLIP_S = 30;
 const WATER = /^(pump_speed|pump_pressure|device_intensity|motion_intensity)$/;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -110,7 +118,7 @@ function simplify(values, i0, i1, dt, tolerance = 0.5) {
  * @param {Map<string,string>} modes  recipe id → 'hits' | 'open' (recipes that follow the hardware)
  * @returns {{ clips, valves: number, pumps: number }}
  */
-export function followHardware(clips, items, modes, design = readFountainDesign(items)) {
+export function followHardware(clips, items, modes, design = readFountainDesign(items), { marginPct = DEFAULT_FLOW_MARGIN_PCT } = {}) {
   if (!modes?.size || !design.connected) return { clips, valves: 0, pumps: 0 };
   const modeOf = (id) => { const m = modes.get(id); return typeof m === 'string' ? m : m?.mode; };
   const capOf = (id) => { const m = modes.get(id); return typeof m === 'object' && Number.isFinite(m?.cap) ? m.cap : 100; };
@@ -164,36 +172,54 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
   for (const id of want.keys()) rebuild(id);
   let pruned = 0;
   const W = Math.round(PRUNE_WINDOW_S / DT), early = Math.round(MIN_ON_S / DT);
-  for (let pass = 0; pass < 4; pass++) {
+  const flow = (id) => jetFlowLpm(design.nozzleById.get(id).item);
+  const budgets = [];
+  for (const pump of design.pumps.values()) {
+    const qMax = pumpCapLpm(pump.item, marginPct) || 0;
+    const mine = pump.nozzleIds.filter((id) => want.has(id));
+    if (!(qMax > 0) || !mine.length) continue;
+    const valved = mine.filter((id) => design.nozzleById.get(id).valveId);
+    budgets.push({ pump, qMax, vfd: isVfdPump(pump.item), mine, valved, free: mine.filter((id) => !design.nozzleById.get(id).valveId) });
+  }
+  // Demand at sample i: Σ flow of the open jets; on a VFD pump × the speed the jets ask for.
+  const demandAt = (b, i) => {
+    let q = 0, speed = 0;
+    for (const id of b.free) if (isOpen.get(id)[i] || want.get(id).height[i] > 0) { q += flow(id); speed = Math.max(speed, want.get(id).height[i]); }
+    const open = b.valved.filter((id) => isOpen.get(id)[i]);
+    for (const id of open) { q += flow(id); speed = Math.max(speed, want.get(id).height[i]); }
+    return { q: b.vfd ? q * Math.min(100, speed) / 100 : q, full: q, speed, open };
+  };
+  const before = new Map(budgets.map((b) => {
+    let worst = 0, at = 0;
+    for (let i = 0; i < N; i++) { const d = demandAt(b, i).q; if (d > worst) { worst = d; at = i * DT; } }
+    return [b.pump.id, { lpm: worst, t: at }];
+  }));
+  const skipped = new Map();
+  for (let pass = 0; pass < 10; pass++) {
     const touched = new Set();
-    for (const pump of design.pumps.values()) {
-      const qMax = Number(pump.item.engineering?.flowLpm) || 0;
-      const mine = pump.nozzleIds.filter((id) => want.has(id));
-      const valved = mine.filter((id) => design.nozzleById.get(id).valveId);
-      if (!(qMax > 0) || !valved.length) continue;
-      const flow = (id) => Number(design.nozzleById.get(id).item.engineering?.flowLpm) || 0;
-      const free = mine.filter((id) => !design.nozzleById.get(id).valveId);
+    for (const b of budgets) {
+      if (!b.valved.length) continue;
+      // A VFD pump may slow to VFD_MIN_SPEED of the asked speed: only beyond that do jets sit out.
+      const limit = b.vfd ? b.qMax / VFD_MIN_SPEED : b.qMax;
       for (let w0 = 0; w0 < N; w0 += W) {
         const w1 = Math.min(N, w0 + W);
         // The window's worst moment decides how many jets sit out.
-        let worst = 0, worstOpen = [];
+        let worst = 0, worstOpen = [], worstScale = 1;
         for (let i = w0; i < w1; i++) {
-          let total = 0;
-          for (const id of free) if (isOpen.get(id)[i] || want.get(id).height[i] > 0) total += flow(id);
-          const open = valved.filter((id) => isOpen.get(id)[i]);
-          for (const id of open) total += flow(id);
-          if (total > worst) { worst = total; worstOpen = open; }
+          const d = demandAt(b, i);
+          if (d.q > worst) { worst = d.q; worstOpen = d.open; worstScale = d.full > 0 ? d.q / d.full : 1; }
         }
-        if (worst <= qMax) continue;
+        if (worst <= limit * (1 + 1e-6)) continue;
         const rot = Math.floor(w0 / W) * 7;
-        const order = [...worstOpen].sort((a, b) => ((valved.indexOf(a) + rot) % valved.length) - ((valved.indexOf(b) + rot) % valved.length));
+        const order = [...worstOpen].sort((a, c) => ((b.valved.indexOf(a) + rot) % b.valved.length) - ((b.valved.indexOf(c) + rot) % b.valved.length));
         let total = worst;
-        while (total > qMax && order.length) {
+        while (total > limit && order.length) {
           const id = order.pop();
           // Close a minimum-on time early too, so an opening just before cannot run on into the window.
           want.get(id).open.fill(0, Math.max(0, w0 - early), w1);
           touched.add(id);
-          total -= flow(id); pruned++;
+          skipped.set(b.pump.id, (skipped.get(b.pump.id) || 0) + 1);
+          total -= flow(id) * worstScale; pruned++;
         }
       }
     }
@@ -235,6 +261,14 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
         if (o[i] || !valved) { target[i] = Math.max(target[i], h[i]); if (o[i] || h[i] > 0) ceiling[i] = Math.min(ceiling[i], w.cap); }
       }
     }
+    // A VFD pump inside its flow rating: Σ open jets' flow × speed ≤ rated flow × margin.
+    const b = budgets.find((x) => x.pump.id === pumpId);
+    let slowed = 0;
+    if (b?.vfd) for (let i = 0; i < N; i++) {
+      const full = demandAt(b, i).full;
+      if (full > 0 && full > b.qMax) { const lim = 100 * FLOW_HEADROOM * b.qMax / full; if (lim < ceiling[i]) { ceiling[i] = lim; if (target[i] > lim) slowed++; } }
+    }
+    if (b) b.slowedS = r2(slowed * DT);
     // A shared pump lifts every open jet together: never above the lowest cap among them.
     for (let i = 0; i < N; i++) target[i] = Math.min(target[i], ceiling[i]);
     // A valve-less jet (a basket on a shared pump) is an outlet that is open while it has a
@@ -279,5 +313,26 @@ export function followHardware(clips, items, modes, design = readFountainDesign(
     }
   }
   const merged = clips.map((c) => rewritten.get(c.id) || c);
-  return { clips: [...merged, ...out], valves: seenValves.size, pumps: pumpLevel.size, pruned };
+
+  // 5. Flow report: per pump the peak it is asked for before / after the cap.
+  const flowCap = { marginPct, changed: false, pumps: [] };
+  for (const b of budgets) {
+    const speed = pumpLevel.get(b.pump.id);
+    let worst = 0, at = 0;
+    for (let i = 0; i < N; i++) {
+      const d = demandAt(b, i);
+      const q = b.vfd ? d.full * Math.min(100, speed ? speed[i] : d.speed) / 100 : d.full;
+      if (q > worst) { worst = q; at = i * DT; }
+    }
+    const pre = before.get(b.pump.id);
+    const row = { id: b.pump.id, name: b.pump.name, vfd: b.vfd, capLpm: Math.round(b.qMax), beforeLpm: Math.round(pre.lpm), beforeT: r2(pre.t),
+      afterLpm: Math.round(worst), afterT: r2(at), skipped: skipped.get(b.pump.id) || 0, slowedS: b.slowedS || 0 };
+    row.changed = row.skipped > 0 || row.slowedS > 0;
+    flowCap.changed ||= row.changed;
+    flowCap.pumps.push(row);
+  }
+  flowCap.text = flowCap.pumps.filter((p) => p.changed).map((p) => `${p.name}: asked up to ${p.beforeLpm} L/min of ${p.capLpm} — `
+    + [p.skipped ? `jets sat out ${p.skipped} × ${PRUNE_WINDOW_S} s window${p.skipped === 1 ? '' : 's'}` : '', p.slowedS ? `pump slowed for ${p.slowedS} s` : ''].filter(Boolean).join(', ')
+    + `; now at most ${p.afterLpm} L/min.`);
+  return { clips: [...merged, ...out], valves: seenValves.size, pumps: pumpLevel.size, pruned, flowCap };
 }

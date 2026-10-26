@@ -185,6 +185,10 @@ export function setEngineeringLights(scene, lightConfigs) {
       id: lc.id,
       x: lc.x ?? 0,
       z: lc.z ?? (lc.y ?? 0),
+      // Elevated light (engineering.mountHeightM) and its aim (engineering.aimDeg /
+      // aimAzimuthDeg): both absent for a light in the basin floor.
+      ...(Number(lc.mountHeightM) > 0 ? { y: Number(lc.mountHeightM) } : {}),
+      ...(Array.isArray(lc.aimDir) ? { aimDir: lc.aimDir } : {}),
       color,
       intensity,
       radius,

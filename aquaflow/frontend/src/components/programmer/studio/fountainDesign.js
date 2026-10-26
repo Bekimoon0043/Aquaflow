@@ -15,8 +15,24 @@
 import { getFixtureInfo } from '../../../utils/fixtureTypeResolver';
 import { isLightItem, isWaterItem } from './patternPresets';
 import { orderMembers } from './showModel';
+import { mountHeightOf, aimOf, catchHeightOf, fieldOf } from '../../preview/elevatedNozzles';
 
 const num = (v, fallback = 0) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
+/**
+ * Elevated / aimed / caught nozzle fields (elevatedNozzles.js) for the timing and splash
+ * models, only when the fixture has them. An aimed nozzle's heightM becomes its reach.
+ */
+function inAir(item) {
+  const m = mountHeightOf(item), a = aimOf(item), c = catchHeightOf(item);
+  if (!(m > 0) && !a && c == null) return {};
+  const reach = num(fieldOf(item, 'reachM'), 0);
+  return {
+    ...(m > 0 ? { mountHeightM: m } : {}),
+    ...(a ? { aimDeg: a.aimDeg, aimAzimuthDeg: a.azimuthDeg } : {}),
+    ...(a && reach > 0 ? { heightM: reach } : {}),
+    ...(c != null ? { catchAtM: c } : {}),
+  };
+}
 const slug = (s) => String(s || 'set').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'set';
 
 /** Nozzle kinds, first match wins (tested on type, name, style, model and runtime effect). */
@@ -91,7 +107,9 @@ export function readFountainDesign(items = []) {
     const pumpId = [e.pumpId, item.supplyingPumpId, e.supplyingPumpId, pumpByValve.get(valveId)].find((id) => pumpById.has(id)) || null;
     const kind = nozzleKind(item);
     return { id: item.id, item, kind: kind.id, kindLabel: kind.label, moving: !!kind.moving, heightM: num(e.jetHeightM),
-      valveId, pumpId, pipeId: e.pipeId || null, set: item.zone || item.groupId || kind.id, lightIds: [] };
+      valveId, pumpId, pipeId: e.pipeId || null, set: item.zone || item.groupId || kind.id, lightIds: [],
+      // Elevated / aimed / caught nozzles: heightM becomes the in-air travel (reach along the aim).
+      ...inAir(item) };
   });
   const nozzleById = new Map(nozzles.map((n) => [n.id, n]));
   const pumps = new Map(byRole.pump.map((p) => [p.id, { id: p.id, item: p, name: shortName(p), nozzleIds: [], valveIds: [] }]));

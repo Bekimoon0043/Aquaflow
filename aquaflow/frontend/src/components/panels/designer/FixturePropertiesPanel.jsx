@@ -14,6 +14,7 @@ import FixtureTrustPanel from "../FixtureTrustPanel"; // AF-NEXT-012
 import { FIXTURE_TYPES } from "../../../engineering/drafting/designerCatalog";
 import { MIXED, sharedFieldValues } from "../../../engineering/drafting/selection";
 import { deliveredDuty } from "../../../engineering/pumpDuty";
+import FixtureConnectionsSection from "../connections/FixtureConnectionsSection"; // pump / valve / nozzle / light links
 
 const t = (f) => String(f?.type || "");
 const KNOWN_FAMILY = (type) => /^(nozzle|light|pump|valve|solenoid|air|fuel|flame|motion|sensor|safety|control|power|vfd|filter|uv|dosing)/.test(type)
@@ -238,6 +239,7 @@ export default function FixturePropertiesPanel({
         <div style={{ color: "#ffcc00", fontSize: 9, fontWeight: "bold", marginBottom: 6 }}>⚙ ENGINEERING DATA</div>
         <EngineeringFields fixture={sf} engineering={sfEngineering} onEngineering={setEngineering} />
       </div>
+      <FixtureConnectionsSection fixture={sf} fixtures={fixtures} onUpdateFixtures={onUpdateFixtures} />
       <div style={{ marginBottom: 5 }}>
         <div style={{ color: "#7ab", fontSize: 9, marginBottom: 2 }}>Depth zone</div>
         <select value={sf.zone || "medium"} onChange={(e) => update((f) => ({ ...f, zone: e.target.value }))}

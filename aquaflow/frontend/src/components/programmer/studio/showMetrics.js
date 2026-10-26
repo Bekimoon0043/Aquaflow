@@ -16,6 +16,7 @@ import { MIN_OFF_S, MIN_ON_S } from './patternPresets';
 import { arcSections, climaxIndex } from './arcPlanner';
 import { songAnalysis } from './deepMerge';
 import { oversprayShare, visibleLead } from '../../preview/waterPhysics';
+import { DEFAULT_FLOW_MARGIN_PCT, isVfdPump, jetFlowLpm, pumpCapLpm } from '../../../engineering/pumpFlow';
 
 export const METRICS_VERSION = 1;
 export const DT = 0.05;
@@ -102,26 +103,89 @@ export function showGates(clips, design, { minOn = MIN_ON_S, minOff = MIN_OFF_S,
   return { pass: violations.length === 0, violations, counts: violations.reduce((m, v) => ({ ...m, [v.gate]: (m[v.gate] || 0) + 1 }), {}) };
 }
 
-/** Flow budget per pump: Σ flow of open jets vs the pump's rated flow (gate when > 105 %). */
-export function flowBudget(levels, design) {
-  const over = [];
-  for (const [pid, pump] of design.pumps) {
-    const qMax = Number(pump.item.engineering?.flowLpm) || 0;
-    if (!(qMax > 0)) continue;
-    const jets = pump.nozzleIds.filter((id) => levels.has(id));
+/**
+ * What every pump really delivers through the show (L/min per sample): its jets that are open
+ * — by their solenoid's clips when the valve is driven, else by the jet's own level — times
+ * each jet's flow (pumpFlow.jetFlowLpm); on a VFD pump the flow falls with the pump's speed
+ * (its pump_speed clips, else the jet's level). Returns Map pumpId → { lpm, t, capLpm, overS, firstOverT }:
+ * `lpm` is the highest flow held for at least `minRunS` (a valve hand-over is not a peak).
+ */
+export function pumpPeaks(clips, design, { T = null, dt = DT, levels = null, minRunS = 0.3, marginPct = DEFAULT_FLOW_MARGIN_PCT } = {}) {
+  const out = new Map();
+  const pumps = [...(design?.pumps?.values() || [])].filter((p) => p.nozzleIds.length);
+  if (!pumps.length || !clips?.length) return out;
+  const end = T ?? Math.min(600, Math.max(1, ...clips.map((c) => (Number(c.startTime) || 0) + (Number(c.duration) || 0))));
+  const nozzleIds = new Set(pumps.flatMap((p) => p.nozzleIds));
+  const lv = levels && [...nozzleIds].every((id) => levels.has(id)) ? levels : levelGrids(clips, nozzleIds, end, dt);
+  const live = (c) => !c.muted && !c.disabled;
+  const drivenValves = new Set(clips.filter((c) => c.type === 'solenoid_open' && live(c)).map((c) => c.fixtureId));
+  const drivenPumps = new Set(clips.filter((c) => c.type === 'pump_speed' && live(c)).map((c) => c.fixtureId));
+  const valveIds = new Set(pumps.flatMap((p) => p.nozzleIds.map((id) => design.nozzleById.get(id)?.valveId)).filter((id) => id && drivenValves.has(id)));
+  const vg = valveIds.size ? levelGrids(clips, valveIds, end, dt, /^solenoid_open$/) : new Map();
+  const pg = levelGrids(clips, new Set(pumps.map((p) => p.id).filter((id) => drivenPumps.has(id))), end, dt, /^pump_speed$/);
+  const k = Math.max(1, Math.round(minRunS / dt));
+  for (const p of pumps) {
+    const vfd = isVfdPump(p.item), cap = pumpCapLpm(p.item, marginPct);
+    const jets = p.nozzleIds.map((id) => ({ id, q: jetFlowLpm(design.nozzleById.get(id)?.item), valve: vg.get(design.nozzleById.get(id)?.valveId) || null }))
+      .filter((j) => j.q > 0 && lv.has(j.id));
     if (!jets.length) continue;
-    const N = levels.get(jets[0]).length;
-    // An overload counts when it lasts ≥ 1 s (a valve hand-over is not one).
-    let worst = 0, at = 0, run = 0;
-    for (let i = 0; i < N; i += 2) {
-      let q = 0;
-      for (const id of jets) if (levels.get(id)[i] > 5) q += Number(design.nozzleById.get(id).item.engineering?.flowLpm) || 0;
-      run = q > qMax * 1.05 ? run + 2 * DT : 0;
-      if (run >= 1 && q > worst) { worst = q; at = i * DT; }
+    const N = lv.get(jets[0].id).length, speed = pg.get(p.id) || null;
+    const q = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      let s = 0;
+      for (const j of jets) {
+        const level = lv.get(j.id)[i];
+        if (!(j.valve ? j.valve[i] > 5 : level > 5)) continue;
+        s += j.q * (vfd ? Math.min(1, Math.max(0, (speed ? speed[i] : level > 5 ? level : 100) / 100)) : 1); // no speed data: full flow
+      }
+      q[i] = s;
     }
-    if (worst > 0) over.push({ gate: 'flow-budget', id: pid, t: r3(at), text: `${pump.name}: ${Math.round(worst)} of ${Math.round(qMax)} L/min` });
+    let best = 0, at = 0, overS = 0, firstOverT = null;
+    for (let i = 0; i + k <= N; i++) {
+      let m = Infinity;
+      for (let j = i; j < i + k; j++) if (q[j] < m) m = q[j];
+      if (m > best) { best = m; at = i * dt; }
+    }
+    if (cap) for (let i = 0; i < N; i++) if (q[i] > cap * 1.02) { overS += dt; if (firstOverT === null) firstOverT = r3(i * dt); }
+    out.set(p.id, { lpm: Math.round(best * 10) / 10, t: r3(at), capLpm: cap, overS: r3(overS), firstOverT });
+  }
+  return out;
+}
+
+/**
+ * Flow budget per pump (gate): the flow a pump is asked for, held ≥ 0.3 s, may not exceed its
+ * rated flow × margin (+2 % for rounding of the drive's ramps). `clips` gives the real
+ * hardware picture (valves, pump speed); without them the jets' levels are used.
+ */
+export function flowBudget(levels, design, { clips = null, marginPct = DEFAULT_FLOW_MARGIN_PCT, T = null } = {}) {
+  const over = [];
+  const levelClips = clips || null;
+  const peaks = levelClips ? pumpPeaks(levelClips, design, { levels, T, marginPct }) : peaksFromLevels(levels, design, marginPct);
+  for (const [pid, pk] of peaks) {
+    if (!(pk.capLpm > 0) || !(pk.lpm > pk.capLpm * 1.02)) continue;
+    const pump = design.pumps.get(pid);
+    over.push({ gate: 'flow-budget', id: pid, t: pk.t, text: `${pump.name}: ${Math.round(pk.lpm)} of ${Math.round(pk.capLpm)} L/min` });
   }
   return over;
+}
+
+function peaksFromLevels(levels, design, marginPct) {
+  const out = new Map();
+  for (const [pid, pump] of design.pumps) {
+    const cap = pumpCapLpm(pump.item, marginPct), vfd = isVfdPump(pump.item);
+    const jets = pump.nozzleIds.filter((id) => levels.has(id));
+    if (!cap || !jets.length) continue;
+    const N = levels.get(jets[0]).length, k = 6;
+    const q = new Float32Array(N);
+    for (let i = 0; i < N; i++) for (const id of jets) {
+      const v = levels.get(id)[i];
+      if (v > 5) q[i] += jetFlowLpm(design.nozzleById.get(id).item) * (vfd ? Math.min(1, v / 100) : 1);
+    }
+    let best = 0, at = 0;
+    for (let i = 0; i + k <= N; i++) { let m = Infinity; for (let j = i; j < i + k; j++) m = Math.min(m, q[j]); if (m > best) { best = m; at = i * DT; } }
+    out.set(pid, { lpm: best, t: r3(at), capLpm: cap });
+  }
+  return out;
 }
 
 /** Look id of a recipe (famous look, preset, wave-field kind or effect). */
@@ -138,7 +202,7 @@ export function measureShow({ clips, items, analysis: raw, studio = null, design
   const levels = levelGrids(clips, nozzleIds, T);
   const N = Math.ceil(T / DT) + 1;
   const gates = showGates(clips, design);
-  const flow = flowBudget(levels, design);
+  const flow = flowBudget(levels, design, { clips, T, marginPct: Number(studio?.site?.flowMarginPct) || DEFAULT_FLOW_MARGIN_PCT });
   if (flow.length) { gates.violations.push(...flow); gates.pass = false; gates.counts['flow-budget'] = flow.length; }
   // Splash: at the site's wind, no jet may throw more than `splashLimit` of its water out of the basin.
   if (basin?.length >= 3) {

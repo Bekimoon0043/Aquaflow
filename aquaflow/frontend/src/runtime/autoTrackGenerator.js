@@ -110,6 +110,7 @@ const FALLBACK_PALETTE = [
 // ("nozzle_geyser").
 
 import { getFixtureCategory } from "../utils/fixtureTypeResolver.js";
+import { isSteelFrameType } from "../components/preview/elevatedNozzles.js";
 
 export function getEquipmentCategory(type = "") {
   const category = getFixtureCategory(type);
@@ -309,6 +310,8 @@ export function generateAutoTracks({ fixtures = [], devices = [] } = {}) {
   sourceItems.forEach((fx, index) => {
     const fixtureId   = fx.id ?? fx.deviceId ?? `item-${index}`;
     const fixtureType = String(fx.type || fx.kind || "").toLowerCase();
+    // Steel frames are scenery: no channels, no folder, no timeline track.
+    if (isSteelFrameType(fixtureType)) return;
     const category    = getEquipmentCategory(fixtureType);
 
     // Resolve groupId: prefer fixture.groupId (written at creation time by

@@ -10,6 +10,7 @@
  */
 import { DESIGN_HEIGHT_RANGE_M } from "../components/preview/jetPhysics.js";
 import { REFERENCE_PREVIEW_3D } from "../data/fixtureReferenceProducts.js";
+import { aimOf, mountHeightOf, isSteelFrameType } from "../components/preview/elevatedNozzles.js";
 
 export const NOZZLE_3D = {
   JET_1D:     "jet_1d",
@@ -29,6 +30,7 @@ export const NOZZLE_3D = {
   FLAME:      "flame",
   LASER:      "laser",
   SCREEN:     "screen",
+  SPHERE:     "sphere",   // crystal ball / dandelion / water sphere
 };
 
 /**
@@ -81,6 +83,13 @@ const FIXTURE_MAP = {
   // ─── Ring jets ────────────────────────────────────────────────────────────
   "ring":                 { nozzleType: NOZZLE_3D.RING,      tiltX:45, tiltZ:0,  scale:0.8, color:"#88ccff", heightMult:0.8 },
   "nozzle_ring":          { nozzleType: NOZZLE_3D.RING,      tiltX:45, tiltZ:0,  scale:0.8, color:"#88ccff", heightMult:0.8 },
+
+  // ─── Crystal ball / dandelion / water sphere ───────────────────────────────
+  "sphere":               { nozzleType: NOZZLE_3D.SPHERE,    tiltX:0,  tiltZ:0,  scale:1.0, color:"#bfe6ff", heightMult:1.0 },
+  "sphere_jet":           { nozzleType: NOZZLE_3D.SPHERE,    tiltX:0,  tiltZ:0,  scale:1.0, color:"#bfe6ff", heightMult:1.0 },
+  "nozzle_sphere":        { nozzleType: NOZZLE_3D.SPHERE,    tiltX:0,  tiltZ:0,  scale:1.0, color:"#bfe6ff", heightMult:1.0 },
+  "water_sphere":         { nozzleType: NOZZLE_3D.SPHERE,    tiltX:0,  tiltZ:0,  scale:1.0, color:"#bfe6ff", heightMult:1.0 },
+  "nozzle_dandelion":     { nozzleType: NOZZLE_3D.SPHERE,    tiltX:0,  tiltZ:0,  scale:1.0, color:"#bfe6ff", heightMult:1.0 },
 
   // ─── Pirouette / rotating ─────────────────────────────────────────────────
   "pirouette":            { nozzleType: NOZZLE_3D.PIROUETTE, tiltX:20, tiltZ:0,  scale:1.0, color:"#88ccff", heightMult:1.0 },
@@ -160,6 +169,9 @@ export function resolveFixtureType(typeString) {
     return FIXTURE_MAP[like] || { ...getDefault(), nozzleType: like };
   }
   // Fuzzy match
+  if ((key.includes("sphere") && !key.includes("hemisphere")) || key.includes("dandelion") || key.includes("crystal_ball")) {
+    return FIXTURE_MAP["sphere"];
+  }
   if (key.includes("geyser"))   return FIXTURE_MAP["geyser"];
   if (key.includes("laminar"))  return FIXTURE_MAP["laminar_jet"];
   if (key.includes("arch"))     return FIXTURE_MAP["arch_jet"];
@@ -244,6 +256,9 @@ export function fixturesToNozzleConfigs(fixtures) {
         intensity: (f.engineering?.wattage ? f.engineering.wattage / 18.0 : map.intensity),
         radius:    f.engineering?.beamRadiusM || 4.5,
         lightType: map.lightType,
+        // Elevated / aimed light (engineering.mountHeightM, aimDeg, aimAzimuthDeg).
+        ...(mountHeightOf(f) > 0 ? { mountHeightM: mountHeightOf(f) } : {}),
+        ...(aimOf(f) ? { aimDir: aimOf(f).dir } : {}),
       });
     } else {
       // Apply engineering data to scale the 3D effect
@@ -374,6 +389,9 @@ export function classifyFixtureType(typeString) {
   const k = String(typeString || "").trim().toLowerCase();
 
   if (!k) return "nozzle";
+
+  // Steel frames are structure (scenery): never water, light or a programmable output.
+  if (isSteelFrameType(k)) return "equipment";
 
   // ─── Equipment ─────────────────────────────────────────────
   const equipmentKeywords = [

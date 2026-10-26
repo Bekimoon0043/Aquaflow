@@ -22,6 +22,10 @@ const { registerCadIpc } = require("./cad-native");
 const { registerProjectIpc, acquireSessionLock, releaseSessionLock } = require("./project-files");
 const { createOpenQueue, READY_CHANNEL, OPEN_CHANNEL } = require("./open-queue");
 const { registerRenderExportIpc } = require("./render-export");
+// Durable main-process log + crash records (Help → Open Logs Folder) and the startup
+// page-file / commit check shown as a banner in the UI.
+const crashLog = require("./crash-log");
+const { createMemoryCheck, formatMemoryCheck } = require("./memory-check");
 
 const getMainWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
 
@@ -42,7 +46,20 @@ if (process.stdout && typeof process.stdout.on === "function") {
     stdoutBroken = true;
   });
 }
+// Everything dbg prints also lands in the rotating log file in app.getPath("logs").
+let mainLog = null;
+function logsDir() {
+  try { app.setAppLogsPath(); } catch { /* already set / not supported */ }
+  try { return app.getPath("logs"); } catch { return path.join(app.getPath("userData"), "logs"); }
+}
+function fileLog(text, options) {
+  try {
+    if (!mainLog) mainLog = crashLog.createRotatingLog({ dir: logsDir() });
+    mainLog.write(text, options);
+  } catch { /* logging must never break the app */ }
+}
 const dbg = (...a) => {
+  fileLog(a.join(" "));
   if (stdoutBroken || !process.stdout || !process.stdout.writable) return;
   try {
     process.stdout.write(`[aquaflow] ${a.join(" ")}\n`);
@@ -54,6 +71,13 @@ const dbg = (...a) => {
     stdoutBroken = true;
   }
 };
+// Engine stdout/stderr: to the log file (one line each) and, when attached, the console.
+function engineLog(chunk) {
+  const text = String(chunk == null ? "" : chunk);
+  fileLog(text.split(/\r?\n/).filter((l) => l.trim()).map((l) => `[engine] ${l}`).join("\n"));
+  if (stdoutBroken || !process.stdout || !process.stdout.writable) return;
+  try { process.stdout.write(`[engine] ${text}`); } catch { stdoutBroken = true; }
+}
 const DEVTOOLS = process.env.AQUAFLOW_DEVTOOLS !== "0";
 
 // LuxuryCon brand.
@@ -84,6 +108,7 @@ const recoveryDir = () => path.join(app.getPath("userData"), "project-recovery")
 function directorKeyEnv() {
   try {
     const key = fs.readFileSync(path.join(os.homedir(), ".aquaflow", "director_key"), "utf8").trim();
+    crashLog.addSecret(key);
     return key ? { ANTHROPIC_API_KEY: key } : {};
   } catch { return {}; }
 }
@@ -186,7 +211,9 @@ function createMainWindow() {
   // Surface renderer failures in the main-process stdout (visible even without DevTools).
   const wc = mainWindow.webContents;
   wc.on("did-fail-load", (_e, code, desc, url) => dbg(`RENDERER did-fail-load ${code} ${desc} — ${url}`));
-  wc.on("render-process-gone", (_e, d) => dbg(`RENDERER gone: ${d && d.reason}`));
+  wc.on("render-process-gone", (_e, d) => onRendererGone(d || {}));
+  mainWindow.on("unresponsive", () => dbg("RENDERER unresponsive"));
+  mainWindow.on("responsive", () => dbg("RENDERER responsive again"));
   wc.on("preload-error", (_e, p, err) => dbg(`PRELOAD error ${p}: ${err && err.message}`));
   wc.on("console-message", (_e, level, message, line, sourceId) =>
     dbg(`console[${level}] ${message} (${sourceId}:${line})`));
@@ -226,6 +253,94 @@ function createMainWindow() {
     splashWindow = null;
   });
   mainWindow.on("closed", () => { mainWindow = null; openQueue.markNotReady(); });
+}
+
+// ── Crash records, reload offer, memory samples ──────────────────────────────────────
+let keepSessionLock = false;   // quitting right after a crash keeps the recovery prompt for next launch
+let reloadPromptOpen = false;
+let lastMemoryCheck = null;
+const memoryCheck = createMemoryCheck();
+
+function currentMemorySample() {
+  return crashLog.sampleMemory({
+    appMetrics: app.getAppMetrics(), freemem: os.freemem(), totalmem: os.totalmem(),
+    systemInfo: typeof process.getSystemMemoryInfo === "function" ? process.getSystemMemoryInfo() : null,
+  });
+}
+
+function recordCrash(kind, details) {
+  let memory = null;
+  try { memory = currentMemorySample(); } catch { /* ignore */ }
+  fileLog(`CRASH ${kind}: ${JSON.stringify(details)}${memory ? ` · ${crashLog.formatMemorySample(memory)}` : ""}`, { sync: true });
+  try {
+    crashLog.writeCrashRecord(logsDir(), {
+      kind, details, appVersion: app.getVersion(), platform: `${process.platform} ${os.release()}`,
+      memory, memoryCheck: lastMemoryCheck, recentLog: mainLog ? mainLog.tail() : [],
+    });
+  } catch { /* ignore */ }
+}
+
+function onRendererGone(details) {
+  const reason = details.reason || "unknown";
+  dbg(`RENDERER gone: ${reason} (exit code ${details.exitCode})`);
+  if (reason === "clean-exit" || shuttingDown) return;
+  recordCrash("renderer", { reason, exitCode: details.exitCode });
+  // The reloaded window then offers the newest autosave (project-recovery) like after a crash.
+  if (sessionInfo) { sessionInfo.uncleanExit = true; sessionInfo.rendererCrashAt = new Date().toISOString(); }
+  offerReload(reason);
+}
+
+async function offerReload(reason) {
+  const win = getMainWindow();
+  if (!win || reloadPromptOpen) return;
+  reloadPromptOpen = true;
+  try {
+    const memoryHint = reason === "oom"
+      ? "\n\nWindows ran out of memory for it. Closing other programs (browsers) and turning on the Windows page file helps."
+      : "";
+    const res = await dialog.showMessageBox(win, {
+      type: "warning", title: "AquaFlow Studio", noLink: true,
+      message: `AquaFlow's window stopped (${reason}).`,
+      detail: "Reload? Your work is in the recovery copy: after reloading, AquaFlow offers to restore the latest autosave." +
+        `${memoryHint}\n\nA crash record was written to the logs folder (Help → Open Logs Folder).`,
+      buttons: ["Reload", "Quit"], defaultId: 0, cancelId: 1,
+    });
+    if (res.response === 0) {
+      const w = getMainWindow();
+      if (w) { dbg("reloading window after renderer crash"); w.webContents.reload(); }
+    } else {
+      keepSessionLock = true;
+      cleanupAndQuit();
+    }
+  } catch (e) {
+    dbg(`reload prompt failed: ${e && e.message}`);
+  } finally {
+    reloadPromptOpen = false;
+  }
+}
+
+app.on("child-process-gone", (_e, d) => {
+  const details = d || {};
+  dbg(`CHILD process gone: ${details.type} ${details.name || details.serviceName || ""} ${details.reason} (exit code ${details.exitCode})`);
+  if (!shuttingDown && details.reason && !["clean-exit", "killed"].includes(details.reason)) recordCrash(`child-${details.type || "process"}`, details);
+});
+process.on("uncaughtException", (err) => {
+  dbg(`MAIN uncaught exception: ${err && err.stack ? err.stack : err}`);
+  recordCrash("main-exception", { message: String(err && err.message ? err.message : err), stack: String((err && err.stack) || "") });
+});
+process.on("unhandledRejection", (reason) => {
+  dbg(`MAIN unhandled rejection: ${reason && reason.stack ? reason.stack : reason}`);
+});
+
+function startMemorySampler() {
+  const tick = () => { try { fileLog(crashLog.formatMemorySample(currentMemorySample())); } catch { /* ignore */ } };
+  tick();
+  const timer = setInterval(tick, 60 * 1000);
+  if (timer.unref) timer.unref();
+}
+
+function registerSystemIpc() {
+  ipcMain.handle("system:memory-status", async () => memoryCheck());
 }
 
 // ── License activation IPC (AF-PKG-ENABLE-LICENSE) ──────────────────────────────
@@ -330,6 +445,10 @@ function installDownloadHandler() {
 }
 
 async function boot() {
+  dbg(`AquaFlow Studio ${app.getVersion()} starting (Electron ${process.versions.electron}, ${process.platform} ${os.release()})`);
+  registerSystemIpc();
+  // Windows page-file / commit check: async, time-boxed, cached for the renderer's banner.
+  memoryCheck().then((r) => { lastMemoryCheck = r; dbg(formatMemoryCheck(r)); }).catch(() => {});
   registerLicenseIpc();
   registerCadIpc({ipcMain,dialog,getMainWindow});
   // AF-NEXT-006 — a lock left over from the previous run means it never quit cleanly; the
@@ -344,6 +463,7 @@ async function boot() {
   createSplash();
   try {
     const cfg = resolveConfig();
+    crashLog.addSecret(cfg.licenseSecret);
     if (!cfg.hasLicenseSecret) {
       throw new Error(
         "No license secret configured. Provision resources/app-config.json (licenseSecret) " +
@@ -373,7 +493,7 @@ async function boot() {
       // UI server's exact origin too so CORS holds even if the regex ever changes.
       corsOrigins: ui ? [`http://127.0.0.1:${ui.port}`] : [],
       extraEnv: directorKeyEnv(),
-      onLog: (line) => process.stdout.write(`[engine] ${line}`),
+      onLog: (line) => engineLog(line),
     });
 
     // If the engine process dies before we're up, fail fast with a dialog.
@@ -404,6 +524,7 @@ async function boot() {
     setCheckForUpdatesHook(() => checkForUpdates({ silent: false }, getMainWindow));
     setOpenShowHook(handleOpenShow); // File > Open Show… goes through the same ready-queue
     createMainWindow();
+    startMemorySampler();
 
     // AF-PKG-007 — configure the update feed and run the silent launch check. Admin-only
     // URL from resolveConfig(); no-ops cleanly in dev / when unconfigured / offline.
@@ -428,7 +549,10 @@ function fatal(message) {
 async function cleanupAndQuit() {
   if (shuttingDown) return;
   shuttingDown = true;
-  releaseSessionLock(recoveryDir()); // AF-NEXT-006 — clean quit: no recovery prompt next launch
+  // AF-NEXT-006 — clean quit: no recovery prompt next launch (unless quitting from a crash prompt).
+  if (!keepSessionLock) releaseSessionLock(recoveryDir());
+  dbg(keepSessionLock ? "quitting after a crash (recovery offered next launch)" : "quitting");
+  if (mainLog) mainLog.flush();
   try { if (ui && ui.close) await ui.close(); } catch { /* ignore */ }
   try { if (engine && engine.child) await stopEngine(engine.child); } catch { /* ignore */ }
   if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
@@ -447,6 +571,7 @@ app.on("window-all-closed", () => {
 
 // Last-resort: never leave the engine orphaned.
 process.on("exit", () => {
+  try { if (mainLog) mainLog.flush(); } catch { /* ignore */ }
   try { if (engine && engine.child && engine.child.exitCode === null) engine.child.kill("SIGKILL"); }
   catch { /* ignore */ }
 });

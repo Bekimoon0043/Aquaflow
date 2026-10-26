@@ -195,7 +195,11 @@ export function encodeLight(L) {
   const deg = Math.PI / 180;
   const tx = (Number(L.tiltX) || 0) * deg, tz = (Number(L.tiltZ) || 0) * deg;
   // Fixtures aim straight up unless tilted; tilt about X leans the beam toward +z.
+  // An explicit aim (engineering.aimDeg → aimDir, world x/y/z) wins.
   let ax = -Math.sin(tz), ay = Math.cos(tx) * Math.cos(tz), az = Math.sin(tx);
+  if (Array.isArray(L.aimDir) && Math.hypot(L.aimDir[0], L.aimDir[1], L.aimDir[2]) > 1e-6) {
+    ax = Number(L.aimDir[0]); ay = Number(L.aimDir[1]); az = Number(L.aimDir[2]);
+  }
   const n = Math.hypot(ax, ay, az) || 1;
   ax /= n; ay /= n; az /= n;
   const half = Math.max(2, Math.min(85, (Number(L.beamAngle) || DEFAULT_HALF_ANGLE_DEG * 2) / 2));

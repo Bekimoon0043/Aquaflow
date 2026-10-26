@@ -22,6 +22,7 @@ import { DEFAULT_COUPLING, DEFAULT_GUST_FACTOR, GRAVITY, windDrift } from "../we
 import { basinOuterPoints, reconcileBasins } from "./basins.js";
 import { evaluateShowFrameAt } from "../show/evaluateShowFrame.js";
 import { fixturesToNozzleConfigs, classifyFixtureType } from "../hooks/fixtureTypeMap.js";
+import { solveReachSpeed, mountHeightOf, catchHeightOf, fieldOf } from "../components/preview/elevatedNozzles.js";
 
 export const ADVISORY_LABEL = "Advisory — not field calibrated";
 
@@ -96,23 +97,48 @@ export function createWaterTest(basins) {
   return { contains: (x, y) => contains(x, y), edgeDistance: (x, y) => edgeDistance(rings, x, y), empty: !basins.length };
 }
 
-/** Ballistic landing of one jet. `jet` = { x, y, heightM, tiltX, tiltZ, rotationY } (degrees). */
+/**
+ * Ballistic landing of one jet. `jet` = { x, y, heightM, tiltX, tiltZ, rotationY } (degrees),
+ * plus, for elevated / aimed nozzles, mountHeightM (m above the water), aimDeg /
+ * aimAzimuthDeg (aim from vertical, plan azimuth from +x toward +y — then heightM is the
+ * reach along the aim) and catchAtM (a tray collects the water: nothing lands in the basin).
+ */
 export function jetLanding(jet, wind, opts = {}) {
   const o = { ...SPLASH_DEFAULTS, ...opts };
   const w = normalizeWind(wind);
   const h = Math.max(0, Number(jet.heightM) || 0) * (1 + Math.max(0, o.nozzleUncertainty));
-  const tx = toRad(jet.tiltX), tz = toRad(jet.tiltZ), yaw = toRad(jet.rotationY);
-  const vy = Math.sqrt(2 * GRAVITY * h);
-  const cosV = Math.max(0.05, Math.cos(tx) * Math.cos(tz));
-  const speed = vy / cosV;
-  const tof = 2 * vy / GRAVITY;
-  const lx = Math.sin(tx) * speed * tof, lz = Math.sin(tz) * speed * tof;
-  const throwX = lx * Math.cos(yaw) + lz * Math.sin(yaw);
-  const throwY = -lx * Math.sin(yaw) + lz * Math.cos(yaw);
-  const throwM = Math.hypot(throwX, throwY);
-  const drift = windDrift(h, w.speed * o.gustFactor, o.coupling);
-  const ux = w.speed > 1e-9 ? w.x / w.speed : 0, uy = w.speed > 1e-9 ? w.y / w.speed : 0;
   const x0 = Number(jet.x) || 0, y0 = Number(jet.y) || 0;
+  const mount = Math.max(0, Number(jet.mountHeightM) || 0);
+  const tray = Number(jet.catchAtM) > 0 && Number(jet.catchAtM) < mount ? Number(jet.catchAtM) : null;
+  if (tray != null) {
+    // Caught on a tray: no water reaches the basin, so nothing can land outside it.
+    return { origin: { x: x0, y: y0 }, center: { x: x0, y: y0 }, radiusM: 0, envelopeHeightM: h,
+      throwM: 0, driftM: 0, caught: true };
+  }
+  let throwX, throwY;
+  const aimed = jet.aimDeg != null && Number.isFinite(Number(jet.aimDeg));
+  if (aimed) {
+    // Launch speed that reaches h along the aim (elevatedNozzles.solveReachSpeed, drag-free
+    // here like the rest of this model), flown down to the water below the mount.
+    const a = toRad(jet.aimDeg), az = toRad(jet.aimAzimuthDeg);
+    const v = solveReachSpeed(h, Number(jet.aimDeg), { gravity: GRAVITY, drag: 0 });
+    const vy = v * Math.cos(a), vh = v * Math.sin(a);
+    const tof = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * GRAVITY * mount))) / GRAVITY;
+    throwX = vh * tof * Math.cos(az); throwY = vh * tof * Math.sin(az);
+  } else {
+    const tx = toRad(jet.tiltX), tz = toRad(jet.tiltZ), yaw = toRad(jet.rotationY);
+    const vy = Math.sqrt(2 * GRAVITY * h);
+    const cosV = Math.max(0.05, Math.cos(tx) * Math.cos(tz));
+    const speed = vy / cosV;
+    // An elevated nozzle's water falls the extra mount height (mount 0: 2 vy / g as before).
+    const tof = mount > 0 ? (vy + Math.sqrt(vy * vy + 2 * GRAVITY * mount)) / GRAVITY : 2 * vy / GRAVITY;
+    const lx = Math.sin(tx) * speed * tof, lz = Math.sin(tz) * speed * tof;
+    throwX = lx * Math.cos(yaw) + lz * Math.sin(yaw);
+    throwY = -lx * Math.sin(yaw) + lz * Math.cos(yaw);
+  }
+  const throwM = Math.hypot(throwX, throwY);
+  const drift = windDrift(h + mount, w.speed * o.gustFactor, o.coupling);
+  const ux = w.speed > 1e-9 ? w.x / w.speed : 0, uy = w.speed > 1e-9 ? w.y / w.speed : 0;
   return {
     origin: { x: x0, y: y0 },
     center: { x: x0 + throwX + drift * ux, y: y0 + throwY + drift * uy },
@@ -123,7 +149,7 @@ export function jetLanding(jet, wind, opts = {}) {
 
 /** Test a landing region against the water. Returns { outside, distanceOutsideM, worstPoint }. */
 export function testLanding(landing, water, opts = {}) {
-  if (water.empty) return { outside: false, distanceOutsideM: 0, worstPoint: null };
+  if (water.empty || landing.caught) return { outside: false, distanceOutsideM: 0, worstPoint: null };
   const n = opts.rimPoints || SPLASH_DEFAULTS.rimPoints;
   const pts = [landing.center];
   for (let k = 0; k < n; k++) {
@@ -175,8 +201,14 @@ export function projectJets(project = {}) {
     const e = f.engineering || {};
     const design = Number(e.jetHeightM) > 0 ? Number(e.jetHeightM)
       : Number(e.pressureBar) > 0 ? 0.8 * Number(e.pressureBar) * BAR_TO_M : null;
+    const reach = fieldOf(f, "reachM");
+    const aimDeg = fieldOf(f, "aimDeg");
     return { id: String(c.id), x: Number(c.x) || 0, y: Number(c.z) || 0, tiltX: c.tiltX || 0, tiltZ: c.tiltZ || 0,
-      rotationY: c.rotationY || 0, designHeightM: design };
+      rotationY: c.rotationY || 0, designHeightM: aimDeg != null && reach > 0 ? reach : design,
+      // Elevated / aimed / caught (elevatedNozzles.js) — only when the fixture has them.
+      ...(mountHeightOf(f) > 0 ? { mountHeightM: mountHeightOf(f) } : {}),
+      ...(aimDeg != null ? { aimDeg, aimAzimuthDeg: fieldOf(f, "aimAzimuthDeg") ?? (Number(f.rotation) || 0) } : {}),
+      ...(catchHeightOf(f) != null ? { catchAtM: catchHeightOf(f) } : {}) };
   });
 }
 

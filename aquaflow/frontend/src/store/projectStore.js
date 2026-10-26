@@ -55,6 +55,7 @@ const audioFilePath = (file, previous) => {
   return p || null;
 };
 
+const SHARED_PROGRAMMER_KEYS = ["timelineClips"];
 const serializableProgrammer = (value) => {
   if (!value) return null;
   const audioFileReference = value.audioFile && typeof value.audioFile === "object"
@@ -70,7 +71,18 @@ const serializableProgrammer = (value) => {
   // AudioBuffer and File contents are intentionally excluded. The project retains
   // choreography, beat markers and file identity; the user can relink audio without
   // producing a corrupt or multi-hundred-megabyte JSON document.
-  return serializable({ ...value, audioFile: null, audioFileReference, audioBuffer: null }, null);
+  const plain = { ...value, audioFile: null, audioFileReference, audioBuffer: null };
+  // The compiled clips (10k+ cues on a long show) are plain data that is never changed in
+  // place — every edit replaces the array — so they are kept by reference instead of being
+  // JSON-copied on each edit (that copy cost ~100 ms and a second full set of clips in memory).
+  const shared = {};
+  for (const key of SHARED_PROGRAMMER_KEYS) {
+    if (Array.isArray(plain[key])) { shared[key] = plain[key]; plain[key] = null; }
+  }
+  const copy = serializable(plain, null);
+  if (!copy) return null;
+  for (const key of Object.keys(shared)) copy[key] = shared[key];
+  return copy;
 };
 
 const initialPanel = () => {

@@ -11,6 +11,12 @@
  * dialog is modal). Legacy .aqua files without a manifest load exactly as before.
  *
  * Status/toast messages go out on "aquaflow:project-status" ({ level, text }).
+ *
+ * Song inside the saved file: a plain .aqua only names the song by its path, so a show copied
+ * to another PC opens without music. When a project has a song, Save asks once per project
+ * (remembered) whether to keep the song inside the project file; "yes" saves an .aquapkg with
+ * the song embedded (the Package Project format, which the loader already understands) and
+ * later Saves overwrite that package. A project opened from an .aquapkg keeps saving as one.
  */
 import { useShowStore } from "../store/showStore";
 import useEngineeringStore from "../store/engineeringStore";
@@ -18,17 +24,20 @@ import useProjectStore from "../store/projectStore";
 import { serializeShow, deserializeShow, saveToRecent } from "./showFile";
 import {
   buildAssetManifest, verifyAssetManifest, hasManifest, sha256Hex, liveAssetFiles,
-  packagedMemberName, describeAssetReport,
+  packagedMemberName, describeAssetReport, collectAssetRefs,
 } from "./assetManifest";
 import { createZip, readZip, zipText } from "./zipStore";
 import { desktopProjectBridge, getSnapshotBackend } from "./projectRecovery";
 
 // ── File session state (which file is open; not project data) ──────────────────────
-let fileState = { path: null, kind: null, name: null, savedAt: null };
+const NO_FILE = Object.freeze({ path: null, kind: null, name: null, savedAt: null });
+let fileState = { ...NO_FILE, projectKey: null };
 const listeners = new Set();
-export const getFileState = () => fileState;
+// The open file belongs to the project that was opened/saved with it: once the workspace holds
+// another project (New Show), Save must not overwrite the previous project's file.
+export const getFileState = () => (fileState.projectKey && fileState.projectKey !== getProjectKey() ? NO_FILE : fileState);
 export function subscribeFileState(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-function setFileState(patch) { fileState = { ...fileState, ...patch }; listeners.forEach((fn) => fn(fileState)); }
+function setFileState(patch) { fileState = { ...fileState, ...patch, projectKey: getProjectKey() }; listeners.forEach((fn) => fn(fileState)); }
 
 const emit = (name, detail) => {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -96,6 +105,48 @@ function downloadBytes(bytes, filename, type) {
   URL.revokeObjectURL(url);
 }
 
+// ── Song inside the saved file ─────────────────────────────────────────────────────
+
+const SONG_CHOICE_PREFIX = "aquaflow.songInProject.";
+/** "embed" | "reference" | null — the remembered answer for this project. */
+export function readSongChoice(projectKey) {
+  try { const v = globalThis.localStorage?.getItem(SONG_CHOICE_PREFIX + projectKey); return v === "embed" || v === "reference" ? v : null; }
+  catch { return null; }
+}
+export function rememberSongChoice(projectKey, choice) {
+  try {
+    if (choice === "embed" || choice === "reference") globalThis.localStorage?.setItem(SONG_CHOICE_PREFIX + projectKey, choice);
+    else globalThis.localStorage?.removeItem(SONG_CHOICE_PREFIX + projectKey);
+  } catch { /* storage unavailable: ask again next time */ }
+}
+
+// The UI (ProjectRecoveryHost) registers the "Keep the song inside the project file?" dialog.
+// prompt({ song, projectKey }) → Promise<"embed" | "reference" | "cancel">.
+let songPrompt = null;
+export function setSongPrompt(fn) {
+  songPrompt = fn;
+  return () => { if (songPrompt === fn) songPrompt = null; };
+}
+
+/** The project's song (the Show Programmer audio) as an asset ref, or null. */
+export function projectSong(data) {
+  return collectAssetRefs(data).find((r) => r.id === "audio:programmer") || null;
+}
+
+/** How this save stores the song: "embed" (save an .aquapkg), "reference" (.aqua) or "cancel". */
+async function chooseSongStorage(data, projectKey) {
+  const song = projectSong(data);
+  if (!song) return "reference";
+  const remembered = readSongChoice(projectKey);
+  if (remembered) return remembered;
+  // A project that already lives in an .aquapkg keeps its song inside without asking.
+  if (getFileState().kind === "package") return "embed";
+  if (!songPrompt) return "reference";
+  const answer = await songPrompt({ song, projectKey });
+  if (answer === "embed" || answer === "reference") rememberSongChoice(projectKey, answer);
+  return answer === "embed" || answer === "reference" ? answer : "cancel";
+}
+
 // ── Save ────────────────────────────────────────────────────────────────────────────
 
 /** Save (overwrite current path) or Save As (choose a path). Returns { ok, path?, manifest } | null when cancelled. */
@@ -104,6 +155,9 @@ export async function saveProject({ saveAs = false } = {}) {
   const data = captureProjectData();
   const name = data.show?.name || "Untitled Show";
   const projectKey = getProjectKey();
+  const songStorage = await chooseSongStorage(data, projectKey);
+  if (songStorage === "cancel") return null;
+  if (songStorage === "embed") return packageProject({ asSave: true, saveAs, data });
   try {
     if (!bridge) {
       // Browser / dev fallback: the original Blob download, now carrying the manifest.
@@ -117,9 +171,10 @@ export async function saveProject({ saveAs = false } = {}) {
       notify(`Downloaded ${safeName(name)}.aqua`, "info");
       return { ok: true, path: null, manifest: data.assetManifest };
     }
-    let target = fileState.kind === "aqua" ? fileState.path : null;
+    const file = getFileState();
+    let target = file.kind === "aqua" ? file.path : null;
     if (saveAs || !target) {
-      const chosen = unwrap(await bridge.saveDialog({ suggestedName: safeName(name), kind: "aqua", defaultPath: fileState.path && fileState.kind === "aqua" ? fileState.path : undefined }), "Save As");
+      const chosen = unwrap(await bridge.saveDialog({ suggestedName: safeName(name), kind: "aqua", defaultPath: file.path && file.kind === "aqua" ? file.path : undefined }), "Save As");
       if (!chosen) return null;
       target = chosen.path;
     }
@@ -141,27 +196,45 @@ export async function saveProject({ saveAs = false } = {}) {
   }
 }
 
-/** Embed every resolvable asset with the manifest into a .aquapkg (ZIP). */
-export async function packageProject() {
+const asPackagePath = (p) => (p ? String(p).replace(/\.(aqua|aquashow|json)$/i, "") + (/\.aquapkg$/i.test(p) ? "" : ".aquapkg") : undefined);
+
+/** Bytes of one file asset for a package: this PC's disk first, then the live File (e.g. a song that came out of an opened package). */
+async function readFileAssetBytes(asset, bridge) {
+  if (bridge && asset.path && asset.sha256) {
+    const res = await bridge.readAsset(asset.path).catch(() => null);
+    if (res && res.ok !== false && res.bytes) return res.bytes;
+  }
+  const live = liveAssetFiles.get(asset.id);
+  return live && typeof live.arrayBuffer === "function" ? new Uint8Array(await live.arrayBuffer()) : null;
+}
+
+/**
+ * Embed every resolvable asset with the manifest into a .aquapkg (ZIP).
+ * asSave: this package IS the project's file (Save with the song inside): it records a clean
+ * save, becomes the current file, and a plain Save overwrites it without asking for a path.
+ */
+export async function packageProject({ asSave = false, saveAs = false, data: captured = null } = {}) {
   const bridge = desktopProjectBridge();
-  const data = captureProjectData();
+  const data = captured || captureProjectData();
   const name = data.show?.name || "Untitled Show";
+  const projectKey = getProjectKey();
   try {
     let target = null;
     if (bridge) {
-      const chosen = unwrap(await bridge.saveDialog({ suggestedName: safeName(name), kind: "package" }), "Package");
-      if (!chosen) return null;
-      target = chosen.path;
+      const file = getFileState();
+      if (asSave && !saveAs && file.kind === "package" && file.path) target = file.path;
+      else {
+        const chosen = unwrap(await bridge.saveDialog({ suggestedName: safeName(name), kind: "package", defaultPath: asPackagePath(file.path) }), "Package");
+        if (!chosen) return null;
+        target = chosen.path;
+      }
     }
     const manifest = await manifestFor(data, target);
     const members = [];
     for (const asset of manifest.assets) {
       let bytes = null;
       if (asset.source === "library") bytes = await readLibraryModel(asset).catch(() => null);
-      else if (asset.source === "file") {
-        if (bridge && asset.path && asset.sha256) bytes = unwrap(await bridge.readAsset(asset.path), "Reading asset")?.bytes || null;
-        else if (liveAssetFiles.get(asset.id)) bytes = new Uint8Array(await liveAssetFiles.get(asset.id).arrayBuffer());
-      }
+      else if (asset.source === "file") bytes = await readFileAssetBytes(asset, bridge);
       if (!bytes) continue;
       bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       if (asset.sha256 && (await sha256Hex(bytes)) !== asset.sha256) throw new Error(`${asset.name} changed while packaging; try again.`);
@@ -175,15 +248,25 @@ export async function packageProject() {
       { name: "manifest.json", data: JSON.stringify(manifest, null, 2) },
       ...members,
     ]);
+    const songMissing = missing.some((a) => a.id === "audio:programmer");
     if (bridge) {
-      const res = unwrap(await bridge.save({ path: target, kind: "package", bytes: zip, name }), "Package");
+      const res = unwrap(await bridge.save({ path: target, kind: "package", bytes: zip, name, ...(asSave ? { projectKey } : {}) }), "Package");
+      target = res.path || target;
       log("info", `Project packaged: ${res.path} (${members.length} asset(s) embedded)`);
-      notify(`Packaged ${members.length} asset(s) into ${res.path}${missing.length ? ` — ${missing.length} could not be embedded` : ""}`, missing.length ? "warn" : "info");
+      if (asSave) notify(`Saved ${res.path} with ${songMissing ? "no song inside — the song file was not found; locate it and save again" : "the song inside"}`, songMissing ? "warn" : "info");
+      else notify(`Packaged ${members.length} asset(s) into ${res.path}${missing.length ? ` — ${missing.length} could not be embedded` : ""}`, missing.length ? "warn" : "info");
     } else {
       downloadBytes(zip, `${safeName(name)}.aquapkg`, "application/zip");
       notify(`Downloaded ${safeName(name)}.aquapkg (${members.length} asset(s) embedded${missing.length ? `, ${missing.length} not available in the browser` : ""})`, missing.length ? "warn" : "info");
     }
-    return { ok: true, path: target, manifest, embedded: members.length, missing };
+    if (asSave) {
+      if (bridge) await getSnapshotBackend().markClean(projectKey, { path: target, name }).catch(() => {});
+      markSavedEverywhere(name);
+      saveToRecent({ name, savedAt: data.savedAt });
+      setFileState({ path: target, kind: "package", name, savedAt: data.savedAt });
+      emit("aquaflow:project-baseline", {});
+    }
+    return { ok: true, path: target, kind: "package", manifest, embedded: members.length, missing };
   } catch (e) {
     log("error", `Package failed: ${e.message}`);
     notify(`Package failed: ${e.message}`, "error");
@@ -363,7 +446,12 @@ export async function relinkAsset(item, { pickBrowserFile = null } = {}) {
   }
   const status = item.sha256 ? (sha256 === item.sha256 ? "ok" : "relinked-different") : "relinked";
   log(status === "ok" ? "info" : "warn", `Relinked ${item.name} → ${path || "(browser file)"}: ${status}`);
-  return { ...item, status, resolvedPath: path, actualSha256: sha256, resolvedVia: "relink" };
+  // No saved fingerprint (or a different one): accepted, but the user is told to check it.
+  const warning = status === "relinked-different"
+    ? `This is not the same file that was saved with the show (different content). Check that it is the right ${item.role === "audio" ? "song" : "file"}.`
+    : status === "relinked" ? `The project has no saved fingerprint for ${item.name}, so this file could not be verified. Check that it is the right ${item.role === "audio" ? "song" : "file"}.` : null;
+  if (warning) notify(warning, "warn");
+  return { ...item, status, resolvedPath: path, actualSha256: sha256, resolvedVia: "relink", warning };
 }
 
 /** Desktop recent files ({ path, name, openedAt, exists }). */
