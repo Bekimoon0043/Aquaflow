@@ -90,6 +90,14 @@ const S = {
 // ── Clear jets ───────────────────────────────────────────────────────────────
 const CLEAR = "Clear Jets (catalogue)";
 const clearJets = [
+  // Plain smooth-bore jet with NO flow straightener: exit turbulence ≈ 5–10 %, so it stays a
+  // thin column and blooms into a droplet crown near its apex (realWorldLook.js).
+  nozzle({ key: "nozzle_smooth_bore_jet_12mm", label: "Smooth-bore jet 12 mm, no straightener (generic)", family: CLEAR, maker: "Generic",
+    model: "Plain smooth-bore jet, 12 mm, no flow straightener", conn: "DN25", h: 4, q: 69, p: 0.48, outletDia: 12,
+    material: "SS304", preview3d: "jet_3d", resolverKey: "comet_jet",
+    extra: { flowStraightener: false, exitTurbulence: 0.06, heightRangeM: [1, 6.5] },
+    src: "https://www.oase.com/en/water-technology/comet-10-12-t-int",
+    note: "AquaFlow generic template: 12 mm at 4 m, flow = ideal orifice × 1.15 (≈ OASE Comet 10-12 T 68 L/min @ 0.48 bar). Exit turbulence 6 % est. (smooth bore, no straightener: 5–10 %). Verify with supplier datasheet." }),
   nozzle({ key: "nozzle_comet_3_6t_oase", label: "OASE Comet 3-6T clear jet", family: CLEAR, maker: "OASE", model: "Comet 3-6T",
     conn: "DN15", h: 2, q: 12.1, p: 0.25, outletDia: 6, material: "Brass", preview3d: "jet_1d", resolverKey: "comet_jet",
     extra: { heightRangeM: [0.5, 2], ballJointDeg: 15 },
@@ -578,6 +586,15 @@ const lights = [
     watts: 12, beam: 120, mode: "RGB", lumens: 500, dmx: 3, extra: { lengthM: 1, ikRating: "IK8" },
     src: S.saferain("fountain-lighting_led-river-strip.pdf"),
     note: "24 V DC, IP68/IK8, 120°, RGB 12 W/m 500 lm/m (white 8 W/m)." }),
+  // Outdoor framing / gobo projector on a mast: its four framing blades cut the beam along
+  // planes (engineering.framing, realWorldLook.js), e.g. the "canopy-floor sight plane".
+  light({ key: "light_projector_framing_5200lm", label: "Framing projector 5,200 lm (generic)", maker: "Generic",
+    model: "Framing projector — Martin Exterior Projection Pro Compact class, verify datasheet",
+    watts: 140, beam: 30, mode: "RGBW", lumens: 5200, dmx: 8,
+    extra: { ipRating: "IP66", voltage: 230, zoomRangeDeg: [15, 45], framingBlades: 4, gobo: true,
+      mountHeightM: 3.4, aimDeg: 60, mountType: "mast / bracket (above water)" },
+    src: "https://creationnetworks.net/products/martin-exterior-projection-pro-compact-ip66-outdoor-image-projector-white",
+    note: "Generic framing projector of the Martin Exterior Projection Pro Compact class: IP66, ~5,200 lm, 15–45° zoom, optional 4-blade framing module + gobo. Power (~140 W), DMX footprint and colour mixing est. — verify datasheet." }),
 ];
 
 // ── Pumps (duty point est. on the published curve limits) ──────────────────

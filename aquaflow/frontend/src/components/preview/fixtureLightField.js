@@ -31,8 +31,14 @@
  * cannot be lit by forward lights cheaply, which is why this exists.
  */
 
+import { bladePlanesOf, bladeSoftnessOf, bladeFactor, MAX_BLADES } from "./lightFraming.js";
+
 export const MAX_FIXTURE_LIGHTS = 1024;
-export const LIGHT_ROWS = 3;
+/** Rows: 0 pos+range, 1 axis+cos(outer), 2 colour+cos(inner), 3–6 framing blades
+ *  (plane n.xyz, w: kept where n·p + w ≥ 0), 7 blade meta (count, softness m). */
+export const LIGHT_ROWS = 8;
+export const BLADE_ROW0 = 3;
+export const BLADE_META_ROW = 7;
 export const CLUSTER_DIM = 32;
 export const CLUSTER_K = 16;
 export const HG_G = 0.6;
@@ -106,7 +112,18 @@ vec3 flContribution(float id, vec3 p, vec3 toCam, float g, float coneW){
   float win = clamp(1.0 - x * x * x * x, 0.0, 1.0);
   float att = win * win / (1.0 + ${ATTEN_K} * d * d);
   float phase = mix(1.0, flPhaseHG(dot(ld, toCam), g), ${PHASE_MIX});
-  return r2.rgb * (cone * att * phase);
+  // Framing blades (lightFraming.js): the beam is cut along up to ${MAX_BLADES} planes.
+  vec4 bm = flTexel(id, ${BLADE_META_ROW}.0);
+  float blade = 1.0;
+  if (bm.x > 0.5) {
+    for (int b = 0; b < ${MAX_BLADES}; b++) {
+      if (float(b) >= bm.x) break;
+      vec4 pl = flTexel(id, ${BLADE_ROW0}.0 + float(b));
+      float s = dot(pl.xyz, p) + pl.w;
+      blade *= bm.y > 0.0 ? smoothstep(0.0, bm.y, s) : step(0.0, s);
+    }
+  }
+  return r2.rgb * (cone * att * phase * blade);
 }
 
 // AF-NEXT-013: accumulate one fixture and track the density statistics.
@@ -208,7 +225,9 @@ export function encodeLight(L) {
   const radius = Math.max(1, Number(L.radius) || 6);
   const intensity = Math.max(0, Number(L.intensity) || 0) * FIELD_GAIN;
   const c = L.color || { r: 1, g: 1, b: 1 };
+  const blades = bladePlanesOf(L);
   return {
+    blades, bladeSoft: blades.length ? bladeSoftnessOf(L) : 0,
     x: Number(L.x) || 0, y: Number.isFinite(Number(L.y)) ? Number(L.y) : 0, z: Number(L.z) || 0,
     range: radius * 3,
     ax, ay, az,
@@ -233,7 +252,9 @@ export function lightContribution(enc, p, toCam, g = HG_G, coneW = 1) {
   const g2 = g * g;
   const hg = (1 - g2) / Math.pow(Math.max(1 + g2 - 2 * g * c, 1e-4), 1.5);
   const phase = 1 + (hg - 1) * PHASE_MIX;
-  const k = cone * att * phase;
+  let blade = 1;
+  if (enc.blades?.length) blade = bladeFactor(null, p.x, p.y, p.z, enc.blades, enc.bladeSoft);
+  const k = cone * att * phase * blade;
   return [enc.r * k, enc.g * k, enc.b * k];
 }
 
@@ -408,6 +429,16 @@ export class FixtureLightField {
       d[o] = e.ax; d[o + 1] = e.ay; d[o + 2] = e.az; d[o + 3] = e.cosOuter;
       o = (2 * W + i) * 4;
       d[o] = e.r; d[o + 1] = e.g; d[o + 2] = e.b; d[o + 3] = e.cosInner;
+      // Framing blades (rows 3–6) and their count / softness (row 7).
+      const nb = e.blades.length;
+      for (let b = 0; b < MAX_BLADES; b++) {
+        o = ((BLADE_ROW0 + b) * W + i) * 4;
+        const pl = e.blades[b];
+        d[o] = pl ? pl.n[0] : 0; d[o + 1] = pl ? pl.n[1] : 0; d[o + 2] = pl ? pl.n[2] : 0; d[o + 3] = pl ? pl.w : 0;
+      }
+      o = (BLADE_META_ROW * W + i) * 4;
+      d[o] = nb; d[o + 1] = e.bladeSoft; d[o + 2] = 0; d[o + 3] = 0;
+      if (nb) key += `b${e.blades.map((pl) => `${pl.n.join(",")},${pl.w.toFixed(3)}`).join("/")};`;
     }
     this.lightTex.needsUpdate = true;
     if (key !== this._geoKey) {

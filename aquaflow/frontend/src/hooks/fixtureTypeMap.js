@@ -11,6 +11,7 @@
 import { DESIGN_HEIGHT_RANGE_M } from "../components/preview/jetPhysics.js";
 import { REFERENCE_PREVIEW_3D } from "../data/fixtureReferenceProducts.js";
 import { aimOf, mountHeightOf, isSteelFrameType } from "../components/preview/elevatedNozzles.js";
+import { parseFraming, framingForRenderer } from "../components/preview/lightFraming.js";
 
 export const NOZZLE_3D = {
   JET_1D:     "jet_1d",
@@ -141,6 +142,7 @@ const FIXTURE_MAP = {
   "light_spot_100w":             { isLight:true, lightType:"spot",   color:"#ffee88", intensity:6.0 },
   "light_moving_head_150w":      { isLight:true, lightType:"moving", color:"#ff99ff", intensity:5.0 },
   "light_moving_head_350w":      { isLight:true, lightType:"moving", color:"#ff66ff", intensity:7.0 },
+  "light_projector_framing_5200lm": { isLight:true, lightType:"spot", color:"#44ff66", intensity:6.0 },
   "laser_rgb_5w":                { isLight:true, lightType:"laser",  color:"#ff00ff", intensity:3.0 },
   "laser_rgb_20w":               { isLight:true, lightType:"laser",  color:"#ff00cc", intensity:5.0 },
   "motion_nozzle_2d_pan_tilt_motor": { nozzleType: NOZZLE_3D.MOTION_2D, tiltX:5, tiltZ:0, scale:1.0, color:"#88ccff", heightMult:1.0 },
@@ -228,6 +230,17 @@ export function fixturePlanCoords(fixture) {
   return { x, z };
 }
 
+/** Light-config fields for engineering.framing: `framing` (renderer form) and `framingIssues`. */
+function framingFieldsOf(raw, planX, planY) {
+  if (raw == null) return {};
+  const parsed = parseFraming(raw);
+  const fr = framingForRenderer(raw, planX, planY);
+  return {
+    ...(fr ? { framing: fr } : {}),
+    ...(parsed?.invalid?.length ? { framingIssues: parsed.invalid } : {}),
+  };
+}
+
 /**
  * Convert engineering fixture array to FountainScene_v6 nozzle config array.
  * This is the main translation function called by useEngineeringSync.
@@ -268,6 +281,9 @@ export function fixturesToNozzleConfigs(fixtures) {
         ...(Number(f.engineering?.wattage) > 0 ? { wattage: Number(f.engineering.wattage) } : {}),
         ...(Number(f.engineering?.lumens) > 0 ? { lumens: Number(f.engineering.lumens) } : {}),
         ...(f.engineering?.dataSource ? { dataSource: f.engineering.dataSource } : {}),
+        // Framing blades (engineering.framing, plan coords) → relative world planes
+        // (lightFraming.js); malformed blades are kept as issues for the realism report.
+        ...framingFieldsOf(f.engineering?.framing, planX, planZ),
       });
     } else {
       // Apply engineering data to scale the 3D effect
@@ -405,6 +421,10 @@ export function classifyFixtureType(typeString) {
 
   // Steel frames are structure (scenery): never water, light or a programmable output.
   if (isSteelFrameType(k)) return "equipment";
+
+  // A framing projector LIGHT (light_projector_*) is a DMX light, not the video-projector
+  // equipment the "projector" keyword below means.
+  if (k.startsWith("light_projector")) return "light";
 
   // ─── Equipment ─────────────────────────────────────────────
   const equipmentKeywords = [

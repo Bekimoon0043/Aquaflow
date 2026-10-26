@@ -207,6 +207,8 @@ export function setEngineeringLights(scene, lightConfigs) {
       ...(Number(lc.lumens) > 0 ? { lumens: Number(lc.lumens) } : {}),
       ...(Number(lc.wattage) > 0 ? { wattage: Number(lc.wattage) } : {}),
       ...(Number(lc.aimDeg) > 0 ? { aimDeg: Number(lc.aimDeg), beamAngleDeg: Number(lc.beamAngleDeg) || undefined } : {}),
+      // Framing blades (lightFraming.js, relative to this light): cut the beam everywhere.
+      ...(lc.framing ? { framing: lc.framing } : {}),
     };
   });
 

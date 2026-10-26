@@ -54,10 +54,27 @@
  * A narrow spot therefore still lights a little round its band, and the rest of the
  * column is dark at night but not black.
  *
+ * ── Exit turbulence (turbulent-surface break-up) ────────────────────────────────────
+ * Tu = engineering.exitTurbulence (0.005–0.2), else by family: smooth bore / no flow
+ * straightener 0.06, straightener / laminar 0.015, unknown → the model above unchanged.
+ * When We > 8 · Tu^-2 the intact length is x_b/d = 3.61 · Tu^-0.275 · We^0.334 (Kusui data
+ * as fitted by Trettel 2020), applied as a break-up time like the other models, and the
+ * head width comes from the radial turbulent velocity (K_TU, an ESTIMATE — see below).
+ *
+ * ── All lights that reach a jet; framing blades; forward scatter ────────────────────
+ * Real world: a nozzle's band comes from its paired aimed lights AND every other aimed
+ * light whose field cone reaches it (selectLitBeams; ≤ MAX_LIGHTS_PER_NOZZLE strongest by
+ * E × phase), so masts of projectors can light a whole canopy. A light's framing blades
+ * (lightFraming.js) cut both the band and the illuminance. Each beam's E is weighted by a
+ * Henyey–Greenstein forward-scatter factor (g = 0.8) for the angle between light → water
+ * and water → viewer (the project's "STAND HERE" view, else the camera), so back-/side-lit
+ * water toward the viewer dominates a front-lit light.
+ *
  * Pure: no three.js. World axes: x = plan x, y = height, z = plan y.
  */
 
-import { fieldOf } from "./elevatedNozzles";
+import { fieldOf, mountHeightOf } from "./elevatedNozzles";
+import { bladePlanesOf, bladeSoftnessOf, bladeFactor } from "./lightFraming";
 import { designHeightOf } from "./designTrajectory";
 import {
   crownTuftOf, topLitFractionOf, hasJetLook, jetBandOf, autoLitBand, beamHitBand, isAerated,
@@ -90,6 +107,34 @@ export const AMBIENT_NIGHT = 0.06;
 /** Luminous efficacy of coloured underwater RGB LEDs when no lumens are published (733 lm / 18 W catalogue). */
 export const LM_PER_W = 40;
 const DEFAULT_BEAM_DEG = 56;
+/** Trettel (2020) fit of Kusui's turbulent-surface break-up data: x_b/d = 3.61 Tu^-0.275 We^0.334. */
+export const TRETTEL_TURBULENT = Object.freeze({ c: 3.61, tu: -0.275, we: 0.334 });
+/** Turbulent-surface regime when We > TURB_WE_C · Tu^-2 (Trettel 2020 regime boundary). */
+export const TURB_WE_C = 8;
+/** Accepted exit-turbulence range (engineering.exitTurbulence, fraction of the mean velocity). */
+export const TU_RANGE = Object.freeze({ min: 0.005, max: 0.2 });
+/** Family defaults: smooth bore, no flow straightener ≈ 5–10 % → 6 %; straightened / laminar ≈ 1–2 % → 1.5 %. */
+export const TU_SMOOTH_BORE = 0.06;
+export const TU_STRAIGHTENED = 0.015;
+/**
+ * Crown of a turbulent jet (ESTIMATE, not a published correlation): drops leave the broken
+ * surface with a radial rms velocity v' = K_TU · Tu · v0, K_TU = 0.85 the radial /
+ * streamwise rms ratio in the core of fully developed pipe flow (≈ 0.75–0.9, Laufer 1954;
+ * Wu & Faeth-type primary break-up keeps the nozzle's radial fluctuation) — i.e. a spray
+ * half-angle tan(θ/2) ≈ K_TU·Tu relative to the exit velocity — and fly ballistically for
+ * the time t = √(2·span/g) the decelerating water needs from break-up to the apex:
+ *   width = APEX_SWELL·d + 2·v'·t
+ * Lands at ≈ 0.3–1.0 m for 10–16 mm jets at 2–6.5 m (Tu 6 %). Measure on site.
+ */
+export const K_TU = 0.85;
+/** Henyey–Greenstein asymmetry for spray / large droplets (strong forward lobe). */
+export const SCATTER_G = 0.8;
+/** At most this many lights shape one nozzle's band (strongest by E × phase). */
+export const MAX_LIGHTS_PER_NOZZLE = 4;
+/** An unpaired light counts only if its E × phase is ≥ this share of the strongest. */
+export const MIN_LIGHT_SHARE = 0.05;
+/** Unpaired lights farther than this from the jet are not considered (m). */
+export const LIGHT_REACH_M = 80;
 const DEG = Math.PI / 180;
 const LN2 = Math.LN2;
 
@@ -210,6 +255,43 @@ export function riseBreakup(L, v) {
   return { tau, yB, rise, fraction: clamp(yB / rise, 0, 1), intact: false };
 }
 
+// ─── Exit turbulence ─────────────────────────────────────────────────────────
+/**
+ * Exit turbulence intensity Tu (fraction): engineering.exitTurbulence (clamped to
+ * 0.005–0.2), else the family default — smooth bore / no straightener 0.06, flow
+ * straightener / laminar 0.015 — else null (unknown: the previous model is kept).
+ * @returns {{tu:number, source:"field"|"family", clamped?:boolean}|null}
+ */
+export function exitTurbulenceOf(cfg) {
+  const raw = cfg?.engineering?.exitTurbulence ?? cfg?.exitTurbulence;
+  if (raw != null && raw !== "") {
+    const v = Number(raw);
+    if (Number.isFinite(v) && v > 0) {
+      const tu = clamp(v, TU_RANGE.min, TU_RANGE.max);
+      return { tu, source: "field", ...(tu !== v ? { clamped: true } : {}) };
+    }
+  }
+  const straight = cfg?.engineering?.flowStraightener ?? cfg?.flowStraightener;
+  if (straight === false) return { tu: TU_SMOOTH_BORE, source: "family" };
+  if (straight === true) return { tu: TU_STRAIGHTENED, source: "family" };
+  const text = productTextOf(cfg);
+  if (/smooth[ _-]?bore|plain[ _-]?jet|no[ _-]?straighten/.test(text)) return { tu: TU_SMOOTH_BORE, source: "family" };
+  const fam = jetFamilyOf(cfg);
+  if (fam === JET_FAMILY.LAMINAR || /straighten|crystal/.test(text)) return { tu: TU_STRAIGHTENED, source: "family" };
+  return null;
+}
+
+/** Weber number above which a jet of exit turbulence tu breaks in the turbulent-surface regime. */
+export function turbulentWeberThreshold(tu) {
+  return TURB_WE_C / (tu * tu);
+}
+
+/** Turbulent-surface intact length, m (Trettel 2020): x_b = 3.61 Tu^-0.275 We^0.334 · d. */
+export function turbulentBreakupLengthM(dM, v, tu) {
+  const { We } = jetNumbers(dM, v);
+  return TRETTEL_TURBULENT.c * Math.pow(tu, TRETTEL_TURBULENT.tu) * Math.pow(We, TRETTEL_TURBULENT.we) * dM;
+}
+
 const breakupCache = new WeakMap();
 
 /**
@@ -221,24 +303,32 @@ export function jetBreakupOf(cfg) {
   const fam = jetFamilyOf(cfg);
   if (fam !== JET_FAMILY.CLEAR && fam !== JET_FAMILY.LAMINAR) return null;
   const out = outletOf(cfg), vel = launchVelocityOf(cfg);
-  const key = `${fam}|${out?.mm}|${vel?.v}|${fieldOf(cfg, "sprayAngleDeg")}`;
+  const turb = exitTurbulenceOf(cfg);
+  const key = `${fam}|${out?.mm}|${vel?.v}|${fieldOf(cfg, "sprayAngleDeg")}|${turb?.tu}`;
   const hit = breakupCache.get(cfg);
   if (hit && hit.key === key) return hit.value;
   let value = null;
   if (out && vel) {
     const dM = boreMmOf(cfg) / 1000;
     const nums = jetNumbers(dM, vel.v);
-    const L = breakupLengthM(dM, vel.v, fam === JET_FAMILY.LAMINAR);
+    // Turbulent-surface regime (Trettel 2020) when the exit turbulence is known and
+    // We > 8 Tu^-2; otherwise the laminar / Grant–Middleman path as before.
+    const turbulent = turb != null && nums.We > turbulentWeberThreshold(turb.tu);
+    const L = turbulent ? turbulentBreakupLengthM(dM, vel.v, turb.tu) : breakupLengthM(dM, vel.v, fam === JET_FAMILY.LAMINAR);
     const r = riseBreakup(L, vel.v);
     const spray = pos(fieldOf(cfg, "sprayAngleDeg"));
     value = {
       family: fam, dM, v0: vel.v, ...nums, breakupLengthM: L, breakupTimeS: r.tau,
+      model: turbulent ? "turbulent-surface" : fam === JET_FAMILY.LAMINAR ? "laminar" : "grant-middleman",
+      ...(turb ? { exitTurbulence: turb.tu, exitTurbulenceSource: turb.source } : {}),
       riseM: r.rise, breakupFraction: r.fraction, intact: r.intact,
       spreadDeg: spray ?? CLEAR_SPREAD_DEG,
       estimated: [
         ...(out.estimated ? ["outlet from DN"] : []),
         ...(vel.source === "height" ? ["velocity from height"] : []),
-        ...(spray == null ? ["spread angle default"] : []),
+        ...(spray == null && !turbulent ? ["spread angle default"] : []),
+        ...(turb?.source === "family" ? ["exit turbulence from nozzle family"] : []),
+        ...(turbulent ? ["crown width estimate"] : []),
       ],
     };
   }
@@ -256,9 +346,16 @@ export function dropletHeadOf(cfg, H) {
   if (!b || !(H > 0)) return null;
   if (b.family === JET_FAMILY.LAMINAR && b.intact) return null;
   const span = (1 - b.breakupFraction) * H;
-  const widthM = clamp(APEX_SWELL * b.dM + 2 * span * Math.tan((b.spreadDeg / 2) * DEG), 2 * b.dM, 1.5);
+  // Turbulent-surface jets: crown from the radial turbulent velocity (K_TU, estimate).
+  const lateral = b.model === "turbulent-surface"
+    ? 2 * K_TU * b.exitTurbulence * b.v0 * Math.sqrt((2 * span) / G)
+    : 2 * span * Math.tan((b.spreadDeg / 2) * DEG);
+  const widthM = clamp(APEX_SWELL * b.dM + lateral, 2 * b.dM, 1.5);
   const heightM = clamp(Math.max(span, ROLLOVER_D * b.dM), 0.04, Math.max(0.04, H));
-  return { widthM, heightM, density: b.intact ? 0.3 : 0.6, kind: "droplets", breakupFraction: b.breakupFraction };
+  return {
+    widthM, heightM, density: b.intact ? 0.3 : 0.6, kind: "droplets", breakupFraction: b.breakupFraction,
+    ...(b.model === "turbulent-surface" ? { widthEstimated: true } : {}),
+  };
 }
 
 /** Physical crown of a foam / aerated / bell nozzle (product-sized), or null for other families. */
@@ -324,7 +421,47 @@ export function beamProfile(theta, halfRad) {
   return (1 - HALO) * Math.exp(-LN2 * t * t) + HALO * Math.max(0, Math.cos(theta));
 }
 
-/** Illuminance (lux) a beam {x,y,z,dir,beamAngleDeg,lumens|wattage} puts at a point. */
+const planeCache = new WeakMap();
+/** World blade planes of a beam / light record (cached per record). */
+function planesOf(beam) {
+  if (!beam?.framing) return [];
+  const hit = planeCache.get(beam);
+  if (hit && hit.x === beam.x && hit.z === beam.z) return hit.planes;
+  const planes = bladePlanesOf(beam);
+  planeCache.set(beam, { x: beam.x, z: beam.z, planes });
+  return planes;
+}
+
+/** 0..1 share of a beam that passes its framing blades at a point (1 without blades). */
+export function beamBladeFactor(beam, px, py, pz) {
+  const planes = planesOf(beam);
+  return planes.length ? bladeFactor(beam, px, py, pz, planes, bladeSoftnessOf(beam)) : 1;
+}
+
+/**
+ * Henyey–Greenstein phase function normalised so an isotropic medium scores 1:
+ *   p(cos θ) = (1 − g²) / (1 + g² − 2 g cos θ)^1.5
+ * θ = angle between the light's travel (light → water) and the view ray (water → eye).
+ * g = SCATTER_G = 0.8 for spray / mm droplets (Mie: strong forward lobe): back-lit water
+ * seen toward the light (θ = 0) scores 45, side-lit (90°) 0.17, front-lit (180°) 0.06.
+ */
+export function scatterPhase(cosTheta, g = SCATTER_G) {
+  const c = clamp(Number(cosTheta) || 0, -1, 1);
+  const g2 = g * g;
+  return (1 - g2) / Math.pow(Math.max(1e-6, 1 + g2 - 2 * g * c), 1.5);
+}
+
+/** Forward-scatter factor of a light at {x,y,z} on water at P, seen from viewer {x,y,z} (1 without a viewer). */
+export function forwardScatterFactor(light, P, viewer, g = SCATTER_G) {
+  if (!viewer || !P) return 1;
+  const lx = P.x - (Number(light?.x) || 0), ly = P.y - (Number(light?.y) || 0), lz = P.z - (Number(light?.z) || 0);
+  const vx = viewer.x - P.x, vy = viewer.y - P.y, vz = viewer.z - P.z;
+  const a = Math.hypot(lx, ly, lz), b = Math.hypot(vx, vy, vz);
+  if (a < 1e-6 || b < 1e-6) return 1;
+  return scatterPhase((lx * vx + ly * vy + lz * vz) / (a * b), g);
+}
+
+/** Illuminance (lux) a beam {x,y,z,dir,beamAngleDeg,lumens|wattage,framing?} puts at a point. */
 export function beamIlluminance(beam, px, py, pz) {
   const d = beam?.dir;
   if (!Array.isArray(d)) return 0;
@@ -335,7 +472,149 @@ export function beamIlluminance(beam, px, py, pz) {
   const cosA = clamp((dx * d[0] + dy * d[1] + dz * d[2]) / (n * r), -1, 1);
   const half = clamp((Number(beam.beamAngleDeg) || DEFAULT_BEAM_DEG) / 2, 0.5, 89) * DEG;
   const I0 = lumensOf(beam).lm / (2 * Math.PI * (1 - Math.cos(half)));
-  return (I0 * beamProfile(Math.acos(cosA), half)) / Math.max(r * r, 0.04);
+  const e = (I0 * beamProfile(Math.acos(cosA), half)) / Math.max(r * r, 0.04);
+  return beam.framing ? e * beamBladeFactor(beam, px, py, pz) : e;
+}
+
+/**
+ * Heights on a vertical jet axis inside a beam's cone (scaled by angleScale) AND on the
+ * kept side of its blades (factor >= 1/2). Without blades: exactly jetLook.beamHitBand.
+ */
+export function beamBandOnJet(beam, jet, angleScale = 1, steps = 240) {
+  const b = angleScale === 1 ? beam
+    : { ...beam, beamAngleDeg: Math.min(170, (Number(beam?.beamAngleDeg) || DEFAULT_BEAM_DEG) * angleScale) };
+  const planes = planesOf(beam);
+  if (!planes.length) return beamHitBand(b, jet, steps);
+  const d = b?.dir;
+  if (!Array.isArray(d)) return null;
+  const n = Math.hypot(d[0], d[1], d[2]);
+  if (!(n > 1e-9)) return null;
+  const ax = d[0] / n, ay = d[1] / n, az = d[2] / n;
+  const cosH = Math.cos(clamp((Number(b.beamAngleDeg) || DEFAULT_BEAM_DEG) / 2, 0.5, 89) * DEG);
+  const lx = Number(b.x) || 0, ly = Number(b.y) || 0, lz = Number(b.z) || 0;
+  const jx = Number(jet.x) || 0, jz = Number(jet.z) || 0;
+  const dx = jx - lx, dz = jz - lz;
+  const soft = bladeSoftnessOf(beam);
+  const inside = (y) => {
+    const dy = y - ly;
+    const L = Math.hypot(dx, dy, dz);
+    if (L >= 1e-6 && (dx * ax + dy * ay + dz * az) / L < cosH) return false;
+    return bladeFactor(beam, jx, y, jz, planes, soft) >= 0.5;
+  };
+  const y0 = Number(jet.y0) || 0, y1 = Math.max(y0 + 1e-3, Number(jet.y1) || 0);
+  const edge = (a, c) => {
+    const ia = inside(a);
+    for (let i = 0; i < 30 && Math.abs(c - a) > 1e-3; i++) {
+      const m = (a + c) / 2;
+      if (inside(m) === ia) a = m; else c = m;
+    }
+    return (a + c) / 2;
+  };
+  let lo = null, hi = null, prevY = y0, prevIn = inside(y0);
+  if (prevIn) lo = y0;
+  for (let i = 1; i <= steps; i++) {
+    const y = y0 + ((y1 - y0) * i) / steps;
+    const now = inside(y);
+    if (now && !prevIn && lo == null) lo = edge(prevY, y);
+    if (!now && prevIn) hi = edge(prevY, y);
+    prevY = y; prevIn = now;
+  }
+  if (lo == null) return null;
+  return { lo, hi: prevIn ? BAND_OPEN : hi };
+}
+
+/** Renderer beam record of an aimed light (the same fields the scene hands a nozzle). */
+export function beamRecordOf(L) {
+  return {
+    ...(L.id != null ? { id: L.id } : {}),
+    x: L.x, y: Number(L.y) > 0 ? Number(L.y) : 0, z: L.z, dir: L.aimDir, beamAngleDeg: L.beamAngleDeg,
+    ...(L.lumens > 0 ? { lumens: L.lumens } : {}), ...(L.wattage > 0 ? { wattage: L.wattage } : {}),
+    ...(L.framing ? { framing: L.framing } : {}),
+  };
+}
+
+/** Smallest angle (rad) between a beam's axis and the jet axis segment (16 samples). */
+function minAxisAngle(beam, jet) {
+  const d = beam.dir, n = Math.hypot(d[0], d[1], d[2]) || 1;
+  const lx = Number(beam.x) || 0, ly = Number(beam.y) || 0, lz = Number(beam.z) || 0;
+  const dx = jet.x - lx, dz = jet.z - lz;
+  let best = Math.PI;
+  for (let i = 0; i <= 16; i++) {
+    const dy = jet.y0 + ((jet.y1 - jet.y0) * i) / 16 - ly;
+    const L = Math.hypot(dx, dy, dz);
+    if (L < 1e-6) return 0;
+    best = Math.min(best, Math.acos(clamp((dx * d[0] + dy * d[1] + dz * d[2]) / (n * L), -1, 1)));
+  }
+  return best;
+}
+
+/**
+ * Geometry half of the real-world light selection (viewer independent): the nozzle's
+ * paired aimed lights (always) plus every other AIMED light within LIGHT_REACH_M whose
+ * field cone reaches the jet on the kept side of its blades.
+ * @returns {Array<{beam, yMid:number, lux:number, paired:boolean}>}
+ */
+export function reachingLights(cfg, lights, baseY = mountHeightOf(cfg)) {
+  const out = [];
+  if (!cfg || !Array.isArray(lights)) return out;
+  const x = Number(cfg.x) || 0, z = Number(cfg.z) || 0;
+  const H = jetHeightOf(cfg) ?? 3;
+  const jet = { x, z, y0: baseY, y1: baseY + H * 1.3 + 0.5 };
+  for (const L of lights) {
+    if (!L || !(Number(L.aimDeg) > 0) || !Array.isArray(L.aimDir)) continue;
+    const paired = L.pairedNozzleId != null && L.pairedNozzleId === cfg.id;
+    const beam = beamRecordOf(L);
+    if (!paired) {
+      const dist = Math.hypot((Number(L.x) || 0) - x, (Number(L.z) || 0) - z);
+      if (dist > LIGHT_REACH_M) continue;
+      // Cheap reject before the sampled band: the jet is nowhere near the field cone.
+      const fieldHalf = clamp(((Number(beam.beamAngleDeg) || DEFAULT_BEAM_DEG) * FIELD_FACTOR) / 2, 0.5, 85) * DEG;
+      if (dist > 2 && minAxisAngle(beam, jet) > fieldHalf + 2 * DEG) continue;
+    }
+    const band = beamBandOnJet(beam, jet, FIELD_FACTOR);
+    if (!band && !paired) continue;
+    const yMid = band ? (band.lo + Math.min(band.hi, baseY + H)) / 2 : baseY + H / 2;
+    const lux = beamIlluminance(beam, x, yMid, z);
+    if (!paired && !(lux > 0)) continue;
+    out.push({ beam, yMid, lux, paired });
+  }
+  return out;
+}
+
+/**
+ * Viewer half: rank reachingLights() by E x forward-scatter phase; keep the paired ones
+ * and at most `maxLights` in all, unpaired ones only when >= MIN_LIGHT_SHARE of the
+ * strongest. Each returned beam carries `scatter` (1 without a viewer), `lux`, `paired`.
+ * @returns {Array|null}
+ */
+export function rankLitBeams(cfg, candidates, { viewer = null, maxLights = MAX_LIGHTS_PER_NOZZLE, g = SCATTER_G } = {}) {
+  if (!Array.isArray(candidates) || !candidates.length) return null;
+  const x = Number(cfg?.x) || 0, z = Number(cfg?.z) || 0;
+  const paired = [], other = [];
+  for (const c of candidates) {
+    const scatter = forwardScatterFactor(c.beam, { x, y: c.yMid, z }, viewer, g);
+    const rec = { ...c.beam, scatter, lux: c.lux, paired: c.paired };
+    (c.paired ? paired : other).push({ rec, w: c.lux * scatter });
+  }
+  other.sort((a, b) => b.w - a.w);
+  const top = Math.max(0, ...paired.map((c) => c.w), ...other.map((c) => c.w));
+  const out = paired.map((c) => c.rec);
+  for (const c of other) {
+    if (out.length >= Math.max(maxLights, paired.length)) break;
+    if (c.w >= MIN_LIGHT_SHARE * top) out.push(c.rec);
+  }
+  return out.length ? out : null;
+}
+
+/**
+ * Real world: the lights that light this nozzle — reachingLights() ranked by
+ * rankLitBeams(). Pure; the scene caches the geometry per nozzle (recomputed only when
+ * the lights or the nozzle change) and re-ranks when the quantised viewer moves.
+ * @param lights renderer light records ({id, x, y, z, aimDir, aimDeg, beamAngleDeg, lumens|wattage, pairedNozzleId, framing})
+ * @returns {Array|null}
+ */
+export function selectLitBeams(cfg, lights, { viewer = null, baseY = mountHeightOf(cfg), maxLights = MAX_LIGHTS_PER_NOZZLE, g = SCATTER_G } = {}) {
+  return rankLitBeams(cfg, reachingLights(cfg, lights, baseY), { viewer, maxLights, g });
 }
 
 const realBandCache = new WeakMap();
@@ -354,16 +633,18 @@ export function realBandOf(cfg, baseY, apexY) {
   const key = `${x}|${z}|${baseY}|${designH}`;
   const hit = realBandCache.get(beams);
   if (hit && hit.key === key) return hit.band;
-  const beam50 = autoLitBand(cfg, baseY);
+  // Framed beams: their bands stop at the blades (beamBandOnJet); unframed: as before.
+  const framed = beams.some((b) => b?.framing);
+  const beam50 = framed ? framedBand(cfg, beams, baseY) : autoLitBand(cfg, baseY);
   let lo10 = null, hi10 = null;
   for (const b of beams) {
-    const wide = { ...b, beamAngleDeg: Math.min(170, (Number(b.beamAngleDeg) || DEFAULT_BEAM_DEG) * FIELD_FACTOR) };
-    const r = beamHitBand(wide, { x, z, y0: baseY, y1: baseY + designH * 1.3 + 0.5 });
+    const r = beamBandOnJet(b, { x, z, y0: baseY, y1: baseY + designH * 1.3 + 0.5 }, FIELD_FACTOR);
     if (!r) continue;
     lo10 = lo10 == null ? r.lo : Math.min(lo10, r.lo);
     hi10 = hi10 == null ? r.hi : Math.max(hi10, r.hi);
   }
-  const E = (y) => beams.reduce((s, b) => s + beamIlluminance(b, x, y, z), 0);
+  // Seen brightness is E x forward-scatter phase (b.scatter, set by selectLitBeams; 1 if absent).
+  const E = (y) => beams.reduce((s, b) => s + beamIlluminance(b, x, y, z) * (Number(b.scatter) > 0 ? Number(b.scatter) : 1), 0);
   const edge = clamp(BAND_SOFT_FRACTION * designH, 0.02, 0.5 * designH);
   let band;
   if (beam50) {
@@ -380,6 +661,19 @@ export function realBandOf(cfg, baseY, apexY) {
     band = { lo: BAND_OPEN / 2, hi: BAND_OPEN, soft: 0.05, glow: AMBIENT_NIGHT };
   }
   realBandCache.set(beams, { key, band });
+  return band;
+}
+
+/** Union of the framed beams' 50 % bands over autoLitBand's design range. */
+function framedBand(cfg, beams, baseY) {
+  const H = designHeightOf(cfg) ?? fieldOf(cfg, "jetHeightM") ?? 10;
+  const x = Number(cfg.x) || 0, z = Number(cfg.z) || 0;
+  let band = null;
+  for (const b of beams) {
+    const r = beamBandOnJet(b, { x, z, y0: baseY, y1: baseY + H * 1.3 + 0.5 });
+    if (!r) continue;
+    band = band ? { lo: Math.min(band.lo, r.lo), hi: Math.max(band.hi, r.hi) } : r;
+  }
   return band;
 }
 
@@ -451,6 +745,20 @@ export function realismReport(nozzles = [], lights = [], { realWorld = true } = 
   add("no-outlet", "estimate", noOutlet, (k) => `${plural(k, "jet")}: no outlet diameter — break-up head not modelled; enter nozzleDiaMm / outletDiaMm from the datasheet.`);
   add("dn-outlet", "estimate", dnOutlet, (k) => `${plural(k, "jet")}: outlet diameter taken from the DN connection size (estimate) — the real orifice is smaller.`);
   add("vel-height", "estimate", velH, (k) => `${plural(k, "jet")}: launch velocity estimated from the jet height (no nozzle pressure).`);
+  // Exit turbulence / turbulent-surface break-up (Trettel 2020) and its crown estimate.
+  const turbCrown = [], tuFamily = [], tuClamped = [];
+  for (const n of water) {
+    const t = exitTurbulenceOf(n);
+    if (t?.clamped) tuClamped.push(n.id);
+    const b = jetBreakupOf(n);
+    if (b?.model === "turbulent-surface") {
+      turbCrown.push(n.id);
+      if (t?.source === "family") tuFamily.push(n.id);
+    }
+  }
+  add("tu-clamped", "ignored", tuClamped, (k) => `${plural(k, "nozzle")}: exitTurbulence outside ${TU_RANGE.min}–${TU_RANGE.max} — clamped.`);
+  add("turbulent-crown", "estimate", turbCrown, (k) => `${plural(k, "jet")}: turbulent-surface break-up (x_b/d = 3.61·Tu^-0.275·We^0.334); crown width is an estimate — measure on site.`);
+  add("tu-family", "estimate", tuFamily, (k) => `${plural(k, "jet")}: exit turbulence taken from the nozzle family (smooth bore ${TU_SMOOTH_BORE * 100} %, straightened ${TU_STRAIGHTENED * 100} %) — enter engineering.exitTurbulence if measured.`);
   add("generic-nozzle", "estimate", water.filter(isGeneric).map((n) => n.id),
     (k) => `${plural(k, "nozzle")} use AquaFlow generic template data — verify outlet, flow and pressure with the supplier datasheet.`);
   const lamps = (lights || []).filter(Boolean);
@@ -460,5 +768,58 @@ export function realismReport(nozzles = [], lights = [], { realWorld = true } = 
     (k) => `${plural(k, "aimed light")}: no beam angle — default ${DEFAULT_BEAM_DEG}° used.`);
   add("generic-light", "estimate", lamps.filter(isGeneric).map((l) => l.id),
     (k) => `${plural(k, "light")} use AquaFlow generic template data — verify beam angle and lumens with the supplier datasheet.`);
+  // Framing blades: list each framed light (projector), malformed blades, and blades that
+  // leave nothing of the beam.
+  for (const l of lamps) {
+    const f = l.framing;
+    if (f?.blades?.length) {
+      const blades = f.blades.map((b, i) => `#${i + 1} point (${fmt(b.d[0] + (Number(l.x) || 0))}, ${fmt(b.d[2] + (Number(l.z) || 0))}, ${fmt(b.d[1])}) m normal (${fmt(b.n[0])}, ${fmt(b.n[2])}, ${fmt(b.n[1])})`).join("; ");
+      items.push({ id: `framing:${l.id}`, level: "info", ids: [l.id],
+        text: `${l.id}: framed light — ${plural(f.blades.length, "framing blade")}, soft edge ${fmt(bladeSoftnessOf(l))} m — ${blades}.` });
+    }
+    if (Array.isArray(l.framingIssues) && l.framingIssues.length) {
+      items.push({ id: `framing-invalid:${l.id}`, level: "ignored", ids: [l.id],
+        text: `${l.id}: framing ${l.framingIssues.map((q) => `${q.index >= 0 ? `blade #${q.index + 1}` : "field"} ignored — ${q.reason}`).join("; ")}.` });
+    }
+  }
+  add("framing-blocked", "ignored", lamps.filter((l) => bladesExcludeBeam(l)).map((l) => l.id),
+    (k) => `${plural(k, "light")}: framing blades exclude the whole beam — it lights nothing (check the blade normals point to the side to keep).`);
   return items;
+}
+
+const fmt = (v) => (Math.round(Number(v) * 100) / 100).toString();
+
+/**
+ * Do a light's blades leave none of its beam? Samples the beam (axis and 8 rim rays of
+ * the field cone at 0.25–64 m) and returns true when every sample is fully cut.
+ * Renderer / report light records ({x, z, y | mountHeightM, aimDir?, beamAngleDeg?, framing}).
+ */
+export function bladesExcludeBeam(light) {
+  if (!light?.framing) return false;
+  const planes = bladePlanesOf(light);
+  if (!planes.length) return false;
+  const soft = bladeSoftnessOf(light);
+  const ox = Number(light.x) || 0, oz = Number(light.z) || 0;
+  const oy = Number(light.y) > 0 ? Number(light.y) : Number(light.mountHeightM) > 0 ? Number(light.mountHeightM) : 0;
+  const d0 = Array.isArray(light.aimDir) ? light.aimDir : [0, 1, 0];
+  const n = Math.hypot(d0[0], d0[1], d0[2]) || 1;
+  const a = [d0[0] / n, d0[1] / n, d0[2] / n];
+  // Two axes perpendicular to the aim.
+  const ref = Math.abs(a[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const u = [a[1] * ref[2] - a[2] * ref[1], a[2] * ref[0] - a[0] * ref[2], a[0] * ref[1] - a[1] * ref[0]];
+  const un = Math.hypot(u[0], u[1], u[2]) || 1;
+  u[0] /= un; u[1] /= un; u[2] /= un;
+  const v = [a[1] * u[2] - a[2] * u[1], a[2] * u[0] - a[0] * u[2], a[0] * u[1] - a[1] * u[0]];
+  const half = clamp(((Number(light.beamAngleDeg ?? light.engineering?.beamAngleDeg) || DEFAULT_BEAM_DEG) * FIELD_FACTOR) / 2, 0.5, 85) * DEG;
+  const dirs = [a];
+  for (let k = 0; k < 8; k++) {
+    const t = (k / 8) * 2 * Math.PI, c = Math.cos(half), sn = Math.sin(half);
+    dirs.push([0, 1, 2].map((i) => c * a[i] + sn * (Math.cos(t) * u[i] + Math.sin(t) * v[i])));
+  }
+  for (const d of dirs) {
+    for (let r = 0.25; r <= 64; r *= 2) {
+      if (bladeFactor(light, ox + d[0] * r, oy + d[1] * r, oz + d[2] * r, planes, soft) > 0) return false;
+    }
+  }
+  return true;
 }

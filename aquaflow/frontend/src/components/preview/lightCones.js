@@ -23,6 +23,8 @@
  * Additive, depthWrite off, one draw per active light (max 16).
  */
 
+import { bladePlanesOf, bladeSoftnessOf, MAX_BLADES } from "./lightFraming.js";
+
 const CONE_VERT = /* glsl */ `
 varying vec3  vWorld;
 varying vec3  vNormal;
@@ -56,9 +58,20 @@ uniform float uUseDepth;
 uniform vec2  uInvRes;
 uniform float uNear;
 uniform float uFar;
+// Framing blades (lightFraming.js): world planes n.xyz, w — kept where n·p + w >= 0.
+uniform vec4  uBlades[${MAX_BLADES}];
+uniform float uBladeCount;
+uniform float uBladeSoft;
 
 void main(){
   if (uIntensity < 0.004) discard;
+  float blade = 1.0;
+  for (int b = 0; b < ${MAX_BLADES}; b++) {
+    if (float(b) >= uBladeCount) break;
+    float s = dot(uBlades[b].xyz, vWorld) + uBlades[b].w;
+    blade *= uBladeSoft > 0.0 ? smoothstep(0.0, uBladeSoft, s) : step(0.0, s);
+  }
+  if (blade < 0.002) discard;
 
   vec3 V = normalize(uCameraPos - vWorld);
 
@@ -79,7 +92,7 @@ void main(){
   float n2 = sin((vWorld.x + vWorld.z) * 3.1 + vH * 9.0 + uTime * 1.1 + uSeed * 9.0);
   float haze = 0.78 + 0.14 * n1 + 0.08 * n2;
 
-  float a = uIntensity * body * axial * base * haze;
+  float a = uIntensity * body * axial * base * haze * blade;
 
   // Soft fade against the opaque scene, so the shaft dissolves at the pool rim
   // instead of clipping through it.
@@ -131,6 +144,9 @@ export class LightConeSet {
           uInvRes: { value: new T.Vector2(1, 1) },
           uNear: { value: 0.1 },
           uFar: { value: 500 },
+          uBlades: { value: Array.from({ length: MAX_BLADES }, () => new T.Vector4(0, 0, 0, 0)) },
+          uBladeCount: { value: 0 },
+          uBladeSoft: { value: 0 },
         },
       });
       const mesh = new T.Mesh(geo, mat);
@@ -189,9 +205,24 @@ export class LightConeSet {
       const u = cone.material.uniforms;
       u.uColor.value.copy(L.color);
       u.uIntensity.value = Math.min(0.9, beamI);
+      // Blades cut the drawn beam volume along their planes (cached per framing object).
+      const planes = L.framing ? this._planesOf(L) : null;
+      u.uBladeCount.value = planes ? planes.length : 0;
+      u.uBladeSoft.value = planes ? bladeSoftnessOf(L) : 0;
+      if (planes) planes.forEach((pl, k) => u.uBlades.value[k].set(pl.n[0], pl.n[1], pl.n[2], pl.w));
       u.uTime.value = elapsed;
       if (camera) u.uCameraPos.value.copy(camera.position);
     }
+  }
+
+  /** World blade planes of a light, cached on (framing, x, z). */
+  _planesOf(L) {
+    const c = this._planeCache || (this._planeCache = new WeakMap());
+    const hit = c.get(L.framing);
+    if (hit && hit.x === L.x && hit.z === L.z) return hit.planes;
+    const planes = bladePlanesOf(L);
+    c.set(L.framing, { x: L.x, z: L.z, planes });
+    return planes;
   }
 
   dispose() {

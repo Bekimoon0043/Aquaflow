@@ -662,6 +662,14 @@ if (sitePreview.active && sitePreview.plan) {
   useEffect(() => { sceneRef.current?.setToneMapping?.(toneMapping); }, [toneMapping]);
   useEffect(() => { sceneRef.current?.setHalfResSpray?.(halfResSpray); }, [halfResSpray]);
   useEffect(() => { sceneRef.current?.setRealWorld?.(realWorld); }, [realWorld, sceneTier]);
+  // Real-world forward scatter is judged from the project's "STAND HERE" view when it has
+  // one (realWorldLook.selectLitBeams), else from the live camera.
+  const standHere = cameraViews.find(v => /stand[\s_-]*here/i.test(`${v.name} ${v.id}`))?.position || null;
+  const standKey = standHere ? `${standHere.x},${standHere.y},${standHere.z}` : "";
+  useEffect(() => {
+    const [x, y, z] = standKey ? standKey.split(",").map(Number) : [];
+    sceneRef.current?.setScatterViewer?.(standKey ? { x, y, z } : null);
+  }, [standKey, sceneTier]);
 
   // Poll the renderer's own counters while the HUD is up. 4 Hz: the scene already
   // averages FPS over a second, so sampling faster would only add React renders.

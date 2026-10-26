@@ -1,5 +1,22 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-27: AquaFlow Studio 1.2.66 — framing projectors, exit turbulence, viewpoint tree v3 from research**
+
+- **Research:** `reports/Viewpoint tree fountain front view.md` (4 note files). Main conclusions:
+  - The canopy can only come from plain smooth-bore jet crowns, backlit along a sight plane. Foam is white from the nozzle; fog cannot hold an elevated canopy outdoors.
+  - Crown width is unmeasured: night-test 10/12/14/16 mm jets at 2.2/4/6.4 m before ordering.
+- **Real-world light** (`lightFraming.js`):
+  - Product `light_projector_framing_5200lm`.
+  - `engineering.framing.blades` (half-space cut-offs, soft edge, ≤ 4).
+  - Unpaired lights now light jets, weighted by a Henyey–Greenstein forward-scatter factor (g 0.8) toward the STAND HERE view.
+  - `engineering.exitTurbulence`, with turbulent break-up x_b/d = 3.61·Tu^-0.275·We^0.334 (Trettel/Kusui) and an estimated crown width 0.3–1.0 m.
+- **Viewpoint tree v3:**
+  - Canopy: 81 plain jets (10–16 mm by row, half-pitch stagger), 344 m³/h, 9 VFD groups.
+  - Lights: two green framing projectors behind the pool with the lower blade on the canopy-floor sight plane; 11° fill spots behind the jets.
+  - Trunk: foam trunk with two 25° spots, and a 70 bar fog skirt.
+  - Basin: 13 × 15.5 m for the splash margins.
+  - Real-world STAND HERE view: a lit dome of green columns on a foam trunk, not the reference's solid canopy (estimated crowns too small).
+
 **2026-10-26 (later): AquaFlow Studio 1.2.65 — real-world simulation by default**
 
 - **Real-world mode** (`render.realWorld`, default on; `components/preview/realWorldLook.js`):

@@ -97,6 +97,7 @@ import {
 import { NO_BAND } from "./jetLook";
 import {
   hasLookFeatures, effectiveBandOf, effectiveCrownOf, columnDimOf, jetBreakupOf, isRealWorld,
+  reachingLights, rankLitBeams,
 } from "./realWorldLook";
 import { createArtisticStamp } from "./artisticStamp";
 import { SteelFrameMesh } from "./steelFrames3D";
@@ -2338,6 +2339,7 @@ export class FountainScene {
     else if (cfg.realWorld === false) delete cfg.realWorld;
     if (this._pairedSrc !== this._engLights) {
       this._pairedSrc = this._engLights;
+      this._lightsRev = (this._lightsRev || 0) + 1;
       const lights = new Map(), beams = new Map();
       for (const L of this._engLights || []) {
         const id = L?.pairedNozzleId;
@@ -2353,7 +2355,9 @@ export class FountainScene {
       this._pairedLights = lights;
       this._pairedBeams = beams;
     }
-    const beams = this._pairedBeams?.get(cfg.id);
+    // Real world: every aimed light whose beam (and blades) reaches the jet, weighted by
+    // forward scatter toward the viewer (realWorldLook.selectLitBeams); artistic: paired only.
+    const beams = this._realWorld === false ? this._pairedBeams?.get(cfg.id) : this._realWorldBeams(cfg);
     if (beams) cfg.litBeams = beams;
     else if (cfg.litBeams) delete cfg.litBeams;
     const paired = this._pairedLights?.get(cfg.id);
@@ -2366,6 +2370,47 @@ export class FountainScene {
     const t = cfg.crownTint || (cfg.crownTint = { r: 0, g: 0, b: 0 });
     if (best && lv > 0.02) { t.r = best.color.r * lv; t.g = best.color.g * lv; t.b = best.color.b * lv; }
     else { t.r = 0.08; t.g = 0.09; t.b = 0.10; }   // its spot is off: an unlit, faint head
+  }
+
+  /**
+   * The viewer forward scatter is judged from: the project's "STAND HERE" view
+   * (setScatterViewer), else the live camera — quantised to 1 m so the per-nozzle light
+   * selection is recomputed only when the design, the lights or the viewpoint change.
+   */
+  _scatterViewerKey() {
+    const v = this._scatterViewer || this.camera?.position;
+    if (!v) return { viewer: null, key: "none" };
+    const q = { x: Math.round(v.x), y: Math.round(v.y), z: Math.round(v.z) };
+    return { viewer: q, key: `${this._scatterViewer ? "s" : "c"}${q.x},${q.y},${q.z}` };
+  }
+
+  /** Cached real-world lit beams of a nozzle (see _applyPairedLights). */
+  _realWorldBeams(cfg) {
+    const cache = this._rwBeamCache || (this._rwBeamCache = new WeakMap());
+    const { viewer, key: vKey } = this._scatterViewerKey();
+    const gKey = `${this._lightsRev}|${cfg.x}|${cfg.z}|${cfg.designHeightM}|${mountHeightOf(cfg)}`;
+    let hit = cache.get(cfg);
+    if (!hit || hit.gKey !== gKey) {
+      // Geometry (which lights reach the jet, their bands and lux): only on design / light changes.
+      hit = { gKey, cands: reachingLights(cfg, this._engLights || [], mountHeightOf(cfg)), vKey: null, beams: null };
+      cache.set(cfg, hit);
+    }
+    if (hit.vKey !== vKey) {
+      // Forward-scatter ranking: cheap, re-run when the (quantised) viewer moves.
+      hit.vKey = vKey;
+      const next = rankLitBeams(cfg, hit.cands, { viewer });
+      // One beam: its scatter cancels in the band (ratio of its own E) — keep the cached band.
+      const same = next && hit.beams && next.length === 1 && hit.beams.length === 1 && next[0].id === hit.beams[0].id;
+      if (!same) hit.beams = next;
+    }
+    return hit.beams;
+  }
+
+  /** Viewer for the forward-scatter factor: a world {x, y, z} (the STAND HERE view), or null = camera. */
+  setScatterViewer(position) {
+    const ok = position && [position.x, position.y, position.z].every((c) => Number.isFinite(Number(c)));
+    this._scatterViewer = ok ? { x: Number(position.x), y: Number(position.y), z: Number(position.z) } : null;
+    return this._scatterViewer;
   }
 
   /**
