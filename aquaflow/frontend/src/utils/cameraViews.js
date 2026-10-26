@@ -3,7 +3,8 @@
  *
  * A project may carry saved viewpoints in its render settings:
  *
- *   render.cameraViews      = [{ id, name, position: {x,y,z}, target: {x,y,z}, note? }]
+ *   render.cameraViews      = [{ id, name, position: {x,y,z}, target: {x,y,z}, fov?, note? }]
+ *   (fov: vertical lens angle in degrees, 8–90 — a long lens frames a distant viewpoint)
  *   render.activeCameraView = "<id>"   (applied when render.cameraMode === "named")
  *
  * Coordinates are 3D WORLD metres per engineering/geometryContract.js: the pool is
@@ -33,7 +34,8 @@ export function normalizeCameraViews(views) {
     const target = vec(view?.target);
     if (!id || seen.has(id) || !position || !target) continue;
     seen.add(id);
-    out.push({ id, name: String(view.name || id), position, target, ...(view.note ? { note: String(view.note) } : {}) });
+    const fov = finite(view?.fov) ? Math.min(90, Math.max(8, Number(view.fov))) : null;
+    out.push({ id, name: String(view.name || id), position, target, ...(fov ? { fov } : {}), ...(view.note ? { note: String(view.note) } : {}) });
   }
   return out;
 }

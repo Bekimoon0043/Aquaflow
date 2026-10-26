@@ -1,5 +1,19 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-26 (later): AquaFlow Studio 1.2.65 — real-world simulation by default**
+
+- **Real-world mode** (`render.realWorld`, default on; `components/preview/realWorldLook.js`):
+  - **Jets:** look comes from the product and physics only. Break-up uses Weber/Ohnesorge regimes (Reitz), L/d = 8.51·We^0.32 for clear jets (Grant & Middleman) and Weber/Rayleigh for laminar jets. A clear jet stays a column and gets a narrow droplet head near its apex. Foam/aerated families draw frothy columns.
+  - **Lights:** water is lit only by real lights — beam angle, field angle, lumens (or W × 40 lm/W), inverse-square, aim — plus spill and 0.06 ambient.
+  - **Overrides:** free `crownTuft` / `topLitFraction` / `columnGlow` are ignored, and the Realism report (Render tab) lists them and any generic data.
+  - **Artistic preview:** the old look, stamped "Artistic preview — not real-world" in the viewport and in every export.
+- **Also new:**
+  - Lit band / bushy crown / foam look (`jetLook.js`), honoured only in artistic mode or where the product makes a head.
+  - Saved camera views can carry a lens angle (`fov`).
+- **Viewpoint tree** (`scripts/build-viewpoint-tree.mjs` + `scripts/data/viewpoint-tree-layout.json`):
+  - 82 lance jets in 8 rows traced from the user's reference outline via the perspective formula, 4 foam trunk jets, 11° spots, 9 VFD groups (~300 m³/h).
+  - In real-world mode it shows thin columns with lit droplet tops, not the reference's fluffy canopy (clear jets cannot make those heads).
+
 **2026-10-26: AquaFlow Studio 1.2.63 — front-facing water sculptures (Odaa tree in the sun)**
 
 - **Elevated and aimed nozzles** (`components/preview/elevatedNozzles.js`), all under `engineering.*` and all optional:

@@ -35,6 +35,14 @@ import {
   fanAngleOf, reachOf, solveReachSpeed, reachTime, aimDegOfVector, sphereRadiusOf,
   sphereCoverageCos, sphereStreamSpeed, sphereDirection,
 } from "./elevatedNozzles";
+import {
+  jetBandOf, crownTuftOf, columnGlowOf, tuftProfile, tuftWeight,
+  BAND_OPEN, TUFT_BASE, TUFT_LIFE, TUFT_SHED_SHARE,
+} from "./jetLook";
+import {
+  isRealWorld, hasLookFeatures, effectiveBandOf, effectiveCrownOf, dropletHeadOf, aeratedLookOf,
+  HEAD_MAX_TILT_DEG,
+} from "./realWorldLook";
 
 /** Emission primitives, shared with the simulation shader. */
 export const EMIT_MODE = {
@@ -49,6 +57,9 @@ export const EMIT_MODE = {
   SPHERE: 6,    // crystal ball: streams over a cap round axis u (p1 = cos half-opening,
                 //   p2 = radius); aux 1 = droplets released at the rim
   CURTAIN: 7,   // an aimed cascade: a line source along u (width p1) launched along dir
+  // jetLook.js: an aerated crown round the apex — a flame-shaped volume of width p1 and
+  // height p2 (origin = apex); aux 1 = droplets shed from its lower half.
+  TUFT: 8,
 };
 
 /** Particle classes — they differ in gravity, drag and blending. */
@@ -129,7 +140,9 @@ export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launch
   const designed = designHeightOf(cfg) == null || cfg?.type === SPHERE_TYPE
     ? descs : applyDesign(descs, cfg, ix, launchSpeed);
   // Mount height / aim / catch tray (elevatedNozzles.js) — only when the fixture has them.
-  return hasSpatialFeatures(cfg) ? applySpatial(designed, cfg, ix, launchSpeed) : designed;
+  const placed = hasSpatialFeatures(cfg) ? applySpatial(designed, cfg, ix, launchSpeed) : designed;
+  // Lit band / apex head / crown — real-world (realWorldLook.js) or artistic (jetLook.js).
+  return hasLookFeatures(cfg) ? applyJetLook(placed, cfg, ix, tintColor) : placed;
 }
 
 function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) {
@@ -189,7 +202,7 @@ function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) 
 
     case "geyser": {
       const speed = spd(8.0 + ix * 7.0);
-      return [
+      const out = [
         emitter({ mode: EMIT_MODE.CONE, ox, oz, dx: wx * 0.015, dy: 1, dz: wz * 0.015,
                   speed, speedJitter: 0.24, spread: 0.35 * ix, spawnRadius: 0.12,
                   life: flightLife(speed), color, scale: 0.14 + ix * 0.10, scaleJitter: 0.06,
@@ -199,6 +212,24 @@ function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) 
                   life: 0.8 + ix * 0.8, color, scale: 0.25 + ix * 0.20, stretch: 0.30,
                   density: ix > 0.3 ? ix : 0, weight: 140 }),
       ];
+      if (aeratedLookOf(cfg)) {
+        // Foam / frothy jet (engineering.aerated, or — real-world — a foam/aerated product family): air-entrained water is WHITE and opaque,
+        // and the column is thick — a wider, whiter core plus a dense froth sheath that
+        // takes the light's colour (white-green under a green spot), not a thin clear jet.
+        const froth = [Math.min(1, cr * 0.45 + 0.55), Math.min(1, cg * 0.45 + 0.55), Math.min(1, cb * 0.40 + 0.60)];
+        const main = out[0];
+        main.color = froth;
+        main.spawnRadius = 0.2;
+        main.spread = 0.12 + 0.4 * ix;
+        main.scale *= 1.3;
+        main.alphaGain = 1.5;
+        out.push(emitter({ cls: EMIT_CLASS.SPRAY, mode: EMIT_MODE.CONE, ox, oz,
+                  dx: main.dx, dy: 1, dz: main.dz, speed: speed * 0.9, speedJitter: 0.3,
+                  spread: 0.15 + 0.55 * ix, spawnRadius: 0.24, life: flightLife(speed * 0.9),
+                  color: froth, scale: 0.26 + ix * 0.16, scaleJitter: 0.1, stretch: 0.3,
+                  density: ix, weight: 320, alphaGain: 1.8, role: "froth" }));
+      }
+      return out;
     }
 
     case "arch": {
@@ -512,8 +543,12 @@ function applyDesign(descs, cfg, ix, launchSpeed) {
     }
     case "geyser": {
       cone(main, W, h);
-      // The base boil: never taller than half the column (a 0.6 m foam jet keeps a low boil).
-      for (const e of rest) e.speed = Math.min(e.speed, speedForApex(0.5 * h, Math.PI / 2, S) / 1.2);
+      for (const e of rest) {
+        // An aerated jet's froth sheath rises almost as high as the column.
+        if (e.role === "froth") { cone(e, S, 0.92 * h); continue; }
+        // The base boil: never taller than half the column (a 0.6 m foam jet keeps a low boil).
+        e.speed = Math.min(e.speed, speedForApex(0.5 * h, Math.PI / 2, S) / 1.2);
+      }
       break;
     }
     default: {
@@ -670,6 +705,129 @@ function applySpatial(descs, cfg, ix, launchSpeed) {
   return descs;
 }
 
+// ─── Lit top band and crown tuft (jetLook.js) ───────────────────────────────
+//
+//   band   every emitter of the nozzle carries `band` {lo, hi, soft, glow} (world heights):
+//          the shaders draw a particle at full brightness inside [lo, hi] and at `glow`,
+//          desaturated toward cool white, outside it — evaluated at the particle's CURRENT
+//          height, so droplets falling out of the band dim again.
+//   tuft   two SPRAY emitters at the drawn apex: the aerated head (TUFT, aux 0, never
+//          dimmed) and the droplets it sheds (aux 1, banded). Always present when the
+//          fixture has a crown, so the pool layout does not change as the jet fades.
+
+/** Brightness lift of a crown over the plain droplet colour (it is aerated: white water). */
+const TUFT_BRIGHT = 1.35;
+
+/** Where the nozzle's main emitter peaks: absolute apex height and its plan position. */
+export function drawnApex(main) {
+  let ax = main.ox, az = main.oz, apexY;
+  if (main.mode === EMIT_MODE.CASCADE || main.mode === EMIT_MODE.CURTAIN) apexY = main.oy;
+  else if (main.mode === EMIT_MODE.SPHERE) apexY = main.oy + main.p2;
+  else {
+    const f = emitterFlight(main);
+    apexY = main.oy + f.apex;
+    if (main.mode === EMIT_MODE.CONE || main.mode === EMIT_MODE.AIM_FAN) {
+      const hn = Math.hypot(main.dx, main.dz);
+      if (hn > 1e-6) { ax += main.dx / hn * f.xApex; az += main.dz / hn * f.xApex; }
+    }
+  }
+  return { apexY, ax, az };
+}
+
+/** Crown colour: the paired light's colour when the scene supplies it (cfg.crownTint), else the water tint. */
+function crownColor(cfg, tintColor) {
+  const t = cfg?.crownTint;
+  if (t && Number.isFinite(t.r)) {
+    return [Math.min(4, t.r * TUFT_BRIGHT + 0.06), Math.min(4, t.g * TUFT_BRIGHT + 0.06), Math.min(4, t.b * TUFT_BRIGHT + 0.06)];
+  }
+  const [r, g, b] = waterTint(tintColor);
+  return [r * TUFT_BRIGHT, g * TUFT_BRIGHT, b * TUFT_BRIGHT];
+}
+
+/** Pool weight of a physical droplet head (realWorldLook.dropletHeadOf): small, bounded. */
+export function dropletHeadWeight(head) {
+  return Math.round(Math.max(40, Math.min(300, 60 + 600 * head.widthM * head.heightM)));
+}
+
+/**
+ * The two crown emitters (head + shed droplets) at a drawn apex. Exported for tests.
+ * `tuft.kind === "droplets"` (real-world break-up head of a clear jet): plain water
+ * droplets, not foam — water tint, normal opacity, smaller drops, its TOP just above the
+ * apex (the zone spans the break-up height → apex), and banded like the column (it is
+ * lit only where a light reaches it).
+ */
+export function tuftEmitters(tuft, apex, ix, color, band, cfg, catchY = null) {
+  const S = RENDER_PHYSICS.spray;
+  const drops = tuft.kind === "droplets";
+  const lv = Math.max(0, Math.min(1, Number(ix) || 0));
+  // The head grows with the jet; a jet at a trickle still carries a small foamy knot.
+  const k = 0.45 + 0.55 * lv;
+  const W = tuft.widthM * k, Ht = tuft.heightM * k;
+  const weight = drops ? dropletHeadWeight(tuft) : tuftWeight(tuft);
+  // Droplets: top at apex + 5 % of the zone, so it spans ~[apex − 0.95·Ht, apex + 0.05·Ht].
+  const oy = drops ? apex.apexY + (0.05 - (1 - TUFT_BASE)) * Ht : apex.apexY;
+  const bottom = oy - TUFT_BASE * Ht;
+  const floorY = Number.isFinite(catchY) ? catchY : 0;
+  const base = { cls: EMIT_CLASS.SPRAY, mode: EMIT_MODE.TUFT, ox: apex.ax, oy, oz: apex.az,
+    dx: 0, dy: 1, dz: 0, p1: W, p2: Ht, color, role: drops ? "breakupHead" : "tuft",
+    ...(Number.isFinite(catchY) ? { catchY } : {}) };
+  const lift = 0.4 * S.gravity * TUFT_LIFE;
+  if (drops) {
+    const shedBand = band || null;
+    return [
+      emitter({ ...base, aux: 0, speed: lift, speedJitter: 0.5, spread: 0.2, spawnRadius: 0,
+                life: TUFT_LIFE, scale: 0.05 + 0.05 * Math.min(1, W), scaleJitter: 0.35, stretch: 0.3,
+                density: lv > 0.02 ? Math.min(1, lv * tuft.density) : 0, weight,
+                ...(band ? { band } : {}) }),
+      emitter({ ...base, aux: 1, role: "breakupShed", speed: 0.5, speedJitter: 0.6, spread: 0.2, spawnRadius: 0,
+                life: Math.max(0.3, fallTime(Math.max(0.2, bottom - floorY), 0.5, S) * 1.05),
+                scale: 0.045 + 0.02 * lv, scaleJitter: 0.3, stretch: 0.5,
+                density: lv > 0.02 ? lv * 0.6 * tuft.density : 0, weight: Math.max(1, Math.round(weight * TUFT_SHED_SHARE)),
+                ...(shedBand ? { band: shedBand } : {}) }),
+    ];
+  }
+  // Upward launch that gravity turns round within the life: net drift slightly DOWN
+  // (−0.1·g·life²), the boiling motion of an aerated head.
+  return [
+    emitter({ ...base, aux: 0, speed: lift, speedJitter: 0.5, spread: 0.3, spawnRadius: 0,
+              life: TUFT_LIFE, scale: 0.16 + 0.12 * Math.min(1.5, W), scaleJitter: 0.35, stretch: 0.1,
+              density: lv > 0.02 ? Math.min(1, lv * 1.4) : 0, weight, alphaGain: 2.0 }),
+    emitter({ ...base, aux: 1, role: "tuftShed", speed: 0.5, speedJitter: 0.6, spread: 0.25, spawnRadius: 0,
+              life: Math.max(0.3, fallTime(Math.max(0.2, bottom - floorY), 0.5, S) * 1.05),
+              scale: 0.06 + 0.02 * lv, scaleJitter: 0.3, stretch: 0.5,
+              density: lv > 0.02 ? lv * 0.8 : 0, weight: Math.max(1, Math.round(weight * TUFT_SHED_SHARE)),
+              // Shed droplets dim once they fall out of the lit band (or out of the head).
+              band: band || { lo: bottom, hi: BAND_OPEN, soft: Math.max(0.05, 0.12 * Ht), glow: columnGlowOf(cfg) } }),
+  ];
+}
+
+function applyJetLook(descs, cfg, ix, tintColor) {
+  if (!descs.length) return descs;
+  const main = descs[0];
+  const apex = drawnApex(main);
+  const baseY = mountHeightOf(cfg);
+  if (!isRealWorld(cfg)) {
+    // Artistic preview: the free fields as set (jetLook.js).
+    const band = jetBandOf(cfg, baseY, apex.apexY);
+    if (band) for (const e of descs) e.band = band;
+    const tuft = crownTuftOf(cfg);
+    if (tuft) descs.push(...tuftEmitters(tuft, apex, ix, crownColor(cfg, tintColor), band, cfg, main.catchY));
+    return descs;
+  }
+  // Real world (realWorldLook.js): band from the lights present; the break-up head of a
+  // near-vertical clear jet; a crown only where the product forms one, sized from it.
+  const band = effectiveBandOf(cfg, baseY, apex.apexY);
+  if (band) for (const e of descs) e.band = band;
+  const vertical = main.mode === EMIT_MODE.CONE
+    && main.dy / (Math.hypot(main.dx, main.dy, main.dz) || 1) >= Math.cos(HEAD_MAX_TILT_DEG * DEG);
+  const H = apex.apexY - baseY;
+  const head = vertical ? dropletHeadOf(cfg, H) : null;
+  if (head) descs.push(...tuftEmitters(head, apex, ix, waterTint(tintColor), band, cfg, main.catchY));
+  const crown = effectiveCrownOf(cfg, H);
+  if (crown) descs.push(...tuftEmitters(crown, apex, ix, crownColor(cfg, tintColor), band, cfg, main.catchY));
+  return descs;
+}
+
 /**
  * One particle from an emitter descriptor — the JS twin of the simulation shader's
  * spawnState(), so the CPU field (low tier, and the splash-map sample) launches exactly
@@ -726,6 +884,22 @@ export function sampleEmitterParticle(e, rand = Math.random, wind = null, out = 
       vx = e.dx * sp + (sx - 0.5) * spread; vy = e.dy * sp; vz = e.dz * sp + (sy - 0.5) * spread;
       break;
     }
+    case EMIT_MODE.TUFT: {
+      // A flame-shaped head round the apex (jetLook.tuftProfile); aux 1 sheds droplets
+      // from its lower half. `fr` frays the edge: a fifth of the particles reach further.
+      const fr = rand();
+      const shed = e.aux === 1;
+      const s = shed ? rx * 0.5 : rx;
+      const widen = fr > 0.8 ? 1 + (fr - 0.8) * 2.5 : 1;
+      const half = 0.5 * e.p1;
+      const rr = Math.sqrt(ry) * tuftProfile(s) * half * widen;
+      const a = rz * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      x += ca * rr; y += (s - TUFT_BASE) * e.p2; z += sa * rr;
+      const outK = (rr / Math.max(half, 1e-3)) * (shed ? 0.25 : 0.3);
+      vx = ca * outK + (sx - 0.5) * spread; vz = sa * outK + (sy - 0.5) * spread;
+      vy = shed ? -e.speed * (0.5 + fr) : e.speed * (1 + (fr - 0.5) * sJit);
+      break;
+    }
     case EMIT_MODE.CASCADE: {
       x += (rx - 0.5) * e.p1; z += (ry - 0.5) * sRad * 2;
       vx = (sx - 0.5) * spread; vy = -e.speed * (0.6 + rz * 0.8); vz = (sy - 0.5) * spread;
@@ -769,7 +943,7 @@ export function spawnDesignNozzle(nz, delta, elapsed, wind, tint) {
   const cfg = nz.config, type = cfg?.type || "jet_3d";
   if (CPU_ONLY_TYPES.has(type)) return false;
   const spatial = hasSpatialFeatures(cfg);
-  if (designHeightOf(cfg) == null && !spatial) return false;
+  if (designHeightOf(cfg) == null && !spatial && !hasLookFeatures(cfg)) return false;
   const ix = nz.intensity;
   const descs = describeNozzleEmitters(cfg, ix, elapsed, wind, tint, (d, f) => nz._launchSpeed(d, f));
   if (!descs.length) return false;
@@ -781,8 +955,9 @@ export function spawnDesignNozzle(nz, delta, elapsed, wind, tint) {
     for (let i = 0; sys && i < n; i++) {
       sampleEmitterParticle(e, Math.random, wind, p);
       const sc = e.scale * (1 + e.scaleJitter * (Math.random() - 0.5) * 2);
+      const a = (spray ? 0.55 : 0.88) * (e.alphaGain ? Math.min(1.6, 0.6 + 0.4 * e.alphaGain) : 1);
       sys.spawn(p.x, p.y, p.z, p.vx, p.vy, p.vz, e.color[0], e.color[1], e.color[2],
-                spray ? 0.55 : 0.88, p.life, sc, e.stretch);
+                Math.min(0.95, a), p.life, sc, e.stretch, e.band);
     }
   }
   const main = descs[0];

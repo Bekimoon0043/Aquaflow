@@ -35,6 +35,9 @@ import { applyTierExtras, applyRenderScale, AdaptiveQualityController } from "./
 // AF-3D-VID-002: Final render quality, PNG sequence, render progress/summary.
 import { adaptiveAllowed, EXPORT_QUALITY_OPTIONS, EXPORT_FORMAT_OPTIONS, renderStats, formatClock, tierLabel } from "./finalRender";
 import { useBakeTier } from "./useBakeTier";
+// Real-world simulation (default) vs artistic preview, and the realism report.
+import RealismReport from "./RealismReport";
+import { ARTISTIC_STAMP_TEXT } from "./artisticStamp";
 import {
   importDesign, importEngineeringFixtures, importSiteModels, graphToNozzles, graphToLights,
   graphToEngineeringFixtures, graphToSiteModels, reconcileEngineeringGraph,
@@ -140,6 +143,9 @@ export default function PreviewPanel() {
   const setToneMapping = setRenderField("toneMapping");
   const halfResSpray = !!renderSettings.halfResSpray;
   const setHalfResSpray = setRenderField("halfResSpray");
+  // realWorldLook.js: absent → real-world simulation; false → artistic preview (stamped).
+  const realWorld = renderSettings.realWorld !== false;
+  const setRealWorld = setRenderField("realWorld");
   const setPattern = setRenderField("pattern");
   const setLightCol = setRenderField("lightColor");
   const setWindX = setRenderField("windX");
@@ -391,6 +397,7 @@ if (sitePreview.active && sitePreview.plan) {
         environment: env, quality: sceneTier, cameraMode: cam, lightColor: lightCol,
         toneMapping: useProjectStore.getState().render.toneMapping,
         halfResSpray: !!useProjectStore.getState().render.halfResSpray,
+        realWorld: useProjectStore.getState().render.realWorld !== false,
       });
       scene.init();
       applyTierExtras(scene);   // AF-NEXT-013: eco water/particles + particle budget
@@ -654,6 +661,7 @@ if (sitePreview.active && sitePreview.plan) {
   useEffect(() => { sceneRef.current?.setReviewOverlays?.(reviewOverlays); }, [reviewOverlays]);
   useEffect(() => { sceneRef.current?.setToneMapping?.(toneMapping); }, [toneMapping]);
   useEffect(() => { sceneRef.current?.setHalfResSpray?.(halfResSpray); }, [halfResSpray]);
+  useEffect(() => { sceneRef.current?.setRealWorld?.(realWorld); }, [realWorld, sceneTier]);
 
   // Poll the renderer's own counters while the HUD is up. 4 Hz: the scene already
   // averages FPS over a second, so sampling faster would only add React renders.
@@ -882,6 +890,18 @@ if (sitePreview.active && sitePreview.plan) {
           without it, "is High affordable on this machine?" is guesswork. Polled at
           4 Hz — the scene already averages over a one-second window, and re-rendering
           this overlay every frame would itself cost frames. */}
+      {/* Artistic preview badge: nobody should mistake it for a real-world simulation. */}
+      {!realWorld && (
+        <div data-testid="artistic-badge" title="Manual looks (crownTuft, topLitFraction, columnGlow) are drawn as set. Turn on Real-world simulation in Render ▸ Real-world."
+          style={{
+            position:"absolute", top:12, left:"50%", transform:"translateX(-50%)", zIndex:16, pointerEvents:"auto",
+            padding:"5px 12px", borderRadius:14, fontSize:11, fontWeight:700, color:"#fff",
+            background:"rgba(40,26,4,0.82)", border:"1px solid rgba(255,190,70,0.9)", whiteSpace:"nowrap",
+          }}>
+          ⚠ {ARTISTIC_STAMP_TEXT}
+        </div>
+      )}
+
       {showPerf && perfStats && (
         <div title={[
             `${perfStats.ms} ms · peak ${perfStats.worstMs} ms`,
@@ -967,6 +987,9 @@ if (sitePreview.active && sitePreview.plan) {
 
           {/* ── RENDER TAB ── */}
           {tab==="render" && (<>
+            <Section title="Real-world" defaultOpen>
+              <RealismReport fixtures={engineeringFixtures} realWorld={realWorld} onToggle={setRealWorld} />
+            </Section>
             <Section title="View" defaultOpen>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:3, marginBottom:10 }}>
               {ENVS.map(e=>(

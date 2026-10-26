@@ -75,7 +75,7 @@ import { WaterHeightField } from "./waterHeightField";
 //   billboard particles (velocity-stretched quads + soft depth fade), procedural
 //   sprite textures, an opaque-scene depth probe, a sky dome with starfield that
 //   doubles as the IBL source, and volumetric beam cones for the RGB fixtures.
-import { buildBillboardGeometry, buildBillboardMaterial } from "./particlesBillboard";
+import { buildBillboardGeometry, buildBillboardMaterial, neutralBands } from "./particlesBillboard";
 import { makeDropletTexture, makeMistTexture, makeFoamTexture, makeFlameTexture } from "./particleTextures";
 // (sky dome construction moved to sceneLighting.js)
 import { LightConeSet } from "./lightCones";
@@ -94,6 +94,11 @@ import { FixtureInstances, LightMarkerInstances, fixtureKindFor } from "./fixtur
 import {
   mountHeightOf, aimOf, parseFrameTubes, tubeSegments, autoSupportSegments, SPHERE_TYPE,
 } from "./elevatedNozzles";
+import { NO_BAND } from "./jetLook";
+import {
+  hasLookFeatures, effectiveBandOf, effectiveCrownOf, columnDimOf, jetBreakupOf, isRealWorld,
+} from "./realWorldLook";
+import { createArtisticStamp } from "./artisticStamp";
 import { SteelFrameMesh } from "./steelFrames3D";
 import { buildVenue, disposeVenue } from "./venueModels";
 import { ModelLayer } from "./modelLibrary";
@@ -131,6 +136,7 @@ const MAX_BEAM_CONES = 16;
 // pool is shared out in advance). Room for large designs, e.g. 134 edge jets plus their
 // spray shells and 3 rotating baskets × 8 outlets — slots past the limit are dropped.
 const MAX_GPU_EMITTERS = 512;
+const DEFAULT_FOV = 50;   // camera lens (degrees); saved views may set their own
 // MAX_RIPPLES (the pool-surface impact ring buffer) lives with the water shader.
 // QUALITY_CONFIG (per-tier feature table) and CPU_SAMPLE_FRACTION live in sceneQuality.js.
 
@@ -176,6 +182,9 @@ class GPUParticleSystem {
     this.bounced    = new Uint8Array(maxCount);
     this.stretches  = new Float32Array(maxCount);
     this.seeds      = new Float32Array(maxCount);
+    // Lit band per particle (jetLook.js). Uploaded only while banded particles live.
+    this.bands      = neutralBands(maxCount);
+    this._bandHold  = 0;
 
     // AF-3D-002: instanced billboard quads instead of gl_Points — velocity-aligned
     // stretch, no driver point-size clamp, sprite textures, soft-depth fade. The
@@ -208,7 +217,7 @@ class GPUParticleSystem {
     u.uUseDepth.value = (on && u.uSceneDepth.value) ? 1.0 : 0.0;
   }
 
-  spawn(x,y,z, vx,vy,vz, r,g,b,a, life, scale, stretch=0.5) {
+  spawn(x,y,z, vx,vy,vz, r,g,b,a, life, scale, stretch=0.5, band=null) {
     if (this.active >= this.maxCount) return;
     // Statistical sampling (see CPU_SAMPLE_FRACTION). Applied here rather than at the
     // call sites so the sample is unbiased across nozzles — thinning inside each
@@ -229,6 +238,13 @@ class GPUParticleSystem {
     this.bounced[i]=0;
     this.stretches[i]=stretch;
     this.seeds[i]=(i * 2654435761 % 1000) / 1000;
+    const bo = i * 4;
+    if (band) {
+      this.bands[bo]=band.lo; this.bands[bo+1]=band.hi; this.bands[bo+2]=band.soft; this.bands[bo+3]=band.glow;
+      this._bandHold = Math.max(this._bandHold, life + 0.5);
+    } else if (this._bandHold > 0) {
+      this.bands[bo]=-1e6; this.bands[bo+1]=1e6; this.bands[bo+2]=1; this.bands[bo+3]=1;
+    }
   }
 
   update(delta, gravity=-RE_GRAVITY, elapsed=0) {
@@ -307,10 +323,18 @@ class GPUParticleSystem {
         this.bounced[alive]   = this.bounced[i];
         this.stretches[alive] = this.stretches[i];
         this.seeds[alive]     = this.seeds[i];
+        if (this._bandHold > 0) this.bands.copyWithin(alive*4, i*4, i*4+4);
       }
       alive++;
     }
     this.active = alive;
+    if (this._bandHold > 0) {
+      // Banded particles may still live: keep the band buffer in step. When the last
+      // has certainly died, reset the whole buffer to neutral and upload once more.
+      this._bandHold -= delta;
+      if (this._bandHold <= 0) neutralBands(this.maxCount, this.bands, 0);
+      this.mesh.geometry.attributes.aBand.needsUpdate = true;
+    }
     this.mesh.geometry.instanceCount = alive;
     this.mesh.geometry.attributes.aOffset.needsUpdate  = true;
     this.mesh.geometry.attributes.aVel.needsUpdate     = true;
@@ -397,6 +421,8 @@ export class NozzleV2 {
       uHorizontalSpeed: { value: new T.Vector2(0, 0) },
       uVerticalSpeed: { value: 1 },
       uWaterColor:   { value: new T.Color(0x88ccff) },
+      // Lit band (jetLook.js): lo, hi, soft, glow — neutral unless the fixture has one.
+      uBand:         { value: new T.Vector4(NO_BAND.lo, NO_BAND.hi, NO_BAND.soft, NO_BAND.glow) },
       uGlobalLight:  sharedLightUniforms.uGlobalLight,
       uGlobalLightI: sharedLightUniforms.uGlobalLightI,
       ...sharedLightUniforms.field,
@@ -480,6 +506,7 @@ export class NozzleV2 {
     const waterB = Math.min(1.0, wc.b * 0.90 + 0.25);
 
     // Phase-2: drive the lit-volume glow & core uniforms continuously
+    let lookBand = null;
     if (this.core) {
       const uns = this.core.material.uniforms;
       uns.uTime.value = elapsed;
@@ -500,13 +527,22 @@ export class NozzleV2 {
         -localX * sinYaw + localZ * cosYaw,
       );
       const apex = JP_jetHeightFor(verticalSpeed);
-      uns.uHeight.value = Math.max(0.05, apex * 0.92);
+      // Real world: a clear jet's coherent core ends where it breaks up (realWorldLook.js).
+      const brk = isRealWorld(cfg) ? jetBreakupOf(cfg) : null;
+      uns.uHeight.value = Math.max(0.05, apex * Math.min(0.92, brk ? brk.breakupFraction : 0.92));
+      const band = hasLookFeatures(cfg) ? effectiveBandOf(cfg, this._mount, this._mount + 0.05 + apex) : null;
+      lookBand = band;
+      const b = band || NO_BAND;
+      uns.uBand.value.set(b.lo, b.hi, b.soft, b.glow);
       if (tintColor) uns.uWaterColor.value.copy(tintColor).multiplyScalar(0.6).add(new this.T.Color(0.3,0.5,0.8));
     }
     if (this.glow) {
       const uns = this.glow.material.uniforms;
       uns.uTime.value = elapsed;
-      uns.uIntensity.value = ix * 0.55;
+      // A jet lit only at its top keeps a faint base (the base glow is the column's light).
+      const dimBase = hasLookFeatures(cfg)
+        ? columnDimOf(cfg, lookBand ?? effectiveBandOf(cfg, this._mount, this._mount + 1)) : 1;
+      uns.uIntensity.value = ix * 0.55 * dimBase;
       uns.uOrigin.value.set(ox, 0.1 + this._mount, oz);
       // Light scatters most visibly where the jet meets the water. A full-height
       // billboard made every stream look like a rectangular blue beam.
@@ -1124,6 +1160,7 @@ export class FountainScene {
     this.wind         = options.wind         || { x:0, z:0 };
     this.toneMapping  = getToneMapping(options.toneMapping).id;   // AF-3D-024
     this._halfResUser = !!options.halfResSpray;                   // AF-3D-008 (medium)
+    this._realWorld = options.realWorld !== false;                 // realWorldLook.js (default on)
 
         this._signals   = {
       pump: 0,
@@ -1186,7 +1223,7 @@ export class FountainScene {
     this.renderer.xr.enabled = true;   // VR Walkthrough (AQ-S3-006)
 
     this.scene  = new T.Scene();
-    this.camera = new T.PerspectiveCamera(50, W/H, 0.1, 500);
+    this.camera = new T.PerspectiveCamera(DEFAULT_FOV, W/H, 0.1, 500);
     this.clock  = new T.Clock();
     this._pr    = PR;
 
@@ -1951,6 +1988,7 @@ export class FountainScene {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    this._drawArtisticStamp();
   }
 
   // ── Fog ─────────────────────────────────────────────────────────────────
@@ -2160,6 +2198,9 @@ export class FountainScene {
         engineering: cfg.engineering || null,
         // Without this every nozzle silently fell back to its generic per-type height.
         designHeightM: cfg.designHeightM ?? null,
+        ...(cfg.aerated ? { aerated: true } : {}),
+        ...(cfg.fixtureType ? { fixtureType: cfg.fixtureType } : {}),
+        ...(this._realWorld === false ? { realWorld: false } : {}),
       };
       const nz = new NozzleV2(this.THREE, this.waterSys, this.spraySys, this.foamSys, this.flameSys, finalCfg, this._lightField);
       if (nz.dot) this.scene.add(nz.dot);
@@ -2274,12 +2315,58 @@ export class FountainScene {
 	groupId: c.groupId || null,
         engineering: c.engineering || null,
         designHeightM: c.designHeightM ?? null, // 100 % apex (jetPhysics.launchSpeed)
+        ...(c.aerated ? { aerated: true } : {}),   // foam / frothy jet (jetLook.isAerated)
+        ...(c.fixtureType ? { fixtureType: c.fixtureType } : {}),   // product key (realWorldLook family)
       }));
     }
     if (this._initialized) this._buildNozzles();
   }
 
   setEngineeringLights(lightConfigs) { return setEngineeringLights(this, lightConfigs); }
+
+  /**
+   * Lights paired with a nozzle (light engineering.pairedNozzleId) shape its look
+   * (jetLook.js): an AIMED paired light (aimDeg > 0) becomes one of the nozzle's
+   * `litBeams` — its jet is lit only where that beam hits — and the brightest paired
+   * light's live colour × level tints a crown tuft (`crownTint`). Rebuilt when the light
+   * list changes; the per-frame part only reads live colours.
+   */
+  _applyPairedLights(nz) {
+    const cfg = nz.config;
+    // Real-world simulation (default) vs artistic preview (realWorldLook.js).
+    if (this._realWorld === false) cfg.realWorld = false;
+    else if (cfg.realWorld === false) delete cfg.realWorld;
+    if (this._pairedSrc !== this._engLights) {
+      this._pairedSrc = this._engLights;
+      const lights = new Map(), beams = new Map();
+      for (const L of this._engLights || []) {
+        const id = L?.pairedNozzleId;
+        if (!id) continue;
+        if (!lights.has(id)) lights.set(id, []);
+        lights.get(id).push(L);
+        if (Number(L.aimDeg) > 0 && Array.isArray(L.aimDir)) {
+          if (!beams.has(id)) beams.set(id, []);
+          beams.get(id).push({ x: L.x, y: Number(L.y) > 0 ? Number(L.y) : 0, z: L.z, dir: L.aimDir, beamAngleDeg: L.beamAngleDeg,
+            ...(L.lumens > 0 ? { lumens: L.lumens } : {}), ...(L.wattage > 0 ? { wattage: L.wattage } : {}) });
+        }
+      }
+      this._pairedLights = lights;
+      this._pairedBeams = beams;
+    }
+    const beams = this._pairedBeams?.get(cfg.id);
+    if (beams) cfg.litBeams = beams;
+    else if (cfg.litBeams) delete cfg.litBeams;
+    const paired = this._pairedLights?.get(cfg.id);
+    if (!paired || !effectiveCrownOf(cfg)) { if (cfg.crownTint) delete cfg.crownTint; return; }
+    let best = null, lv = 0;
+    for (const L of paired) {
+      const l = L.baseIntensity > 0 ? Math.min(1, (L.intensity || 0) / L.baseIntensity) : 0;
+      if (l >= lv) { lv = l; best = L; }
+    }
+    const t = cfg.crownTint || (cfg.crownTint = { r: 0, g: 0, b: 0 });
+    if (best && lv > 0.02) { t.r = best.color.r * lv; t.g = best.color.g * lv; t.b = best.color.b * lv; }
+    else { t.r = 0.08; t.g = 0.09; t.b = 0.10; }   // its spot is off: an unlit, faint head
+  }
 
   /**
    * Steel frames (steel_frame fixtures: engineering.tubes, PLAN coordinates), drawn as
@@ -2441,6 +2528,7 @@ export class FountainScene {
       const floor = (IDLE[t] || 0.02) * breath * Math.max(0, 1.0 - live*5.0);
       const finalI = this._nozzleOutputIntensity(nz, live, floor);
       nz.setIntensity(finalI);
+      this._applyPairedLights(nz);
       nz.update(delta, elapsed, this.wind, this._lightField.uGlobalLight.value);
 
       if (gpuOn) {
@@ -2464,7 +2552,7 @@ export class FountainScene {
       const pool = this._poolBoundsForSplash();
       // The allocation only has to be recomputed when the DESIGN changes; keying on
       // the emitter signature keeps a fading nozzle from reshuffling the whole field.
-      const key = `${this.nozzles.map(n => `${n.config.id}:${n.config.type}`).join("|")}#${emitWater.length}/${emitSpray.length}`;
+      const key = `${this.nozzles.map(n => `${n.config.id}:${n.config.type}`).join("|")}#${emitWater.length}/${emitSpray.length}#rw${this._realWorld === false ? 0 : 1}`;
       if (key !== this._gpuLayoutKey) {
         this._gpuLayoutKey = key;
         this._gpuWater.setLayout(allocatePool(emitWater, this._gpuWater.count), key);
@@ -2984,7 +3072,12 @@ export class FountainScene {
     this.environment=env;
     if(this._initialized) { this._applyEnvironment(); this._setWaterPalette(); this._buildVenueElements(); }
   }
-  setCameraMode(m)  { this.cameraMode=m; this._pathTime=0; if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true; }
+  setCameraMode(m)  { this.cameraMode=m; this._pathTime=0; if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true; if (m !== "named") this._setLens(DEFAULT_FOV); }
+  /** Vertical lens angle (a saved view may use a long lens; every other mode uses the default). */
+  _setLens(fov) {
+    if (!this.camera || !Number.isFinite(fov) || Math.abs(this.camera.fov - fov) < 1e-3) return;
+    this.camera.fov = fov; this.camera.updateProjectionMatrix();
+  }
   /**
    * AF-NEXT-002: hold the camera on a saved project view ({position, target} in world
    * metres, see utils/cameraViews.js). Passing null clears it. In editor mode the
@@ -2994,6 +3087,7 @@ export class FountainScene {
     this._namedView = view && view.position && view.target
       ? { position: { ...view.position }, target: { ...view.target } }
       : null;
+    this._setLens(this._namedView && Number.isFinite(view.fov) ? view.fov : DEFAULT_FOV);
     if (!this._namedView) return false;
     this.cameraMode = "named";
     this.orbitAuto = false;
@@ -3086,6 +3180,22 @@ export class FountainScene {
   setHalfResSpray(on) {
     this._halfResUser = !!on;
     return this.renderer ? configureHalfResSpray(this) : this._halfResUser;
+  }
+  /**
+   * Real-world simulation (default) or artistic preview (realWorldLook.js). Artistic
+   * frames carry an "Artistic preview — not real-world" stamp in the corner, so every
+   * screenshot, recording, baked video and PNG frame is marked.
+   */
+  setRealWorld(on) {
+    this._realWorld = on !== false;
+    return this._realWorld;
+  }
+  _drawArtisticStamp() {
+    if (this._realWorld !== false || !this.renderer || this._quadView || this._xrSession) return;
+    try {
+      if (!this._artStamp) this._artStamp = createArtisticStamp(this.THREE);
+      this._artStamp?.render(this.renderer);
+    } catch (e) { this._artStamp = null; }
   }
   setToneMapping(name) {
     this.toneMapping = getToneMapping(name).id;
@@ -3185,6 +3295,7 @@ export class FountainScene {
     c.removeEventListener('touchmove',  this._onTouchmove);
     c.removeEventListener('touchend',   this._onUp);
     this.nozzles.forEach(n => n.dispose?.());
+    this._artStamp?.dispose?.(); this._artStamp = null;
     this.waterSys?.dispose?.();
     this.spraySys?.dispose?.();
     this.foamSys?.dispose?.();

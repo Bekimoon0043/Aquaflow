@@ -198,7 +198,15 @@ export function setEngineeringLights(scene, lightConfigs) {
       // Beam aim for the light texture (AF-3D-022); upright, ~56° beam when absent.
       tiltX: Number(lc.tiltX) || 0,
       tiltZ: Number(lc.tiltZ) || 0,
-      beamAngle: Number(lc.beamAngle) || undefined,
+      // An aimed light carries its catalogue beam (beamAngleDeg); others keep the default.
+      beamAngle: Number(lc.beamAngle) || (Array.isArray(lc.aimDir) ? Number(lc.beamAngleDeg) : 0) || undefined,
+      // A spot paired with (and aimed at) a nozzle lights only the band of the jet its
+      // beam hits (jetLook.js); the scene hands these to the nozzle as litBeams.
+      ...(lc.pairedNozzleId ? { pairedNozzleId: lc.pairedNozzleId } : {}),
+      // Photometry for the real-world band / spill (realWorldLook.js).
+      ...(Number(lc.lumens) > 0 ? { lumens: Number(lc.lumens) } : {}),
+      ...(Number(lc.wattage) > 0 ? { wattage: Number(lc.wattage) } : {}),
+      ...(Number(lc.aimDeg) > 0 ? { aimDeg: Number(lc.aimDeg), beamAngleDeg: Number(lc.beamAngleDeg) || undefined } : {}),
     };
   });
 

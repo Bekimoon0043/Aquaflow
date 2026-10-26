@@ -5,7 +5,11 @@
 //   Perspective: s = (14 + Y) / 18,  X = s·u,  H = 1.60 + s·(v − 1.60)   (u, v on the drawing plane)
 //   vite-node build-viewpoint-tree.mjs <template.aquapkg> <out.aquapkg>
 //
-// AquaFlow plan: x = X, plan y = 4 − Y (the audience is on +y; front edge at y = +4, back at −4).
+// v2 (matching the reference render): the canopy outline traced from the reference front view is
+// filled with 82 jets in 8 rows (scripts/data/viewpoint-tree-layout.json); each jet carries a bushy
+// lit crown tuft sized so, from STAND HERE, neighbouring tufts merge into one scalloped canopy; the
+// columns below stay faint. The trunk is 4 foam jets in front. Pool 9 × 9.5 m, drawing plane 4.5 m.
+// AquaFlow plan: x = X, plan y = 4.75 − Y (the audience is on +y; front edge at y = +4.75).
 import fs from "node:fs";
 import { readZip, zipText, createZip } from "/src/utils/zipStore.js";
 import { getDefaultEngineering } from "/src/data/fixtureLibrary.js";
@@ -15,21 +19,14 @@ import { readFountainDesign } from "/src/components/programmer/studio/fountainDe
 const [tplPath, out] = process.argv.slice(2);
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const BAR = 10.197, DEG = 180 / Math.PI;
-const EYE = { d: 14, h: 1.6 }, PLANE_Y = 4;
-const planY = (Y) => r3(4 - Y);
-const GREEN = "#2bff4a", TRUNK_GREEN = "#1fd65a";
+const LAYOUT = JSON.parse(fs.readFileSync(new URL("./data/viewpoint-tree-layout.json", import.meta.url), "utf8"));
+const EYE = LAYOUT.eye, PLANE_Y = LAYOUT.planeY, POOL = { w: 9, d: 9.5 };
+const planY = (Y) => r3(POOL.d / 2 - Y);
+const GREEN = "#2bff4a", TRUNK_GREEN = "#3dff7a";
 const JET = "nozzle_straight_jet_dn15";              // stands in for a 12 mm adjustable lance jet
-
-// ── The layout (metres) ──────────────────────────────────────────────────────────────────
-const ROWS = [
-  ["A", 1.5, 2.55, [-2.41, -1.81, -1.21, -0.60, 0, 0.60, 1.21, 1.81, 2.41]],
-  ["B", 2.5, 3.07, [-2.57, -1.92, -1.28, -0.64, 0, 0.64, 1.28, 1.92, 2.57]],
-  ["C", 3.5, 3.64, [-2.72, -2.04, -1.36, -0.68, 0, 0.68, 1.36, 2.04, 2.72]],
-  ["D", 4.5, 4.27, [-2.16, -1.44, -0.72, 0, 0.72, 1.44, 2.16]],
-  ["E", 5.5, 4.90, [-1.52, -0.76, 0, 0.76, 1.52]],
-  ["F", 6.5, 5.47, [-0.80, 0, 0.80]],
-];
-const TRUNK = { Y: 0.8, jets: [[-0.45, 1.70], [-0.23, 2.10], [0, 2.35], [0.23, 2.10], [0.45, 1.70]] };
+const FOAM = "nozzle_foam_jet_dn25";
+const ROWS = LAYOUT.rows.map((r) => [r.row, r.Y, r.jets]);
+const TRUNK = LAYOUT.trunk;
 
 // Lance-jet hydraulics: ~69 L/min at 5 m for a 12 mm lance (SafeRain data), flow ∝ √height.
 const lance = (H) => {
@@ -48,11 +45,13 @@ const add = (f, group) => {
   return f.id;
 };
 const canopyApparent = [];
-for (const [row, Y, H, xs] of ROWS) {
-  xs.forEach((X, i) => {
+for (const [row, Y, jets] of ROWS) {
+  jets.forEach(({ X, H, tuftW, tuftH }, i) => {
     const id = `${row}${i + 1}`, pumpId = `pump-row-${row.toLowerCase()}`, y = planY(Y);
     add({ id, type: JET, label: `Canopy ${id}`, x: X, y, zone: `row-${row.toLowerCase()}`, groupId: `row_${row.toLowerCase()}`,
-      engineering: { ...lance(H), solenoidValveId: `${id}-valve`, pumpId, aimDeg: 0, aimAzimuthDeg: 0 } }, `Row ${row}`);
+      engineering: { ...lance(H), solenoidValveId: `${id}-valve`, pumpId, aimDeg: 0, aimAzimuthDeg: 0,
+        // The lit, aerated head of the jet: the canopy is made of these; the column below stays faint.
+        crownTuft: { widthM: tuftW, heightM: tuftH, density: 1.2 }, topLitFraction: r3(Math.min(0.6, (tuftH * 1.05) / H)), columnGlow: 0.18 } }, `Row ${row}`);
     add({ id: `${id}-valve`, type: "valve_solenoid_dn15_24v", label: `Balancing + solenoid valve ${id}`, x: X, y: r3(y - 0.15), zone: `row-${row.toLowerCase()}`,
       engineering: { controlledFixtureId: id, pumpId } }, `Row ${row} valves`);
     // Spotlight 1.2 m toward the viewer, aimed up the jet at its top: the lit top, not the column.
@@ -62,13 +61,15 @@ for (const [row, Y, H, xs] of ROWS) {
     canopyApparent.push({ id, ...apparent(X, Y, H) });
   });
 }
-TRUNK.jets.forEach(([X, H], i) => {
+TRUNK.jets.forEach(({ X, H }, i) => {
   const id = `T${i + 1}`, pumpId = "pump-trunk", y = planY(TRUNK.Y);
-  add({ id, type: JET, label: `Trunk ${id}`, x: X, y, zone: "trunk", groupId: "trunk",
-    engineering: { ...lance(H), solenoidValveId: `${id}-valve`, pumpId } }, "Trunk");
+  const foam = getDefaultEngineering(FOAM);
+  add({ id, type: FOAM, label: `Trunk foam jet ${id}`, x: X, y, zone: "trunk", groupId: "trunk",
+    engineering: { jetHeightM: H, pressureBar: r3(H / ((Number(foam.heightEfficiency) || 0.6) * BAR)), flowLpm: r3(Number(foam.flowLpm) * Math.sqrt(H / Number(foam.jetHeightM))),
+      solenoidValveId: `${id}-valve`, pumpId, topLitFraction: 1 } }, "Trunk");
   add({ id: `${id}-valve`, type: "valve_solenoid_dn15_24v", label: `Balancing + solenoid valve ${id}`, x: X, y: r3(y - 0.15), zone: "trunk",
     engineering: { controlledFixtureId: id, pumpId } }, "Trunk valves");
-  add({ id: `${id}-light`, type: "light_uw_rgb_18w", label: `Trunk light ${id}`, x: X, y: r3(y + 0.12), zone: "trunk-lights",
+  add({ id: `${id}-light`, type: "light_uw_rgb_36w", label: `Trunk light ${id}`, x: X, y: r3(y + 0.12), zone: "trunk-lights",
     engineering: { pairedNozzleId: id, defaultColor: TRUNK_GREEN } }, "Trunk lights");
 });
 
@@ -87,7 +88,7 @@ const pumps = [...ROWS.map(([row], i) => pumpOf(`pump-row-${row.toLowerCase()}`,
   pumpOf("pump-trunk", "Trunk pump (VFD)", "Trunk", 4.5)];
 for (const p of pumps) console.log(`${p.label.padEnd(20)} ${String(p.n).padStart(2)} jets · ${Math.round(p.flow)} L/min · head ${p.head.toFixed(1)} m · ~${p.kw.toFixed(1)} kW`);
 const totalM3h = pumps.reduce((s, p) => s + p.flow, 0) * 60 / 1000;
-console.log(`total circulation ${totalM3h.toFixed(0)} m³/h (user's allowance 150–170 m³/h)`);
+console.log(`total circulation ${totalM3h.toFixed(0)} m³/h (the 42-jet allowance was 150–170 m³/h)`);
 // Sanity: where each row's tops appear on the drawing plane (u across, v up), seen from the eye.
 for (const [row] of ROWS) {
   const pts = canopyApparent.filter((p) => p.id.startsWith(row));
@@ -95,10 +96,10 @@ for (const [row] of ROWS) {
 }
 
 // ── Site: 8 × 8 m basin, plaza, the STAND HERE disc ──────────────────────────────────────────
-const outline = [{ x: -4, y: -4 }, { x: 4, y: -4 }, { x: 4, y: 4 }, { x: -4, y: 4 }];
+const outline = [{ x: -POOL.w / 2, y: -POOL.d / 2 }, { x: POOL.w / 2, y: -POOL.d / 2 }, { x: POOL.w / 2, y: POOL.d / 2 }, { x: -POOL.w / 2, y: POOL.d / 2 }];
 const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 const disc = (cx, cy, r, n = 24) => Array.from({ length: n }, (_, i) => ({ x: r3(cx + r * Math.cos((2 * Math.PI * i) / n)), y: r3(cy + r * Math.sin((2 * Math.PI * i) / n)) }));
-const eyePlanY = 4 + EYE.d;
+const eyePlanY = POOL.d / 2 + EYE.d;
 const site_surfaces = [
   { id: "plaza", label: "Plaza", type: "paving", color: "#8f8a82", elevation: 0.02, visible: true, points: rect(-14, -12, 14, eyePlanY + 4) },
   { id: "stand-here", label: "STAND HERE — design viewpoint (eye 1.60 m)", type: "rock", color: "#2c3440", elevation: 0.04, visible: true, points: disc(0, eyePlanY, 0.6) },
@@ -111,7 +112,7 @@ const now = new Date().toISOString();
 const NAME = "Viewpoint Tree — illusion from the STAND HERE spot";
 Object.assign(proj.engineering, {
   name: "Viewpoint Tree", id: "aquaflow-viewpoint-tree", projectName: NAME, pool_type: "rectangular",
-  params: { width: 8, length: 8, radius: 0, depth: 0.45, units: "m", design_head_m: 20 },
+  params: { width: POOL.w, length: POOL.d, radius: 0, depth: 0.45, units: "m", design_head_m: 20 },
   geometry: { type: "polygon", closed: true, points: outline, source: { units: "meters" } },
   basins: [{ type: "polygon", closed: true, id: "basin-1", name: "Viewpoint basin", outer: outline, source: { units: "meters" } }],
   fixtures, groups: [...groups].map(([name, members]) => ({ id: `group-${name.toLowerCase().replace(/\W+/g, "-")}`, uuid: `group-${name.toLowerCase().replace(/\W+/g, "-")}`, owner: "model", name, members })),
@@ -149,7 +150,8 @@ proj.project = { ...proj.project, id: "aquaflow-viewpoint-tree", name: NAME, rev
 // Cameras: the design eye (STAND HERE, 1.60 m) looking at the drawing plane, and a side view.
 proj.render = { ...proj.render, environment: "night", windX: 0, windZ: 0, activeCameraView: "stand-here",
   cameraViews: [
-    { id: "stand-here", name: "STAND HERE (illusion)", position: { x: 0, y: EYE.h, z: eyePlanY }, target: { x: 0, y: 3.3, z: 4 - PLANE_Y } },
+    // At the eye point with a long lens (26°): framed like a phone photo zoomed in from the spot.
+    { id: "stand-here", name: "STAND HERE (illusion)", position: { x: 0, y: EYE.h, z: eyePlanY }, target: { x: 0, y: 3.0, z: planY(PLANE_Y) }, fov: 26 },
     { id: "side", name: "Side view (rows revealed)", position: { x: 11, y: 5.5, z: 9 }, target: { x: 0, y: 1.8, z: 0 } },
     { id: "plan", name: "Plan (nozzle grid)", position: { x: 0, y: 16, z: 0.01 }, target: { x: 0, y: 0, z: 0 } },
   ] };

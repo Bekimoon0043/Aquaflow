@@ -137,6 +137,7 @@ precision highp float;
 uniform vec3  uWaterColor;
 uniform vec3  uGlobalLight;
 uniform float uGlobalLightI;
+uniform vec4  uBand;      // lit band (jetLook.js): lo, hi, soft, glow — neutral = factor 1
 ${FIELD_LIGHT_GLSL}
 varying float vT;
 varying vec3  vWorldPos;
@@ -171,9 +172,21 @@ void main(){
 
   // RGB fixture field (AF-3D-022): every fixture whose beam reaches this point —
   // cone x distance x forward scattering, linear HDR so bright beams bloom.
-  col += flDensityNormalize(fieldLightN(vWorldPos, viewDir, ${HG_G.toFixed(2)}, 1.0, uFieldMaxGroups));   // AF-NEXT-013
+  vec3 fl = flDensityNormalize(fieldLightN(vWorldPos, viewDir, ${HG_G.toFixed(2)}, 1.0, uFieldMaxGroups));   // AF-NEXT-013
 
-  gl_FragColor = vec4(col, vAlpha * (0.55 + 0.45 * facing));
+  // Lit band: outside it the column is faint and pale (desaturated toward cool white).
+  float bandF = smoothstep(uBand.x - uBand.z, uBand.x + uBand.z, vWorldPos.y)
+              * (1.0 - smoothstep(uBand.y - uBand.z, uBand.y + uBand.z, vWorldPos.y));
+  float bandA = 1.0;
+  if (bandF < 1.0) {
+    vec3 cool = vec3(0.86, 0.93, 1.0);
+    col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))) * cool, col, bandF);
+    fl  = mix(vec3(dot(fl,  vec3(0.299, 0.587, 0.114))) * cool, fl,  bandF);
+    bandA = mix(uBand.w, 1.0, bandF);
+  }
+  col += fl;
+
+  gl_FragColor = vec4(col, vAlpha * (0.55 + 0.45 * facing) * bandA);
 }`;
 
 // ─── LOCALIZED LIT-VOLUME GLOW (camera-facing billboard above each jet) ──────

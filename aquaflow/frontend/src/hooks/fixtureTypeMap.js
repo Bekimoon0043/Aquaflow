@@ -259,6 +259,15 @@ export function fixturesToNozzleConfigs(fixtures) {
         // Elevated / aimed light (engineering.mountHeightM, aimDeg, aimAzimuthDeg).
         ...(mountHeightOf(f) > 0 ? { mountHeightM: mountHeightOf(f) } : {}),
         ...(aimOf(f) ? { aimDir: aimOf(f).dir } : {}),
+        // An aimed light's real beam (beamAngleDeg) and the nozzle it is paired with: a
+        // spot aimed at a jet's top lights only the band its beam hits (jetLook.js).
+        ...(aimOf(f) && Number(f.engineering?.beamAngleDeg) > 0 ? { beamAngleDeg: Number(f.engineering.beamAngleDeg) } : {}),
+        ...(aimOf(f) ? { aimDeg: aimOf(f).aimDeg } : {}),
+        ...((f.engineering?.pairedNozzleId || f.pairedNozzleId) ? { pairedNozzleId: f.engineering?.pairedNozzleId || f.pairedNozzleId } : {}),
+        // Photometry for the real-world preview (realWorldLook.js): flux and data provenance.
+        ...(Number(f.engineering?.wattage) > 0 ? { wattage: Number(f.engineering.wattage) } : {}),
+        ...(Number(f.engineering?.lumens) > 0 ? { lumens: Number(f.engineering.lumens) } : {}),
+        ...(f.engineering?.dataSource ? { dataSource: f.engineering.dataSource } : {}),
       });
     } else {
       // Apply engineering data to scale the 3D effect
@@ -275,6 +284,8 @@ export function fixturesToNozzleConfigs(fixtures) {
       nozzleConfigs.push({
         id:       f.id,
         type:     map.nozzleType,
+        // The product key: the real-world preview reads the nozzle family from it.
+        ...(f.type ? { fixtureType: f.type } : {}),
         // Engineering Y axis = 3D Z axis (plan view) — via canonical fixturePlanCoords
         x:        planX,
         z:        planZ,
@@ -291,6 +302,8 @@ export function fixturesToNozzleConfigs(fixtures) {
 groupId: f.groupId || resolveFixtureGroup(f.type),
         // Pass engineering data through for reference
         engineering: eng,
+        // Foam / frothy jets draw as thick white aerated columns (nozzleEmitters geyser).
+        ...(eng.aerated === true || /foam|frothy|snowy|schaum/.test(String(f.type || "").toLowerCase()) ? { aerated: true } : {}),
       });
     }
   });

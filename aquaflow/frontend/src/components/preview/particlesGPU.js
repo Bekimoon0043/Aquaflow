@@ -48,9 +48,11 @@
 
 import { billboardFrag, fieldLightUniformStubs, FIELD_LIGHT_VARYING } from "./particlesBillboard";
 import { emitterOpacityScale } from './waterOptics';
+import { NO_BAND, TUFT_BASE } from './jetLook';
 
-/** Rows of the emitter parameter texture. Must match the rows the shaders read. */
-const EMIT_ROWS = 7;
+/** Rows of the emitter parameter texture. Must match the rows the shaders read.
+ *  Row 7 = lit band (jetLook.js): lo, hi, soft, glow — NO_BAND when the emitter has none. */
+export const EMIT_ROWS = 8;
 
 /**
  * Push the basin shape into a simulation material's uniforms (AF-3D-017).
@@ -176,7 +178,23 @@ void spawnState(float emitIdx, float seed, out vec3 pos, out vec3 vel, out float
   } else if (mode > 4.5) {
     // Elevated / aimed primitives (elevatedNozzles.js). Their life is solved on the CPU.
     vec3 u = emitTexel(emitIdx, 6.0).xyz;
-    if (mode < 5.5) {
+    if (mode > 7.5) {
+      // TUFT (jetLook.js): an aerated head round the apex — a flame-shaped volume of
+      // width p1, height p2 (profile tuftProfile); aux 1 sheds droplets from its lower half.
+      float fr   = hash11(seed * 5.3 + uTime * 0.37);
+      bool  shed = e5.y > 0.5;
+      float s    = shed ? r.x * 0.5 : r.x;
+      float prof = pow(max(0.0, sin(3.14159265 * (0.1 + 0.9 * s))), 0.6);
+      float hw   = 0.5 * p1;
+      float rr   = sqrt(r.y) * prof * hw * (fr > 0.8 ? 1.0 + (fr - 0.8) * 2.5 : 1.0);
+      float a    = r.z * 6.2831853;
+      vec2  cs   = vec2(cos(a), sin(a));
+      pos += vec3(cs.x * rr, (s - ${TUFT_BASE.toFixed(3)}) * p2, cs.y * rr);
+      float outK = (rr / max(hw, 1e-3)) * (shed ? 0.25 : 0.3);
+      vel = vec3(cs.x * outK + (r2.x - 0.5) * spread,
+                 shed ? -speed * (0.5 + fr) : speed * (1.0 + (fr - 0.5) * sJit),
+                 cs.y * outK + (r2.y - 0.5) * spread);
+    } else if (mode < 5.5) {
       // AIM_FAN: a sheet swept cos(th)*dir + sin(th)*u — a fan pointing anywhere.
       float th = mix(p1, p2, r.x);
       vec3 d = normalize(cos(th) * e1.xyz + sin(th) * u + vec3(0.0, 1e-6, 0.0));
@@ -371,9 +389,19 @@ void main(){
   // jet integrates to solid white and loses its shape entirely. Smaller, fainter,
   // far more numerous droplets is also simply what water is.
   vColor    = vec4(e3.rgb, uAlpha * emitTexel(emitIdx, 5.0).z);
+  // Lit band (jetLook.js): full brightness inside [lo, hi], dim (glow) and pale outside —
+  // at the particle's current height. NO_BAND gives exactly 1 (no change).
+  vec4 e7 = emitTexel(emitIdx, 7.0);
+  float bandF = smoothstep(e7.x - e7.z, e7.x + e7.z, pl.y) * (1.0 - smoothstep(e7.y - e7.z, e7.y + e7.z, pl.y));
   vLife     = lifeFrac;
   vWorldPos = pl.xyz;
   vFieldLight = particleFieldLight(pl.xyz);
+  if (bandF < 1.0) {
+    vec3 cool = vec3(0.86, 0.93, 1.0);
+    vColor.rgb  = mix(vec3(dot(vColor.rgb, vec3(0.299, 0.587, 0.114))) * cool, vColor.rgb, bandF);
+    vFieldLight = mix(vec3(dot(vFieldLight, vec3(0.299, 0.587, 0.114))) * cool, vFieldLight, bandF);
+    vColor.a   *= mix(e7.w, 1.0, bandF);
+  }
   vSeed     = seed;
   vUv       = uv;
 
@@ -437,7 +465,7 @@ export class GPUParticleField {
     this.velRT = [mkRT(), mkRT()];
     this.cur = 0;
 
-    // Emitter parameter texture — 6 rows, re-uploaded each frame.
+    // Emitter parameter texture — EMIT_ROWS rows, re-uploaded each frame.
     this.emitData = new Float32Array(maxEmitters * EMIT_ROWS * 4);
     this.emitTex = new T.DataTexture(this.emitData, maxEmitters, EMIT_ROWS, T.RGBAFormat, T.FloatType);
     this.emitTex.minFilter = this.emitTex.magFilter = T.NearestFilter;
@@ -593,8 +621,10 @@ export class GPUParticleField {
       put(2, i, e.spread, e.speedJitter, e.spawnRadius, Math.max(0, Math.min(1, e.density)));
       put(3, i, e.color[0], e.color[1], e.color[2], e.life);
       put(4, i, e.scale, e.scaleJitter, e.stretch, e.p1);
-      put(5, i, e.p2, e.aux || 0, emitterOpacityScale(e, this._ranges?.[i]?.count || 0), e.extraLife || 0);
+      put(5, i, e.p2, e.aux || 0, emitterOpacityScale(e, this._ranges?.[i]?.count || 0) * (e.alphaGain || 1), e.extraLife || 0);
       put(6, i, e.ux || 0, e.uy ?? 1, e.uz || 0, Number.isFinite(e.catchY) ? e.catchY : -1);
+      const b = e.band || NO_BAND;
+      put(7, i, b.lo, b.hi, b.soft, b.glow);
     }
     for (let i = n; i < W; i++) {
       // Density 0 parks any particle still assigned to a removed emitter.

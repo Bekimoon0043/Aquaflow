@@ -14,6 +14,9 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   toneMapping: "aces",
   // AF-3D-008: half-resolution spray/mist pass. Always on for high; opt-in on medium.
   halfResSpray: false,
+  // Real-world simulation: jet and light appearance only from the equipment's physics
+  // (realWorldLook.js). false = artistic preview (manual looks, stamped exports).
+  realWorld: true,
   pattern: "none",
   lightColor: "#0066ff",
   windX: 0,

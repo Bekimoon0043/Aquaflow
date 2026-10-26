@@ -54,6 +54,14 @@ vec3 particleFieldLight(vec3 wp){
 }
 `;
 
+/** maxCount neutral bands (factor exactly 1): lo = −1e6, hi = 1e6, soft = 1, glow = 1. */
+export function neutralBands(maxCount, out = new Float32Array(maxCount * 4), from = 0) {
+  for (let i = from; i < maxCount; i++) {
+    out[i * 4] = -1e6; out[i * 4 + 1] = 1e6; out[i * 4 + 2] = 1; out[i * 4 + 3] = 1;
+  }
+  return out;
+}
+
 /** Build the instanced quad geometry over the caller's simulation arrays. */
 export function buildBillboardGeometry(T, maxCount, arrays) {
   const geo = new T.InstancedBufferGeometry();
@@ -74,6 +82,9 @@ export function buildBillboardGeometry(T, maxCount, arrays) {
   geo.setAttribute("aLife", new T.InstancedBufferAttribute(arrays.lives, 1));
   geo.setAttribute("aStretch", new T.InstancedBufferAttribute(arrays.stretches, 1));
   geo.setAttribute("aSeed", new T.InstancedBufferAttribute(arrays.seeds, 1));
+  // Lit band per particle (jetLook.js): lo, hi, soft, glow. The shader needs it bound;
+  // a caller without one gets a static neutral band.
+  geo.setAttribute("aBand", new T.InstancedBufferAttribute(arrays.bands || neutralBands(maxCount), 4));
   geo.instanceCount = 0;
   return geo;
 }
@@ -86,6 +97,7 @@ attribute float aScale;
 attribute float aLife;
 attribute float aStretch;
 attribute float aSeed;
+attribute vec4  aBand;
 uniform float uSizeScale;
 varying vec4  vColor;
 varying float vLife;
@@ -98,6 +110,15 @@ ${FIELD_LIGHT_VARYING}
 void main(){
   vFieldLight = particleFieldLight(aOffset);
   vColor    = aColor;
+  // Lit band (jetLook.js) at the particle's current height; neutral bands give exactly 1.
+  float bandF = smoothstep(aBand.x - aBand.z, aBand.x + aBand.z, aOffset.y)
+              * (1.0 - smoothstep(aBand.y - aBand.z, aBand.y + aBand.z, aOffset.y));
+  if (bandF < 1.0) {
+    vec3 cool = vec3(0.86, 0.93, 1.0);
+    vColor.rgb  = mix(vec3(dot(vColor.rgb, vec3(0.299, 0.587, 0.114))) * cool, vColor.rgb, bandF);
+    vFieldLight = mix(vec3(dot(vFieldLight, vec3(0.299, 0.587, 0.114))) * cool, vFieldLight, bandF);
+    vColor.a   *= mix(aBand.w, 1.0, bandF);
+  }
   vLife     = aLife;
   vWorldPos = aOffset;
   vSeed     = aSeed;

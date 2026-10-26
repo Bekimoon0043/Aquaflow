@@ -35,3 +35,16 @@ describe("absent elevated/aim fields leave descriptors unchanged", () => {
     });
   }
 });
+
+describe("absent lit-band / crown fields leave descriptors unchanged", () => {
+  for (const cfg of CASES) {
+    it(`${cfg.type}${cfg.designHeightM ? ` @${cfg.designHeightM} m` : ""}`, () => {
+      const launch = cfg.designHeightM ? (d, fb) => launchSpeed(null, d, fb, null, cfg) : null;
+      const plain = describeNozzleEmitters(cfg, 0.8, 1.5, WIND, TINT, launch);
+      // columnGlow alone, a disabled crown and an empty beam list do nothing.
+      const inert = { ...cfg, litBeams: [], engineering: { ...(cfg.engineering || {}), columnGlow: 0.5, crownTuft: false } };
+      const launch2 = cfg.designHeightM ? (d, fb) => launchSpeed(null, d, fb, null, inert) : null;
+      expect(round(describeNozzleEmitters(inert, 0.8, 1.5, WIND, TINT, launch2))).toEqual(round(plain));
+    });
+  }
+});
