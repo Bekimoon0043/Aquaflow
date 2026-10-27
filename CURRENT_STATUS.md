@@ -1,5 +1,14 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-27 (later): Green Dome design traced from the user's reference photo**
+
+- **New site:** `Desktop/Green_Dome_Fountain.aquapkg`, built by `frontend/scripts/build-green-dome.mjs` (same pipeline as the Green Crown and tree designs: vite-node script → `.aquapkg`).
+  - Read from the photo (basin ≈ 14 m across): dome 11.8 m wide × 7.6 m tall, every jet rising from a centre cluster of radius ≤ 1.4 m, arches landing on an oval 5.9 × 4.0 m.
+  - 101 DN20 clear jets: a 9-jet centre bundle (7.6 / 7.2 m) and five rings A–E (12/16/20/24/20 jets, apex 6.8 → 2.5 m), each arc solved with the renderer's own physics for its apex and landing point.
+  - Lights: an 18 W green light behind every jet aimed up along its arc, plus 26 × 36 W edge lights on the landing oval aimed inward (the photo's lit floor row). 127 lights in all.
+  - 3 VFD pumps (core + A, B + C, D + E), 195 m³/h; basin 14 × 10 m, 500 mm; a 60 s show (core rises, rings open from the centre out, dome breathes, finale).
+  - Renders on the Desktop: `Green_Dome_Front_real_world.png`, `Green_Dome_ThreeQuarter_real_world.png`, `Green_Dome_Side_real_world.png` (headless Edge, low quality, paused at 20 s).
+
 **2026-10-27: AquaFlow Studio 1.2.66 — framing projectors, exit turbulence, viewpoint tree v3 from research**
 
 - **Research:** `reports/Viewpoint tree fountain front view.md` (4 note files). Main conclusions:
