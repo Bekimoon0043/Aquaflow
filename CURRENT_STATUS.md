@@ -1,5 +1,17 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-27 (evening): Green Tree Fountain from the user's concept sheet, CSV schedule and PDF plan**
+
+- **New site:** `Desktop/Green_Tree_Fountain.aquapkg`, built by `frontend/scripts/build-green-tree.mjs` from `frontend/scripts/data/green-tree-nozzles.csv` (the user's 65-nozzle schedule, verbatim).
+  - 65 vertical clear jets on a 13 × 5 grid (0.50 m × 0.75 m), 6 × 3 m footprint, 0.36–4.5 m. Rows taper 100 / 82 / 60 % per the PDF.
+  - 3 VFD zones (centre row, inner rows, outer rows), about 42 m³/h, one solenoid per jet. Basin 9 × 6 m, 400 mm.
+  - Lights: an 8° spot under every jet (yellow centre peak, orange side edges |x| ≥ 2.5 m, green canopy) and three purple 30° trunk-wash spots behind the centre. 60 s show.
+  - Renders on the Desktop: `Green_Tree_Front/Angled/Side/Top_real_world.png`.
+- **Deviations from the concept sheet:**
+  - The sheet's tree-shaped top view and trunk jets are not in the schedule. The trunk is a light layer.
+  - Colours follow regions, not the legend's height bands, because a spot's field reaches neighbours at 0.5 m pitch.
+- **Preview finding (not fixed):** `utils/fullShowPreview.js` tints all water with the first lit light's colour ("representative", 0.12 wash). With mixed colours the first light in fixture order paints every column. The build script lists the green canopy lights first as a workaround.
+
 **2026-10-27 (later): Green Dome design traced from the user's reference photo**
 
 - **New site:** `Desktop/Green_Dome_Fountain.aquapkg`, built by `frontend/scripts/build-green-dome.mjs` (same pipeline as the Green Crown and tree designs: vite-node script → `.aquapkg`).
