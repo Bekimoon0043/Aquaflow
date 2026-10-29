@@ -29,7 +29,7 @@ export const PROJECT_CONTENT_KEYS = Object.freeze({
   show: ["currentShow", "nodes", "connections", "timelineTracks", "audioData", "manualPatterns",
     "manualPatternMeta", "manualPriority", "manualPatternConfig", "generatedTracks"],
   engineering: ["projectName", "projectId", "poolType", "params", "geometry", "basins", "fixtures", "groups",
-    "siteModels", "siteSurfaces", "cadUnderlay", "layers", "measurements", "depthZones", "hydraulicSummary",
+    "siteModels", "siteSurfaces", "cadUnderlay", "layers", "measurements", "guidePaths", "depthZones", "hydraulicSummary",
     "solvedHydraulics", "bomItems", "manualPipes", "pipes"],
   project: ["metadata", "render", "programmer", "integrations"],
 });

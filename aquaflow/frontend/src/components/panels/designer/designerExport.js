@@ -8,7 +8,7 @@ import { HYD_NOT_CALCULATED, hydFmt } from "./DesignerSidebar";
 export const buildProjectPayload = ({
   projectId, projectName, primaryBasin, basins, fixtures, siteModels, siteSurfaces, cadUnderlay, manualPipes,
   measurements, layers, depthZones, solvedHydraulics, poolMetrics, arraySettings, hydraulicSummary, pipework,
-  baseBomItems, groups,
+  baseBomItems, groups, guidePaths,
 }) => ({
     id: projectId,
     format:"AquaFlowPoolGeometry",
@@ -24,6 +24,7 @@ export const buildProjectPayload = ({
    cad_underlay: cadUnderlay || null,
    manualPipes,
    measurements,
+   guide_paths: guidePaths || [],
    layers,
    depth_zones: depthZones,
    solved_hydraulics: solvedHydraulics,

@@ -106,6 +106,8 @@ pipes: [],
 
   // ─── Measurements ────────────────────────────────────────────────────────────
   measurements: [],
+  // Guide lines drawn only as paths for fixture arrays.
+  guidePaths: [],
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
@@ -150,6 +152,7 @@ pipes: [],
       cadUnderlay:       normalized.cad_underlay,
       layers:            mergeEngineeringLayers(normalized.layers),
       measurements:      normalized.measurements,
+      guidePaths:        normalized.guide_paths || [],
       depthZones:        normalized.depth_zones,
       hydraulicSummary:  normalized.hydraulics || get().hydraulicSummary,
       solvedHydraulics:   normalized.solved_hydraulics,
@@ -189,6 +192,7 @@ pipes: [],
       cad_underlay: s.cadUnderlay,
       layers:      s.layers,
       measurements:s.measurements,
+      guide_paths: s.guidePaths || [],
       depth_zones: s.depthZones,
       hydraulics:  s.hydraulicSummary,
       solved_hydraulics: s.solvedHydraulics,

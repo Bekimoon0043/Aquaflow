@@ -46,6 +46,8 @@ import { boxSelect, clickSelection, createGroup, expandToGroups, groupsContainin
 import { designBounds, fitViewTo, screenToWorld, zoomAbout, DEFAULT_VIEW } from "../../engineering/drafting/viewport";
 import { editGeometryProperty, geometryMeta as outlineMeta, hitGrip, hitSurfaceVertex, pointInsideOutline, stretchFromGrip, translateGeometry } from "../../engineering/drafting/geometryEdit";
 import { autoPlaceFixtures, buildFixtureArray } from "../../engineering/drafting/arrays";
+import { arraySources, buildPipeArray, hitGuide, pathLength, pipePath } from "../../engineering/drafting/pipeArray";
+import { connectToPump, pairLights } from "../../engineering/connections";
 import { angleOf, dynamicInputKey, emptyDynamicInput, resolveDynamicInput } from "../../engineering/drafting/dynamicInput";
 import CommandPalette from "../../engineering/drafting/commandPalette";
 import CommandLineBar from "../../engineering/drafting/CommandLineBar";
@@ -64,7 +66,7 @@ const DESIGNER_TYPING_TOOLS = new Set(["pipe"]);
 // Idle command line: letters are captured only once text is typed, or when the key starts a shape alias (F/H stay view keys).
 const ALIAS_START_KEYS = new Set(["L", "P", "R", "C", "E", "A"]);
 const TOOL_DRAFTS = { polyline: "pline", rectangle: "rect", circle: "circle" };
-const DRAFT_TARGET_LABEL = { pool: "pool outline", land: "land surface", depth: "depth zone" };
+const DRAFT_TARGET_LABEL = { pool: "pool outline", land: "land surface", depth: "depth zone", guide: "a line for an array" };
 const CLOSE_TOLERANCE_PX = 12;
 
 export default function PoolGeometryDesigner() {
@@ -163,6 +165,13 @@ export default function PoolGeometryDesigner() {
   const [arrayRows, setArrayRows] = useState(3);
   const [arrayCols, setArrayCols] = useState(5);
   const [arrayInset, setArrayInset] = useState(1.0);
+  const [arrayPipeId, setArrayPipeId] = useState("");
+  const [arraySpacing, setArraySpacing] = useState(0);
+  const [arrayEndGap, setArrayEndGap] = useState(0.3);
+  const [arraySideOffset, setArraySideOffset] = useState(0);
+  const [arrayNote, setArrayNote] = useState("");
+  const [guidePaths, setGuidePaths] = useState(() => useEngineeringStore.getState().guidePaths || []);
+  const [selectedGuideId, setSelectedGuideId] = useState(null);
   const [exportStatus, setExportStatus] = useState("");
   const [pipeContextMenu, setPipeContextMenu] = useState(null);
   const [selectionBox, setSelectionBox] = useState(null);
@@ -244,11 +253,11 @@ export default function PoolGeometryDesigner() {
 
   const engineeringSnapshot = useMemo(() => ({
     projectId, projectName, geometry, poolType, params, fixtures, siteSurfaces, manualPipes, layers,
-    measurements, depthZones, solvedHydraulics, basins, activeBasinIndex, groups,
+    measurements, depthZones, solvedHydraulics, basins, activeBasinIndex, groups, guidePaths,
     arraySettings: { arrayMode, arrayCount, arrayRows, arrayCols, arrayInset },
   }), [
     projectId, projectName, geometry, poolType, params, fixtures, siteSurfaces, manualPipes, layers,
-    measurements, depthZones, solvedHydraulics, basins, activeBasinIndex, groups, arrayMode, arrayCount, arrayRows, arrayCols, arrayInset,
+    measurements, depthZones, solvedHydraulics, basins, activeBasinIndex, groups, guidePaths, arrayMode, arrayCount, arrayRows, arrayCols, arrayInset,
   ]);
 
   const restoreEngineeringSnapshot = useCallback((snapshot) => {
@@ -266,6 +275,8 @@ export default function PoolGeometryDesigner() {
     loadBasins(snapshot.basins || [], snapshot.activeBasinIndex || 0);
     setSolvedHydraulics(snapshot.solvedHydraulics || null);
     setGroups(snapshot.groups || []);
+    setGuidePaths(snapshot.guidePaths || []);
+    setSelectedGuideId(null);
     const arrays = snapshot.arraySettings || {};
     setArrayMode(arrays.arrayMode || "centerline");
     setArrayCount(arrays.arrayCount || 8);
@@ -323,6 +334,7 @@ export default function PoolGeometryDesigner() {
       basins: store.basins || [],
       activeBasinIndex: 0,
       groups: store.groups || [],
+      guidePaths: store.guidePaths || [],
       arraySettings: { arrayMode:"centerline", arrayCount:8, arrayRows:3, arrayCols:5, arrayInset:1 },
     };
     historyApi.reset(loadedSnapshot);
@@ -392,7 +404,7 @@ export default function PoolGeometryDesigner() {
     poolType: primaryBasin.poolType,
     params: primaryBasin.params,
     basins, fixtures, siteSurfaces, manualPipes, layers, measurements, depthZones,
-    hydraulicSummary, solvedHydraulics, bomItems, groups,
+    hydraulicSummary, solvedHydraulics, bomItems, groups, guidePaths,
   });
 
   const isLayerVisible = (key) => layers.find(l => l.key === key)?.visible !== false;
@@ -434,7 +446,9 @@ export default function PoolGeometryDesigner() {
       tool, selectedSurfaceVertex, landDrawPoints, landSurfaceType, drawPreview, geometry, showDepth,
       pipework, fixtures, renderPipes, selectedObject, activeGrip, showDimensions, poolMetrics, params,
       basins, activeBasinIndex, depthZones, depthDrawPoints, depthZone, freeformPoints, drawStart,
-      polylinePoints, selectedFixture, selectedKeys, measurements, selectionBox, draftOverlay,
+      polylinePoints, selectedFixture, selectedKeys, measurements, selectionBox, draftOverlay, guidePaths, selectedGuideId,
+      // eslint-disable-next-line no-use-before-define -- runs after render, when arraySource exists
+      arrayHighlight: arrayMode === "pipe" && ["nozzle", "light", "equipment"].includes(tool) && arraySource ? pipePath(arraySource) : null,
       snapResult: (pipeSnap ? pipeSnap.snap : hoverSnap?.snap) || null,
       polarGuide: polar && polarFrom ? { from: polarFrom, angleDeg: polar.angleDeg, locked: polar.locked, label: `${Math.round(polar.angleDeg)}°` } : null,
     });
@@ -444,7 +458,7 @@ export default function PoolGeometryDesigner() {
     selectedSurfaceVertex, landDrawPoints, landSurfaceType, freeformPoints, measurements, zoom, pan, showGrid, showDepth,
     tool, manualPipes, selectedPipeId, selectedNode, renderPipes, showDimensions, depthZones, depthDrawPoints, depthZone,
     drawPreview, canvasViewport, poolMetrics, layers, selectedObject, activeGrip, pipework, params, drawStart, polylinePoints,
-    selectionBox, hoverSnap, pipeSystem.snapInfo, draftOverlay,
+    selectionBox, hoverSnap, pipeSystem.snapInfo, draftOverlay, guidePaths, selectedGuideId, arrayMode, arrayPipeId, selectedPipeId,
   ]);
 
   // Canvas coordinate helpers
@@ -558,12 +572,17 @@ export default function PoolGeometryDesigner() {
   }, [pushUndo]);
 
   const deleteCurrentSelection = useCallback(() => {
-    if (selectedNode) removeNode(selectedNode.pipeId, selectedNode.nodeIndex);
+    if (selectedGuideId) {
+      pushUndo("Delete guide line");
+      setGuidePaths((current) => current.filter((g) => g.id !== selectedGuideId));
+      setSelectedGuideId(null);
+      setSelectedObject(null);
+    } else if (selectedNode) removeNode(selectedNode.pipeId, selectedNode.nodeIndex);
     else if (selectedSegment) deleteSelectedSegment();
     else if (selectedPipeId) deleteSelectedPipe();
     else if (selectedSurfaceId) deleteSelectedSurface();
     else deleteSelectedFixture();
-  }, [selectedNode, selectedSegment, selectedPipeId, selectedSurfaceId, removeNode, deleteSelectedSegment, deleteSelectedPipe, deleteSelectedSurface, deleteSelectedFixture]);
+  }, [selectedGuideId, pushUndo, selectedNode, selectedSegment, selectedPipeId, selectedSurfaceId, removeNode, deleteSelectedSegment, deleteSelectedPipe, deleteSelectedSurface, deleteSelectedFixture]);
 
   const deselectAll = useCallback(() => {
     clearSelection();
@@ -716,7 +735,9 @@ export default function PoolGeometryDesigner() {
 
   // ── Shape drawing (shapeDraft.js) driven by clicks and the command line ─────
   const logLine = (text, tone) => setCmdLine((current) => pushHistory(current, text, tone));
-  const defaultDraftTarget = () => (tool === "land" ? "land" : tool === "depth" ? "depth" : "pool");
+  // With a fixture tool on "Along a line", a typed shape command draws a guide line, not the pool.
+  const defaultDraftTarget = () => (tool === "land" ? "land" : tool === "depth" ? "depth"
+    : ["nozzle", "light", "equipment"].includes(tool) && arrayMode === "pipe" ? "guide" : "pool");
 
   const startDraft = (command, target = defaultDraftTarget()) => {
     if (target === "pool" && isLayerLocked("pool_outline")) { logLine("The POOL OUTLINE layer is locked", "error"); return; }
@@ -726,13 +747,23 @@ export default function PoolGeometryDesigner() {
     cancelDrawing();
     cancelPipeDrawing();
     if (target === "pool") { setTool(info.key === "rect" ? "rectangle" : info.key === "circle" ? "circle" : "polyline"); setSelection([]); setSelectedObject("pool"); }
-    setDraft({ target, state: createDraft(info.key) });
+    // A guide line may stay open; the tool in use (nozzle, light…) is kept so the array panel stays open.
+    setDraft({ target, state: createDraft(info.key, target === "guide" ? { closedOnly: false } : undefined), returnTool: target === "guide" ? tool : "select" });
     lastDraftCommandRef.current = { command: info.key, target };
     logLine(`${info.label.toUpperCase()} → ${DRAFT_TARGET_LABEL[target]}`, "input");
   };
 
   const finishDraftTarget = (target, res) => {
     const pts = res.points.map((p) => ({ x: Number(p.x.toFixed(4)), y: Number(p.y.toFixed(4)) }));
+    if (target === "guide") {
+      pushUndo("Draw guide line");
+      const [guide] = ensureEntityIdentities([{ kind: "guide", label: `Guide line ${guidePaths.length + 1}`, points: pts, closed: Boolean(res.closed), shape: res.kind }], "site");
+      setGuidePaths((current) => [...current, guide]);
+      setSelectedGuideId(guide.id);
+      setArrayPipeId(guide.id);
+      setArrayMode("pipe");
+      return true;
+    }
     if (target === "land") return finishLandSurface(pts);
     if (target === "depth") {
       const ok = finishDepthZone(pts);
@@ -770,10 +801,10 @@ export default function PoolGeometryDesigner() {
       setDraftHover(null);
       setHoverSnap(null);
       if (finishDraftTarget(target, r.done) !== false) {
-        logLine(`✓ ${r.done.summary}`, "ok");
+        logLine(`✓ ${r.done.summary}${target === "guide" ? " · chosen for the array: press APPLY" : ""}`, "ok");
         setSaveStatus(`${r.done.summary} · Enter repeats the last shape · Ctrl+Z undoes.`);
       }
-      setTool("select");
+      setTool(draft.returnTool || "select");
       return;
     }
     setDraft({ ...draft, state: r.state });
@@ -783,7 +814,7 @@ export default function PoolGeometryDesigner() {
     setDraft(null);
     setDraftHover(null);
     setHoverSnap(null);
-    setTool("select");
+    setTool(draft?.returnTool || "select");
     logLine("*Cancel*", "prompt");
   };
 
@@ -890,7 +921,7 @@ export default function PoolGeometryDesigner() {
       return;
     }
     if (e.key === "Delete" || e.key === "Backspace") {
-      const hasSelection = Boolean(selectedNode || selectedSegment || selectedPipeId || selection.length || selectedSurfaceId);
+      const hasSelection = Boolean(selectedGuideId || selectedNode || selectedSegment || selectedPipeId || selection.length || selectedSurfaceId);
       if (!hasSelection) return;
       e.preventDefault();
       deleteCurrentSelection();
@@ -968,6 +999,18 @@ export default function PoolGeometryDesigner() {
     const rawWorld = toWorld(e.clientX, e.clientY);
     const world = snapPoint(rawWorld, tool === "polyline" && polylinePoints.length ? { from: polylinePoints.at(-1), polar: true, shift: e.shiftKey } : undefined);
     setPipeContextMenu(null);
+    // A sidebar field keeps keyboard focus after use; release it so typed lengths reach the drawing.
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) document.activeElement.blur();
+    if (tool === "select" && e.button === 0 && !draft) {
+      setSelectedGuideId(null);
+      const guideHit = isLayerVisible("guides") ? hitGuide(guidePaths, rawWorld, Math.max(0.15, 8 / zoom)) : null;
+      if (guideHit) {
+        setSelectedGuideId(guideHit.id); setArrayPipeId(guideHit.id); setSelectedObject("guide"); setSelection([]);
+        setSelectedPipeId(null); setSelectedSurfaceId(null);
+        setSaveStatus(`${guideHit.label} · ${pathLength(pipePath(guideHit)).toFixed(2)} m · Delete removes it · choose a Nozzle/Light tool, Array Type "Along a line", APPLY.`);
+        return;
+      }
+    }
     if (tool === "select") {
       const node = selectNodeAtPoint(rawWorld);
       if (node) { setSelectedObject("pipe_node"); setSelection([]); historyApi.beginGesture("Move pipe node"); return; }
@@ -1264,7 +1307,7 @@ export default function PoolGeometryDesigner() {
 
   const buildProjectPayload = () => composeProjectPayload({
     projectId, projectName, primaryBasin, basins, fixtures, siteModels: useEngineeringStore.getState().siteModels, siteSurfaces,
-    cadUnderlay, manualPipes, measurements, layers, depthZones, solvedHydraulics, poolMetrics, groups,
+    cadUnderlay, manualPipes, measurements, layers, depthZones, solvedHydraulics, poolMetrics, groups, guidePaths,
     arraySettings: { arrayMode, arrayCount, arrayRows, arrayCols, arrayInset }, hydraulicSummary, pipework, baseBomItems,
   });
 
@@ -1327,6 +1370,7 @@ export default function PoolGeometryDesigner() {
       basins: project.basins || [],
       activeBasinIndex: 0,
       groups: project.groups || [],
+      guidePaths: project.guide_paths || project.guidePaths || [],
       solvedHydraulics: null,
     };
     cancelPipeDrawing();
@@ -1369,11 +1413,48 @@ export default function PoolGeometryDesigner() {
     }
   };
 
+  const arraySourceList = useMemo(() => arraySources({
+    pipes: manualPipes, guides: guidePaths, basins, activeBasinIndex, activeGeometry: geometry, siteSurfaces, depthZones,
+  }), [manualPipes, guidePaths, basins, activeBasinIndex, geometry, siteSurfaces, depthZones]);
+  // Chosen in the dropdown, else whatever is selected on the canvas, else the last drawn guide / pipe.
+  const canvasSourceId = selectedGuideId || selectedPipe?.id
+    || (selectedSurfaceId ? `surface:${selectedSurfaceId}` : null)
+    || (selectedObject === "pool" ? arraySourceList.find((s) => s.kind === "basin" && s.id === `basin:${basins[activeBasinIndex]?.id || activeBasinIndex}`)?.id : null);
+  const arraySource = arraySourceList.find((s) => s.id === arrayPipeId)
+    || arraySourceList.find((s) => s.id === canvasSourceId)
+    || arraySourceList.filter((s) => s.kind === "guide").at(-1)
+    || arraySourceList.filter((s) => s.kind === "pipe").at(-1)
+    || null;
+
+  const applyPipeArray = (ft) => {
+    const src = arraySource;
+    if (!src) { setArrayNote("Draw a line first: use the shape buttons below, or draw a pipe."); return; }
+    const name = src.label.replace(/ \([\d.]+ m\)$/, "");
+    const { made, pumpId, pumpLabel, pairs, length, closed } = buildPipeArray({
+      source: src, pipes: manualPipes, fixtures, fixtureType, typeLabel: ft.label, count: arrayCount, spacing: arraySpacing,
+      endGap: arrayEndGap, sideOffset: arraySideOffset, zone: depthZone, owner: ownerForPoint(basins, src.points?.[0] || { x: 0, y: 0 }),
+    });
+    if (!made.length) { setArrayNote("The line is too short for this array."); return; }
+    pushUndo(`Array ${made.length} fixtures along ${name}`);
+    setFixtures((prev) => {
+      let next = [...prev, ...made];
+      if (pumpId) next = connectToPump(next, made.map((f) => f.id), pumpId);
+      for (const [lightId, nozzleId] of pairs) next = pairLights(next, [lightId], nozzleId);
+      return next;
+    });
+    const gap = closed ? length / made.length : arraySpacing > 0 ? arraySpacing : made.length > 1 ? (length - 2 * arrayEndGap) / (made.length - 1) : 0;
+    const spacingText = made.length > 1 ? ` · ${gap.toFixed(2)} m apart` : "";
+    setArrayNote(`✓ ${made.length} × ${ft.label} on ${name} (${length.toFixed(2)} m${closed ? ", closed" : ""})${spacingText}`
+      + (pumpId ? ` · linked to ${pumpLabel}` : src.kind === "pipe" && /^nozzle/.test(fixtureType || "") ? " · no pump on this pipe yet — connect a pump pipe, then apply again or set the pump in Connections" : "")
+      + (pairs.length ? ` · ${pairs.length} light(s) paired to nozzles` : ""));
+  };
+
   const applyFixtureArray = () => {
-    if(!geometry) return;
     if(fixtureType?.startsWith("nozzle") && isLayerLocked("nozzles")) return;
     if(fixtureType?.startsWith("light") && isLayerLocked("lights")) return;
     const ft = FIXTURE_TYPES.find(t => t.key === fixtureType) || FIXTURE_TYPES[0];
+    if (arrayMode === "pipe") { applyPipeArray(ft); return; }
+    if(!geometry) return;
     const made = buildFixtureArray({
       geometry, fixtureType, typeLabel: ft.label, existing: fixtures, mode: arrayMode, count: arrayCount, rows: arrayRows,
       cols: arrayCols, inset: arrayInset, zone: depthZone, owner: ownerForPoint(basins, { x: geometry.center?.x ?? 0, y: geometry.center?.y ?? 0 }),
@@ -1548,6 +1629,9 @@ export default function PoolGeometryDesigner() {
     updateCadUnderlay, updateSelectedSurface,
     draft, startDraft, finishDraft, cancelDraft, chooseTool,
     undoDraftPoint: () => draft && setDraft({ ...draft, state: draftUndo(draft.state) }),
+    arraySourceList, arraySource, setArrayPipeId, arraySpacing, setArraySpacing, arrayEndGap, setArrayEndGap,
+    arraySideOffset, setArraySideOffset, arrayNote,
+    drawGuide: (command) => startDraft(command, "guide"),
   };
 
   const drawing = draft || drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing;

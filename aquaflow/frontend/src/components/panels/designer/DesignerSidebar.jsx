@@ -393,7 +393,17 @@ export function ToolsSection({ d }) {
 
 
 export function FixturePickerSection({ d }) {
-  const { applyFixtureArray, arrayCols, arrayCount, arrayInset, arrayMode, arrayRows, autoPlaceNozzles, fixtureType, fixtures, setArrayCols, setArrayCount, setArrayInset, setArrayMode, setArrayRows, setFixtureType, tool } = d;
+  const { applyFixtureArray, arrayCols, arrayCount, arrayInset, arrayMode, arrayRows, autoPlaceNozzles, fixtureType, fixtures, setArrayCols, setArrayCount, setArrayInset, setArrayMode, setArrayRows, setFixtureType, tool,
+    arraySourceList = [], arraySource, setArrayPipeId, arraySpacing, setArraySpacing, arrayEndGap, setArrayEndGap, arraySideOffset, setArraySideOffset, arrayNote, drawGuide } = d;
+  const onPipe = arrayMode === "pipe";
+  const numInput = (label, value, set, { min = 0, step = 0.1, aria } = {}) => (
+    <div style={{ marginBottom:5 }}>
+      <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }}>{label}</div>
+      <input aria-label={aria || label} type="number" min={min} step={step} value={value}
+        onChange={e=>set(e.target.value === "" ? 0 : parseFloat(e.target.value))}
+        style={{ width:"100%", padding:"3px 5px", background:"#06121c", color:"#ffcc00", border:"1px solid #0a3040", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
+    </div>
+  );
   return (
     <>
     <div style={{ display:["nozzle","light","equipment"].includes(tool)?"block":"none", borderBottom:"1px solid #0a2030" }}>
@@ -420,7 +430,32 @@ export function FixturePickerSection({ d }) {
           <option value="ring">Ring</option>
           <option value="grid">Grid</option>
           <option value="edge">Along edge</option>
+          <option value="pipe">Along a line (pipe, drawn line, outline)</option>
         </select>
+
+        {onPipe && (
+          <div style={{ marginBottom:5 }}>
+            <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }}>Line to follow</div>
+            {arraySourceList.length ? (
+              <select aria-label="Array line" value={arraySource?.id || ""} onChange={e=>setArrayPipeId(e.target.value)}
+                style={{ width:"100%", padding:"3px", background:"#06121c", color:"#c4b5fd", border:"1px solid #4c3a8a", borderRadius:3, fontSize:9, fontFamily:"monospace" }}>
+                {arraySourceList.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            ) : (
+              <div style={{ color:"#ff9f6b", fontSize:8, lineHeight:1.5 }}>No line yet: draw one below, or draw a pipe.</div>
+            )}
+            <div style={{ color:"#c084fc", fontSize:8, fontWeight:"bold", margin:"6px 0 3px" }}>DRAW A LINE FOR ARRAY</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:3 }}>
+              {[["pline","╱ Line"],["arc","◠ Arc"],["rect","▭ Rect"],["circle","○ Circle"],["polygon","⬡ Polygon"],["ellipse","⬭ Ellipse"]].map(([key, label]) => (
+                <button key={key} type="button" aria-label={`Draw guide ${key}`} onClick={() => drawGuide?.(key)}
+                  style={{ padding:"4px 2px", background:"#140b24", color:"#d8b4fe", border:"1px solid #5b3a8a", borderRadius:3, cursor:"pointer", fontSize:8, fontFamily:"monospace" }}>{label}</button>
+              ))}
+            </div>
+            <div style={{ color:"#6f8595", fontSize:7.5, lineHeight:1.5, marginTop:3 }}>
+              Click points or type lengths (5 Enter, 5&lt;30, A = arc); Enter finishes an open line. Or select any pipe, guide, land area or the pool on the canvas.
+            </div>
+          </div>
+        )}
 
         {arrayMode !== "grid" && (
           <div style={{ marginBottom:5 }}>
@@ -448,17 +483,29 @@ export function FixturePickerSection({ d }) {
           </div>
         )}
 
+        {onPipe ? (
+          <>
+            {numInput("Spacing (m) — 0 = use Count", arraySpacing, setArraySpacing, { aria: "Array spacing (m)" })}
+            {numInput("Gap at line ends (m) — open lines only", arrayEndGap, setArrayEndGap, { aria: "Gap at pipe ends (m)" })}
+            {numInput("Side offset (m) — e.g. 0.3 for lights beside nozzles", arraySideOffset, setArraySideOffset, { min: -5, aria: "Side offset (m)" })}
+          </>
+        ) : (
         <div style={{ marginBottom:6 }}>
           <div style={{ color:"#7ab", fontSize:8, marginBottom:2 }}>Inset from Edge (m)</div>
           <input aria-label="Inset from edge (m)" type="number" min="0" max="50" step="0.1" value={arrayInset}
             onChange={e=>setArrayInset(parseFloat(e.target.value || 0))}
             style={{ width:"100%", padding:"3px 5px", background:"#06121c", color:"#ffcc00", border:"1px solid #0a3040", borderRadius:3, fontSize:10, fontFamily:"monospace" }} />
         </div>
+        )}
 
         <button onClick={applyFixtureArray}
           style={{ width:"100%", padding:"5px", background:"#002030", color:"#00ccaa", border:"1px solid #00aa8844", borderRadius:3, cursor:"pointer", fontSize:9, fontFamily:"monospace" }}>
-          APPLY ARRAY
+          {onPipe ? "APPLY ARRAY ON LINE" : "APPLY ARRAY"}
         </button>
+        {arrayNote && <div role="status" style={{ marginTop:5, color: arrayNote.startsWith("✓") ? "#7fffd4" : "#ffb37a", fontSize:8, lineHeight:1.5 }}>{arrayNote}</div>}
+        {onPipe && <div style={{ marginTop:4, color:"#6f8595", fontSize:8, lineHeight:1.5 }}>
+          On a closed line (circle, rectangle, outline) the items go evenly all the way round. On a pipe, nozzles are linked to the pump the pipe connects to. Lights placed afterwards are paired with the nearest nozzle on the same line.
+        </div>}
       </div>
       </div>
     </div>

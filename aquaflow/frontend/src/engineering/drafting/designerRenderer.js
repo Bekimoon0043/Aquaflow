@@ -624,6 +624,40 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
     }
   });
 
+  // Guide lines (paths for arrays) and the line the current array will follow.
+  const strokePath = (pts, closed) => {
+    if (!pts?.length) return;
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(wx(p.x), wy(p.y)) : ctx.moveTo(wx(p.x), wy(p.y))));
+    if (closed) ctx.closePath();
+    ctx.stroke();
+  };
+  if (isLayerVisible("guides")) (s.guidePaths || []).forEach((g) => {
+    const selected = g.id === s.selectedGuideId;
+    ctx.strokeStyle = "#c084fc";
+    ctx.lineWidth = selected ? 2.5 : 1.2;
+    ctx.setLineDash([6, 4]);
+    strokePath(g.points, g.closed);
+    ctx.setLineDash([]);
+    let len = 0;
+    const pts = g.closed ? [...g.points, g.points[0]] : g.points;
+    for (let i = 1; i < pts.length; i += 1) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    const p = g.points[Math.floor(g.points.length / 2)] || g.points[0];
+    if (p) {
+      ctx.fillStyle = "#c084fc";
+      ctx.font = selected ? "bold 10px monospace" : "10px monospace";
+      ctx.fillText(`${g.label || "Guide"} · ${len.toFixed(2)} m`, wx(p.x) + 6, wy(p.y) - 6);
+    }
+  });
+  if (s.arrayHighlight?.length > 1) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,204,0,0.55)";
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    strokePath(s.arrayHighlight, false);
+    ctx.restore();
+  }
+
   // Measurements
   if(isLayerVisible("measurements")) measurements.forEach(m => {
     ctx.beginPath();

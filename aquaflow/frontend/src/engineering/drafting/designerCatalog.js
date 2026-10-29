@@ -190,6 +190,7 @@ export const DEFAULT_LAYERS = [
   { key:"measurements", label:"MEASUREMENTS", color:"#ffcc00", visible:true, locked:false },
   { key:"annotations", label:"ANNOTATIONS", color:"#ffcc00", visible:true, locked:false },
   { key:"pipework", label:"PIPEWORK", color:"#8b5cf6", visible:true, locked:false },
+  { key:"guides", label:"GUIDES", color:"#c084fc", visible:true, locked:false },
 ];
 
 export const mergeEngineeringLayers = (layers = []) => DEFAULT_LAYERS.map((fallback) => ({
