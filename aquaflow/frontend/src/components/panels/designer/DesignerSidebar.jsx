@@ -11,6 +11,41 @@ import { LAND_SURFACE_TYPES } from "../../../engineering/siteSurfaces";
 import { setUnderlayLayerVisible, setUnderlayVisible } from "../../../engineering/cadUnderlay";
 import { ICAN_SITE_PROJECT_NAME } from "../../../data/icanSiteEngineeringProject";
 import { POOL_TYPES, TOOLS, FIXTURE_TYPES } from "../../../engineering/drafting/designerCatalog";
+import { DRAFT_COMMANDS } from "../../../engineering/drafting/shapeDraft";
+
+/** One button per drawing command; the draft session draws the given target. */
+export function DraftShapeButtons({ d, target, color = "#7dd3fc" }) {
+  const active = d.draft?.target === target ? d.draft.state.command : null;
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:3, marginTop:6 }}>
+      {DRAFT_COMMANDS.map((cmd) => (
+        <button key={cmd.key} type="button" title={`${cmd.label} — or type ${cmd.aliases[0]} + Enter`}
+          onMouseDown={(e) => e.preventDefault()} onClick={() => d.startDraft(cmd.key, target)}
+          style={{ padding:"5px 2px", cursor:"crosshair", borderRadius:4, fontFamily:"monospace", fontSize:9, fontWeight:active === cmd.key ? 800 : 500,
+            background: active === cmd.key ? "linear-gradient(135deg,#00533f,#073020)" : "#08253a",
+            color: active === cmd.key ? "#a7ffe8" : color, border:`1px solid ${active === cmd.key ? "#00d6a3" : "#1674a8"}` }}>
+          <span style={{ fontSize:13 }}>{cmd.icon}</span><br />{cmd.label.replace("Line / ", "")}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Finish / undo / cancel for the active shape, shown while a draft is running. */
+export function DraftControls({ d }) {
+  if (!d.draft) return null;
+  const btn = (label, onClick, color, border) => (
+    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClick}
+      style={{ padding:4, background:"#06121c", color, border:`1px solid ${border}`, borderRadius:3, fontSize:8, cursor:"pointer", fontFamily:"monospace" }}>{label}</button>
+  );
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4, marginTop:6 }}>
+      {btn("✓ FINISH (Enter)", d.finishDraft, "#7fffd4", "#0a5045")}
+      {btn("↶ POINT (Bksp)", d.undoDraftPoint, "#ffcc00", "#5a4a10")}
+      {btn("✕ CANCEL (Esc)", d.cancelDraft, "#ff9999", "#552222")}
+    </div>
+  );
+}
 
 // AQ-S2-002 — head/pump figures are null until the backend solver supplies them.
 export const HYD_NOT_CALCULATED = "—";
@@ -73,7 +108,7 @@ export function ProjectHeaderSection({ d }) {
 
 
 export function PoolTypeSection({ d }) {
-  const { activeBasin, activeBasinIndex, basinState, basins, changePoolType, isLayerLocked, poolType, pushUndo, safePoolTypes, startCustomPoolDrawing, tool } = d;
+  const { activeBasin, activeBasinIndex, basinState, basins, changePoolType, isLayerLocked, poolType, pushUndo, safePoolTypes } = d;
   return (
     <>
     <div style={{ padding:"8px 10px", borderBottom:"1px solid #0a2030" }}>
@@ -102,14 +137,13 @@ export function PoolTypeSection({ d }) {
           }}>{poolType===t.key ? "●" : t.icon} {t.label}</button>
         ))}
       </div>
-      <button type="button" onClick={startCustomPoolDrawing} style={{
-        width:"100%", marginTop:6, padding:"7px 8px", cursor:"crosshair",
-        background:tool==="polyline"?"linear-gradient(135deg,#00533f,#073020)":"#08253a",
-        color:tool==="polyline"?"#a7ffe8":"#7dd3fc", border:`1px solid ${tool==="polyline"?"#00d6a3":"#1674a8"}`,
-        borderRadius:4, fontFamily:"monospace", fontSize:10, fontWeight:800, textAlign:"left",
-      }}>✎ DRAW CUSTOM POOL</button>
+      <div style={{ color:"#7dd3fc", fontSize:9, fontWeight:800, marginTop:8 }}>✎ DRAW POOL SHAPE</div>
+      <DraftShapeButtons d={d} target="pool" />
+      {d.draft?.target === "pool" && <DraftControls d={d} />}
       <div style={{ color:"#6f8595", fontSize:8, lineHeight:1.5, marginTop:4 }}>
-        Draw any outline: click corners in the plan, then double-click to close it.
+        Click points, or type sizes on the keyboard + Enter: <span style={{ color:"#ffcc00" }}>5</span> = 5 m line toward the cursor,
+        <span style={{ color:"#ffcc00" }}> 5&lt;90</span> = 5 m at 90°, <span style={{ color:"#ffcc00" }}>12,8</span> = rectangle 12 × 8 m.
+        A = arc · C = close · U = undo.
       </div>
     </div>
     </>
@@ -199,7 +233,7 @@ export function ToolsSection({ d }) {
           <div style={{ color:"#556677", fontSize:9, marginBottom:5 }}>TOOLS</div>
           <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
             {TOOLS.map(t => (
-              <button key={t.key} onClick={()=>{ setTool(t.key); cancelDrawing(); }} style={{
+              <button key={t.key} onClick={()=>d.chooseTool(t.key)} style={{
                 padding:"4px 7px", background: tool===t.key?"#003020":"#0a1825",
                 color: tool===t.key?"#00ccaa":"#556677",
                 border:`1px solid ${tool===t.key?"#00aa4444":"#0a2030"}`,
@@ -269,7 +303,8 @@ export function ToolsSection({ d }) {
             )}
           </div>
         )}
-        {tool==="polyline" && (
+        {d.draft?.target === "pool" && <DraftControls d={d} />}
+        {tool==="polyline" && !d.draft && polylinePoints.length > 0 && (
             <div style={{ marginTop:6 }}>
               <button onClick={finishPolyline} disabled={polylinePoints.length < 3} style={{ width:"100%", padding:"4px", background:polylinePoints.length>=3?"#002030":"#081018", color:polylinePoints.length>=3?"#00ccaa":"#334455", border:"1px solid #00aa4444", borderRadius:3, cursor:"pointer", fontSize:9 }}>
                 ✓ Close Polyline ({polylinePoints.length} pts)
@@ -288,18 +323,22 @@ export function ToolsSection({ d }) {
                 {LAND_SURFACE_TYPES.map((surface) => <option key={surface.key} value={surface.key}>{surface.label}</option>)}
               </select>
               <div style={{ color:"#91ad84", fontSize:8, lineHeight:1.5, marginBottom:5 }}>
-                Click the land boundary points. Double-click or choose Close Surface to finish.
+                Pick a shape, then click points or type sizes + Enter. Click the start point or press Enter to close.
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
-                <button type="button" onClick={finishLandSurface} disabled={landDrawPoints.length < 3}
-                  style={{ padding:4, background:landDrawPoints.length >= 3?"#163719":"#081018", color:landDrawPoints.length >= 3?"#b8f59e":"#334455", border:"1px solid #37612b", borderRadius:3, fontSize:8, cursor:"pointer" }}>
-                  CLOSE ({landDrawPoints.length})
-                </button>
-                <button type="button" onClick={cancelDrawing}
-                  style={{ padding:4, background:"#1a0808", color:"#ff9999", border:"1px solid #552222", borderRadius:3, fontSize:8, cursor:"pointer" }}>
-                  CANCEL
-                </button>
-              </div>
+              <DraftShapeButtons d={d} target="land" color="#b8f59e" />
+              {d.draft?.target === "land" && <DraftControls d={d} />}
+              {!d.draft && landDrawPoints.length > 0 && (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, marginTop:4 }}>
+                  <button type="button" onClick={finishLandSurface} disabled={landDrawPoints.length < 3}
+                    style={{ padding:4, background:landDrawPoints.length >= 3?"#163719":"#081018", color:landDrawPoints.length >= 3?"#b8f59e":"#334455", border:"1px solid #37612b", borderRadius:3, fontSize:8, cursor:"pointer" }}>
+                    CLOSE ({landDrawPoints.length})
+                  </button>
+                  <button type="button" onClick={cancelDrawing}
+                    style={{ padding:4, background:"#1a0808", color:"#ff9999", border:"1px solid #552222", borderRadius:3, fontSize:8, cursor:"pointer" }}>
+                    CANCEL
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {(tool==="rectangle" || tool==="circle") && drawStart && (
@@ -319,10 +358,12 @@ export function ToolsSection({ d }) {
                 {safeDepthZones.map((zone) => <option key={zone.key} value={zone.key}>{zone.label} · {zone.depth}m</option>)}
               </select>
               <div style={{ color:"#7890a0", fontSize:8, lineHeight:1.5, marginBottom:5 }}>
-                Click at least three points inside the pool, then validate and close the zone.
+                Pick a shape and draw it inside the pool (click points or type sizes + Enter).
               </div>
               {depthZoneError && <div role="alert" style={{ color:"#ff8888", fontSize:8, marginBottom:5 }}>{depthZoneError}</div>}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+              <DraftShapeButtons d={d} target="depth" />
+              {d.draft?.target === "depth" && <DraftControls d={d} />}
+              {!d.draft && depthDrawPoints.length > 0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, marginTop:4 }}>
                 <button type="button" onClick={finishDepthZone} disabled={depthDrawPoints.length < 3}
                   style={{ padding:4, background:depthDrawPoints.length >= 3?"#002b26":"#081018", color:depthDrawPoints.length >= 3?"#7fffd4":"#334455", border:"1px solid #0a5045", borderRadius:3, fontSize:8, cursor:"pointer" }}>
                   CLOSE ({depthDrawPoints.length})
@@ -331,7 +372,7 @@ export function ToolsSection({ d }) {
                   style={{ padding:4, background:"#1a0808", color:"#ff9999", border:"1px solid #552222", borderRadius:3, fontSize:8, cursor:"pointer" }}>
                   CANCEL
                 </button>
-              </div>
+              </div>}
               {safeDepthZones.find((zone) => zone.key === depthZone)?.points?.length >= 3 && (
                 <button type="button" onClick={() => setDepthZones((zones) => zones.map((zone) => (zone.zone || zone.key) === depthZone ? { ...zone, points:[] } : zone))}
                   style={{ width:"100%", marginTop:4, padding:3, background:"transparent", color:"#ff8888", border:"1px solid #552222", borderRadius:3, fontSize:8, cursor:"pointer" }}>

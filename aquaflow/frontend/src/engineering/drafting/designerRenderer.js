@@ -12,6 +12,78 @@ import { getEngineeringSymbol, drawEngSymbol } from "./designerCatalog";
 import { entityKey } from "./entities";
 import { drawDraftingOverlays } from "./overlays";
 
+const DRAFT_COLORS = { pool: "#00ffcc", land: "#a7e38c", depth: "#7ec8e3" };
+
+function drawTag(ctx, x, y, text, color) {
+  ctx.font = "bold 11px monospace";
+  const w = ctx.measureText(text).width + 8;
+  ctx.fillStyle = "rgba(2,8,16,0.85)";
+  ctx.fillRect(x - w / 2, y - 8, w, 16);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - w / 2, y - 8, w, 16);
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x, y);
+}
+
+/** In-progress shape: dashed rubber band, edge lengths, live length/angle tags, close ring. */
+function drawDraftOverlay(ctx, o, { wx, wy }) {
+  const color = DRAFT_COLORS[o.target] || DRAFT_COLORS.pool;
+  const pts = o.points || [];
+  ctx.save();
+  if (pts.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(wx(pts[0].x), wy(pts[0].y));
+    pts.slice(1).forEach((p) => ctx.lineTo(wx(p.x), wy(p.y)));
+    if (o.closed) { ctx.closePath(); ctx.fillStyle = "rgba(0,255,204,0.07)"; ctx.fill(); }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  (o.guides || []).forEach(({ from, to }) => {
+    ctx.beginPath();
+    ctx.moveTo(wx(from.x), wy(from.y));
+    ctx.lineTo(wx(to.x), wy(to.y));
+    ctx.strokeStyle = "rgba(255,204,0,0.55)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+  if (o.labelEdges && pts.length > 1 && pts.length <= 60) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len > 0.05 &&Math.hypot(wx(b.x) - wx(a.x), wy(b.y) - wy(a.y)) > 50) {
+        ctx.font = "10px monospace";
+        ctx.fillStyle = "#cce8ff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(`${len.toFixed(2)} m`, (wx(a.x) + wx(b.x)) / 2, (wy(a.y) + wy(b.y)) / 2 - 4);
+      }
+    }
+  }
+  pts.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(wx(p.x), wy(p.y), 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+  if (o.start) {
+    ctx.beginPath();
+    ctx.arc(wx(o.start.x), wy(o.start.y), o.nearStart ? 11 : 5, 0, Math.PI * 2);
+    ctx.strokeStyle = o.nearStart ? "#ffcc00" : color;
+    ctx.lineWidth = o.nearStart ? 2.5 : 1.5;
+    ctx.stroke();
+    if (o.nearStart) drawTag(ctx, wx(o.start.x), wy(o.start.y) - 22, "CLOSE", "#ffcc00");
+  }
+  (o.labels || []).forEach((l, i) => drawTag(ctx, wx(l.x) + (i % 2 ? 26 : 0), wy(l.y) - (i % 2 ? 18 : 14), l.text, "#ffcc00"));
+  ctx.restore();
+}
+
 export function renderDesignerCanvas(canvas, s) {
   if (!canvas) return;
   const {
@@ -495,6 +567,8 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
 
     ctx.restore();
   }
+
+  if (s.draftOverlay) drawDraftOverlay(ctx, s.draftOverlay, { wx, wy });
 
   // Draw fixtures using PROFESSIONAL ENGINEERING SYMBOLS
   fixtures.forEach((f, i) => {

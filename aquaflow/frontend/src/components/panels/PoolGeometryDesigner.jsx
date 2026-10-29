@@ -48,6 +48,9 @@ import { editGeometryProperty, geometryMeta as outlineMeta, hitGrip, hitSurfaceV
 import { autoPlaceFixtures, buildFixtureArray } from "../../engineering/drafting/arrays";
 import { angleOf, dynamicInputKey, emptyDynamicInput, resolveDynamicInput } from "../../engineering/drafting/dynamicInput";
 import CommandPalette from "../../engineering/drafting/commandPalette";
+import CommandLineBar from "../../engineering/drafting/CommandLineBar";
+import { commandLineKey, emptyCommandLine, pushHistory } from "../../engineering/drafting/commandLine";
+import { DRAFT_COMMANDS, commandForAlias, createDraft, draftAnchor, draftClick, draftFinish, draftPreview, draftPrompt, draftTyped, draftUndo } from "../../engineering/drafting/shapeDraft";
 import DynamicInputOverlay from "../../engineering/drafting/DynamicInputOverlay";
 import FixturePropertiesPanel from "./designer/FixturePropertiesPanel";
 import { buildBomCsv, buildProjectPayload as composeProjectPayload, downloadTextFile as saveTextFile, safeFileName } from "./designer/designerExport";
@@ -58,6 +61,11 @@ import {
 
 const ownerFnFor = (basins) => (entity) => ownerForPoint(basins, entity);
 const DESIGNER_TYPING_TOOLS = new Set(["pipe"]);
+// Idle command line: letters are captured only once text is typed, or when the key starts a shape alias (F/H stay view keys).
+const ALIAS_START_KEYS = new Set(["L", "P", "R", "C", "E", "A"]);
+const TOOL_DRAFTS = { polyline: "pline", rectangle: "rect", circle: "circle" };
+const DRAFT_TARGET_LABEL = { pool: "pool outline", land: "land surface", depth: "depth zone" };
+const CLOSE_TOLERANCE_PX = 12;
 
 export default function PoolGeometryDesigner() {
   const canvasRef = useRef(null);
@@ -160,6 +168,11 @@ export default function PoolGeometryDesigner() {
   const [selectionBox, setSelectionBox] = useState(null);
   const [dynamicInput, setDynamicInput] = useState(emptyDynamicInput);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // AutoCAD-style shape drawing: one draft session ({ target: pool | land | depth, state }) + command line.
+  const [draft, setDraft] = useState(null);
+  const [draftHover, setDraftHover] = useState(null);
+  const [cmdLine, setCmdLine] = useState(emptyCommandLine);
+  const lastDraftCommandRef = useRef(null);
   const fixtureDragRef = useRef(null);
 
   const selectedIndices = useMemo(() => {
@@ -401,6 +414,16 @@ export default function PoolGeometryDesigner() {
   const resolvePoint = (pt, extra) => resolveDraftPoint(pt, snapCtx(extra));
   const snapPoint = (pt, extra) => resolvePoint(pt, extra).point;
 
+  const draftOverlay = useMemo(() => {
+    if (!draft) return null;
+    const s = draft.state;
+    const preview = draftPreview(s, draftHover?.point || null, { cursorAngleDeg: draftHover?.angleDeg });
+    const start = s.command === "pline" ? s.points[0] || null : null;
+    const nearStart = Boolean(start && s.segments.length >= 2 && draftHover?.point
+      && Math.hypot(draftHover.point.x - start.x, draftHover.point.y - start.y) <= CLOSE_TOLERANCE_PX / zoom);
+    return { ...preview, labelEdges: s.command === "pline", start, nearStart, target: draft.target };
+  }, [draft, draftHover, zoom]);
+
   // Draw canvas
   useEffect(() => {
     const pipeSnap = tool === "pipe" ? pipeSystem.snapInfo : null;
@@ -411,7 +434,7 @@ export default function PoolGeometryDesigner() {
       tool, selectedSurfaceVertex, landDrawPoints, landSurfaceType, drawPreview, geometry, showDepth,
       pipework, fixtures, renderPipes, selectedObject, activeGrip, showDimensions, poolMetrics, params,
       basins, activeBasinIndex, depthZones, depthDrawPoints, depthZone, freeformPoints, drawStart,
-      polylinePoints, selectedFixture, selectedKeys, measurements, selectionBox,
+      polylinePoints, selectedFixture, selectedKeys, measurements, selectionBox, draftOverlay,
       snapResult: (pipeSnap ? pipeSnap.snap : hoverSnap?.snap) || null,
       polarGuide: polar && polarFrom ? { from: polarFrom, angleDeg: polar.angleDeg, locked: polar.locked, label: `${Math.round(polar.angleDeg)}°` } : null,
     });
@@ -421,7 +444,7 @@ export default function PoolGeometryDesigner() {
     selectedSurfaceVertex, landDrawPoints, landSurfaceType, freeformPoints, measurements, zoom, pan, showGrid, showDepth,
     tool, manualPipes, selectedPipeId, selectedNode, renderPipes, showDimensions, depthZones, depthDrawPoints, depthZone,
     drawPreview, canvasViewport, poolMetrics, layers, selectedObject, activeGrip, pipework, params, drawStart, polylinePoints,
-    selectionBox, hoverSnap, pipeSystem.snapInfo,
+    selectionBox, hoverSnap, pipeSystem.snapInfo, draftOverlay,
   ]);
 
   // Canvas coordinate helpers
@@ -632,10 +655,11 @@ export default function PoolGeometryDesigner() {
     setFitAfterCADImport(false);
   }, [fitAfterCADImport, fitView]);
 
-  const finishDepthZone = () => {
+  const finishDepthZone = (drawnPoints) => {
+    const points = Array.isArray(drawnPoints) ? drawnPoints : depthDrawPoints;
     const basinId = activeBasin?.id || primaryBasinId;
     const validation = validateDepthZone(
-      depthDrawPoints,
+      points,
       geometry,
       zonesForBasin(depthZones, basinId, primaryBasinId).filter((zone) => (zone.zone || zone.key) !== depthZone)
     );
@@ -644,7 +668,7 @@ export default function PoolGeometryDesigner() {
       return false;
     }
     // AF-NEXT-010: depth zones are scoped to the basin being edited.
-    setDepthZones((zones) => upsertBasinDepthZone(zones, { zoneKey: depthZone, basinId, primaryId: primaryBasinId, points: depthDrawPoints }));
+    setDepthZones((zones) => upsertBasinDepthZone(zones, { zoneKey: depthZone, basinId, primaryId: primaryBasinId, points }));
     setDepthDrawPoints([]);
     setDrawPreview(null);
     setDepthZoneError("");
@@ -664,6 +688,8 @@ export default function PoolGeometryDesigner() {
     setLandDrawPoints([]);
     setMeasureStart(null);
     setDynamicInput(emptyDynamicInput());
+    setDraft(null);
+    setDraftHover(null);
     cancelDepthZone();
   };
 
@@ -679,11 +705,136 @@ export default function PoolGeometryDesigner() {
     setDepthZoneError("");
     setSelectionBox(null);
     setDynamicInput(emptyDynamicInput());
+    setDraft(null);
+    setDraftHover(null);
     cancelPipeDrawing();
     setSelectedPipeId(null);
     setSelectedNode(null);
     setSelectedSegment(null);
     setSelectedSurfaceVertex(null);
+  };
+
+  // ── Shape drawing (shapeDraft.js) driven by clicks and the command line ─────
+  const logLine = (text, tone) => setCmdLine((current) => pushHistory(current, text, tone));
+  const defaultDraftTarget = () => (tool === "land" ? "land" : tool === "depth" ? "depth" : "pool");
+
+  const startDraft = (command, target = defaultDraftTarget()) => {
+    if (target === "pool" && isLayerLocked("pool_outline")) { logLine("The POOL OUTLINE layer is locked", "error"); return; }
+    if (target === "land" && isLayerLocked("landscape")) { logLine("The LANDSCAPE layer is locked", "error"); return; }
+    const info = DRAFT_COMMANDS.find((c) => c.key === commandForAlias(command));
+    if (!info) { logLine(`Unknown command: ${command}`, "error"); return; }
+    cancelDrawing();
+    cancelPipeDrawing();
+    if (target === "pool") { setTool(info.key === "rect" ? "rectangle" : info.key === "circle" ? "circle" : "polyline"); setSelection([]); setSelectedObject("pool"); }
+    setDraft({ target, state: createDraft(info.key) });
+    lastDraftCommandRef.current = { command: info.key, target };
+    logLine(`${info.label.toUpperCase()} → ${DRAFT_TARGET_LABEL[target]}`, "input");
+  };
+
+  const finishDraftTarget = (target, res) => {
+    const pts = res.points.map((p) => ({ x: Number(p.x.toFixed(4)), y: Number(p.y.toFixed(4)) }));
+    if (target === "land") return finishLandSurface(pts);
+    if (target === "depth") {
+      const ok = finishDepthZone(pts);
+      if (!ok) logLine("Depth zone must lie inside the pool and not overlap another zone", "error");
+      return ok;
+    }
+    pushUndo(`Draw ${res.kind} pool`);
+    const plain = res.segments.every((g) => g.type === "line");
+    if (res.kind === "rect" && plain) {
+      const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      setPoolType("rectangular");
+      setParams((p) => ({ ...p, width: Number((x1 - x0).toFixed(3)), length: Number((y1 - y0).toFixed(3)) }));
+      setGeometry({ type: "rectangle", points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], closed: true });
+    } else if (res.kind === "circle" && res.segments[0]?.center) {
+      const { center, radius } = res.segments[0];
+      setPoolType("circular");
+      setParams((p) => ({ ...p, radius: Number(radius.toFixed(3)) }));
+      setGeometry({ type: "circle", center: { x: center.x, y: center.y }, radius: Number(radius.toFixed(3)) });
+    } else {
+      setPoolType("freeform");
+      setGeometry({ type: "freeform", points: pts, closed: true });
+    }
+    setFreeformPoints([]);
+    setSelectedObject("pool");
+    return true;
+  };
+
+  const applyDraftStep = (r) => {
+    if (!draft) return;
+    if (r.error) { logLine(r.error, "error"); return; }
+    if (r.done) {
+      const target = draft.target;
+      setDraft(null);
+      setDraftHover(null);
+      setHoverSnap(null);
+      if (finishDraftTarget(target, r.done) !== false) {
+        logLine(`✓ ${r.done.summary}`, "ok");
+        setSaveStatus(`${r.done.summary} · Enter repeats the last shape · Ctrl+Z undoes.`);
+      }
+      setTool("select");
+      return;
+    }
+    setDraft({ ...draft, state: r.state });
+  };
+
+  const cancelDraft = () => {
+    setDraft(null);
+    setDraftHover(null);
+    setHoverSnap(null);
+    setTool("select");
+    logLine("*Cancel*", "prompt");
+  };
+
+  const draftCursorOpts = () => ({ cursor: draftHover?.point || null, cursorAngleDeg: draftHover?.angleDeg });
+  const submitDraftText = (text) => {
+    if (!draft) {
+      const cmd = commandForAlias(text);
+      if (cmd) startDraft(cmd);
+      else logLine(`Unknown command "${text}" · try L, REC, C, POL, EL or A`, "error");
+      return;
+    }
+    if (text.toUpperCase() === "U") { setDraft({ ...draft, state: draftUndo(draft.state) }); return; }
+    applyDraftStep(draftTyped(draft.state, text, draftCursorOpts()));
+  };
+  const finishDraft = () => { if (draft) applyDraftStep(draftFinish(draft.state)); };
+
+  // Selecting the old pool tools or the land/depth tools starts the matching shape session.
+  const chooseTool = (key) => {
+    cancelDrawing();
+    setTool(key);
+    if (TOOL_DRAFTS[key]) startDraft(TOOL_DRAFTS[key], "pool");
+    else if (key === "land" || key === "depth") {
+      if (!(key === "land" && isLayerLocked("landscape"))) {
+        setDraft({ target: key, state: createDraft("pline") });
+        lastDraftCommandRef.current = { command: "pline", target: key };
+      }
+    }
+  };
+
+  const handleCommandLineKey = (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return false;
+    if (useProjectStore.getState().workspace?.activePanel && useProjectStore.getState().workspace.activePanel !== "geometry") return false;
+    if (tool === "pipe" && !draft) return false;
+    const drawingNow = Boolean(draft);
+    const hadText = Boolean(cmdLine.text);
+    const k = e.key && e.key.length === 1 ? e.key.toUpperCase() : "";
+    const idleCapture = !drawingNow && !hadText && ALIAS_START_KEYS.has(k);
+    if (!drawingNow && !hadText && (e.key === "Escape" || (e.key === "Enter" && !lastDraftCommandRef.current))) return false;
+    const { state, action, handled } = commandLineKey(cmdLine, e.key, { drawing: drawingNow, idleCapture });
+    if (!handled) {
+      if (drawingNow && e.key === "Backspace") { e.preventDefault(); setDraft({ ...draft, state: draftUndo(draft.state) }); return true; }
+      return false;
+    }
+    e.preventDefault();
+    setCmdLine(state);
+    if (!action) return true;
+    if (action.type === "submit") submitDraftText(action.text);
+    else if (action.type === "finish") finishDraft();
+    else if (action.type === "repeat") { const last = lastDraftCommandRef.current; if (last) startDraft(last.command, last.target); }
+    else if (action.type === "cancel" && drawingNow && !hadText) cancelDraft();
+    return true;
   };
 
   // ── AF-CAD-033: typed entry while a pipe waits for its next point ───────────
@@ -725,6 +876,7 @@ export default function PoolGeometryDesigner() {
     if (paletteOpen) return;
     if (ctrl && !e.shiftKey && key === "z") { e.preventDefault(); handleUndo(); return; }
     if (ctrl && (key === "y" || (e.shiftKey && key === "z"))) { e.preventDefault(); handleRedo(); return; }
+    if (handleCommandLineKey(e)) return;
     if (handleDynamicKey(e)) return;
     if (e.code === "Space") { e.preventDefault(); setIsSpaceDown(true); }
     if (ctrl && key === "a") { e.preventDefault(); selectAllFixtures(); return; }
@@ -826,6 +978,14 @@ export default function PoolGeometryDesigner() {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      return;
+    }
+    if (draft) {
+      if (e.button !== 0) return;
+      const anchor = draftAnchor(draft.state);
+      const res = resolvePoint(rawWorld, anchor ? { from: anchor, polar: true, shift: e.shiftKey } : undefined);
+      const angle = res.polar?.angleDeg ?? (anchor ? angleOf(anchor, res.point) : undefined);
+      applyDraftStep(draftClick(draft.state, res.point, { closeTolerance: CLOSE_TOLERANCE_PX / zoom, tangentDeg: angle }));
       return;
     }
     if (tool === "pipe") { onPipeClick(rawWorld, { shift: e.shiftKey }); setDynamicInput(emptyDynamicInput()); return; }
@@ -968,14 +1128,19 @@ export default function PoolGeometryDesigner() {
 
   const onCanvasMouseMove = (e) => {
     const rawWorld = toWorld(e.clientX, e.clientY);
-    const polylineFrom = tool === "polyline" && polylinePoints.length ? polylinePoints.at(-1) : null;
+    const draftFrom = draft ? draftAnchor(draft.state) : null;
+    const polylineFrom = draft ? draftFrom : tool === "polyline" && polylinePoints.length ? polylinePoints.at(-1) : null;
     const resolved = resolvePoint(rawWorld, polylineFrom ? { from: polylineFrom, polar: true, shift: e.shiftKey } : undefined);
     const world = resolved.point;
     setCursorWorld({ x: world.x, y: world.y });
     const { cx, cy } = toCanvas(e.clientX, e.clientY);
     setCursorScreen({ x: cx, y: cy });
-    if (tool !== "pipe" && tool !== "select") setHoverSnap({ snap: resolved.snap, polar: resolved.polar, from: polylineFrom });
+    if (draft || (tool !== "pipe" && tool !== "select")) setHoverSnap({ snap: resolved.snap, polar: resolved.polar, from: polylineFrom });
     else if (hoverSnap) setHoverSnap(null);
+    if (draft) {
+      setDraftHover({ point: world, angleDeg: resolved.polar?.angleDeg ?? (draftFrom ? angleOf(draftFrom, world) : undefined) });
+      if (!isPanning) return;
+    }
 
     if (selectionBox) { setSelectionBox((box) => (box ? { ...box, end: rawWorld } : box)); return; }
     if (tool === "select" && selectedNode && e.buttons === 1) {
@@ -1075,8 +1240,8 @@ export default function PoolGeometryDesigner() {
     setDrawPreview(null);
   };
 
-  const finishLandSurface = () => {
-    const points = dedupeSurfacePoints(landDrawPoints);
+  const finishLandSurface = (drawnPoints) => {
+    const points = dedupeSurfacePoints(Array.isArray(drawnPoints) ? drawnPoints : landDrawPoints);
     if (points.length < 3) return false;
     pushUndo("Draw land surface");
     const preset = LAND_SURFACE_TYPES.find((entry) => entry.key === landSurfaceType) || LAND_SURFACE_TYPES[0];
@@ -1248,13 +1413,8 @@ export default function PoolGeometryDesigner() {
   };
 
   const startCustomPoolDrawing = () => {
-    pushUndo();
-    cancelDrawing();
-    setPoolType("freeform");
-    setTool("polyline");
-    setSelection([]);
-    setSelectedObject("pool");
-    setSaveStatus("CUSTOM POOL: click each boundary point, then double-click or choose Close Polyline.");
+    startDraft("pline", "pool");
+    setSaveStatus("CUSTOM POOL: click points or type a length + Enter · A = arc · C = close · U = undo.");
   };
 
   const setNumericParam = (key, value, min, max) => {
@@ -1335,7 +1495,8 @@ export default function PoolGeometryDesigner() {
   // ── AF-CAD-033: every designer command, for the Ctrl+K palette ──────────────
   const hasFixtureSelection = selection.length > 0;
   const paletteCommands = [
-    ...TOOLS.map((t) => ({ id: `tool:${t.key}`, group: "Tool", label: t.label, aliases: [t.key], run: () => { setTool(t.key); cancelDrawing(); } })),
+    ...TOOLS.map((t) => ({ id: `tool:${t.key}`, group: "Tool", label: t.label, aliases: [t.key], run: () => chooseTool(t.key) })),
+    ...DRAFT_COMMANDS.map((c) => ({ id: `draw:${c.key}`, group: "Draw", label: c.label, aliases: c.aliases, shortcut: c.aliases[0], run: () => startDraft(c.key) })),
     { id: "edit:undo", group: "Edit", label: "Undo", shortcut: "Ctrl+Z", enabled: historyApi.canUndo, run: handleUndo },
     { id: "edit:redo", group: "Edit", label: "Redo", shortcut: "Ctrl+Y", enabled: historyApi.canRedo, run: handleRedo },
     { id: "edit:delete", group: "Edit", label: "Delete selection", shortcut: "Del", run: deleteCurrentSelection },
@@ -1385,9 +1546,17 @@ export default function PoolGeometryDesigner() {
     setSelectedSurfaceVertex, setShowCADImport, setShowLayerPanel, setTool, showDimensions, showLayerPanel, showSavedProjects,
     siteSurfaces, solvedHydraulics, startCustomPoolDrawing, toggleLayerLocked, toggleLayerVisible, toggleSavedProjectBrowser, tool,
     updateCadUnderlay, updateSelectedSurface,
+    draft, startDraft, finishDraft, cancelDraft, chooseTool,
+    undoDraftPoint: () => draft && setDraft({ ...draft, state: draftUndo(draft.state) }),
   };
 
-  const drawing = drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing;
+  const drawing = draft || drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0 || pipeSystem.drawing;
+  const draftLengthHint = (() => {
+    const from = draft ? draftAnchor(draft.state) : null;
+    const p = draftHover?.point;
+    if (!from || !p) return "";
+    return `${Math.hypot(p.x - from.x, p.y - from.y).toFixed(3)} m < ${Math.round(draftHover.angleDeg ?? angleOf(from, p))}°`;
+  })();
   const pipeOverlay = tool === "pipe" ? pipeSystem.snapInfo : hoverSnap;
   const selectionLabel = selection.length > 1 ? `${selection.length} FIXTURES`
     : selectedObject === "fixture" && sf ? sf.label : selectedObject === "surface" && selectedSurface ? selectedSurface.label : selectedObject === "pool" ? "POOL" : "NONE";
@@ -1426,7 +1595,8 @@ export default function PoolGeometryDesigner() {
         <ProjectOutputSection d={d} />
       </div>
 
-      {/* Main canvas */}
+      {/* Main canvas + command line */}
+      <div style={{ flex:1, minWidth:0, minHeight:0, display:"flex", flexDirection:"column" }}>
       <div ref={canvasHostRef} style={{ flex:1, minWidth:0, minHeight:0, position:"relative", overflow:"hidden" }}>
         <div style={{ position: "absolute", top: 10, left: 10, zIndex: 20, display: "flex", gap: 8, alignItems: "center", pointerEvents: "none" }}>
           <div style={{ padding: "5px 8px", borderRadius: 6, background: "rgba(2,8,16,0.88)", border: "1px solid rgba(0,255,204,0.45)", color: "#7fffd4", fontSize: 10, fontFamily: "monospace", fontWeight: 800, boxShadow: "0 0 12px rgba(0,255,204,0.16)" }}>
@@ -1459,6 +1629,7 @@ export default function PoolGeometryDesigner() {
           onWheel={onCanvasWheel}
           onDoubleClick={(e) => {
             const w = snapPoint(toWorld(e.clientX, e.clientY));
+            if (draft) { if (draft.state.command === "pline") finishDraft(); return; }
             if (tool === "pipe") { onPipeDoubleClick(w); setDynamicInput(emptyDynamicInput()); return; }
             if (tool === "depth") { finishDepthZone(); return; }
             if (tool === "polyline") { finishPolyline(); return; }
@@ -1521,7 +1692,8 @@ export default function PoolGeometryDesigner() {
         </div>
 
         {/* Info overlay */}
-        <div style={{ position:"absolute", bottom:8, left:8, background:"rgba(0,0,0,0.7)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#334455" }}>
+        <div style={{ position:"absolute", bottom:30, left:8, background:"rgba(0,0,0,0.7)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#334455" }}>
+          {draft ? <span style={{ color:"#7ec8e3" }}>Drawing {DRAFT_TARGET_LABEL[draft.target]}: click points or type a length / size + Enter · Enter or Space finishes · Backspace undoes a point · Esc cancels</span> : <>
           {tool==="select" && "Drag grips to stretch · Drag pool to move · Shift+click adds · drag on empty space (or Ctrl+drag) selects: →window ←crossing · Ctrl+G groups · Del deletes · Ctrl+D duplicates · Ctrl+K commands"}
           {tool==="nozzle" && "Click on pool to place nozzle"}
           {tool==="light"  && "Click on pool to place light fixture"}
@@ -1535,6 +1707,7 @@ export default function PoolGeometryDesigner() {
           {tool==="measure"&& "Click two points to measure distance"}
           {tool==="delete" && "Click a fixture to delete it"}
           {tool==="depth"  && "Click to set depth zone"}
+          </>}
         </div>
 
         {drawPreview && (drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0) && (
@@ -1562,6 +1735,15 @@ export default function PoolGeometryDesigner() {
         <div style={{ position:"absolute", bottom:8, right:8, background:"rgba(0,0,0,0.72)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#7ab", fontFamily:"monospace" }}>
           TOOL {tool.toUpperCase()}&nbsp;&nbsp; X {cursorWorld.x.toFixed(3)} m&nbsp;&nbsp; Y {cursorWorld.y.toFixed(3)} m&nbsp;&nbsp; ZOOM {Math.round(zoom)} px/m&nbsp;&nbsp; SNAP {snapToGrid ? gridStep + "m" : "OFF"}&nbsp;&nbsp; OSNAP {osnap ? "ON" : "OFF"}{pipeOverlay?.snap?.mode ? ` (${pipeOverlay.snap.label})` : ""}&nbsp;&nbsp; DRAW {drawing ? "ACTIVE" : "IDLE"}&nbsp;&nbsp; LAYERS {layers.filter(l=>l.visible).length}/{layers.length}&nbsp;&nbsp; SELECTED {selectionLabel}
         </div>
+      </div>
+      <CommandLineBar
+        prompt={draft ? draftPrompt(draft.state) : null}
+        text={cmdLine.text}
+        history={cmdLine.history}
+        lengthHint={draftLengthHint}
+        onOption={(key) => submitDraftText(key)}
+        onCommand={(key) => startDraft(key)}
+      />
       </div>
     </div>
   );

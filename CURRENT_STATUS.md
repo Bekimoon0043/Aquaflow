@@ -1,5 +1,13 @@
 # AquaFlow Studio — Current Status
 
+**2026-10-29: AquaFlow Studio 1.2.67 — AutoCAD-style drawing in the Site & Basin Designer**
+
+- **Why:** typed lengths only worked for pipes; pool, land and depth outlines could only be clicked. Research: `reports/AutoCAD drafting methods for the basin designer.md`.
+- **Shape engine** `engineering/drafting/shapeDraft.js` (pure, 40 tests): Polyline (line + tangent / 3-point / radius arcs, Close, Undo, click start to close), Rectangle (corners, `12,8`, Dimensions, Fillet), Circle (radius, Diameter, 2P, 3P), Polygon (sides, inscribed/circumscribed), Ellipse, Arc. Typed `5`, `5<30`, `@dx,dy`, `x,y`.
+- **Command line** under the plan (`commandLine.js`, `CommandLineBar.jsx`, 11 tests): prompt with clickable options, typed text, history, live length/angle; idle shape buttons; aliases L, PL, REC, C, POL, EL, A; Enter/Space submits or finishes, empty Enter repeats, Backspace undoes a point, Esc clears then cancels.
+- **Designer:** one draft session for pool / land / depth targets; sidebar shape buttons for each; the Rectangle/Circle/Polyline/Land/Depth tools start it; rubber band with edge lengths and a CLOSE ring. A rectangle stays a rectangular pool (W × L params), a circle a circular one; other shapes become freeform. Snaps and 15° polar tracking still apply.
+- **Verified** in a headless browser: `REC` → corner → `12,8` → 12 × 8 m (96 m²); `L` → 5 → 4 → A → C closed shape; `C` → 4 → R 4 m. Screenshots `Desktop/Designer_Drawing_*.png`.
+
 **2026-10-27 (evening): Green Tree Fountain from the user's concept sheet, CSV schedule and PDF plan**
 
 - **New site:** `Desktop/Green_Tree_Fountain.aquapkg`, built by `frontend/scripts/build-green-tree.mjs` from `frontend/scripts/data/green-tree-nozzles.csv` (the user's 65-nozzle schedule, verbatim).
