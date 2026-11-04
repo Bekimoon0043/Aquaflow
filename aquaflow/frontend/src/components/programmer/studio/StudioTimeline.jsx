@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { groupFlag, snapBeat } from './showModel';
 import { deviceRows, worstLevel } from './plcLimits';
+import { CAMERA_ROW_HEIGHT, CameraLaneControls, CameraLaneRow } from '../../preview/camera/CameraLane';
 
 const ROW = 42, HEADER = 32, LABEL = 205;
 function Waveform({ buffer, zoom, offset, width }) {
@@ -37,8 +38,11 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
     window.addEventListener('keydown', close);
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', close); };
   }, [menu]);
+  const [cameraOpen, setCameraOpen] = useState(true);
+  const [cameraKeyId, setCameraKeyId] = useState(null);
   const selection = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const rowTop = HEADER + (audioBuffer ? 44 : 0);
+  const laneTop = HEADER + (audioBuffer ? 44 : 0);
+  const rowTop = laneTop + (cameraOpen ? CAMERA_ROW_HEIGHT : 0);
   const end = Math.max(30, audioBuffer?.duration || 0, ...studio.recipes.map(r => r.start + r.duration), ...studio.legacyClips.map(c => c.startTime + c.duration));
   const duration = Math.ceil((end + 5) / 10) * 10;
   const groupById = useMemo(() => new Map(studio.groups.map(g => [g.id, g])), [studio.groups]);
@@ -109,12 +113,14 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
           {plcCheck.counts.info > 0 && <p>{plcCheck.counts.info} note(s) about clips the PLC skips or simplifies are shown on the clips.</p>}
         </div>}</span>}
       <button onClick={() => setBeatSnap(!beatSnap)} aria-pressed={beatSnap}>Beat snap</button>
+      <button onClick={() => setCameraOpen(!cameraOpen)} aria-pressed={cameraOpen} title="Show the Camera lane: keyframed camera moves for the 3D view and video export">🎥 Camera</button>
       <button onClick={() => onMarker(time)}>+ Marker</button>
       {onPatternBuilder && <button className="sp-pattern-builder-open" onClick={onPatternBuilder} title="Build a wave, chase, ripple… with live 3D preview">✦ Pattern builder</button>}{stripExtras}
       <span>{selectedIds.length} selected</span><button disabled={!selectedIds.length} onClick={onCopy}>Copy</button><button onClick={onPaste}>Paste</button><button disabled={!selectedIds.length} onClick={onDuplicate}>Duplicate</button><button disabled={!selectedIds.length} onClick={onDelete}>Delete</button>
       <span className="sp-grow" /><button onClick={() => setZoom(Math.max(2, zoom / 1.4))}>−</button><span>{zoom.toFixed(0)} px/s</span><button onClick={() => setZoom(Math.min(180, zoom * 1.4))}>+</button>
       <button onClick={() => { setZoom(Math.max(2, (scroll.width - LABEL - 20) / duration)); if (ref.current) ref.current.scrollLeft = 0; }}>Fit show</button>
     </div>
+    {cameraOpen && <CameraLaneControls time={time} onSeek={onSeek} selectedId={cameraKeyId} onSelectKey={setCameraKeyId} />}
     <div className="sp-timeline-scroll" ref={ref} tabIndex={0} onScroll={e => { const { scrollLeft: x, scrollTop: y } = e.currentTarget; setScroll(s => ({ ...s, x, y })); }}
       onPointerDown={e => {
         if (e.button !== 0 || e.target.closest('button,.sp-track-label,.sp-ruler,input')) return;
@@ -130,6 +136,8 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
           {Array.from({ length: Math.ceil(duration / interval) + 1 }, (_, n) => n * interval).filter(t => t * zoom + LABEL >= scroll.x && t * zoom < scroll.x + scroll.width).map(t => <span className="sp-tick" key={t} style={{ left: LABEL + t * zoom }}>{t.toFixed(0)}s</span>)}
         </div>
         {audioBuffer && <Waveform buffer={audioBuffer} zoom={zoom} offset={Math.max(0, scroll.x - LABEL)} width={scroll.width} />}
+        {cameraOpen && <CameraLaneRow top={laneTop} zoom={zoom} labelWidth={LABEL} scrollX={scroll.x} width={LABEL + duration * zoom} time={time}
+          onSeek={t => onSeek(Math.min(duration, t))} selectedId={cameraKeyId} onSelectKey={setCameraKeyId} />}
         {visible.map((row, offset) => <div key={row.key} className={`sp-track ${row.group ? 'sp-track-group' : ''}`} style={{ top: rowTop + (start + offset) * ROW, height: ROW, width: LABEL + duration * zoom }}
           onDoubleClick={e => { if (!row.group || !onAddPattern || e.target.closest('.sp-clip,.sp-track-label')) return; onAddPattern(row.id, snap(timeAt(e))); }}>
           <div className="sp-track-label" style={{ left: scroll.x, width: LABEL, paddingLeft: 8 + (row.depth || 0) * 12 }}>

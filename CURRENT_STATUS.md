@@ -1,5 +1,13 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-04: AquaFlow Studio 1.2.69 - Depence-style camera animation and reliable 3D zoom**
+
+- **Why:** the 3D view only had hard-coded fly paths round one point and a wheel zoom limited to 3-25 m. Research: `reports/Depence camera animation for AquaFlow.md`.
+- **Camera track:** `preview/camera/cameraTrack.js` (keys with position, target, FOV, ease; Catmull-Rom path; 8 site-sized moves), saved in `render.cameraTrack` with the project and .aquapkg. Sampled at show time, so video export is frame-exact.
+- **Show timeline Camera lane** (`preview/camera/CameraLane.jsx`): diamonds to drag or click, + Camera key, Camera moves (including Rail along a guide line), Saved view -> key, View through camera, Keep horizon level, undo/redo, key inspector. Path and key markers in 3D (hidden in video). "Free view - Back to camera" chip after a free look.
+- **Navigation** (`preview/camera/navMath.js`): zoom toward the cursor, eased, limits from site size; pivot orbit, right-drag pan, double-click pivot, Shift+wheel lens, F frame all, Home; Ctrl+1..9 / 1..9 saved views. The editor uses the same zoom rule. F over a 3D view no longer also fits the 2D plan.
+- **Verified** in a headless browser with real mouse and keys on Odaa Tree (`Desktop/Camera_Anim_*.png`); all 1,817 frontend tests pass. Not checked by hand: the Studio's own 3D view following the track (scene test only), real trackpad, a finished video through the camera.
+
 **2026-10-29: AquaFlow Studio 1.2.67 — AutoCAD-style drawing in the Site & Basin Designer**
 
 - **Why:** typed lengths only worked for pipes; pool, land and depth outlines could only be clicked. Research: `reports/AutoCAD drafting methods for the basin designer.md`.

@@ -43,6 +43,10 @@
  */
 
 import * as THREE from "three";
+import {
+  FOV_MAX, FOV_MIN, clampDistance, dampTo, distanceLimits, frameBounds, rayPlaneY, siteBounds, wheelNotches, zoomStep,
+} from "./camera/navMath";
+import { cameraPathPolyline, normalizeCameraTrack, sampleCameraTrack } from "./camera/cameraTrack";
 // Basin / water-surface / site-surface construction lives in sceneBasin.js.
 import { buildPool, disposeSiteSurfaces, buildSiteSurfaces, buildWaterSurface, setCadUnderlay } from "./sceneBasin";
 // Environment lights, shadows, sky, underwater + engineering lights: sceneLighting.js.
@@ -126,6 +130,7 @@ export const ENVIRONMENTS = RE_ENVIRONMENTS;   // sourced from the rendering eng
 export const CAMERA_MODES  = {
   ORBIT:"orbit", TOP:"top", FRONT:"front",
   AERIAL:"aerial", FLYTHROUGH:"flythrough", DRAMATIC:"dramatic", AUDIENCE:"audience",
+  ANIMATED:"animated",
 };
 export const RENDER_QUALITY = { LOW:"low", MEDIUM:"medium", HIGH:"high" };
 
@@ -1185,6 +1190,9 @@ export class FountainScene {
     this.orbitHeight = 7;
     this.orbitRadius = 14;
     this.orbitAuto   = true;
+    // The orbit pivot: the camera circles it, zooms toward it, and pans move it.
+    this.orbitTarget = { x: 0, y: 3, z: 0 };
+    this._navAnim    = null;   // active zoom / fly animation, stepped in the ORBIT branch
     this._isDragging = false;
     this._pathTime   = 0;
 
@@ -2807,6 +2815,16 @@ export class FountainScene {
       this._editor?.update?.();
       return;
     }
+    if (this.cameraMode === CAMERA_MODES.ANIMATED) {
+      const frame = sampleCameraTrack(this._cameraTrack, this._cameraTime || 0);
+      if (frame) {
+        cam.position.set(frame.position.x, frame.position.y, frame.position.z);
+        cam.up.set(0, 1, 0);
+        cam.lookAt(frame.target.x, frame.target.y, frame.target.z);
+        if (frame.roll && this._horizonLock === false) cam.rotateZ((frame.roll * Math.PI) / 180);
+        this._setLens(frame.fov);
+      }
+    } else {
     const cinematic = [CAMERA_MODES.AERIAL, CAMERA_MODES.FLYTHROUGH, CAMERA_MODES.DRAMATIC, CAMERA_MODES.AUDIENCE];
     if (cinematic.includes(this.cameraMode)) {
       this._pathTime = (this._pathTime + delta*0.08) % 1;
@@ -2816,9 +2834,11 @@ export class FountainScene {
       const k = 1 - Math.pow(1 - 0.025, Math.max(0, delta) * 60);
       if (cp) { cam.position.lerp(cp.pos, k); cam.lookAt(cp.look); }
     } else if (this.cameraMode === CAMERA_MODES.ORBIT) {
+      if (!this._baking) this._stepNav(delta);
       if (this.orbitAuto) this.orbitAngle += delta*0.055;
-      cam.position.set(Math.cos(this.orbitAngle)*this.orbitRadius, this.orbitHeight, Math.sin(this.orbitAngle)*this.orbitRadius);
-      cam.lookAt(0, 3, 0);
+      const t = this.orbitTarget || { x: 0, y: 3, z: 0 };
+      cam.position.set(t.x + Math.cos(this.orbitAngle)*this.orbitRadius, this.orbitHeight, t.z + Math.sin(this.orbitAngle)*this.orbitRadius);
+      cam.lookAt(t.x, t.y, t.z);
     } else if (this.cameraMode === CAMERA_MODES.TOP) {
       cam.position.set(0, 25, 0.01); cam.lookAt(0,0,0);
     } else if (this.cameraMode === CAMERA_MODES.FRONT) {
@@ -2829,6 +2849,7 @@ export class FountainScene {
       cam.position.set(v.position.x, v.position.y, v.position.z);
       cam.lookAt(v.target.x, v.target.y, v.target.z);
     }
+    }
   }
 
   _setupEvents() {
@@ -2836,45 +2857,269 @@ export class FountainScene {
     // When the editor owns the viewport it also owns navigation (Depence's scheme:
     // ALT+drag orbits, right-drag pans, wheel dollies toward the picked point). The
     // legacy spin-on-drag would fight it, so every handler below stands down.
+    //
+    // Viewer navigation: left-drag orbits the pivot, right/middle-drag pans it, the wheel
+    // zooms toward the point under the cursor (Shift+wheel = lens zoom), double-click sets
+    // the pivot, and over the canvas +/− zoom, F frames the site, Home resets the view.
     this._onDown = e => {
       if (this._editorMode) return;
-      this._isDragging=true; this._dragStart={x:e.clientX,y:e.clientY};
+      // A plain click must not drop the animated camera; the first drag movement takes over.
+      if (this.cameraMode !== CAMERA_MODES.ANIMATED) this._takeOverCamera();
+      this._isDragging = true;
+      this._dragMode = (e.button === 1 || e.button === 2) ? "pan" : "orbit";
+      this._dragStart = { x: e.clientX, y: e.clientY };
+      if (e.button === 1) e.preventDefault();
     };
     this._onMove = e => {
-      if (this._editorMode) return;
-      if (!this._isDragging) return;
-      const dx=e.clientX-this._dragStart.x, dy=e.clientY-this._dragStart.y;
-      this._dragStart={x:e.clientX,y:e.clientY};
-      this.orbitAngle += dx*0.005;
-      this.orbitHeight = Math.max(1, Math.min(25, this.orbitHeight - dy*0.04));
-      this.orbitAuto=false; this.cameraMode=CAMERA_MODES.ORBIT;
+      this._hover = true;
+      if (this._editorMode || !this._isDragging) return;
+      const dx = e.clientX - this._dragStart.x, dy = e.clientY - this._dragStart.y;
+      if (!dx && !dy) return;
+      this._dragStart = { x: e.clientX, y: e.clientY };
+      this._takeOverCamera();
+      if (this._dragMode === "pan") this._panBy(dx, dy);
+      else this._orbitBy(dx, dy);
     };
-    this._onUp = () => { this._isDragging=false; };
+    this._onUp = () => { this._isDragging = false; };
+    this._onLeave = () => { this._isDragging = false; this._hover = false; };
     this._onWheel = e => {
       if (this._editorMode) return;
-      this.orbitRadius = Math.max(3, Math.min(25, this.orbitRadius + e.deltaY*0.012));
+      e.preventDefault();
+      const notches = wheelNotches(e.deltaY, e.deltaMode);
+      if (!notches) return;
+      this._takeOverCamera();
+      if (e.shiftKey) {
+        const fov = Math.max(FOV_MIN, Math.min(FOV_MAX, (this.camera?.fov || DEFAULT_FOV) * zoomStep(notches)));
+        this._setLens(fov);
+        return;
+      }
+      this._zoomBy(zoomStep(notches), this._pickNavPoint(e.clientX, e.clientY));
     };
+    this._onDblClick = e => {
+      if (this._editorMode) return;
+      const p = this._pickNavPoint(e.clientX, e.clientY);
+      if (p) this.setOrbitPivot(p);
+    };
+    this._onContextMenu = e => { if (!this._editorMode) e.preventDefault(); };
+    this._onKey = e => {
+      if (this._editorMode || !this._hover || e.metaKey || e.altKey) return;
+      const tag = document.activeElement?.tagName;
+      if (tag && /^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+      // Saved views (Depence-style): Ctrl+1..9 stores the current view, 1..9 flies to it.
+      const slot = /^Digit([1-9])$/.exec(e.code || "")?.[1];
+      if (slot && !e.shiftKey) {
+        if (e.ctrlKey) this.onSaveViewSlot?.(Number(slot), this.getCameraState());
+        else this.onRecallViewSlot?.(Number(slot));
+        e.preventDefault();
+        return;
+      }
+      if (e.ctrlKey) return;
+      if (e.key === "+" || e.key === "=") { this._takeOverCamera(); this._zoomBy(zoomStep(-1), null); }
+      else if (e.key === "-" || e.key === "_") { this._takeOverCamera(); this._zoomBy(zoomStep(1), null); }
+      else if (e.key === "f" || e.key === "F") this.frameAll();
+      else if (e.key === "Home") this.resetView();
+      else return;
+      e.preventDefault();
+    };
+    // Touch: one finger orbits, two fingers pinch-zoom about their midpoint and pan.
+    const touchMid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2,
+      d: Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY) });
     this._onTouchstart = e => {
       if (this._editorMode) return;
-      if(e.touches[0]) this._dragStart={x:e.touches[0].clientX,y:e.touches[0].clientY}; this._isDragging=true;
+      this._takeOverCamera();
+      if (e.touches.length >= 2) { this._pinch = touchMid(e.touches); this._isDragging = false; return; }
+      if (e.touches[0]) { this._dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; this._dragMode = "orbit"; this._isDragging = true; }
     };
     this._onTouchmove = e => {
       if (this._editorMode) return;
-      if(!this._isDragging || !e.touches[0]) return;
-      const dx=e.touches[0].clientX-this._dragStart.x, dy=e.touches[0].clientY-this._dragStart.y;
-      this._dragStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
-      this.orbitAngle += dx*0.005;
-      this.orbitHeight = Math.max(1, Math.min(25, this.orbitHeight - dy*0.04));
-      this.orbitAuto=false;
+      if (e.touches.length >= 2 && this._pinch) {
+        const m = touchMid(e.touches);
+        if (m.d > 1 && this._pinch.d > 1) this._zoomBy(this._pinch.d / m.d, this._pickNavPoint(m.x, m.y), { immediate: true });
+        this._panBy(m.x - this._pinch.x, m.y - this._pinch.y);
+        this._pinch = m;
+        return;
+      }
+      if (!this._isDragging || !e.touches[0]) return;
+      const dx = e.touches[0].clientX - this._dragStart.x, dy = e.touches[0].clientY - this._dragStart.y;
+      this._dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      this._orbitBy(dx, dy);
     };
+    this._onTouchend = e => { if ((e.touches?.length || 0) < 2) this._pinch = null; if (!e.touches?.length) this._isDragging = false; };
     c.addEventListener('mousedown',  this._onDown);
     c.addEventListener('mousemove',  this._onMove);
     c.addEventListener('mouseup',    this._onUp);
-    c.addEventListener('mouseleave', this._onUp);
-    c.addEventListener('wheel',      this._onWheel, {passive:true});
+    c.addEventListener('mouseleave', this._onLeave);
+    c.addEventListener('wheel',      this._onWheel, {passive:false});
+    c.addEventListener('dblclick',   this._onDblClick);
+    c.addEventListener('contextmenu', this._onContextMenu);
     c.addEventListener('touchstart', this._onTouchstart, {passive:true});
     c.addEventListener('touchmove',  this._onTouchmove,  {passive:true});
-    c.addEventListener('touchend',   this._onUp);
+    c.addEventListener('touchend',   this._onTouchend);
+    window.addEventListener('keydown', this._onKey);
+  }
+
+  // ── Viewer navigation (orbit pivot, damped zoom toward the cursor, frame all) ──────
+  /** Site bounds and the zoom limits that follow from them. */
+  _navBounds() {
+    const fixtures = (this.userNozzles || []).map((n) => ({ x: n.x, z: n.z, h: Number(n.designHeightM) || undefined }));
+    const b = siteBounds({ poolType: this._poolType, width: this._poolW, length: this._poolL, radius: this._poolRadius, points: this._poolPoints }, fixtures);
+    return { bounds: b, limits: distanceLimits(b.radius) };
+  }
+
+  _orbitDistance() {
+    const t = this.orbitTarget;
+    return Math.hypot(this.orbitRadius, this.orbitHeight - t.y);
+  }
+
+  /**
+   * Leaving a cinematic, fixed or named view: continue from where the camera is now
+   * instead of jumping back to the old orbit. The lens is kept (a named view may use one).
+   */
+  _takeOverCamera() {
+    this.orbitAuto = false;
+    if (this.cameraMode === CAMERA_MODES.ORBIT || !this.camera) return;
+    if (this.cameraMode === CAMERA_MODES.ANIMATED) this.onLeaveCameraTrack?.();
+    const cam = this.camera, T = this.THREE;
+    const fwd = new T.Vector3(); cam.getWorldDirection(fwd);
+    let target = this.cameraMode === "named" && this._namedView ? { ...this._namedView.target } : null;
+    if (!target) {
+      const hit = rayPlaneY(cam.position, fwd, 0, 300);
+      target = hit || { x: cam.position.x + fwd.x * 15, y: cam.position.y + fwd.y * 15, z: cam.position.z + fwd.z * 15 };
+    }
+    this.orbitTarget = target;
+    const dx = cam.position.x - target.x, dz = cam.position.z - target.z;
+    this.orbitRadius = Math.max(0.05, Math.hypot(dx, dz));
+    this.orbitAngle = Math.atan2(dz, dx);
+    this.orbitHeight = cam.position.y;
+    this._navAnim = null;
+    this.cameraMode = CAMERA_MODES.ORBIT;
+  }
+
+  /** World point under a client position: the ground/water plane, else null. */
+  _pickNavPoint(clientX, clientY) {
+    if (!this.camera || this.isQuadView?.()) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const T = this.THREE;
+    const ndc = new T.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    const rc = this._navRay || (this._navRay = new T.Raycaster());
+    rc.setFromCamera(ndc, this.camera);
+    const { limits } = this._navBounds();
+    return rayPlaneY(rc.ray.origin, rc.ray.direction, 0, limits.max * 1.5);
+  }
+
+  _orbitBy(dx, dy) {
+    if (this._navAnim?.kind === "fly") this._navAnim = null;
+    this.orbitAngle += dx * 0.005;
+    const t = this.orbitTarget, d = this._orbitDistance();
+    // Tilt about the pivot at constant distance, never under the ground or over the top.
+    let phi = Math.atan2(this.orbitHeight - t.y, this.orbitRadius) + dy * 0.005;
+    const minPhi = Math.asin(Math.max(-1, Math.min(1, (0.15 - t.y) / Math.max(d, 1e-6))));
+    phi = Math.max(minPhi, Math.min(1.53, phi));
+    this.orbitRadius = Math.max(0.05, d * Math.cos(phi));
+    this.orbitHeight = t.y + d * Math.sin(phi);
+    // A zoom still easing in keeps going from the new tilt instead of snapping back.
+    const z = this._navAnim;
+    if (z?.kind === "zoom") { z.r0 = this.orbitRadius / z.s; z.rel0 = (this.orbitHeight - t.y) / z.s; }
+  }
+
+  _panBy(dx, dy) {
+    const cam = this.camera;
+    if (!cam) return;
+    this._navAnim = null;
+    const h = this.canvas.clientHeight || 600;
+    const wpp = (2 * this._orbitDistance() * Math.tan((cam.fov * Math.PI) / 360)) / h;
+    const T = this.THREE;
+    cam.updateMatrixWorld();
+    const right = new T.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+    const up = new T.Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
+    const mx = -right.x * dx * wpp + up.x * dy * wpp;
+    const my = -right.y * dx * wpp + up.y * dy * wpp;
+    const mz = -right.z * dx * wpp + up.z * dy * wpp;
+    const t = this.orbitTarget;
+    this.orbitTarget = { x: t.x + mx, y: Math.max(0, t.y + my), z: t.z + mz };
+    this.orbitHeight += this.orbitTarget.y - t.y;
+  }
+
+  /**
+   * Scale the camera's distance by `factor` about `pivot` (the point under the cursor), so
+   * that point stays put on screen; null pivot = the orbit target. Animated with damping;
+   * successive wheel notches accumulate into one smooth move.
+   */
+  _zoomBy(factor, pivot, { immediate = false } = {}) {
+    const t = this.orbitTarget;
+    const p = pivot || t;
+    const prev = this._navAnim?.kind === "zoom" ? this._navAnim : null;
+    const remaining = prev ? prev.goal / prev.s : 1;
+    const d0 = this._orbitDistance();
+    const { limits } = this._navBounds();
+    const goal = clampDistance(d0 * remaining * factor, limits) / Math.max(d0, 1e-9);
+    this._navAnim = {
+      kind: "zoom", pivot: { ...p }, s: 1, goal,
+      t0: { ...t }, r0: this.orbitRadius, rel0: this.orbitHeight - t.y,
+    };
+    if (immediate) this._stepNav(Infinity);
+  }
+
+  /** Animate the pivot to `p`, keeping the camera where it is. */
+  setOrbitPivot(p) {
+    this._takeOverCamera();
+    const cam = this.camera;
+    const dx = cam.position.x - p.x, dz = cam.position.z - p.z;
+    this._flyTo({ target: { x: p.x, y: p.y, z: p.z }, radius: Math.max(0.05, Math.hypot(dx, dz)), height: cam.position.y, angle: Math.atan2(dz, dx) });
+  }
+
+  /** Animate to a view that fits the whole site (basin and every fixture). */
+  frameAll() {
+    this._takeOverCamera();
+    const { bounds } = this._navBounds();
+    const aspect = (this.canvas.clientWidth || 16) / (this.canvas.clientHeight || 9);
+    const dir = { x: Math.cos(this.orbitAngle) * 0.8, y: 0.6, z: Math.sin(this.orbitAngle) * 0.8 };
+    const f = frameBounds(bounds, this.camera?.fov || DEFAULT_FOV, aspect, dir);
+    this._flyTo({ target: f.target, radius: Math.hypot(f.position.x - f.target.x, f.position.z - f.target.z), height: f.position.y, angle: this.orbitAngle });
+  }
+
+  /** Animate back to the default design view (same framing as fitCameraToDesign). */
+  resetView() {
+    this._takeOverCamera();
+    this._setLens(DEFAULT_FOV);
+    const r = this._poolType === "circular" ? (this._poolRadius || 6) : Math.max((this._poolW || 12) / 2, (this._poolL || 8) / 2);
+    this._flyTo({ target: { x: 0, y: 3, z: 0 }, radius: Math.max(12, Math.min(38, r * 3.1)), height: Math.max(6, Math.min(20, r * 1.3)), angle: -0.72 });
+  }
+
+  _flyTo(goal) {
+    // Shortest way round, so a fly never spins the long way.
+    let a = goal.angle;
+    while (a - this.orbitAngle > Math.PI) a -= 2 * Math.PI;
+    while (a - this.orbitAngle < -Math.PI) a += 2 * Math.PI;
+    this._navAnim = { kind: "fly", goal: { ...goal, angle: a } };
+  }
+
+  /** Advance the active navigation animation by `dt` seconds (Infinity = finish now). */
+  _stepNav(dt) {
+    const a = this._navAnim;
+    if (!a) return;
+    if (a.kind === "zoom") {
+      a.s = Number.isFinite(dt) ? dampTo(a.s, a.goal, 14, dt) : a.goal;
+      if (Math.abs(a.s - a.goal) <= 1e-3 * a.goal) { a.s = a.goal; this._navAnim = null; }
+      const s = a.s, p = a.pivot, t0 = a.t0;
+      this.orbitTarget = { x: p.x + (t0.x - p.x) * s, y: Math.max(0, p.y + (t0.y - p.y) * s), z: p.z + (t0.z - p.z) * s };
+      this.orbitRadius = Math.max(0.05, a.r0 * s);
+      this.orbitHeight = this.orbitTarget.y + a.rel0 * s;
+      return;
+    }
+    const g = a.goal, k = Number.isFinite(dt) ? 1 - Math.exp(-9 * Math.max(0, dt)) : 1;
+    const t = this.orbitTarget;
+    this.orbitTarget = { x: t.x + (g.target.x - t.x) * k, y: t.y + (g.target.y - t.y) * k, z: t.z + (g.target.z - t.z) * k };
+    this.orbitRadius += (g.radius - this.orbitRadius) * k;
+    this.orbitHeight += (g.height - this.orbitHeight) * k;
+    this.orbitAngle += (g.angle - this.orbitAngle) * k;
+    const done = Math.hypot(g.target.x - this.orbitTarget.x, g.target.y - this.orbitTarget.y, g.target.z - this.orbitTarget.z) < 1e-3
+      && Math.abs(g.radius - this.orbitRadius) < 1e-3 && Math.abs(g.height - this.orbitHeight) < 1e-3 && Math.abs(g.angle - this.orbitAngle) < 1e-4;
+    if (done) {
+      this.orbitTarget = { ...g.target }; this.orbitRadius = g.radius; this.orbitHeight = g.height; this.orbitAngle = g.angle;
+      this._navAnim = null;
+    }
   }
 
   // ─── Video capture — 4K / 60 FPS / synchronized audio (AQ-S3-007) ─────────
@@ -2948,7 +3193,7 @@ export class FountainScene {
       w: this.canvas.clientWidth || this.canvas.width,
       h: this.canvas.clientHeight || this.canvas.height,
       pr: this._pr || 1,
-      overlays: [this._reviewGroup, this._editor?.root].filter(Boolean).map(object => [object, object.visible]),
+      overlays: [this._reviewGroup, this._editor?.root, this._cameraPathLine, this._cameraKeyMarkers].filter(Boolean).map(object => [object, object.visible]),
       grain: this._gradePass?.uniforms?.uGrain?.value,
       reflectionInterval: this._reflection?.interval,
     };
@@ -2958,6 +3203,7 @@ export class FountainScene {
       this.composer?.setPixelRatio?.(pr);
     };
     const apply = (t) => {
+      this._cameraTime = t;
       const s = sampleSignals ? sampleSignals(t) : null;
       if (!s) return;
       this._bakeSignalWrite = true;
@@ -3117,7 +3363,103 @@ export class FountainScene {
     this.environment=env;
     if(this._initialized) { this._applyEnvironment(); this._setWaterPalette(); this._buildVenueElements(); }
   }
-  setCameraMode(m)  { this.cameraMode=m; this._pathTime=0; if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true; if (m !== "named") this._setLens(DEFAULT_FOV); }
+  setCameraMode(m)  {
+    this.cameraMode=m; this._pathTime=0;
+    if(m===CAMERA_MODES.ORBIT) this.orbitAuto=true;
+    if (m !== "named" && m !== CAMERA_MODES.ANIMATED) this._setLens(DEFAULT_FOV);
+    this._syncCameraPathVisibility();
+  }
+  /** Project-owned camera animation, sampled from the show playhead and by video bake time. */
+  setCameraTrack(track, time = this._cameraTime || 0) {
+    this._cameraTrack = normalizeCameraTrack(track);
+    this._cameraTime = Math.max(0, Number(time) || 0);
+    this._rebuildCameraPath();
+  }
+  setCameraTime(time) { this._cameraTime = Math.max(0, Number(time) || 0); this._highlightCameraKey(); }
+  /** Keep horizon level (default): ignore key roll. */
+  setHorizonLock(on) { this._horizonLock = on !== false; }
+  /** Show the camera path while the Camera lane is being edited, even in a free view. */
+  setCameraPathVisible(on) { this._cameraPathWanted = !!on; this._syncCameraPathVisibility(); }
+  _syncCameraPathVisibility() {
+    const show = (this.cameraMode === CAMERA_MODES.ANIMATED || this._cameraPathWanted) && !this._baking;
+    if (this._cameraPathLine) this._cameraPathLine.visible = show;
+    if (this._cameraKeyMarkers) this._cameraKeyMarkers.visible = show;
+  }
+  _highlightCameraKey() {
+    const g = this._cameraKeyMarkers;
+    if (!g) return;
+    const keys = this._cameraTrack?.keys || [];
+    let current = -1;
+    for (let i = 0; i < keys.length; i += 1) if (keys[i].t <= this._cameraTime + 1e-3) current = i;
+    g.children.forEach((m, i) => m.material.color.setHex(i === current ? 0xffffff : 0x33d6ff));
+  }
+  /** Animate the free camera to a saved view ({position, target, fov}). */
+  flyToView(view) {
+    if (!view?.position || !view?.target || !this.camera) return false;
+    this._takeOverCamera();
+    const p = view.position, t = view.target;
+    this._flyTo({ target: { ...t }, radius: Math.max(0.05, Math.hypot(p.x - t.x, p.z - t.z)), height: p.y, angle: Math.atan2(p.z - t.z, p.x - t.x) });
+    if (Number.isFinite(view.fov)) this._setLens(view.fov);
+    return true;
+  }
+  /** Back to the animated camera after a free look. */
+  resumeCameraTrack() { this.setCameraMode(CAMERA_MODES.ANIMATED); }
+  isPointerOver() { return !!this._hover; }
+  /** Leave the animated camera for a free orbit from where the camera is now. */
+  leaveCameraTrack() { if (this.cameraMode === CAMERA_MODES.ANIMATED) this._takeOverCamera(); }
+  getCameraBounds() {
+    const b = this._navBounds().bounds;
+    return { ...b, size: { x: b.max.x - b.min.x, y: b.max.y - b.min.y, z: b.max.z - b.min.z } };
+  }
+  getCameraState() {
+    if (!this.camera) return null;
+    const p = this.camera.position;
+    let target = this.cameraMode === CAMERA_MODES.ORBIT ? this.orbitTarget : this._namedView?.target;
+    if (!target) {
+      const f = new this.THREE.Vector3(); this.camera.getWorldDirection(f);
+      target = { x: p.x + f.x * 15, y: p.y + f.y * 15, z: p.z + f.z * 15 };
+    }
+    return { position: { x: p.x, y: p.y, z: p.z }, target: { ...target }, fov: this.camera.fov, roll: this.camera.rotation.z * 180 / Math.PI };
+  }
+  _rebuildCameraPath() {
+    if (!this.scene) return;
+    const T = this.THREE;
+    if (this._cameraPathLine) {
+      this.scene.remove(this._cameraPathLine);
+      this._cameraPathLine.geometry?.dispose?.(); this._cameraPathLine.material?.dispose?.();
+      this._cameraPathLine = null;
+    }
+    if (this._cameraKeyMarkers) {
+      this.scene.remove(this._cameraKeyMarkers);
+      this._cameraKeyMarkers.children.forEach((m) => { m.geometry?.dispose?.(); m.material?.dispose?.(); });
+      this._cameraKeyMarkers = null;
+    }
+    const keys = this._cameraTrack?.keys || [];
+    if (keys.length) {
+      // Small diamonds at each key, pointing along the key's view direction.
+      const group = new T.Group(); group.renderOrder = 1001;
+      const geo = new T.OctahedronGeometry(0.22);
+      for (const k of keys) {
+        const m = new T.Mesh(geo.clone(), new T.MeshBasicMaterial({ color: 0x33d6ff, depthTest: false, transparent: true, opacity: 0.95 }));
+        m.position.set(k.position.x, k.position.y, k.position.z);
+        m.lookAt(k.target.x, k.target.y, k.target.z);
+        m.scale.set(1, 1, 1.8);
+        m.renderOrder = 1001;
+        group.add(m);
+      }
+      geo.dispose();
+      this._cameraKeyMarkers = group; this.scene.add(group);
+    }
+    const points = cameraPathPolyline(this._cameraTrack);
+    if (points.length >= 2) {
+      const geometry = new T.BufferGeometry().setFromPoints(points.map(p => new T.Vector3(p.x, p.y, p.z)));
+      const material = new T.LineDashedMaterial({ color: 0x4ee8ff, transparent: true, opacity: 0.8, dashSize: 0.7, gapSize: 0.35, depthTest: false });
+      const line = new T.Line(geometry, material); line.computeLineDistances(); line.renderOrder = 1000;
+      this._cameraPathLine = line; this.scene.add(line);
+    }
+    this._syncCameraPathVisibility();
+    this._highlightCameraKey();
+  }
   /** Vertical lens angle (a saved view may use a long lens; every other mode uses the default). */
   _setLens(fov) {
     if (!this.camera || !Number.isFinite(fov) || Math.abs(this.camera.fov - fov) < 1e-3) return;
@@ -3154,6 +3496,8 @@ export class FountainScene {
     this.orbitRadius = Math.max(12, Math.min(38, r * 3.1));
     this.orbitHeight = Math.max(6, Math.min(20, r * 1.3));
     this.orbitAngle = -0.72;
+    this.orbitTarget = { x: 0, y: 3, z: 0 };
+    this._navAnim = null;
     this.setCameraMode(CAMERA_MODES.ORBIT);
     this.orbitAuto = false;
   }
@@ -3275,7 +3619,7 @@ export class FountainScene {
       this._buildReviewOverlays();
       // A saved named view (AF-NEXT-002) is the designer's explicit choice; loading the
       // pool geometry must not silently replace it with the auto-fit orbit.
-      if (dimensionsChanged && !(this.cameraMode === "named" && this._namedView)) this.fitCameraToDesign();
+      if (dimensionsChanged && !(this.cameraMode === "named" && this._namedView) && this.cameraMode !== CAMERA_MODES.ANIMATED) this.fitCameraToDesign();
     }
   }
   /** AF-CAD-011: the locked CAD underlay ({ toWorld, centerKey } — see sceneBasin.js). */
@@ -3334,11 +3678,14 @@ export class FountainScene {
     c.removeEventListener('mousedown',  this._onDown);
     c.removeEventListener('mousemove',  this._onMove);
     c.removeEventListener('mouseup',    this._onUp);
-    c.removeEventListener('mouseleave', this._onUp);
+    c.removeEventListener('mouseleave', this._onLeave);
     c.removeEventListener('wheel',      this._onWheel);
+    c.removeEventListener('dblclick',   this._onDblClick);
+    c.removeEventListener('contextmenu', this._onContextMenu);
     c.removeEventListener('touchstart', this._onTouchstart);
     c.removeEventListener('touchmove',  this._onTouchmove);
-    c.removeEventListener('touchend',   this._onUp);
+    c.removeEventListener('touchend',   this._onTouchend);
+    window.removeEventListener('keydown', this._onKey);
     this.nozzles.forEach(n => n.dispose?.());
     this._artStamp?.dispose?.(); this._artStamp = null;
     this.waterSys?.dispose?.();
@@ -3389,6 +3736,11 @@ export class FountainScene {
     this._envRT = null;
     this._fieldLights?.dispose?.();
     this._fieldLights = null;
+    if (this._cameraPathLine) {
+      this.scene?.remove?.(this._cameraPathLine);
+      this._cameraPathLine.geometry?.dispose?.(); this._cameraPathLine.material?.dispose?.();
+      this._cameraPathLine = null;
+    }
     this.renderer?.dispose();
   }
 }

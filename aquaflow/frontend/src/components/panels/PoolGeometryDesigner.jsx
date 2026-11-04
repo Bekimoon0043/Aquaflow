@@ -46,6 +46,7 @@ import { boxSelect, clickSelection, createGroup, expandToGroups, groupsContainin
 import { designBounds, fitViewTo, screenToWorld, zoomAbout, DEFAULT_VIEW } from "../../engineering/drafting/viewport";
 import { editGeometryProperty, geometryMeta as outlineMeta, hitGrip, hitSurfaceVertex, pointInsideOutline, stretchFromGrip, translateGeometry } from "../../engineering/drafting/geometryEdit";
 import { autoPlaceFixtures, buildFixtureArray } from "../../engineering/drafting/arrays";
+import { getActiveScene } from "../preview/camera/activeScene";
 import { arraySources, buildPipeArray, hitGuide, pathLength, pipePath } from "../../engineering/drafting/pipeArray";
 import { connectToPump, pairLights } from "../../engineering/connections";
 import { angleOf, dynamicInputKey, emptyDynamicInput, resolveDynamicInput } from "../../engineering/drafting/dynamicInput";
@@ -912,8 +913,10 @@ export default function PoolGeometryDesigner() {
     if (e.code === "Space") { e.preventDefault(); setIsSpaceDown(true); }
     if (ctrl && key === "a") { e.preventDefault(); selectAllFixtures(); return; }
     if (ctrl && key === "g") { e.preventDefault(); if (e.shiftKey) ungroupSelection(); else groupSelection(); return; }
-    if (!ctrl && key === "f") fitView();
-    if (!ctrl && key === "h") resetView();
+    // Over a 3D view F belongs to that view (frame all), not to this plan.
+    const over3D = !!getActiveScene()?.isPointerOver?.();
+    if (!ctrl && key === "f" && !over3D) fitView();
+    if (!ctrl && key === "h" && !over3D) resetView();
     if (ctrl && key === "d" && (selection.length || selectedSurfaceId)) {
       e.preventDefault();
       if (selectedSurfaceId) duplicateSelectedSurface();

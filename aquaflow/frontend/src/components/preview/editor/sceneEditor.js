@@ -27,6 +27,7 @@ import {
 // AF-CAD-032/033: the shared drafting kernel (object snap + typed pipe drawing).
 import { buildSnapScene } from "../../../engineering/drafting/snap";
 import { DraftingSession } from "../../../engineering/drafting/session";
+import { clampDistance, dampTo, distanceLimits, wheelNotches, zoomStep } from "../camera/navMath";
 
 const SELECT_COLOR = 0xffb020;
 const HOVER_COLOR = 0x66ccff;
@@ -187,6 +188,10 @@ export class SceneEditor {
   /** Call once per frame so the gizmo keeps a constant on-screen size. */
   update() {
     if (!this.enabled) return;
+    const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
+    const dt = this._lastUpdate ? Math.min(0.1, now - this._lastUpdate) : 1 / 60;
+    this._lastUpdate = now;
+    this._stepDolly(dt);
     this._updateGizmo();
   }
 
@@ -383,7 +388,8 @@ export class SceneEditor {
     this._onWheel = (e) => {
       if (!this.enabled) return;
       e.preventDefault();
-      this.dolly(e.deltaY);
+      this._setPointer(e);
+      this.dolly(e.deltaY, { deltaMode: e.deltaMode, pivot: this.activePane?.orthographic ? null : this._navPoint() });
     };
 
     this._onContextMenu = (e) => { if (this.enabled) e.preventDefault(); };
@@ -463,6 +469,7 @@ export class SceneEditor {
 
   // ── camera navigation ─────────────────────────────────────────────────────
   orbit(dx, dy) {
+    this._dollyAnim = null;
     const cam = this.camera;
     const off = cam.position.clone().sub(this.focus);
     const radius = off.length();
@@ -482,6 +489,7 @@ export class SceneEditor {
   }
 
   pan(dx, dy) {
+    this._dollyAnim = null;
     const cam = this.camera;
     const dist = cam.position.distanceTo(this.focus);
     // Scale panning by distance so it feels the same close up and far away.
@@ -495,14 +503,57 @@ export class SceneEditor {
     this._emit("camera");
   }
 
-  dolly(deltaY) {
+  /**
+   * Wheel zoom: multiplicative per notch, toward `pivot` (the point under the cursor, which
+   * stays under the cursor; null = the focus point), limited by the site's size and eased
+   * in over a few frames by update(). `immediate` applies it at once.
+   */
+  dolly(deltaY, { deltaMode = 0, pivot = null, immediate = false } = {}) {
+    const factor = zoomStep(wheelNotches(deltaY, deltaMode));
+    if (factor === 1) return;
     const cam = this.camera;
-    const off = cam.position.clone().sub(this.focus);
-    const scale = Math.pow(0.95, -deltaY / 100);
-    const len = Math.max(0.6, Math.min(200, off.length() * scale));
-    cam.position.copy(this.focus).add(off.setLength(len));
-    cam.lookAt(this.focus);
+    const prev = this._dollyAnim;
+    const remaining = prev ? prev.goal / prev.s : 1;
+    const d0 = cam.position.distanceTo(this.focus);
+    const goal = clampDistance(d0 * remaining * factor, this._navLimits()) / Math.max(d0, 1e-9);
+    const p = pivot || this.focus;
+    this._dollyAnim = {
+      pivot: { x: p.x, y: p.y, z: p.z }, s: 1, goal,
+      c0: cam.position.clone(), f0: this.focus.clone(),
+    };
+    if (immediate) this._stepDolly(Infinity);
+  }
+
+  _stepDolly(dt) {
+    const a = this._dollyAnim;
+    if (!a) return;
+    a.s = Number.isFinite(dt) ? dampTo(a.s, a.goal, 14, dt) : a.goal;
+    if (Math.abs(a.s - a.goal) <= 1e-3 * a.goal) { a.s = a.goal; this._dollyAnim = null; }
+    const { pivot: p, s, c0, f0 } = a;
+    this.camera.position.set(p.x + (c0.x - p.x) * s, p.y + (c0.y - p.y) * s, p.z + (c0.z - p.z) * s);
+    this.focus.set(p.x + (f0.x - p.x) * s, p.y + (f0.y - p.y) * s, p.z + (f0.z - p.z) * s);
+    this.camera.lookAt(this.focus);
     this._emit("camera");
+  }
+
+  /** Zoom limits from the site: the scene's bounds when attached, else the graph's spread. */
+  _navLimits() {
+    const fromScene = this._viewportSource?._navBounds?.();
+    if (fromScene?.limits) return fromScene.limits;
+    let r = 10;
+    const pts = [...this.graph.nodes.keys()].map((id) => this.graph.worldPosition(id)).filter(Boolean);
+    for (const q of pts) r = Math.max(r, Math.hypot(q.x, q.z));
+    return distanceLimits(r);
+  }
+
+  /** The point under the pointer: an object first, else the ground plane. */
+  _navPoint() {
+    const meshes = [...this.proxies.values()].filter((m) => m.visible);
+    const hit = this.raycaster.intersectObjects(meshes, true)[0];
+    if (hit?.point) return hit.point.clone();
+    const gp = this.groundPoint(0);
+    const { max } = this._navLimits();
+    return gp && gp.distanceTo(this.camera.position) <= max * 1.5 ? gp : null;
   }
 
   /** Frame the current selection, or the whole scene when nothing is selected. */

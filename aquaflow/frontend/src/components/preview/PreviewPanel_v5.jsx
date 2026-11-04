@@ -11,6 +11,11 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { FountainScene, ENVIRONMENTS, CAMERA_MODES, RENDER_QUALITY } from "./FountainScene_v6";
 import { useEngineeringSync } from "../../hooks/useEngineeringSync";
 import { normalizeCameraViews, resolveCameraView, NAMED_CAMERA_MODE } from "../../utils/cameraViews";
+import {
+  CAMERA_MOVES, addCameraKey, buildCameraMove, cameraKeyAt, normalizeCameraTrack, removeCameraKey, updateCameraKey,
+} from "./camera/cameraTrack";
+import { clearActiveScene, setActiveScene } from "./camera/activeScene";
+import { bindViewSlots } from "./camera/CameraLane";
 import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
 import useProjectStore from "../../store/projectStore";
@@ -70,6 +75,7 @@ const ENVS = [
 ];
 const CAMS = [
   { key:"orbit",      label:"Orbit",    icon:"↻" },
+  { key:"animated",   label:"Camera track", icon:"◆" },
   { key:"front",      label:"Front",    icon:"▣" },
   { key:"top",        label:"Top",      icon:"⬆" },
   { key:"aerial",     label:"Aerial",   icon:"◎" },
@@ -122,6 +128,8 @@ export default function PreviewPanel() {
   const cameraViews = normalizeCameraViews(renderSettings.cameraViews);
   const activeCameraView = renderSettings.activeCameraView || null;
   const selectCameraView = (id) => updateRender({ cameraMode: NAMED_CAMERA_MODE, activeCameraView: id });
+  const cameraTrack = useMemo(() => normalizeCameraTrack(renderSettings.cameraTrack), [renderSettings.cameraTrack]);
+  const [freeLook, setFreeLook] = useState(false);
   const setQuality = setRenderField("quality");
   // AF-NEXT-013: the tier actually rendered. Starts from the GPU profile (auto) or the
   // user's choice, then adaptive quality may step it down/up at runtime. Not saved.
@@ -291,6 +299,23 @@ export default function PreviewPanel() {
   const params       = useEngineeringStore(s => s.params);
   const timelineTracks = useShowStore(s => s.timelineTracks);
 const playhead = useShowStore(s => s.playhead);
+const showDuration = useShowStore(s => Math.max(1, Number(s.currentShow?.duration) || 60));
+const cameraKeyHere = cameraKeyAt(cameraTrack, playhead);
+const saveCameraKey = () => {
+  const view = sceneRef.current?.getCameraState?.();
+  if (!view) return;
+  const key = { id: cameraKeyHere?.id || `camera-${Date.now().toString(36)}`, t: playhead, ...view, ease: cameraKeyHere?.ease || "smooth", label: cameraKeyHere?.label || `Camera ${cameraTrack.keys.length + 1}` };
+  updateRender({ cameraTrack: addCameraKey(cameraTrack, key), cameraMode: CAMERA_MODES.ANIMATED });
+};
+const deleteCameraKey = (id) => updateRender({ cameraTrack: removeCameraKey(cameraTrack, id) });
+const addCameraMove = (moveKey) => {
+  const scene = sceneRef.current;
+  const bounds = scene?.getCameraBounds?.();
+  if (!bounds) return;
+  const keys = buildCameraMove(moveKey, { bounds, start: playhead, duration: 10, from: scene.getCameraState?.() });
+  const next = keys.reduce((track, key) => addCameraKey(track, key), cameraTrack);
+  updateRender({ cameraTrack: next, cameraMode: CAMERA_MODES.ANIMATED });
+};
 const playbackState = useShowStore(s => s.playbackState);
 const manualPatterns = useShowStore(s => s.manualPatterns);
 const manualPatternMeta = useShowStore(s => s.manualPatternMeta);
@@ -415,7 +440,11 @@ if (sitePreview.active && sitePreview.plan) {
     });
     scene.setReviewOverlays?.(reviewOverlays);
     scene.fitCameraToDesign?.();
+    if (useProjectStore.getState().render.cameraMode === CAMERA_MODES.ANIMATED) scene.setCameraMode?.(CAMERA_MODES.ANIMATED);
     sceneRef.current = scene;
+    scene.onLeaveCameraTrack = () => setFreeLook(true);
+    bindViewSlots(scene);
+    setActiveScene(scene);
 
     // ── Editing workspace ────────────────────────────────────────────────────
     // Seed the scene graph from whatever design already exists, so switching into
@@ -598,6 +627,7 @@ if (sitePreview.active && sitePreview.plan) {
       editor.dispose();
       sharedSceneHistory.dispose();
       editorRef.current = null;
+      clearActiveScene(scene);
       scene.dispose();
       sceneRef.current = null;
     };
@@ -644,7 +674,10 @@ if (sitePreview.active && sitePreview.plan) {
   }, [editMode]);
 
   useEffect(() => { sceneRef.current?.setEnvironment(env); }, [env]);
-  useEffect(() => { sceneRef.current?.setCameraMode(cam); }, [cam]);
+  useEffect(() => { sceneRef.current?.setCameraMode(cam); setFreeLook(false); }, [cam]);
+  useEffect(() => { sceneRef.current?.setHorizonLock?.(renderSettings.cameraHorizonLock !== false); }, [renderSettings.cameraHorizonLock, sceneTier]);
+  useEffect(() => { sceneRef.current?.setCameraTrack?.(cameraTrack); }, [cameraTrack, sceneTier]);
+  useEffect(() => { sceneRef.current?.setCameraTime?.(playhead); }, [playhead, sceneTier]);
   useEffect(() => {
     if (cam !== NAMED_CAMERA_MODE) return;
     sceneRef.current?.setNamedView?.(resolveCameraView(useProjectStore.getState().render, activeCameraView));
@@ -742,6 +775,8 @@ if (sitePreview.active && sitePreview.plan) {
     setBake({ frame: 0, frames: plan.frames, phase: "prepare", startedAt });
     // Freeze the live preview clock so nothing else advances while baking.
     if (site.active && site.playback === "playing") site.pause();
+    // "View through camera": the render follows the camera track even after a free look.
+    if (cam === CAMERA_MODES.ANIMATED && cameraTrack.keys.length) { scene.resumeCameraTrack?.(); setFreeLook(false); }
     let notice = "";
     try {
       const { runBakeJob } = await import("./finalRenderJob");
@@ -832,7 +867,14 @@ if (sitePreview.active && sitePreview.plan) {
       style={{ position:"relative", width:"100%", height:"100%", background:"#030806", overflow:"hidden", display:"flex" }}>
 
       {/* ── 3D Canvas ── */}
-      <canvas ref={canvasRef} aria-label="Interactive 3D fountain viewport" style={{ flex:1, display:"block", minWidth:0 }} />
+      <canvas ref={canvasRef} aria-label="Interactive 3D fountain viewport" style={{ flex:1, display:"block", minWidth:0 }}
+        onPointerEnter={() => sceneRef.current && setActiveScene(sceneRef.current)} />
+      {freeLook && cam === CAMERA_MODES.ANIMATED && (
+        <button type="button" onClick={() => { sceneRef.current?.resumeCameraTrack?.(); setFreeLook(false); }}
+          style={{ position:"absolute", top:44, left:"50%", transform:"translateX(-50%)", zIndex:20, background:"#0f3346", color:"#33d6ff", border:"1px solid #33d6ff", borderRadius:12, padding:"3px 12px", fontSize:11, cursor:"pointer" }}>
+          Free view · Back to camera
+        </button>
+      )}
 
       {/* Compact DCC-style header: mode and scene state remain visible while the
           viewport keeps almost all available screen area. */}
@@ -1031,6 +1073,30 @@ if (sitePreview.active && sitePreview.plan) {
                 </div>
               </>
             )}
+
+            <div style={subLabel}>Camera animation</div>
+            <div style={{ display:"flex", gap:3, marginBottom:5 }}>
+              <button onClick={saveCameraKey} style={{ ...btnSm(!!cameraKeyHere, "#00dca0"), flex:1 }}>
+                {cameraKeyHere ? "Update key" : "+ Camera key"}
+              </button>
+              {cameraKeyHere && <button onClick={() => deleteCameraKey(cameraKeyHere.id)} style={btnSm(false, "#ff6677")}>Delete</button>}
+            </div>
+            {cameraKeyHere && <select value={cameraKeyHere.ease} onChange={e => updateRender({ cameraTrack: updateCameraKey(cameraTrack, cameraKeyHere.id, { ease: e.target.value }) })}
+              title="How the camera leaves this key" style={{ width:"100%", marginBottom:5, background:"#0b1220", color:"#cde", border:"1px solid #24405e", fontSize:10 }}>
+              {["smooth","linear","easeIn","easeOut","hold","cut"].map(e => <option key={e} value={e}>{e}</option>)}
+            </select>}
+            <div title="Camera row — click a diamond to move the show playhead" style={{ position:"relative", height:22, marginBottom:6, border:"1px solid #24405e", borderRadius:3, background:"#08111d" }}>
+              <span style={{ position:"absolute", left:3, top:3, fontSize:8, color:"#61798d" }}>Camera</span>
+              {cameraTrack.keys.map(key => <button key={key.id} onClick={() => { useShowStore.getState().setPlayhead(key.t); setCam(CAMERA_MODES.ANIMATED); }}
+                title={`${key.label || "Camera key"} · ${key.t.toFixed(2)} s · ${key.ease}`}
+                style={{ position:"absolute", left:`calc(${Math.min(100, key.t / showDuration * 100)}% - 5px)`, top:8, width:10, height:10, padding:0, border:0,
+                  transform:"rotate(45deg)", background:cameraKeyHere?.id === key.id ? "#fff" : "#33d6ff", cursor:"pointer" }} />)}
+            </div>
+            <select defaultValue="" onChange={e => { if (e.target.value) addCameraMove(e.target.value); e.target.value = ""; }}
+              style={{ width:"100%", marginBottom:8, background:"#0b1220", color:"#cde", border:"1px solid #24405e", fontSize:10 }}>
+              <option value="">Add 10 s camera move…</option>
+              {CAMERA_MOVES.map(move => <option key={move.key} value={move.key}>{move.label}</option>)}
+            </select>
 
             </Section>
             <Section title="Quality" defaultOpen>

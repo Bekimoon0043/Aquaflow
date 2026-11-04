@@ -6,6 +6,8 @@ export const AQUAFLOW_PROJECT_SCHEMA_VERSION = 2;
 export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   environment: "night",
   cameraMode: "orbit",
+  cameraTrack: { enabled: true, keys: [] },
+  cameraHorizonLock: true,
   // AF-NEXT-013: "auto" = the tier detected for this PC's GPU (gpuTier.js); an explicit
   // eco/low/medium/high is honoured (and is a hard override when adaptiveQuality is off).
   quality: "auto",

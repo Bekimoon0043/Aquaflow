@@ -8,10 +8,19 @@ import { createFullShowPreview, evaluateFullShowPreview } from '../../../utils/f
 import { createICANPreviewPlan } from '../../../utils/icanPatternPreview';
 import { SceneGraph } from '../../preview/editor/sceneGraph';
 import { reconcileEngineeringGraph } from '../../preview/editor/fixtureBridge';
+import useProjectStore from '../../../store/projectStore';
+import { normalizeCameraTrack } from '../../preview/camera/cameraTrack';
+import { clearActiveScene, setActiveScene } from '../../preview/camera/activeScene';
+import { bindViewSlots } from '../../preview/camera/CameraLane';
 
 export default function StudioPreview({ clips, time, selected, onSelect, frame }) {
   const canvas = useRef(null), sceneRef = useRef(null), wrapper = useRef(null), overlay = useRef(null);
   const [error, setError] = useState('');
+  const [freeLook, setFreeLook] = useState(false);
+  const trackRaw = useProjectStore(s => s.render?.cameraTrack);
+  const viewThrough = useProjectStore(s => s.render?.cameraMode === 'animated');
+  const horizonLock = useProjectStore(s => s.render?.cameraHorizonLock !== false);
+  const hasKeys = normalizeCameraTrack(trackRaw).keys.length > 0;
   const [nonvisual, setNonvisual] = useState(0);
   const current = useRef({ selected, onSelect, time });
   current.current = { selected, onSelect, time };
@@ -24,12 +33,16 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
       scene = new FountainScene(canvas.current, { environment: 'night', quality: 'medium', cameraMode: 'orbit', lightColor: '#65d9d0' });
       scene.init(); scene.stopPattern(); scene.setReviewOverlays(false); scene.orbitAuto = false;
       sceneRef.current = scene;
+      scene.onLeaveCameraTrack = () => setFreeLook(true);
+      bindViewSlots(scene);
+      setActiveScene(scene);
       resize = new ResizeObserver(() => { if (!wrapper.current) return; const r = wrapper.current.getBoundingClientRect(); if (r.width && r.height) scene.resize(r.width, r.height); });
       resize.observe(wrapper.current);
       const draw = () => {
         if (!overlay.current || !wrapper.current) return;
         const engine = useEngineeringStore.getState();
         if (plan.current) scene.setSignals(evaluateFullShowPreview(plan.current, current.current.time, engine.fixtures));
+        scene.setCameraTime?.(current.current.time);
         const element = overlay.current, ctx = element.getContext('2d'), rect = wrapper.current.getBoundingClientRect();
         element.width = rect.width; element.height = rect.height;
         const center = poolCenter(engine.geometry, engine.params, engine.poolType);
@@ -43,8 +56,17 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
       };
       draw();
     } catch (e) { setError(`3D preview unavailable: ${e.message}. Use Plan or Matrix view.`); }
-    return () => { cancelAnimationFrame(animation); resize?.disconnect(); scene?.dispose(); sceneRef.current = null; };
+    return () => { cancelAnimationFrame(animation); resize?.disconnect(); clearActiveScene(scene); scene?.dispose(); sceneRef.current = null; };
   }, []);
+  useEffect(() => { sceneRef.current?.setCameraTrack?.(trackRaw); }, [trackRaw]);
+  useEffect(() => { sceneRef.current?.setHorizonLock?.(horizonLock); }, [horizonLock]);
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (viewThrough && hasKeys) scene.resumeCameraTrack?.();
+    else scene.leaveCameraTrack?.();
+    setFreeLook(false);
+  }, [viewThrough, hasKeys]);
   useEngineeringSync(sceneRef);
   useEffect(() => {
     if (!sceneRef.current) return;
@@ -53,7 +75,12 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
     reconcileEngineeringGraph(graph, { fixtures: [], siteModels: models, center: poolCenter(engine.geometry, engine.params, engine.poolType) });
     sceneRef.current.syncModelGraph(graph);
   }, [models, fixtures]);
-  useEffect(() => { sceneRef.current?.fitCameraToDesign(); if (sceneRef.current) sceneRef.current.orbitAuto = false; }, [frame]);
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    scene.fitCameraToDesign(); scene.orbitAuto = false;
+    if (useProjectStore.getState().render?.cameraMode === 'animated' && hasKeys) scene.resumeCameraTrack?.();
+  }, [frame]);
   useEffect(() => {
     const visual = [], supported = new Map();
     for (const clip of clips) {
@@ -69,7 +96,10 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
       else plan.current = { duration: 600, passMs: 600000, repeat: 1, visualClips: [] };
     } catch (e) { setError(e.message); plan.current = { duration: 600, passMs: 600000, repeat: 1, visualClips: [] }; }
   }, [clips, fixtures]);
-  return <div className="sp-preview" ref={wrapper}>
+  return <div className="sp-preview" ref={wrapper} onPointerEnter={() => sceneRef.current && setActiveScene(sceneRef.current)}>
+    {viewThrough && hasKeys && freeLook && <button type="button" className="sp-free-view-chip" onClick={() => { sceneRef.current?.resumeCameraTrack(); setFreeLook(false); }}
+      style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: '#0f3346', color: '#33d6ff', border: '1px solid #33d6ff', borderRadius: 12, padding: '3px 12px', fontSize: 11, cursor: 'pointer' }}>
+      Free view · Back to camera</button>}
     <canvas ref={canvas} onPointerDown={e => { start.current = [e.clientX, e.clientY]; }} onPointerUp={e => {
       if (!start.current || Math.hypot(e.clientX - start.current[0], e.clientY - start.current[1]) > 4) return;
       if (!wrapper.current) return;
