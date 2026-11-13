@@ -2,16 +2,18 @@
 import csv
 import io
 import json
-import math
 import re
 import zipfile
 
 from engine.siemens_contract import (
-    COMMAND_SIZE, CONTRACT_VERSION, DB_SIZE, FEEDBACK_SIZE, HEADER_SIZE,
+    APPLIED_AT_OFFSET, BUFFER_CAPACITY, BUFFER_CAPACITY_OFFSET, BUFFER_READ_OFFSET,
+    BUFFER_STATUS_OFFSET, BUFFER_WRITE_OFFSET, COMMAND_SIZE, CONTRACT_VERSION, CYCLE_MS, DB_SIZE,
+    FEEDBACK_SIZE, HEADER_SIZE, LAST_LATE_OFFSET, LEGACY_CONTRACT_VERSION,
     LIGHT_ACTIVE_OFFSET, LIGHT_CAPACITY, LIGHT_COMMAND_OFFSET, LIGHT_FEEDBACK_OFFSET,
     MAGIC, PROGRAM_VERSION, PUMP_CAPACITY, PUMP_COMMAND_OFFSET, PUMP_FAULT_OFFSET,
-    PUMP_FEEDBACK_OFFSET, PUMP_MODE_OFFSET, PUMP_RUNNING_OFFSET, VALVE_CAPACITY,
-    VALVE_COMMAND_OFFSET, VALVE_FEEDBACK_OFFSET,
+    PUMP_FEEDBACK_OFFSET, PUMP_MODE_OFFSET, PUMP_RUNNING_OFFSET, RING_OFFSET, SHOW_CLOCK_OFFSET,
+    SLOT_SIZE, STREAM_KEEPALIVE_OFFSET, UNDERRUN_LIMIT_MS, VALID_UNTIL_OFFSET, VALVE_CAPACITY,
+    VALVE_COMMAND_OFFSET, VALVE_FEEDBACK_OFFSET, WATCHDOG_MS, WORST_LATE_OFFSET,
 )
 from engine.siemens_site import CONTRACT, signature
 from services.siemens_readiness import commissioning_readiness, unsupported_input_bindings
@@ -19,7 +21,7 @@ from services.siemens_readiness import commissioning_readiness, unsupported_inpu
 
 CYCLIC_OB_REQUIREMENT = {
     "name": "AquaFlowCycle", "event": "CyclicInterrupt", "minimum_ob_number": 200,
-    "cycle_us": 100000, "phase_us": 0, "language": "SCL",
+    "cycle_us": CYCLE_MS * 1000, "phase_us": 0, "language": "SCL",
     "required_instance_call": "AquaFlowSiteControlInstance", "automatic_generation": True,
     "generation_method": (
         "Generate SCL through the selected TIA release, export that OB as version-native "
@@ -67,7 +69,7 @@ def build_tia_package(site):
     stamp = signature(site)
     db = f'''DATA_BLOCK "AquaFlowSiteIO"
 {{ S7_Optimized_Access := 'FALSE' }}
-VERSION : 2.0
+VERSION : 3.0
    STRUCT
       Magic : Word := W#16#{MAGIC:04X}; // byte 0, PLC-owned
       ContractVersion : UInt := {CONTRACT_VERSION}; // byte 2
@@ -84,13 +86,18 @@ VERSION : 2.0
       CommandFlags : Word; // byte 28, RUN=bit0 RESET=bit1 STAGING=bit15
       RejectedReason : UInt; // byte 30
       FeedbackSequence : UInt; // byte 32
-      CycleMs : UInt := 100; // byte 34
+      CycleMs : UInt := {CYCLE_MS}; // byte 34, fast cyclic OB period
       PumpCapacity : UInt := {PUMP_CAPACITY}; // byte 36
       ValveCapacity : UInt := {VALVE_CAPACITY}; // byte 38
       LightCapacity : UInt := {LIGHT_CAPACITY}; // byte 40
-      Reserved0 : Word; // byte 42
+      LastLateMs : UInt; // byte {LAST_LATE_OFFSET}, PLC-owned: ms between a bank's AtMs and its application
       LastCommandAgeMs : UDInt; // byte 44
-      ReservedHeader : Array[0..15] of Byte; // bytes 48..63
+      ShowClockMs : UDInt; // byte {SHOW_CLOCK_OFFSET}, PLC show clock: ms since the buffered RUN was accepted
+      BufferReadIndex : UInt; // byte {BUFFER_READ_OFFSET}, PLC-owned ring read counter
+      BufferCapacity : UInt := {BUFFER_CAPACITY}; // byte {BUFFER_CAPACITY_OFFSET}
+      WorstLateMs : UInt; // byte {WORST_LATE_OFFSET}, since RUN
+      BufferStatus : Word; // byte {BUFFER_STATUS_OFFSET}, bit0 buffered RUN, bit1 underrun hold, bit2 late bank
+      AppliedAtMs : UDInt; // byte {APPLIED_AT_OFFSET}, AtMs of the last applied bank
       PumpSpeed : Array[0..15] of UInt; // bytes 64..95, PC-owned
       PumpMode : Array[0..15] of Byte; // bytes 96..111, 0=off 1=automatic
       ValveBits : Array[0..63] of Byte; // bytes 112..175
@@ -101,6 +108,17 @@ VERSION : 2.0
       ValveFeedbackBits : Array[0..63] of Byte; // bytes 308..371
       LightAppliedRGB : Array[0..95] of Byte; // bytes 372..467
       LightActiveBits : Array[0..3] of Byte; // bytes 468..471
+      BufferWriteIndex : UInt; // byte {BUFFER_WRITE_OFFSET}, PC-owned: commits ring slots
+      StreamKeepalive : UInt; // byte {STREAM_KEEPALIVE_OFFSET}, PC-owned: changes on every refill
+      ValidUntilMs : UDInt; // byte {VALID_UNTIL_OFFSET}, PC-owned: the ring holds every bank up to this show time
+      ReservedStream : Array[0..7] of Byte; // bytes 480..487
+      Ring : Array[0..{BUFFER_CAPACITY - 1}] of Struct // bytes {RING_OFFSET}..{DB_SIZE - 1}, {SLOT_SIZE} bytes per slot, PC-owned
+         AtMs : UDInt; // show time to apply this bank
+         PumpSpeed : Array[0..15] of UInt;
+         PumpMode : Array[0..15] of Byte;
+         ValveBits : Array[0..63] of Byte;
+         LightRGB : Array[0..95] of Byte;
+      END_STRUCT;
    END_STRUCT;
 BEGIN
 END_DATA_BLOCK
@@ -111,19 +129,20 @@ END_DATA_BLOCK
     for channel in site["channels"]:
         index = channel["index"]
         if channel["kind"] == "valve":
-            on_ticks = math.ceil(channel["min_on_ms"] / 100)
-            off_ticks = math.ceil(channel["min_off_ms"] / 100)
+            # Minimum on/off times in ms: the age counts CycleMs per fast-OB execution.
+            on_ms = int(channel["min_on_ms"])
+            off_ms = int(channel["min_off_ms"])
             outlet_logic.append(f'''   #Wanted := #Running AND ((#ValveSnapshot[{index // 8}] AND B#16#{1 << (index % 8):02X}) <> B#16#00);
    IF NOT #Running THEN
       #ValveOpen[{index}] := FALSE;
-      #ValveAge[{index}] := 0;
+      #ValveAgeMs[{index}] := 0;
    ELSE
-      IF #ValveAge[{index}] < 30000 THEN #ValveAge[{index}] := #ValveAge[{index}] + 1; END_IF;
+      IF #ValveAgeMs[{index}] < 30000 THEN #ValveAgeMs[{index}] := #ValveAgeMs[{index}] + {CYCLE_MS}; END_IF;
       IF (#Wanted <> #ValveOpen[{index}]) AND
-         ((#ValveOpen[{index}] AND (#ValveAge[{index}] >= {on_ticks})) OR
-          (NOT #ValveOpen[{index}] AND (#ValveAge[{index}] >= {off_ticks}))) THEN
+         ((#ValveOpen[{index}] AND (#ValveAgeMs[{index}] >= {on_ms})) OR
+          (NOT #ValveOpen[{index}] AND (#ValveAgeMs[{index}] >= {off_ms}))) THEN
          #ValveOpen[{index}] := #Wanted;
-         #ValveAge[{index}] := 0;
+         #ValveAgeMs[{index}] := 0;
       END_IF;
    END_IF;''')
             if channel.get("output"):
@@ -170,9 +189,14 @@ END_DATA_BLOCK
                 f'("AquaFlowSiteIO".LightAppliedRGB[{base + component}] <> B#16#00)' for component in range(3))
             light_logic.append(_bit_set_scl('"AquaFlowSiteIO".LightActiveBits', index, f"({active})"))
 
+    ring_copy = "\n".join([
+        '         FOR #i := 0 TO 15 DO #PumpSnapshot[#i] := "AquaFlowSiteIO".Ring[#Slot].PumpSpeed[#i]; END_FOR;',
+        '         FOR #i := 0 TO 63 DO #ValveSnapshot[#i] := "AquaFlowSiteIO".Ring[#Slot].ValveBits[#i]; END_FOR;',
+        '         FOR #i := 0 TO 95 DO #LightSnapshot[#i] := "AquaFlowSiteIO".Ring[#Slot].LightRGB[#i]; END_FOR;',
+    ])
     fb = f'''FUNCTION_BLOCK "AquaFlowSiteControl"
 {{ S7_Optimized_Access := 'TRUE' }}
-VERSION : 2.0
+VERSION : 3.0
    VAR_INPUT
       EstopOK : Bool;
       LevelOK : Bool;
@@ -182,39 +206,56 @@ VERSION : 2.0
    END_VAR
    VAR
       LastSequence : UInt;
-      MissedCycles : Int := 10;
+      CommandAgeMs : Int := {WATCHDOG_MS}; // not healthy until the first OFF handshake
       Ready : Bool;
       Running : Bool;
+      Buffered : Bool; // RUN from the timestamped ring on the PLC show clock
+      ShowClock : UDInt;
+      LastKeepalive : UInt;
+      StreamFault : UInt; // 4 invalid ring, 5 underrun; latched until the next OFF handshake
+      LateSeen : Bool;
       PumpSnapshot : Array[0..15] of UInt;
       ValveSnapshot : Array[0..63] of Byte;
       LightSnapshot : Array[0..95] of Byte;
       ValveOpen : Array[0..511] of Bool;
-      ValveAge : Array[0..511] of Int;
+      ValveAgeMs : Array[0..511] of Int;
    END_VAR
    VAR_TEMP
       LocalPermit : Bool;
       Seq : UInt;
       Flags : Word;
       i : Int;
+      k : Int;
+      Slot : Int;
       Wanted : Bool;
       PumpAllowed : Bool;
       PumpTarget : Int;
       AnyPumpFault : Bool;
+      WasRunning : Bool;
+      Started : Bool;
+      WantBuffered : Bool;
+      Underrun : Bool;
+      Invalid : Bool;
+      WriteIndex : UInt;
+      ValidUntil : UDInt;
+      Pending : DInt;
+      Late : UDInt;
       PumpCandidate : Array[0..15] of UInt;
       ValveCandidate : Array[0..63] of Byte;
       LightCandidate : Array[0..95] of Byte;
    END_VAR
 BEGIN
-   // Execute exactly once from a 100-ms cyclic interrupt OB.
+   // Execute exactly once from the {CYCLE_MS}-ms cyclic interrupt OB (AquaFlowCycle, OB200).
    "AquaFlowSiteIO".Magic := W#16#{MAGIC:04X};
    "AquaFlowSiteIO".ContractVersion := {CONTRACT_VERSION};
    "AquaFlowSiteIO".HeaderSize := {HEADER_SIZE};
    "AquaFlowSiteIO".SiteSignature := DW#16#{stamp:08X};
    "AquaFlowSiteIO".ProgramVersion := DW#16#{PROGRAM_VERSION:08X};
-   "AquaFlowSiteIO".CycleMs := 100;
+   "AquaFlowSiteIO".CycleMs := {CYCLE_MS};
    "AquaFlowSiteIO".PumpCapacity := {PUMP_CAPACITY};
    "AquaFlowSiteIO".ValveCapacity := {VALVE_CAPACITY};
    "AquaFlowSiteIO".LightCapacity := {LIGHT_CAPACITY};
+   "AquaFlowSiteIO".BufferCapacity := {BUFFER_CAPACITY};
    IF "AquaFlowSiteIO".PlcHeartbeat = 65535 THEN "AquaFlowSiteIO".PlcHeartbeat := 0;
    ELSE "AquaFlowSiteIO".PlcHeartbeat := "AquaFlowSiteIO".PlcHeartbeat + 1; END_IF;
 
@@ -227,8 +268,9 @@ BEGIN
    IF #DriveOK THEN "AquaFlowSiteIO".Permit := "AquaFlowSiteIO".Permit OR W#16#0010; END_IF;
    IF #PressureOK THEN "AquaFlowSiteIO".Permit := "AquaFlowSiteIO".Permit OR W#16#0020; END_IF;
 
-   IF #MissedCycles < 300 THEN #MissedCycles := #MissedCycles + 1; END_IF;
-   "AquaFlowSiteIO".LastCommandAgeMs := INT_TO_UDINT(#MissedCycles) * 100;
+   #WasRunning := #Running;
+   #Started := FALSE;
+   IF #CommandAgeMs < 30000 THEN #CommandAgeMs := #CommandAgeMs + {CYCLE_MS}; END_IF;
    #Seq := "AquaFlowSiteIO".CommandSequence;
    #Flags := "AquaFlowSiteIO".CommandFlags;
    IF (#Seq <> #LastSequence) AND ((#Flags AND W#16#8000) = W#16#0000) THEN
@@ -237,25 +279,95 @@ BEGIN
       FOR #i := 0 TO 63 DO #ValveCandidate[#i] := "AquaFlowSiteIO".ValveBits[#i]; END_FOR;
       FOR #i := 0 TO 95 DO #LightCandidate[#i] := "AquaFlowSiteIO".LightRGB[#i]; END_FOR;
       IF (#Seq = "AquaFlowSiteIO".CommandSequence) AND (#Flags = "AquaFlowSiteIO".CommandFlags) THEN
-         FOR #i := 0 TO 15 DO #PumpSnapshot[#i] := #PumpCandidate[#i]; END_FOR;
-         FOR #i := 0 TO 63 DO #ValveSnapshot[#i] := #ValveCandidate[#i]; END_FOR;
-         FOR #i := 0 TO 95 DO #LightSnapshot[#i] := #LightCandidate[#i]; END_FOR;
          #LastSequence := #Seq;
-         #MissedCycles := 0;
-         IF (#Flags AND W#16#0002) <> W#16#0000 THEN #Ready := FALSE; #Running := FALSE; END_IF;
-         IF (#Flags AND W#16#0001) = W#16#0000 THEN #Running := FALSE; #Ready := #LocalPermit;
-         ELSE
-            #Running := #Ready AND #LocalPermit;
-            IF NOT #LocalPermit THEN "AquaFlowSiteIO".RejectedReason := 1;
-            ELSIF NOT #Ready THEN "AquaFlowSiteIO".RejectedReason := 2; END_IF;
+         #CommandAgeMs := 0;
+         #WantBuffered := (#Flags AND W#16#0004) <> W#16#0000;
+         // A RUN+BUFFERED commit during buffered RUN is only a keepalive: the ring owns the outputs.
+         IF NOT (#WantBuffered AND ((#Flags AND W#16#0001) <> W#16#0000) AND #Running AND #Buffered) THEN
+            FOR #i := 0 TO 15 DO #PumpSnapshot[#i] := #PumpCandidate[#i]; END_FOR;
+            FOR #i := 0 TO 63 DO #ValveSnapshot[#i] := #ValveCandidate[#i]; END_FOR;
+            FOR #i := 0 TO 95 DO #LightSnapshot[#i] := #LightCandidate[#i]; END_FOR;
+            IF (#Flags AND W#16#0002) <> W#16#0000 THEN #Ready := FALSE; #Running := FALSE; END_IF;
+            IF (#Flags AND W#16#0001) = W#16#0000 THEN
+               #Running := FALSE; #Ready := #LocalPermit; #StreamFault := 0;
+            ELSIF #Running AND (#Buffered <> #WantBuffered) THEN
+               // Never switch between streamed and buffered while outputs run.
+               #Running := FALSE; #Ready := FALSE;
+               "AquaFlowSiteIO".RejectedReason := 5;
+            ELSE
+               IF NOT #Running THEN #Buffered := #WantBuffered; END_IF;
+               #Running := #Ready AND #LocalPermit;
+               IF NOT #LocalPermit THEN "AquaFlowSiteIO".RejectedReason := 1;
+               ELSIF NOT #Ready THEN "AquaFlowSiteIO".RejectedReason := 2; END_IF;
+               #Started := #Running AND #Buffered AND NOT #WasRunning;
+            END_IF;
          END_IF;
       ELSE "AquaFlowSiteIO".RejectedReason := 3;
       END_IF;
    END_IF;
-   IF NOT #LocalPermit OR (#MissedCycles >= 10) THEN
+   IF #Started THEN #LastKeepalive := "AquaFlowSiteIO".StreamKeepalive; END_IF;
+   // While buffered, every refill changes StreamKeepalive: that is the command watchdog's food.
+   IF #Running AND #Buffered AND ("AquaFlowSiteIO".StreamKeepalive <> #LastKeepalive) THEN
+      #LastKeepalive := "AquaFlowSiteIO".StreamKeepalive;
+      #CommandAgeMs := 0;
+   END_IF;
+   IF NOT #LocalPermit OR (#CommandAgeMs >= {WATCHDOG_MS}) THEN
       #Running := FALSE;
       #Ready := FALSE; // Fresh OFF handshake is required; never auto-restart.
    END_IF;
+   "AquaFlowSiteIO".LastCommandAgeMs := INT_TO_UDINT(#CommandAgeMs);
+
+   // Frame-accurate playback: apply every ring bank whose AtMs has come on the PLC show clock.
+   #Underrun := FALSE;
+   #Invalid := FALSE;
+   IF #Running AND #Buffered THEN
+      IF #Started THEN
+         #ShowClock := 0;
+         #LateSeen := FALSE;
+         "AquaFlowSiteIO".LastLateMs := 0;
+         "AquaFlowSiteIO".WorstLateMs := 0;
+         "AquaFlowSiteIO".AppliedAtMs := 0;
+      ELSE
+         #ShowClock := #ShowClock + {CYCLE_MS};
+      END_IF;
+      #WriteIndex := "AquaFlowSiteIO".BufferWriteIndex;
+      #ValidUntil := "AquaFlowSiteIO".ValidUntilMs;
+      FOR #k := 1 TO {BUFFER_CAPACITY} DO
+         #Pending := UINT_TO_DINT(#WriteIndex) - UINT_TO_DINT("AquaFlowSiteIO".BufferReadIndex);
+         IF #Pending < 0 THEN #Pending := #Pending + 65536; END_IF;
+         IF #Pending = 0 THEN EXIT; END_IF;
+         IF #Pending > {BUFFER_CAPACITY} THEN #Invalid := TRUE; EXIT; END_IF;
+         #Slot := UINT_TO_INT("AquaFlowSiteIO".BufferReadIndex MOD {BUFFER_CAPACITY});
+         IF "AquaFlowSiteIO".Ring[#Slot].AtMs > #ShowClock THEN EXIT; END_IF;
+         IF "AquaFlowSiteIO".Ring[#Slot].AtMs < "AquaFlowSiteIO".AppliedAtMs THEN #Invalid := TRUE; EXIT; END_IF;
+{ring_copy}
+         #Late := #ShowClock - "AquaFlowSiteIO".Ring[#Slot].AtMs;
+         IF #Late > 65535 THEN #Late := 65535; END_IF;
+         "AquaFlowSiteIO".LastLateMs := UDINT_TO_UINT(#Late);
+         IF "AquaFlowSiteIO".LastLateMs > "AquaFlowSiteIO".WorstLateMs THEN "AquaFlowSiteIO".WorstLateMs := "AquaFlowSiteIO".LastLateMs; END_IF;
+         IF #Late >= {CYCLE_MS} THEN #LateSeen := TRUE; END_IF;
+         "AquaFlowSiteIO".AppliedAtMs := "AquaFlowSiteIO".Ring[#Slot].AtMs;
+         IF "AquaFlowSiteIO".BufferReadIndex = 65535 THEN "AquaFlowSiteIO".BufferReadIndex := 0;
+         ELSE "AquaFlowSiteIO".BufferReadIndex := "AquaFlowSiteIO".BufferReadIndex + 1; END_IF;
+      END_FOR;
+      // Ring ran dry: hold the last bank (as a stalled stream did before), then stop.
+      IF #ShowClock > #ValidUntil THEN
+         #Underrun := TRUE;
+         IF (#ShowClock - #ValidUntil) >= {UNDERRUN_LIMIT_MS} THEN #StreamFault := 5; #Running := FALSE; #Ready := FALSE; END_IF;
+      END_IF;
+      IF #Invalid THEN #StreamFault := 4; #Running := FALSE; #Ready := FALSE; END_IF;
+   END_IF;
+   IF #Buffered AND NOT #Running THEN
+      // Leaving buffered RUN (Stop, watchdog, permit, underrun, invalid ring): flush the ring.
+      "AquaFlowSiteIO".BufferReadIndex := "AquaFlowSiteIO".BufferWriteIndex;
+      #Buffered := FALSE;
+      #ShowClock := 0;
+   END_IF;
+   "AquaFlowSiteIO".ShowClockMs := #ShowClock;
+   "AquaFlowSiteIO".BufferStatus := W#16#0000;
+   IF #Running AND #Buffered THEN "AquaFlowSiteIO".BufferStatus := "AquaFlowSiteIO".BufferStatus OR W#16#0001; END_IF;
+   IF #Underrun THEN "AquaFlowSiteIO".BufferStatus := "AquaFlowSiteIO".BufferStatus OR W#16#0002; END_IF;
+   IF #LateSeen THEN "AquaFlowSiteIO".BufferStatus := "AquaFlowSiteIO".BufferStatus OR W#16#0004; END_IF;
 
    FOR #i := 0 TO 15 DO "AquaFlowSiteIO".PumpApplied[#i] := 0; END_FOR;
    FOR #i := 0 TO 1 DO "AquaFlowSiteIO".PumpRunningBits[#i] := B#16#00; "AquaFlowSiteIO".PumpFaultBits[#i] := B#16#00; END_FOR;
@@ -270,12 +382,13 @@ BEGIN
 
    "AquaFlowSiteIO".FaultCode := 0;
    IF NOT #LocalPermit THEN "AquaFlowSiteIO".FaultCode := 1;
-   ELSIF #MissedCycles >= 10 THEN "AquaFlowSiteIO".FaultCode := 2;
+   ELSIF #CommandAgeMs >= {WATCHDOG_MS} THEN "AquaFlowSiteIO".FaultCode := 2;
+   ELSIF #StreamFault <> 0 THEN "AquaFlowSiteIO".FaultCode := #StreamFault;
    ELSIF #AnyPumpFault THEN "AquaFlowSiteIO".FaultCode := 3; END_IF;
    "AquaFlowSiteIO".Status := W#16#0000;
    IF #Running THEN "AquaFlowSiteIO".Status := "AquaFlowSiteIO".Status OR W#16#0001; END_IF;
    IF #Ready THEN "AquaFlowSiteIO".Status := "AquaFlowSiteIO".Status OR W#16#0002; END_IF;
-   IF #MissedCycles < 10 THEN "AquaFlowSiteIO".Status := "AquaFlowSiteIO".Status OR W#16#0004; END_IF;
+   IF #CommandAgeMs < {WATCHDOG_MS} THEN "AquaFlowSiteIO".Status := "AquaFlowSiteIO".Status OR W#16#0004; END_IF;
    IF #LastSequence = "AquaFlowSiteIO".CommandSequence THEN "AquaFlowSiteIO".Status := "AquaFlowSiteIO".Status OR W#16#0008; END_IF;
    IF "AquaFlowSiteIO".FaultCode <> 0 THEN "AquaFlowSiteIO".Status := "AquaFlowSiteIO".Status OR W#16#0010; END_IF;
    // Publish acknowledgement and feedback sequence after outputs and feedback.
@@ -305,7 +418,8 @@ END_DATA_BLOCK
 '''
     cycle_ob = f'''ORGANIZATION_BLOCK "AquaFlowCycle"
 {{ S7_Optimized_Access := 'TRUE' }}
-VERSION : 2.0
+VERSION : 3.0
+// Cyclic interrupt, {CYCLE_MS} ms, phase 0. The PLC show clock counts these executions.
 BEGIN
 {call}END_ORGANIZATION_BLOCK
 '''
@@ -334,12 +448,27 @@ TIA Portal owns hardware configuration, compilation, download and commissioning.
 classic S7comm absolute DB access after TIA is closed. Import the DB/FB/OB sources, map every
 healthy-high interlock and physical I/O, compile, inspect offsets, download, and test in a secured
 commissioning environment. Configure CPU access protection to permit the approved runtime data
-connection. Do not call the FB from OB1; call its non-retentive instance once from the 100-ms OB.
+connection. Do not call the FB from OB1; call its non-retentive instance once from the {CYCLE_MS}-ms
+cyclic interrupt OB (OB200 AquaFlowCycle, phase 0).
+
+FRAME-ACCURATE TIMING (contract v{CONTRACT_VERSION})
+The PLC keeps its own show clock (ShowClockMs, +{CYCLE_MS} ms per OB200 execution from the accepted RUN).
+AquaFlow keeps a ring of {BUFFER_CAPACITY} timestamped command banks (Ring[], {SLOT_SIZE} bytes each: AtMs + the
+same pump/valve/RGB bank as the streamed command) up to ~1.5 s ahead, and the PLC applies each bank
+in the OB execution where ShowClockMs reaches its AtMs: cues land within one {CYCLE_MS}-ms cycle,
+independent of PC or network jitter. AquaFlow reads ShowClockMs, BufferReadIndex and WorstLateMs back
+and shows them as the measured timing. The ring is never an autonomous show: StreamKeepalive must
+change at least every {WATCHDOG_MS} ms (otherwise the watchdog drops Ready/Running, as before) and when
+ShowClockMs passes ValidUntilMs the PLC holds the last bank for at most {UNDERRUN_LIMIT_MS} ms, then stops
+with FaultCode 5. Stop (RUN=0), permit loss, watchdog, underrun or an invalid ring flush the ring.
+Valve minimum on/off times are enforced in milliseconds. PLCs still running the contract v{LEGACY_CONTRACT_VERSION}
+(100-ms, streamed) program keep working; AquaFlow streams to them and asks for this update.
 
 The DB ownership, offsets, status bits, fault codes, command transaction and commissioning steps are
 documented in SIEMENS-PLC-RUNTIME-CONTRACT.md and SIEMENS-RUNTIME-COMMISSIONING.md. Pump speeds are
 0..27648. A pump is disabled unless at least one mapped supplied valve is open. Loss of fresh command
-sequences for ten cycles removes Ready/Running and requires a new OFF handshake. PLC-applied feedback
+sequences (or, while buffered, of StreamKeepalive changes) for {WATCHDOG_MS} ms removes Ready/Running and
+requires a new OFF handshake. PLC-applied feedback
 is returned for every output; optional digital feedback/fault inputs upgrade pump/valve state to
 physical evidence. RGB lights use three consecutive %QB bytes.
 
@@ -350,6 +479,14 @@ drive trips, level/pressure protection and safe CPU-STOP substitute values indep
         "magic": f"0x{MAGIC:04X}", "contract_version": CONTRACT_VERSION,
         "program_version": f"0x{PROGRAM_VERSION:08X}", "db_size": DB_SIZE,
         "header_size": HEADER_SIZE, "command_size": COMMAND_SIZE, "feedback_size": FEEDBACK_SIZE,
+        "cycle_ms": CYCLE_MS, "watchdog_ms": WATCHDOG_MS, "underrun_limit_ms": UNDERRUN_LIMIT_MS,
+        "buffer": {"capacity": BUFFER_CAPACITY, "slot_size": SLOT_SIZE, "ring": RING_OFFSET,
+                   "slot_layout": {"at_ms": 0, "bank": 4},
+                   "show_clock": SHOW_CLOCK_OFFSET, "read_index": BUFFER_READ_OFFSET,
+                   "capacity_field": BUFFER_CAPACITY_OFFSET, "worst_late": WORST_LATE_OFFSET,
+                   "last_late": LAST_LATE_OFFSET, "status": BUFFER_STATUS_OFFSET,
+                   "applied_at": APPLIED_AT_OFFSET, "write_index": BUFFER_WRITE_OFFSET,
+                   "keepalive": STREAM_KEEPALIVE_OFFSET, "valid_until": VALID_UNTIL_OFFSET},
         "offsets": {
             "pump_command": PUMP_COMMAND_OFFSET, "pump_mode": PUMP_MODE_OFFSET,
             "valve_command": VALVE_COMMAND_OFFSET, "light_command": LIGHT_COMMAND_OFFSET,
@@ -405,12 +542,12 @@ drive trips, level/pressure protection and safe CPU-STOP substitute values indep
         "tia_portal": {"minimum_version": 17, "selected_version": site.get("tia", {}).get("version", 17),
                        "maximum_reviewed_version": 21},
         "plc_interface": {"db": site["plc"]["db"], "optimized_access": False,
-                          "cyclic_ob": "AquaFlowCycle", "cycle_ms": 100},
+                          "cyclic_ob": "AquaFlowCycle", "cycle_ms": CYCLE_MS},
         "import_order": ["AquaFlowSiteIO.db", "AquaFlowSiteControl.scl", "AquaFlowCycle.scl"],
         "manual_v17_import_order": ["AquaFlowSiteIO.db", "AquaFlowSiteControl.scl"],
         "manual_cyclic_ob": {
             "name": "AquaFlowCycle", "number": 200, "event": "CyclicInterrupt",
-            "cycle_ms": 100, "phase_ms": 0, "call_file": "cyclic-call.txt",
+            "cycle_ms": CYCLE_MS, "phase_ms": 0, "call_file": "cyclic-call.txt",
             "simulator_call_file": "PLCSIM-ONLY-cyclic-call.txt",
         },
         "compiled_pattern": {
@@ -446,7 +583,10 @@ IN TIA PORTAL
    AquaFlowSiteControl.scl
 5. Generate blocks from each source. AquaFlowSiteControl.scl also creates its instance DB.
 6. Confirm AquaFlowSiteIO is non-optimized DB{site['plc']['db']}.
-7. Create OB200 AquaFlowCycle in TIA as a Cyclic interrupt, 100 ms, phase 0. Paste cyclic-call.txt.
+7. Create OB200 AquaFlowCycle in TIA as a Cyclic interrupt, {CYCLE_MS} ms, phase 0. Paste cyclic-call.txt.
+   (Updating a PLC that ran the older 100-ms program: open OB200 > Properties > Cyclic interrupt and
+   change the cycle time from 100 ms to {CYCLE_MS} ms, regenerate all three blocks from these sources,
+   compile and download. AquaFlow refuses the new program if OB200 does not run every {CYCLE_MS} ms.)
    AquaFlowCycle.scl is a source reference; never accept a generated OB until TIA confirms its event class and period.
 8. Replace every FALSE safety argument with the correct healthy-high field input. Use TRUE only in an isolated simulator.
 9. Compile hardware and software. Continue only with zero errors.
@@ -460,6 +600,8 @@ BACK IN AQUAFLOW
 4. Save, then click Verify PLC connection. Verify is read-only.
 5. Commission one outlet at a time. Record the observed response before full-show arming.
 6. Compile/start the saved AquaFlow pattern. AquaFlow schedules the pattern; the PLC owns interlocks, watchdog and physical I/O.
+7. The Play-on-PLC status shows "Frame-accurate (PLC clock)": cues fire on the PLC's own {CYCLE_MS}-ms clock.
+   "Streamed ... update the PLC program" means the PLC still runs the older 100-ms program.
 
 FILES
 - AquaFlowShow.json and ShowTimeline.csv: the compiled pattern and human-readable timeline.
@@ -490,7 +632,7 @@ DB: DB{site['plc']['db']} (non-optimized)
    Number: 200
    Event: Cyclic interrupt
    Language: SCL
-   Cycle: 100 ms
+   Cycle: {CYCLE_MS} ms   (the frame-accurate show clock counts these executions)
    Phase: 0 ms
 6. For isolated PLCSIM paste PLCSIM-ONLY-cyclic-call.txt into the OB. For physical hardware,
    paste cyclic-call.txt only after its FALSE values are replaced by reviewed healthy-high inputs.
@@ -506,7 +648,13 @@ EXPECTED IDENTITY
 Magic: 0x{MAGIC:04X}
 Contract version: {CONTRACT_VERSION}
 Site signature: 0x{stamp:08X}
-PLC heartbeat: changes every 100 ms while AquaFlowCycle executes
+PLC heartbeat: changes every {CYCLE_MS} ms while AquaFlowCycle executes
+Timing: AquaFlow reports "Frame-accurate (PLC clock)" once Verify finds contract v{CONTRACT_VERSION}
+
+UPDATING A PLCSIM PROJECT FROM THE OLDER 100-MS PROGRAM
+Regenerate AquaFlowSiteIO, AquaFlowSiteControl (and its instance) from these sources, change
+OB200's cyclic interrupt time from 100 ms to {CYCLE_MS} ms, compile, download and put PLCSIM in RUN.
+DB{site['plc']['db']} grows to {DB_SIZE} bytes; keep it non-optimized. Then Verify again in AquaFlow.
 
 PLCSIM-ONLY-cyclic-call.txt deliberately forces the five logical permits TRUE. Never transfer
 that simulator call into a physical fountain project. Physical safety inputs and independent
@@ -526,7 +674,7 @@ TARGET CPU
 PLCSIM CPU address shown in the supplied screenshot: {lab_profile['simulated_cpu_ip']}
 
 USE THE REAL INPUT-MAPPED CALL
-Create OB200 as a 100 ms Cyclic interrupt and paste cyclic-call.txt. Do not use
+Create OB200 as a {CYCLE_MS} ms Cyclic interrupt and paste cyclic-call.txt. Do not use
 PLCSIM-ONLY-cyclic-call.txt for this learning test. In PLCSIM force these healthy-high
 inputs TRUE before arming AquaFlow:
 {input_lines}
@@ -546,6 +694,8 @@ a bare CPU 1215C has no RGB/DMX interface. Monitor those bytes plus AquaFlowSite
 and AquaFlowSiteIO.LightAppliedRGB in DB100. These addresses are PLCSIM-only.
 Also monitor PlcHeartbeat, AquaFlowHeartbeat, CommandSequence, AckSequence, PumpSpeed,
 PumpApplied, ValveBits, ValveFeedbackBits, Status, Permit, FaultCode and RejectedReason.
+During a show ShowClockMs counts up in {CYCLE_MS}-ms steps, BufferReadIndex follows BufferWriteIndex,
+AppliedAtMs shows the last cue taken from Ring[] and WorstLateMs stays below {CYCLE_MS}.
 
 60-SECOND EXPECTED SEQUENCE
 0-32 s: four valve pairs run for eight seconds each.

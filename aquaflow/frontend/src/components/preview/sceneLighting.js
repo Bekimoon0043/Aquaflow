@@ -12,6 +12,7 @@ import { ENVIRONMENTS } from "../../rendering";
 import { createSkyDome } from "./skyDome";
 import { QUALITY_CONFIG } from "./sceneQuality";
 import { MAX_FIXTURE_LIGHTS } from "./fixtureLightField";
+import { rgbwLightLevel } from "./rgbwLight.js";
 
 /** Environment-map strength. The sky-dome IBL is dim and truthful, so it can run
  *  near full strength; the RoomEnvironment fallback is a bright studio probe that
@@ -206,6 +207,13 @@ export function setEngineeringLights(scene, lightConfigs) {
       // Photometry for the real-world band / spill (realWorldLook.js).
       ...(Number(lc.lumens) > 0 ? { lumens: Number(lc.lumens) } : {}),
       ...(Number(lc.wattage) > 0 ? { wattage: Number(lc.wattage) } : {}),
+      photometry: lc.photometry || null,
+      luminaireType: lc.luminaireType || null,
+      area: lc.area || null,
+      areaLight: lc.areaLight || false,
+      gobo: lc.gobo || null,
+      projection: lc.projection || null,
+      goboRotationDeg: lc.goboRotationDeg || 0,
       ...(Number(lc.aimDeg) > 0 ? { aimDeg: Number(lc.aimDeg), beamAngleDeg: Number(lc.beamAngleDeg) || undefined } : {}),
       // Framing blades (lightFraming.js, relative to this light): cut the beam everywhere.
       ...(lc.framing ? { framing: lc.framing } : {}),
@@ -242,6 +250,16 @@ export function colorFromSignalColor(scene, value, fallback = "#ffffff") {
   }
 
   return new T.Color(fallback);
+}
+
+export function applyRGBWFixtureState(L, state, scene) {
+  const color = state?.color?.isColor
+    ? state.color
+    : scene._colorFromSignalColor(state?.color, "#ffffff");
+  const mixed = rgbwLightLevel(color, state?.intensity, state?.whiteIntensity, L.baseIntensity);
+  L.color.setRGB(mixed.r, mixed.g, mixed.b);
+  L.intensity = mixed.intensity;
+  L.radius = L.baseRadius;
 }
 
 export function applyRuntimeLighting(scene) {

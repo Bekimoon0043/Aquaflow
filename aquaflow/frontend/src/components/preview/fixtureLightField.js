@@ -37,6 +37,7 @@ export const MAX_FIXTURE_LIGHTS = 1024;
 /** Rows: 0 pos+range, 1 axis+cos(outer), 2 colour+cos(inner), 3–6 framing blades
  *  (plane n.xyz, w: kept where n·p + w ≥ 0), 7 blade meta (count, softness m). */
 export const LIGHT_ROWS = 8;
+export const IES_SAMPLES = 32;
 export const BLADE_ROW0 = 3;
 export const BLADE_META_ROW = 7;
 export const CLUSTER_DIM = 32;
@@ -81,6 +82,8 @@ const DEFAULT_SOFTNESS_DEG = 10;
 export const FIELD_LIGHT_GLSL = /* glsl */ `
 uniform sampler2D uLightTex;
 uniform sampler2D uClusterTex;
+uniform sampler2D uIesTex;
+uniform vec2  uIesSize;
 uniform vec4  uClusterBounds;   // xy = origin (world xz), zw = 1 / size
 uniform float uClusterDim;
 uniform int   uFieldCount;
@@ -97,6 +100,18 @@ float flPhaseHG(float c, float g){
   return (1.0 - g2) / pow(max(1.0 + g2 - 2.0 * g * c, 1e-4), 1.5);
 }
 
+vec4 flIesTexel(float pixel){
+  return texture2D(uIesTex, vec2((mod(pixel, uIesSize.x) + 0.5) / uIesSize.x,
+    (floor(pixel / uIesSize.x) + 0.5) / uIesSize.y));
+}
+
+float flIesProfile(float id, float cosine){
+  vec4 meta = flIesTexel(id * 32.0);
+  if (meta.g < 0.5) return 1.0;
+  float u = clamp(acos(clamp(cosine, -1.0, 1.0)) / 3.141592653589793, 0.0, 1.0);
+  return max(0.0, flIesTexel(id * 32.0 + floor(u * 31.0)).r);
+}
+
 vec3 flContribution(float id, vec3 p, vec3 toCam, float g, float coneW){
   vec4 r0 = flTexel(id, 0.0);   // pos.xyz, range
   vec3 L  = p - r0.xyz;
@@ -105,7 +120,7 @@ vec3 flContribution(float id, vec3 p, vec3 toCam, float g, float coneW){
   vec4 r1 = flTexel(id, 1.0);   // axis.xyz, cos(outer)
   vec4 r2 = flTexel(id, 2.0);   // colour x intensity, cos(inner)
   vec3 ld = L / max(d, 1e-4);
-  float cone = mix(1.0, smoothstep(r1.w, r2.w, dot(ld, r1.xyz)), coneW);
+  float cone = mix(1.0, smoothstep(r1.w, r2.w, dot(ld, r1.xyz)), coneW) * flIesProfile(id, dot(ld, r1.xyz));
   // An omni (coneW = 0) sample — the pool surface — keeps the old field's reach of one
   // fixture radius (range / 3); beams through spray carry the full range.
   float x   = d / (r0.w * mix(${(1/3).toFixed(6)}, 1.0, coneW));
@@ -203,6 +218,19 @@ vec3 flSurfaceKnee(vec3 c){
 // ─── CPU side ────────────────────────────────────────────────────────────────
 const clamp01 = v => Math.min(1, Math.max(0, v));
 
+function photometricEncoding(L) {
+  const p = L.photometry || {};
+  const enabled = p.enabled === true && Number(p.fluxLm) > 0;
+  if (!enabled) return { enabled: false, curve: null };
+  let curve = null;
+  if (typeof p.profile?.candelaAt === "function") {
+    const samples = Array.from({ length: 32 }, (_, index) => Math.max(0, p.profile.candelaAt(index * 180 / 31, 0)));
+    const peak = Math.max(...samples, 1e-9);
+    curve = samples.map((value) => value / peak);
+  }
+  return { enabled: true, curve };
+}
+
 /**
  * Normalise a scene light record into the encoded form.
  * Accepts the scene's engineering-light records ({x, z, y?, color, intensity, radius,
@@ -223,7 +251,10 @@ export function encodeLight(L) {
   const outer = Math.min(89, half + DEFAULT_SOFTNESS_DEG / 2);
   const inner = Math.max(0.5, half - DEFAULT_SOFTNESS_DEG / 2);
   const radius = Math.max(1, Number(L.radius) || 6);
-  const intensity = Math.max(0, Number(L.intensity) || 0) * FIELD_GAIN;
+  const photometric = photometricEncoding(L);
+  const intensity = photometric.enabled
+    ? Number(L.photometry.fluxLm) / (4 * Math.PI * 1000)
+    : Math.max(0, Number(L.intensity) || 0) * FIELD_GAIN;
   const c = L.color || { r: 1, g: 1, b: 1 };
   const blades = bladePlanesOf(L);
   return {
@@ -233,6 +264,7 @@ export function encodeLight(L) {
     ax, ay, az,
     cosOuter: Math.cos(outer * deg), cosInner: Math.cos(inner * deg),
     r: (c.r ?? 1) * intensity, g: (c.g ?? 1) * intensity, b: (c.b ?? 1) * intensity,
+    photometric,
   };
 }
 
@@ -245,6 +277,9 @@ export function lightContribution(enc, p, toCam, g = HG_G, coneW = 1) {
   const dx = lx * s, dy = ly * s, dz = lz * s;
   const t = clamp01((dx * enc.ax + dy * enc.ay + dz * enc.az - enc.cosOuter) / ((enc.cosInner - enc.cosOuter) || 1e-6));
   const cone = 1 + (t * t * (3 - 2 * t) - 1) * coneW;
+  const cosine = dx * enc.ax + dy * enc.ay + dz * enc.az;
+  const profileIndex = Math.round(Math.acos(Math.max(-1, Math.min(1, cosine))) / Math.PI * 31);
+  const profile = enc.photometric?.enabled && enc.photometric.curve ? enc.photometric.curve[profileIndex] : 1;
   const x = d / (enc.range * (1 / 3 + (1 - 1 / 3) * coneW));
   const win = clamp01(1 - x * x * x * x);
   const att = (win * win) / (1 + ATTEN_K * d * d);
@@ -254,7 +289,7 @@ export function lightContribution(enc, p, toCam, g = HG_G, coneW = 1) {
   const phase = 1 + (hg - 1) * PHASE_MIX;
   let blade = 1;
   if (enc.blades?.length) blade = bladeFactor(null, p.x, p.y, p.z, enc.blades, enc.bladeSoft);
-  const k = cone * att * phase * blade;
+  const k = cone * profile * att * phase * blade;
   return [enc.r * k, enc.g * k, enc.b * k];
 }
 
@@ -389,7 +424,11 @@ export class FixtureLightField {
     this.lightTex = new T.DataTexture(this.lightData, maxLights, LIGHT_ROWS, T.RGBAFormat, T.FloatType);
     this.clusterData = new Float32Array(clusterDim * clusterDim * clusterK);
     this.clusterTex = new T.DataTexture(this.clusterData, clusterDim * clusterDim, clusterK / 4, T.RGBAFormat, T.FloatType);
-    for (const tx of [this.lightTex, this.clusterTex]) {
+    this.iesData = new Float32Array(maxLights * IES_SAMPLES * 4);
+    const iesWidth = Math.min(1024, maxLights * IES_SAMPLES);
+    const iesHeight = Math.ceil(maxLights * IES_SAMPLES / iesWidth);
+    this.iesTex = new T.DataTexture(this.iesData, iesWidth, iesHeight, T.RGBAFormat, T.FloatType);
+    for (const tx of [this.lightTex, this.clusterTex, this.iesTex]) {
       tx.minFilter = tx.magFilter = T.NearestFilter;
       tx.generateMipmaps = false;
       if (T.NoColorSpace) tx.colorSpace = T.NoColorSpace;
@@ -398,6 +437,8 @@ export class FixtureLightField {
     this.uniforms = {
       uLightTex: { value: this.lightTex },
       uClusterTex: { value: this.clusterTex },
+      uIesTex: { value: this.iesTex },
+      uIesSize: { value: new T.Vector2(iesWidth, iesHeight) },
       uClusterBounds: { value: new T.Vector4(0, 0, 1, 1) },
       uClusterDim: { value: clusterDim },
       uFieldCount: { value: 0 },
@@ -439,8 +480,16 @@ export class FixtureLightField {
       o = (BLADE_META_ROW * W + i) * 4;
       d[o] = nb; d[o + 1] = e.bladeSoft; d[o + 2] = 0; d[o + 3] = 0;
       if (nb) key += `b${e.blades.map((pl) => `${pl.n.join(",")},${pl.w.toFixed(3)}`).join("/")};`;
+      for (let sample = 0; sample < IES_SAMPLES; sample++) {
+        const offset = (i * IES_SAMPLES + sample) * 4;
+        this.iesData[offset] = e.photometric.curve ? e.photometric.curve[sample] : 1;
+        this.iesData[offset + 1] = e.photometric.enabled ? 1 : 0;
+        this.iesData[offset + 2] = 0;
+        this.iesData[offset + 3] = 1;
+      }
     }
     this.lightTex.needsUpdate = true;
+    this.iesTex.needsUpdate = true;
     if (key !== this._geoKey) {
       this._geoKey = key;
       const cl = buildClusters(encoded, this.dim, this.K);
@@ -464,6 +513,7 @@ export class FixtureLightField {
   dispose() {
     this.lightTex.dispose();
     this.clusterTex.dispose();
+    this.iesTex.dispose();
   }
 }
 

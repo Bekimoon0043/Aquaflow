@@ -9,8 +9,11 @@ import pytest
 from engine import siemens_devices as dev
 from engine.fake_s7_server import FakeS7Server
 from engine.s7_client import S7Client
-from engine.siemens_contract import (CONTRACT_VERSION, DB_SIZE, HEADER_SIZE, LIGHT_CAPACITY, MAGIC,
-                                     PROGRAM_VERSION, PUMP_CAPACITY, VALVE_CAPACITY)
+# These benches emulate the contract v2 (100-ms, streamed) PLC program; v3 is covered by
+# tests/test_siemens_buffered.py with engine.fake_s7_server.FakeAquaFlowPlc.
+from engine.siemens_contract import (LEGACY_CONTRACT_VERSION as CONTRACT_VERSION, LEGACY_DB_SIZE as DB_SIZE,
+                                     HEADER_SIZE, LIGHT_CAPACITY, MAGIC,
+                                     LEGACY_PROGRAM_VERSION as PROGRAM_VERSION, PUMP_CAPACITY, VALVE_CAPACITY)
 from engine.siemens_runtime import SiemensRuntime
 from engine.siemens_site import SiteStore, compile_show, create_tia_plcsim_test, signature
 from services.siemens_acceptance import AcceptanceRunner, AcceptanceStore

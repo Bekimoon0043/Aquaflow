@@ -53,7 +53,7 @@ import { buildPool, disposeSiteSurfaces, buildSiteSurfaces, buildWaterSurface, s
 import {
   envIntensityFor, buildSky, refitShadows, fitShadowCamera, applyEnvironment,
   buildUnderwaterLights, setEngineeringLights, colorFromSignalColor,
-  applyRuntimeLighting, setLightColor,
+  applyRuntimeLighting, applyRGBWFixtureState, setLightColor,
 } from "./sceneLighting";
 // Photorealistic Rendering Engine (AQ-S3-004) — single source of truth for the
 // environment presets and gravity used by the water physics below.
@@ -113,6 +113,13 @@ import {
   configureHalfResSpray, renderHalfResSpray, restoreVisibility, halfResSprayObjects,
 } from "./scenePost";
 import { FixtureLightField, bindFieldLightUniforms } from "./fixtureLightField";
+import { FilmWaterLayer, filmKindFor } from "./filmWaterLayer.js";
+import { FountainIndirectLights } from "./fountainIndirect3D.js";
+import { MotionBlurAccumulator } from "./motionBlur.js";
+import { PyroSystem } from "./pyro/pyroSystem.js";
+import { AdvancedLightingLayer } from "./advancedLighting3D.js";
+import { LaserScene } from "./laser/laserScene.js";
+import { createSubframeSchedule, exposureTimeSeconds } from "../../rendering/cinematic.js";
 import {
   CORE_VERT, CORE_FRAG, GLOW_VERT, GLOW_FRAG,
   FOG_VERT, FOG_FRAG, LASER_VERT, LASER_FRAG, MAX_RIPPLES,
@@ -497,6 +504,11 @@ export class NozzleV2 {
   update(delta, elapsed, wind, tintColor) {
     const ix = this.intensity;
     const cfg = this.config;
+    if (cfg.advancedNozzleModel && filmKindFor(cfg)) {
+      if (this.core) this.core.visible = false;
+      if (this.glow) this.glow.visible = false;
+      return;
+    }
     const type = cfg.type || 'jet_3d';
     const ox = cfg.x || 0;
     const oz = cfg.z || 0;
@@ -1167,6 +1179,7 @@ export class FountainScene {
     this.toneMapping  = getToneMapping(options.toneMapping).id;   // AF-3D-024
     this._halfResUser = !!options.halfResSpray;                   // AF-3D-008 (medium)
     this._realWorld = options.realWorld !== false;                 // realWorldLook.js (default on)
+    this._advancedNozzles = options.advancedNozzles === true;
 
         this._signals   = {
       pump: 0,
@@ -1342,6 +1355,9 @@ export class FountainScene {
     this._lightMarkers = new LightMarkerInstances(this.THREE);
     this.scene.add(this._lightMarkers.group);
     this._buildNozzles();
+    this._filmWater = new FilmWaterLayer(this.THREE, this.scene);
+    this._fountainIndirect = new FountainIndirectLights(this.THREE, this.scene);
+    this._advancedLighting = new AdvancedLightingLayer(this.THREE, this.scene);
     this._buildReviewOverlays();
     this._setupEvents();
 
@@ -1943,7 +1959,7 @@ export class FountainScene {
       this.waterSys?.mesh, this.spraySys?.mesh, this.foamSys?.mesh, this.flameSys?.mesh,
       this._gpuWater?.mesh, this._gpuSpray?.mesh,
       this._fogMesh, this.waterSurface, this._wetOverlay, this._reviewGroup,
-      this._laserGroup, this._cones?.group, this._sky?.group, this._editor?.root, this._cadUnderlay?.group,
+      this._laserGroup, this._laserRig?.group, this._cones?.group, this._sky?.group, this._editor?.root, this._cadUnderlay?.group,
       ...(this.nozzles || []).map(n => n.glow),
       ...(this.nozzles || []).map(n => n.core),
       ...(this._engLightMeshes || []),
@@ -2136,7 +2152,19 @@ export class FountainScene {
       this._laserBeams.push(beam);
     }
     this.scene.add(this._laserGroup);
+    // Real projectors (laser/laserScene.js): one rig for every placed laser fixture.
+    if (!this._laserRig) this._laserRig = new LaserScene(T, this.scene);
+    this._laserRig.setFixtures(this._laserFixtures || [], this._laserSafety || {});
   }
+  /** Placed laser projectors (world frame) and the audience safety area (laser/laserSite.js). */
+  setLaserFixtures(fixtures = [], safety = {}) {
+    this._laserFixtures = fixtures || [];
+    this._laserSafety = safety || {};
+    this._laserRig?.setFixtures(this._laserFixtures, this._laserSafety);
+  }
+  /** Haze in the air, 0..1: laser beams are only visible where light scatters. */
+  setLaserHaze(v) { this._laserHaze = Math.max(0, Math.min(1, Number(v) || 0)); }
+  getLaserStats() { return this._laserRig?.stats || { beams: 0, blanked: 0, clamped: 0 }; }
 
   _buildEnvironment() { this._applyEnvironment(); }
   _buildVenueElements() {
@@ -2207,6 +2235,10 @@ export class FountainScene {
         engineering: cfg.engineering || null,
         // Without this every nozzle silently fell back to its generic per-type height.
         designHeightM: cfg.designHeightM ?? null,
+        advancedNozzleModel: cfg.advancedNozzleModel ?? this._advancedNozzles,
+        model: cfg.model || null,
+        physics: cfg.physics || null,
+        photometry: cfg.photometry || null,
         ...(cfg.aerated ? { aerated: true } : {}),
         ...(cfg.fixtureType ? { fixtureType: cfg.fixtureType } : {}),
         ...(this._realWorld === false ? { realWorld: false } : {}),
@@ -2491,17 +2523,16 @@ export class FountainScene {
     if (I.fixtureLightStates && this._engLights?.length) {
       this._engLights.forEach((L, index) => {
         const state = I.fixtureLightStates[L.id];
-        const level = Math.max(0, Math.min(1, Number(state?.intensity) || 0));
-        L.color.copy(this._colorFromSignalColor(state?.color, "#ffffff"));
-        L.intensity = L.baseIntensity * level;
-        L.radius = L.baseRadius;
-        this._lightMarkers?.setLevel(index, L.color, 0.08 + level * 0.84);
+        applyRGBWFixtureState(L, state, this);
+        this._lightMarkers?.setLevel(index, L.color, 0.08 + (state?.intensity || 0) * 0.84 + (state?.whiteIntensity || 0) * 0.3);
       });
     } else if (this._engLights?.length) {
       for (const L of this._engLights) {
-        if (L?.color) L.color.copy(runtimeColor);
-        L.intensity = L.baseIntensity * lightI;
-	L.radius = L.baseRadius;
+        applyRGBWFixtureState(L, {
+          color: runtimeColor,
+          intensity: lightI,
+          whiteIntensity: (I.lightingColor?.w || 0) * lightI,
+        }, this);
       }
 
       for (let i = 0; i < this._engLights.length; i++) this._lightMarkers?.setLevel(i, runtimeColor);
@@ -2599,6 +2630,12 @@ export class FountainScene {
         }
       }
     });
+    this._filmWater?.update(this.nozzles, elapsed, this.camera);
+    this._fountainIndirect?.update(this.nozzles.map((nozzle) => ({
+      ...nozzle.config,
+      runtimeIntensity: nozzle.intensity,
+    })), this._engLights || [], this.quality);
+    this._advancedLighting?.update(this._engLights || [], elapsed);
 
     // ─── GPU particle simulation ───────────────────────────────────────
     if (gpuOn) {
@@ -2637,7 +2674,15 @@ export class FountainScene {
     }
 
     // ─── Lasers ────────────────────────────────────────────────────────
-    const laserI = I.laser || 0;
+    // Placed projectors are driven per fixture from the show frame, timed by show time so a
+    // baked video matches the live view; the old decorative rig only runs without them.
+    const realLasers = !!(this._laserRig && this._laserFixtures?.length);
+    if (realLasers) {
+      const showT = Number.isFinite(I.showFrame?.showTimeMs) ? I.showFrame.showTimeMs / 1000 : elapsed;
+      this._laserRig.update(I.showFrame?.fixtures || {}, showT,
+        { haze: Math.max(this._laserHaze ?? 0.35, Number(I.fog) || 0), realWorld: this._realWorld !== false });
+    }
+    const laserI = realLasers ? 0 : (I.laser || 0);
     this._laserBeams.forEach((beam,i) => {
       beam.visible = laserI > 0.05;
       beam.material.uniforms.uIntensity.value = laserI;
@@ -2653,6 +2698,17 @@ export class FountainScene {
       this.waterMat.uniforms.uLightColor.value.copy(this._lightField.uGlobalLight.value);
       this.waterMat.uniforms.uLightIntensity.value = individualLights ? 0.16 : 0.16 + lightI * 0.42;
       this.waterMat.uniforms.uCameraPos.value.copy(this.camera.position);
+    }
+
+    // ─── Fireworks: a function of the show time (live playhead or bake time) ──
+    if (this._pyro) {
+      this._pyro.update(this._cameraTime || 0, { quality: this.quality, camera: this.camera, viewportHeight: this.renderer?.domElement?.height || 720 });
+      const f = this._pyro.flash;
+      if (f.intensity > 0 && this.waterMat) {
+        const u = this.waterMat.uniforms;
+        u.uLightColor.value.lerp(this._pyroFlashColor.setRGB(f.r, f.g, f.b), Math.min(1, f.intensity));
+        u.uLightIntensity.value += f.intensity * 0.6;
+      }
     }
 
     // ─── Underwater point lights tinted to global light ────────────────
@@ -3239,22 +3295,50 @@ export class FountainScene {
 
       // 2. Frames: fixed physics sub-steps per frame, then one render + encode.
       const t0 = now();
-      for (let i = 0; i < plan.frames; i++) {
-        if (abort?.aborted) throw new DOMException("Render cancelled", "AbortError");
-        const frameStart = VB_frameShowTime(plan, i) - plan.frameDuration;
-        for (let s = 1; s <= plan.substeps; s++) {
-          apply(Math.max(0, frameStart + s * plan.substepDt));
-          this._bakeElapsed += plan.substepDt;
-          this._update(plan.substepDt, this._bakeElapsed);
+      const blur = plan.motionBlur?.enabled ? plan.motionBlur : null;
+      const blurAccumulator = blur ? new MotionBlurAccumulator(this.THREE, this.renderer, {
+        width: Math.max(1, Math.round(plan.width * pixelRatio)),
+        height: Math.max(1, Math.round(plan.height * pixelRatio)),
+      }) : null;
+      try {
+        for (let i = 0; i < plan.frames; i++) {
+          if (abort?.aborted) throw new DOMException("Render cancelled", "AbortError");
+          if (this.renderer.info.autoReset) this.renderer.info.autoReset = false;
+          this.renderer.info.reset();
+          if (blurAccumulator) {
+            const exposure = exposureTimeSeconds(plan.fps, blur.shutterAngle);
+            const samples = createSubframeSchedule({
+              frameTime: VB_frameShowTime(plan, i), exposureSeconds: exposure,
+              sampleCount: blur.samples, seed: `${blur.seed || 0}:${i}`,
+            }).sort((a, b) => a - b);
+            let previous = VB_frameShowTime(plan, i) - plan.frameDuration;
+            blurAccumulator.render(samples.length, (index) => {
+              const time = samples[index];
+              const dt = Math.max(0, time - previous);
+              previous = time;
+              apply(time);
+              this._bakeElapsed += dt;
+              this._update(dt, this._bakeElapsed);
+              this._updateCamera(dt);
+              this._renderFrame();
+            });
+          } else {
+            const frameStart = VB_frameShowTime(plan, i) - plan.frameDuration;
+            for (let s = 1; s <= plan.substeps; s++) {
+              apply(Math.max(0, frameStart + s * plan.substepDt));
+              this._bakeElapsed += plan.substepDt;
+              this._update(plan.substepDt, this._bakeElapsed);
+            }
+            this._updateCamera(plan.frameDuration);
+            this._renderFrame();
+          }
+          // Awaiting respects encoder back-pressure (bounded memory at 4K).
+          await encoder.addFrame(VB_frameTimestamp(plan, i), plan.frameDuration);
+          onProgress?.({ frame: i + 1, frames: plan.frames, phase: "render", elapsedMs: now() - t0 });
+          if (i % 2 === 1) await yieldUI();
         }
-        this._updateCamera(plan.frameDuration);
-        if (this.renderer.info.autoReset) this.renderer.info.autoReset = false;
-        this.renderer.info.reset();
-        this._renderFrame();
-        // Awaiting respects encoder back-pressure (bounded memory at 4K).
-        await encoder.addFrame(VB_frameTimestamp(plan, i), plan.frameDuration);
-        onProgress?.({ frame: i + 1, frames: plan.frames, phase: "render", elapsedMs: now() - t0 });
-        if (i % 2 === 1) await yieldUI();
+      } finally {
+        blurAccumulator?.dispose();
       }
     } finally {
       this._baking = false;
@@ -3374,6 +3458,16 @@ export class FountainScene {
     this._cameraTrack = normalizeCameraTrack(track);
     this._cameraTime = Math.max(0, Number(time) || 0);
     this._rebuildCameraPath();
+  }
+  /** Firework cues in the world frame (show/pyro.js pyroCuesFromClips); [] removes them. */
+  setPyroCues(cues = []) {
+    const list = Array.isArray(cues) ? cues : [];
+    if (!list.length && !this._pyro) return;
+    if (!this._pyro && this.scene && this.THREE) {
+      this._pyro = new PyroSystem(this.THREE, this.scene);
+      this._pyroFlashColor = new this.THREE.Color();
+    }
+    this._pyro?.setCues(list);
   }
   setCameraTime(time) { this._cameraTime = Math.max(0, Number(time) || 0); this._highlightCameraKey(); }
   /** Keep horizon level (default): ignore key roll. */
@@ -3592,6 +3686,7 @@ export class FountainScene {
     if (!this.renderer) return this.toneMapping;
     this.renderer.toneMapping = threeToneMapping(this.THREE, this.toneMapping);
     this._setBaseExposure(this._baseExposure ?? this.renderer.toneMappingExposure);
+    if (this._initialized) { this._disposePostFX(); this._buildPostFX(); }
     return this.toneMapping;
   }
   setWaterSimulation({ response, damping, boundaryDamping } = {}) {
@@ -3675,6 +3770,8 @@ export class FountainScene {
   dispose() {
     cancelAnimationFrame(this._rafId);
     this.stopPattern();
+    this._pyro?.dispose(); this._pyro = null;
+    this._laserRig?.dispose(); this._laserRig = null;
     const c = this.canvas;
     c.removeEventListener('mousedown',  this._onDown);
     c.removeEventListener('mousemove',  this._onMove);
@@ -3703,6 +3800,12 @@ export class FountainScene {
     this._disposeGPUFields();
     this._cones?.dispose?.();
     this._cones = null;
+    this._filmWater?.dispose?.();
+    this._filmWater = null;
+    this._fountainIndirect?.dispose?.();
+    this._fountainIndirect = null;
+    this._advancedLighting?.dispose?.();
+    this._advancedLighting = null;
     this._sky?.dispose?.();
     this._sky = null;
     if (this._venueGroup) { disposeVenue(this._venueGroup); this._venueGroup = null; }

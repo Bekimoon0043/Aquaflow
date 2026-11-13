@@ -113,7 +113,7 @@ namespace AquaFlow.TiaBridge
                     { "project_path", project.Path.FullName },
                     { "program_validation", cycle },
                     { "diagnostics", new object[] { new Dictionary<string, object> {
-                        { "severity", "information" }, { "message", "AquaFlowCycle was generated through version-native Siemens SimaticML and verified as a 100-ms cyclic interrupt before the project was saved." }
+                        { "severity", "information" }, { "message", "AquaFlowCycle was generated through version-native Siemens SimaticML and verified as a 10-ms cyclic interrupt before the project was saved." }
                     }}}
                 };
             }
@@ -299,7 +299,8 @@ namespace AquaFlow.TiaBridge
                 secondary.Value = "CyclicInterrupt";
                 // Event-specific values exported from the temporary program-cycle OB are
                 // intentionally omitted. Siemens assigns the selected CPU's defaults for the
-                // new cyclic-interrupt event; readback below requires 100 ms and phase zero.
+                // new cyclic-interrupt event except the period and phase, which the
+                // frame-accurate contract (v3) fixes at 10 ms / 0; readback below verifies both.
                 var eventAttributes = new HashSet<string>(StringComparer.Ordinal) {
                     "ApplicationCycle", "AutomaticMinimum", "ConstantName", "CycleTimeDistributedIO",
                     "CyclicApplicationCycleTime", "CyclicTime", "DataExchangeMode", "DelayTime",
@@ -311,6 +312,8 @@ namespace AquaFlow.TiaBridge
                 };
                 foreach (XElement element in attributes.Elements().Where(element => eventAttributes.Contains(element.Name.LocalName)).ToList())
                     element.Remove();
+                InsertAttributeSorted(attributes, number.Name.Namespace + "CyclicTime", RequiredCyclicTimeUs.ToString());
+                InsertAttributeSorted(attributes, number.Name.Namespace + "PhaseOffset", "0");
                 document.Save(xmlPath, SaveOptions.DisableFormatting);
                 IList<PlcBlock> imported = plc.BlockGroup.Blocks.Import(new FileInfo(xmlPath), ImportOptions.Override);
                 if (imported == null || imported.Count != 1 || plc.BlockGroup.Blocks.Find("AquaFlowCycle") == null)
@@ -323,6 +326,19 @@ namespace AquaFlow.TiaBridge
             {
                 if (File.Exists(xmlPath)) File.Delete(xmlPath);
             }
+        }
+
+        // AquaFlow runtime contract v3: the PLC show clock counts AquaFlowCycle executions.
+        private const int RequiredCyclicTimeUs = 10000;
+
+        // SimaticML lists OB attributes alphabetically; keep that order when adding one.
+        private static void InsertAttributeSorted(XElement attributes, XName name, string value)
+        {
+            XElement element = new XElement(name, value);
+            XElement after = attributes.Elements().FirstOrDefault(existing =>
+                string.CompareOrdinal(existing.Name.LocalName, name.LocalName) > 0);
+            if (after != null) after.AddBeforeSelf(element);
+            else attributes.Add(element);
         }
 
         private static Dictionary<string, object> VerifyProgram(PlcSoftware plc)
@@ -353,8 +369,8 @@ namespace AquaFlow.TiaBridge
             if (number < 200 || secondary.IndexOf("Cyclic", StringComparison.OrdinalIgnoreCase) < 0 ||
                 secondary.IndexOf("Interrupt", StringComparison.OrdinalIgnoreCase) < 0)
                 throw new InvalidOperationException("AquaFlowCycle must be an S7-1200 cyclic interrupt OB with number 200 or higher; Siemens reports number " + number + " and type '" + secondary + "'");
-            if (cyclicTime != 100000 || phase != 0)
-                throw new InvalidOperationException("AquaFlowCycle must use 100000 us (100 ms) with phase 0; Siemens reports " + cyclicTime + " us and phase " + phase);
+            if (cyclicTime != RequiredCyclicTimeUs || phase != 0)
+                throw new InvalidOperationException("AquaFlowCycle must use " + RequiredCyclicTimeUs + " us (10 ms) with phase 0; Siemens reports " + cyclicTime + " us and phase " + phase);
 
             string exported = Path.Combine(Path.GetTempPath(), "aquaflow-cycle-" + Guid.NewGuid().ToString("N") + ".xml");
             try

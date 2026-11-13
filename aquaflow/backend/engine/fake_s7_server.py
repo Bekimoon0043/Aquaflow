@@ -24,6 +24,15 @@ Fault modes:
 (Faults apply to the DATA phase only — the COTP/S7 handshake always succeeds, the
 way a real PLC that later fails mid-session behaves.)
 
+Jitter injection: `write_delay` / `read_delay` (callables returning seconds) delay each
+Write Var / Read Var request before it touches the DB — the PC/network jitter a show
+must survive.  Requests on one connection stay in order, as on the wire.
+
+FakeAquaFlowPlc (below) runs the generated AquaFlowSiteControl FB logic — contract v3
+(10-ms OB, PLC show clock, timestamped bank ring) or v2 (100-ms OB, streamed banks) —
+against this server's DB on its own thread, so tests can measure when outputs change on
+the PLC's clock while the PC and network jitter.
+
 Discovery additions (read-only identification, engine/s7_identify.py):
   expected_slot   — when set, a COTP CR whose remote TSAP names another slot is
                     refused (connection dropped, or a COTP DR with
@@ -41,7 +50,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-from typing import Optional
+import threading
+import time
+from typing import Callable, Optional
 
 logger = logging.getLogger("aquaflow.fake_s7")
 
@@ -78,6 +89,11 @@ class FakeS7Server:
         self.dbs: dict[int, bytearray] = {1: bytearray(64)}
         self.reads = 0
         self.writes = 0
+        # One S7 item is consistent against the PLC cycle (FakeAquaFlowPlc holds this lock
+        # for a whole OB execution, the server for one Read/Write Var item).
+        self.lock = threading.RLock()
+        self.write_delay: Optional[Callable[[], float]] = None
+        self.read_delay: Optional[Callable[[], float]] = None
         self._server: Optional[asyncio.Server] = None
         self._conns: list[asyncio.StreamWriter] = []
         self.port: Optional[int] = None
@@ -128,6 +144,9 @@ class FakeS7Server:
                     return                                     # not TPKT — hang up
                 total = struct.unpack(">H", tpkt[2:4])[0]
                 frame = await reader.readexactly(total - 4)
+                delay = self._data_delay(frame)
+                if delay > 0:
+                    await asyncio.sleep(delay)
                 self._close_after_reply = False
                 reply = self._reply(frame)
                 if reply is None:                              # drop mode
@@ -141,7 +160,20 @@ class FakeS7Server:
         except (asyncio.IncompleteReadError, ConnectionError, OSError):
             pass
 
+    def _data_delay(self, frame: bytes) -> float:
+        """Injected latency for a Read/Write Var JOB (0 for everything else)."""
+        cotp_len = frame[0] + 1
+        s7 = frame[cotp_len:]
+        if len(s7) < 11 or s7[0] != 0x32 or s7[1] != 0x01:
+            return 0.0
+        source = {0x04: self.read_delay, 0x05: self.write_delay}.get(s7[10])
+        return max(0.0, float(source())) if source else 0.0
+
     def _reply(self, frame: bytes) -> Optional[bytes]:
+        with self.lock:
+            return self._reply_locked(frame)
+
+    def _reply_locked(self, frame: bytes) -> Optional[bytes]:
         # frame = COTP + payload (TPKT already consumed).
         cotp_len = frame[0] + 1
         cotp, s7 = frame[:cotp_len], frame[cotp_len:]
@@ -350,3 +382,307 @@ class FakeS7Server:
                   bytes(error))                                # error class/code
         cotp = bytes([0x02, 0xF0, 0x80])
         return self._tpkt(cotp + header + param + data)
+
+
+class FakeAquaFlowPlc:
+    """The generated AquaFlowSiteControl FB, executed on a thread against a FakeS7Server DB.
+
+    A line-by-line model of services/siemens_tia_package.py's SCL for contract v3 (10-ms OB:
+    PLC show clock, timestamped bank ring, keepalive watchdog, underrun hold/stop, ms min
+    on/off) and v2 (100-ms OB, streamed banks).  Each OB execution holds `server.lock`, the
+    way a real CPU serves an S7 item between OB executions, never inside one.
+
+    Controls: `local_permit` (the healthy-high field inputs), `halted` (CPU STOP: no OB runs,
+    the server still answers), `freeze_heartbeat` (OB runs but PlcHeartbeat stops),
+    `accept_commits` (False: ignore new CommandSequence values).
+
+    Measurement: `applied` lists every ring bank applied (at_ms, clock_ms, late_ms on the PLC
+    clock, wall_late_ms against the thread's wall clock since RUN); `events` lists every change
+    of the physical outputs with the PLC clock and wall time.
+    """
+
+    def __init__(self, server: FakeS7Server, site: dict, *, contract_version: Optional[int] = None,
+                 db: Optional[int] = None):
+        from engine import siemens_contract as C
+        from engine.siemens_site import signature
+        self.C = C
+        self.server = server
+        self.site = site
+        self.db = int(db or site["plc"]["db"])
+        self.version = int(contract_version or C.CONTRACT_VERSION)
+        profile = C.PROFILES[self.version]
+        self.cycle_ms = profile["cycle_ms"]
+        self.buffered_capable = profile["buffered"]
+        buf = bytearray(profile["db_size"])
+        struct.pack_into(">HHHHII", buf, 0, C.MAGIC, self.version, C.HEADER_SIZE, 0,
+                         signature(site), profile["program_version"])
+        struct.pack_into(">HHHH", buf, 34, self.cycle_ms, C.PUMP_CAPACITY, C.VALVE_CAPACITY, C.LIGHT_CAPACITY)
+        if self.buffered_capable:
+            struct.pack_into(">H", buf, C.BUFFER_CAPACITY_OFFSET, C.BUFFER_CAPACITY)
+        with server.lock:
+            server.dbs[self.db] = buf
+        self.local_permit = True
+        self.halted = False
+        self.freeze_heartbeat = False
+        self.accept_commits = True
+        # FB statics (non-retentive instance DB)
+        self.last_seq = 0
+        self.age_ms = C.WATCHDOG_MS          # = legacy MissedCycles := 10: not healthy until a commit
+        self.ready = False
+        self.running = False
+        self.buffered = False
+        self.clock = 0
+        self.last_keepalive = 0
+        self.stream_fault = 0
+        self.late_flag = False
+        self.pump = [0] * C.PUMP_CAPACITY
+        self.valves = bytearray(C.VALVE_CAPACITY // 8)
+        self.lights = bytearray(C.LIGHT_CAPACITY * 3)
+        self.valve_open = [False] * C.VALVE_CAPACITY
+        self.valve_age = [0] * C.VALVE_CAPACITY
+        # measurement
+        self.applied: list[dict] = []
+        self.events: list[dict] = []
+        self.outputs: dict = {}
+        self.ticks = 0
+        self.run_wall: Optional[float] = None
+        self.run_start_wall: Optional[float] = None
+        self._thread: Optional[threading.Thread] = None
+        self._stop = threading.Event()
+
+    # ── lifecycle ────────────────────────────────────────────────────────────
+    def start(self):
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._loop, name="fake-aquaflow-plc", daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(2)
+
+    def _loop(self):
+        period = self.cycle_ms / 1000
+        due = time.perf_counter()
+        while not self._stop.is_set():
+            due += period
+            delay = due - time.perf_counter()
+            if delay > 0:
+                time.sleep(delay)
+            elif delay < -5 * period:          # far behind (host stalled): drop the queued events
+                due = time.perf_counter()
+            if not self.halted:
+                self.tick()
+
+    def tick(self):
+        with self.server.lock:
+            self._cycle(time.perf_counter())
+
+    # ── DB access ────────────────────────────────────────────────────────────
+    @property
+    def _db(self) -> bytearray:
+        return self.server.dbs[self.db]
+
+    def _w(self, offset):
+        return struct.unpack_from(">H", self._db, offset)[0]
+
+    def _put(self, offset, value):
+        struct.pack_into(">H", self._db, offset, value & 0xFFFF)
+
+    def _d(self, offset):
+        return struct.unpack_from(">I", self._db, offset)[0]
+
+    def _putd(self, offset, value):
+        struct.pack_into(">I", self._db, offset, value & 0xFFFFFFFF)
+
+    def _adopt(self, bank: bytes):
+        C = self.C
+        self.pump = [struct.unpack_from(">H", bank, i * 2)[0] for i in range(C.PUMP_CAPACITY)]
+        base = C.VALVE_COMMAND_OFFSET - C.PUMP_COMMAND_OFFSET
+        self.valves = bytearray(bank[base:base + C.VALVE_CAPACITY // 8])
+        base = C.LIGHT_COMMAND_OFFSET - C.PUMP_COMMAND_OFFSET
+        self.lights = bytearray(bank[base:base + C.LIGHT_CAPACITY * 3])
+
+    # ── one OB execution ─────────────────────────────────────────────────────
+    def _cycle(self, wall: float):
+        C, b = self.C, self._db
+        self.ticks += 1
+        if not self.freeze_heartbeat:
+            self._put(16, self._w(16) + 1)
+        permit = bool(self.local_permit)
+        self._put(20, 0x003F if permit else 0x0000)
+        was_running = self.running
+        started = False
+        self.age_ms = min(30000, self.age_ms + self.cycle_ms)
+        seq, flags = self._w(26), self._w(28)
+        if self.accept_commits and seq != self.last_seq and not flags & C.FLAG_STAGING:
+            self._put(30, 0)
+            candidate = bytes(b[C.PUMP_COMMAND_OFFSET:C.COMMAND_END])
+            self.last_seq = seq
+            self.age_ms = 0
+            want_buffered = self.buffered_capable and bool(flags & C.FLAG_BUFFERED)
+            if want_buffered and flags & C.FLAG_RUN and self.running and self.buffered:
+                pass                                   # keepalive commit: the ring owns the outputs
+            else:
+                self._adopt(candidate)
+                if flags & C.FLAG_RESET:
+                    self.ready = self.running = False
+                if not flags & C.FLAG_RUN:
+                    self.running = False
+                    self.ready = permit
+                    self.stream_fault = 0
+                elif self.running and self.buffered != want_buffered:
+                    self.running = self.ready = False
+                    self._put(30, 5)
+                else:
+                    if not self.running:
+                        self.buffered = want_buffered
+                    self.running = self.ready and permit
+                    if not permit:
+                        self._put(30, 1)
+                    elif not self.ready:
+                        self._put(30, 2)
+                    started = self.running and self.buffered and not was_running
+        if self.running and not was_running:
+            self.run_start_wall = wall                 # RUN accepted: the show starts on the PLC
+        if started:
+            self.last_keepalive = self._w(C.STREAM_KEEPALIVE_OFFSET)
+        if self.running and self.buffered and self._w(C.STREAM_KEEPALIVE_OFFSET) != self.last_keepalive:
+            self.last_keepalive = self._w(C.STREAM_KEEPALIVE_OFFSET)
+            self.age_ms = 0
+        if not permit or self.age_ms >= C.WATCHDOG_MS:
+            self.running = self.ready = False
+        self._putd(44, self.age_ms)
+
+        underrun = False
+        if self.running and self.buffered:
+            if started:
+                self.clock = 0
+                self.late_flag = False
+                self._put(C.LAST_LATE_OFFSET, 0)
+                self._put(C.WORST_LATE_OFFSET, 0)
+                self._putd(C.APPLIED_AT_OFFSET, 0)
+                self.run_wall = wall
+            else:
+                self.clock += self.cycle_ms
+            write_index, valid_until = self._w(C.BUFFER_WRITE_OFFSET), self._d(C.VALID_UNTIL_OFFSET)
+            invalid = trip = False
+            for _ in range(C.BUFFER_CAPACITY):
+                read_index = self._w(C.BUFFER_READ_OFFSET)
+                pending = (write_index - read_index) & 0xFFFF
+                if pending == 0:
+                    break
+                if pending > C.BUFFER_CAPACITY:
+                    invalid = True
+                    break
+                slot = C.slot_offset(read_index)
+                at = self._d(slot)
+                if at > self.clock:
+                    break
+                if at < self._d(C.APPLIED_AT_OFFSET):
+                    invalid = True
+                    break
+                self._adopt(bytes(b[slot + 4:slot + C.SLOT_SIZE]))
+                late = min(65535, self.clock - at)
+                self._put(C.LAST_LATE_OFFSET, late)
+                if late > self._w(C.WORST_LATE_OFFSET):
+                    self._put(C.WORST_LATE_OFFSET, late)
+                if late >= self.cycle_ms:
+                    self.late_flag = True
+                self._putd(C.APPLIED_AT_OFFSET, at)
+                self._put(C.BUFFER_READ_OFFSET, read_index + 1)
+                self.applied.append({"at_ms": at, "clock_ms": self.clock, "late_ms": self.clock - at,
+                                     "wall_late_ms": (wall - self.run_wall) * 1000 - at})
+            if self.clock > valid_until:
+                underrun = True
+                trip = self.clock - valid_until >= C.UNDERRUN_LIMIT_MS
+            if invalid or trip:
+                self.stream_fault = 4 if invalid else 5
+                self.running = self.ready = False
+        if self.buffered and not self.running:
+            # Leaving buffered RUN (Stop, watchdog, permit, underrun, invalid): flush the ring.
+            self._put(C.BUFFER_READ_OFFSET, self._w(C.BUFFER_WRITE_OFFSET))
+            self.buffered = False
+            self.clock = 0
+        if self.buffered_capable:
+            self._putd(C.SHOW_CLOCK_OFFSET, self.clock)
+            status = ((C.BUFFER_ACTIVE if self.running and self.buffered else 0) |
+                      (C.BUFFER_UNDERRUN if underrun else 0) | (C.BUFFER_LATE if self.late_flag else 0))
+            self._put(C.BUFFER_STATUS_OFFSET, status)
+        self._outputs_and_feedback(wall)
+
+        fault = 0
+        if not permit:
+            fault = 1
+        elif self.age_ms >= C.WATCHDOG_MS:
+            fault = 2
+        elif self.stream_fault:
+            fault = self.stream_fault
+        self._put(22, fault)
+        status = ((1 if self.running else 0) | (2 if self.ready else 0) |
+                  (4 if self.age_ms < C.WATCHDOG_MS else 0) |
+                  (8 if self.last_seq == self._w(26) else 0) | (16 if fault else 0))
+        self._put(6, status)
+        self._put(32, self.last_seq)
+        self._put(24, self.last_seq)
+
+    def _outputs_and_feedback(self, wall: float):
+        C, b = self.C, self._db
+        running = self.running
+        channels = self.site["channels"]
+        b[C.PUMP_FEEDBACK_OFFSET:C.FEEDBACK_END] = bytes(C.FEEDBACK_SIZE)
+        outputs = {}
+        for ch in channels:                           # every valve before any pump (as the SCL)
+            if ch["kind"] != "valve":
+                continue
+            i = ch["index"]
+            wanted = running and bool(self.valves[i // 8] & (1 << (i % 8)))
+            if not running:
+                self.valve_open[i] = False
+                self.valve_age[i] = 0
+            else:
+                self.valve_age[i] = min(30000, self.valve_age[i] + self.cycle_ms)
+                on_ms, off_ms = ch["min_on_ms"], ch["min_off_ms"]
+                if self.cycle_ms == C.LEGACY_CYCLE_MS:    # v2 counts whole 100-ms ticks
+                    on_ms = -(-on_ms // 100) * 100
+                    off_ms = -(-off_ms // 100) * 100
+                if wanted != self.valve_open[i] and (
+                        (self.valve_open[i] and self.valve_age[i] >= on_ms) or
+                        (not self.valve_open[i] and self.valve_age[i] >= off_ms)):
+                    self.valve_open[i] = wanted
+                    self.valve_age[i] = 0
+            is_open = running and self.valve_open[i]
+            if is_open:
+                b[C.VALVE_FEEDBACK_OFFSET + i // 8] |= 1 << (i % 8)
+            outputs[ch["id"]] = is_open
+        mapped = {c["index"] for c in channels if c["kind"] == "valve" and c.get("output")}
+        for ch in channels:
+            if ch["kind"] != "pump":
+                continue
+            i = ch["index"]
+            outlets = [c["index"] for c in channels if c.get("pump_id") == ch["id"] and c["index"] in mapped]
+            any_open = any(self.valve_open[v] for v in outlets)
+            allowed = running and any_open
+            if running and self.pump[i] > 0 and not any_open:
+                self._put(30, 4)
+            maximum = round(ch["max_percent"] * 27648 / 100)
+            target = min(self.pump[i], maximum) if allowed else 0
+            struct.pack_into(">H", b, C.PUMP_FEEDBACK_OFFSET + 2 * i, target)
+            if allowed and target > 0:
+                b[C.PUMP_RUNNING_OFFSET + i // 8] |= 1 << (i % 8)
+            outputs[ch["id"]] = round(target * 100 / 27648, 3)
+        for ch in channels:
+            if ch["kind"] != "light":
+                continue
+            i = ch["index"]
+            rgb = bytes(self.lights[i * 3:i * 3 + 3]) if running else bytes(3)
+            b[C.LIGHT_FEEDBACK_OFFSET + i * 3:C.LIGHT_FEEDBACK_OFFSET + i * 3 + 3] = rgb
+            if any(rgb):
+                b[C.LIGHT_ACTIVE_OFFSET + i // 8] |= 1 << (i % 8)
+            outputs[ch["id"]] = tuple(rgb)
+        if outputs != self.outputs:
+            since = (wall - self.run_start_wall) * 1000 if running and self.run_start_wall else None
+            self.events.append({"clock_ms": self.clock if (running and self.buffered) else None,
+                                "since_run_ms": since, "wall": wall, "outputs": dict(outputs)})
+            self.outputs = outputs

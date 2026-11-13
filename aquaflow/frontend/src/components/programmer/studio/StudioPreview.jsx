@@ -12,6 +12,7 @@ import useProjectStore from '../../../store/projectStore';
 import { normalizeCameraTrack } from '../../preview/camera/cameraTrack';
 import { clearActiveScene, setActiveScene } from '../../preview/camera/activeScene';
 import { bindViewSlots } from '../../preview/camera/CameraLane';
+import { isPyroClip, pyroCuesFromClips } from '../../../show/pyro';
 
 export default function StudioPreview({ clips, time, selected, onSelect, frame }) {
   const canvas = useRef(null), sceneRef = useRef(null), wrapper = useRef(null), overlay = useRef(null);
@@ -82,8 +83,11 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
     if (useProjectStore.getState().render?.cameraMode === 'animated' && hasKeys) scene.resumeCameraTrack?.();
   }, [frame]);
   useEffect(() => {
+    const engine = useEngineeringStore.getState();
+    sceneRef.current?.setPyroCues?.(pyroCuesFromClips(clips, fixtures, poolCenter(engine.geometry, engine.params, engine.poolType)));
     const visual = [], supported = new Map();
     for (const clip of clips) {
+      if (isPyroClip(clip)) continue;
       const key = `${clip.fixtureId}:${clip.type}`;
       if (!supported.has(key)) {
         try { createFullShowPreview([clip], fixtures); supported.set(key, true); } catch { supported.set(key, false); }

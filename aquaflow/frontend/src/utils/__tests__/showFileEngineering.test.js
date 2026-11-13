@@ -27,7 +27,8 @@ describe(".aqua engineering persistence", () => {
     const file = serializeShow(showState, engineering);
     expect(file.engineering).toMatchObject({ name: "Pool A", pool_type: "lshape" });
     const restored = deserializeShow(JSON.parse(JSON.stringify(file))).engineeringProject;
-    expect(restored.fixtures).toEqual(engineering.fixtures);
+    expect(restored.fixtures.map(({ model, ...fixture }) => fixture)).toEqual(engineering.fixtures);
+    expect(restored.fixtures[0].model).toMatchObject({ schema: "aquaflow-fixture-model", version: 1, type: "nozzle_geyser" });
     expect(restored.manualPipes).toEqual(engineering.manualPipes);
     expect(restored.depth_zones).toEqual(engineering.depth_zones);
     expect(restored.solved_hydraulics).toEqual(engineering.solved_hydraulics);

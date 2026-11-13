@@ -486,7 +486,8 @@ def evaluate_show_frame_at(project, seconds, opts=None, prepared=None):
                     if win and _better(win, master):
                         master = win
                 rgb = any(c in channels for c in LIGHT_CHANNELS)
-                record["level"] = master["level"] if master else 1.0 if rgb else 0.0
+                white = channels.get("lighting_white")
+                record["level"] = master["level"] if master else 1.0 if (rgb or white) else 0.0
                 if rgb:
                     record["color"] = _color_record({
                         "r": channels["lighting_red"]["level"] if "lighting_red" in channels else 0.0,
@@ -496,6 +497,8 @@ def evaluate_show_frame_at(project, seconds, opts=None, prepared=None):
                     record["color"] = _color_record(hex_to_srgb(master["clip"]["color"]), "clip")
                 srgb = record["color"]["srgb"]
                 record["output"] = {k: srgb[k] * record["level"] for k in ("r", "g", "b")}
+                if white:
+                    record["output"]["w"] = white["level"] * record["level"]
                 record["source"] = _source((master or best)["clip"])
             else:
                 level = 0.0

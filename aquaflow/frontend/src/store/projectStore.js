@@ -41,6 +41,9 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   // "high"/"ultra" = Final render) and output ("video" | "png" image sequence).
   exportQuality: "preview",
   exportFormat: "video",
+  motionBlur: false,
+  motionBlurSamples: 8,
+  shutterAngle: 180,
 });
 
 const serializable = (value, fallback) => {

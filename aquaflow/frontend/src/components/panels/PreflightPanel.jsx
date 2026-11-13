@@ -86,7 +86,8 @@ export default function PreflightPanel() {
   const run = async () => {
     setRunning(true); setError("");
     try {
-      const project = buildPreflightProject({ fixtures, programmer, hydraulicNetwork, site: { basins, geometry, poolType, params } });
+      const project = buildPreflightProject({ fixtures, programmer, hydraulicNetwork, site: { basins, geometry, poolType, params, siteSurfaces: useEngineeringStore.getState().siteSurfaces,
+        siteModels: useEngineeringStore.getState().siteModels, wind: { x: useProjectStore.getState().render?.windX, z: useProjectStore.getState().render?.windZ } } });
       const target = kind === "siemens" ? { kind, site_id: siteId } : { kind };
       const outcome = await runPreflight(project, target);
       setResult(outcome);

@@ -1,5 +1,6 @@
 import { classifyFixtureType } from "../hooks/fixtureTypeMap";
 import { evaluateShowFrameAt, lightViewState, normalizeCurve, parseKeys } from "../show/evaluateShowFrame";
+import { LASER_TYPES, isLaserFixture } from "../components/preview/laser/laserRig";
 
 const WATER_TYPES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity"]);
 const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
@@ -22,7 +23,8 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
     }
     const category = classifyFixtureType(fixture.type);
     const type = clip.type;
-    const allowed = category === "light" ? LIGHT_TYPES.has(type)
+    const allowed = isLaserFixture(fixture.type) ? LASER_TYPES.includes(type) || LIGHT_TYPES.has(type)
+      : category === "light" ? LIGHT_TYPES.has(type)
       : category === "equipment" ? /pump/i.test(fixture.type) && PUMP_TYPES.has(type)
         : WATER_TYPES.has(type) || PUMP_TYPES.has(type) // any water nozzle may be driven by its pump speed (e.g. rotating_jet)
           || (String(fixture.type).startsWith("motion") && MOTION_TYPES.has(type));

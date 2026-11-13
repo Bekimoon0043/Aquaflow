@@ -57,6 +57,11 @@ export const TRACK_TYPE_COLORS = Object.freeze({
   fog_density:       "#6b7280",
   laser_intensity:   "#ec4899",
   laser_pattern:     "#db2777",
+  pyro_fire:         "#ff8a3d",
+  laser_pan:         "#be185d",
+  laser_tilt:        "#9d174d",
+  laser_size:        "#f472b6",
+  laser_speed:       "#f9a8d4",
   device_enable:     "#94a3b8",
   device_intensity:  "#64748b",
   motion_intensity:  "#38bdf8",
@@ -80,6 +85,7 @@ export const GROUP_LABELS = Object.freeze({
   flame_units:          "FLAME UNITS",
   fog_machines:         "FOG MACHINES",
   laser_units:          "LASER UNITS",
+  pyro_positions:       "PYRO POSITIONS",
   engineering_equipment:"EQUIPMENT",
 });
 
@@ -91,6 +97,7 @@ export const GROUP_COLORS = Object.freeze({
   flame_units:          "#f97316",
   fog_machines:         "#6b7280",
   laser_units:          "#ec4899",
+  pyro_positions:       "#ff8a3d",
   engineering_equipment:"#94a3b8",
 });
 
@@ -119,6 +126,7 @@ export function getEquipmentCategory(type = "") {
     pump: "pump",
     lighting: "lighting",
     laser: "laser",
+    pyro: "pyro",
     fire: "fire",
     fog: "fog",
     motion_1d: "motion_1d",
@@ -189,6 +197,17 @@ const CATEGORY_CHANNELS = Object.freeze({
   laser: [
     { suffix: "intensity", type: "laser_intensity", label: "Intensity" },
     { suffix: "pattern",   type: "laser_pattern",   label: "Pattern" },
+    { suffix: "red",       type: "lighting_red",    label: "Red" },
+    { suffix: "green",     type: "lighting_green",  label: "Green" },
+    { suffix: "blue",      type: "lighting_blue",   label: "Blue" },
+    { suffix: "pan",       type: "laser_pan",       label: "Pan" },
+    { suffix: "tilt",      type: "laser_tilt",      label: "Tilt" },
+    { suffix: "size",      type: "laser_size",      label: "Size" },
+    { suffix: "speed",     type: "laser_speed",     label: "Speed" },
+  ],
+  // One-shot firework cue (burst time − lift = ignition); exported, never output.
+  pyro: [
+    { suffix: "fire", type: "pyro_fire", label: "Fire (cue)" },
   ],
   generic: [
     { suffix: "enable",    type: "device_enable",    label: "Enable" },

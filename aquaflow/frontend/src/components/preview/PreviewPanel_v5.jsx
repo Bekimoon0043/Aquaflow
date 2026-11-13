@@ -48,6 +48,7 @@ import {
   graphToEngineeringFixtures, graphToSiteModels, reconcileEngineeringGraph,
 } from "./editor/fixtureBridge";
 import { poolCenter, engineeringToWorld } from "../../engineering/geometryContract";
+import { pyroCuesFromClips } from "../../show/pyro";
 // AF-CAD-031..033: shared 2D/3D command history + plan frame for snapping and drafting.
 import { createPlanFrame, createStoreSceneHistory } from "./editor/engineeringDraftingBridge";
 import { sharedDraftingHistory } from "../../engineering/drafting/commands";
@@ -157,6 +158,8 @@ export default function PreviewPanel() {
   const setPattern = setRenderField("pattern");
   const setLightCol = setRenderField("lightColor");
   const setWindX = setRenderField("windX");
+  const laserHaze = Number.isFinite(Number(renderSettings.laserHaze)) ? Number(renderSettings.laserHaze) : 0.35;
+  const setLaserHaze = setRenderField("laserHaze");
   const setWindZ = setRenderField("windZ");
   const setWaveResponse = setRenderField("waveResponse");
   const setWaveDamping = setRenderField("waveDamping");
@@ -228,6 +231,12 @@ export default function PreviewPanel() {
   const setBakeStart = setRenderField("bakeStart");
   const bakeDuration = renderSettings.bakeDuration;   // 0 = whole show
   const setBakeDuration = setRenderField("bakeDuration");
+  const motionBlur = renderSettings.motionBlur;
+  const setMotionBlur = setRenderField("motionBlur");
+  const motionBlurSamples = renderSettings.motionBlurSamples;
+  const setMotionBlurSamples = setRenderField("motionBlurSamples");
+  const shutterAngle = renderSettings.shutterAngle;
+  const setShutterAngle = setRenderField("shutterAngle");
   // "Include music" (default on). Its own key: older projects saved bakeAudio:false from the
   // retired site-audio "♪" box, which must not silently drop the song from new exports.
   const bakeAudio = renderSettings.includeMusic !== false;
@@ -298,6 +307,7 @@ export default function PreviewPanel() {
   const poolType     = useEngineeringStore(s => s.poolType);
   const params       = useEngineeringStore(s => s.params);
   const timelineTracks = useShowStore(s => s.timelineTracks);
+  const programmerClips = useProjectStore(s => s.programmer?.timelineClips);
 const playhead = useShowStore(s => s.playhead);
 const showDuration = useShowStore(s => Math.max(1, Number(s.currentShow?.duration) || 60));
 const cameraKeyHere = cameraKeyAt(cameraTrack, playhead);
@@ -423,6 +433,7 @@ if (sitePreview.active && sitePreview.plan) {
         toneMapping: useProjectStore.getState().render.toneMapping,
         halfResSpray: !!useProjectStore.getState().render.halfResSpray,
         realWorld: useProjectStore.getState().render.realWorld !== false,
+        advancedNozzles: true,
       });
       scene.init();
       applyTierExtras(scene);   // AF-NEXT-013: eco water/particles + particle budget
@@ -678,6 +689,15 @@ if (sitePreview.active && sitePreview.plan) {
   useEffect(() => { sceneRef.current?.setHorizonLock?.(renderSettings.cameraHorizonLock !== false); }, [renderSettings.cameraHorizonLock, sceneTier]);
   useEffect(() => { sceneRef.current?.setCameraTrack?.(cameraTrack); }, [cameraTrack, sceneTier]);
   useEffect(() => { sceneRef.current?.setCameraTime?.(playhead); }, [playhead, sceneTier]);
+  // Fireworks follow the project timeline's pyro cues (drawn from the show time, so bakes match).
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene?.setPyroCues) return;
+    const eng = useEngineeringStore.getState();
+    const fromTracks = (timelineTracks || []).flatMap(track => track?.clips || track?.items || track?.events || []);
+    const byId = new Map([...fromTracks, ...(programmerClips || [])].filter(c => c?.type === "pyro_fire").map(c => [c.id, c]));
+    scene.setPyroCues(pyroCuesFromClips([...byId.values()], engineeringFixtures || [], poolCenter(eng.geometry, eng.params, eng.poolType)));
+  }, [timelineTracks, programmerClips, engineeringFixtures, sceneTier]);
   useEffect(() => {
     if (cam !== NAMED_CAMERA_MODE) return;
     sceneRef.current?.setNamedView?.(resolveCameraView(useProjectStore.getState().render, activeCameraView));
@@ -695,6 +715,7 @@ if (sitePreview.active && sitePreview.plan) {
   useEffect(() => { sceneRef.current?.setToneMapping?.(toneMapping); }, [toneMapping]);
   useEffect(() => { sceneRef.current?.setHalfResSpray?.(halfResSpray); }, [halfResSpray]);
   useEffect(() => { sceneRef.current?.setRealWorld?.(realWorld); }, [realWorld, sceneTier]);
+  useEffect(() => { sceneRef.current?.setLaserHaze?.(laserHaze); }, [laserHaze, sceneTier]);
   // Real-world forward scatter is judged from the project's "STAND HERE" view when it has
   // one (realWorldLook.selectLitBeams), else from the live camera.
   const standHere = cameraViews.find(v => /stand[\s_-]*here/i.test(`${v.name} ${v.id}`))?.position || null;
@@ -764,6 +785,12 @@ if (sitePreview.active && sitePreview.plan) {
     const durationS = Number(bakeDuration) > 0 ? Number(bakeDuration) : Math.max(0.1, total - startS);
     // Final quality warms the water a little longer so dense high/ultra fields are full on frame 0.
     const plan = planBake({ resolution: exportRes, fps: exportFps, startS, durationS, ...(exportQuality !== "preview" ? { prerollS: 4 } : {}) });
+    plan.motionBlur = {
+      enabled: !!renderSettings.motionBlur,
+      samples: Math.max(1, Math.min(64, Math.round(Number(renderSettings.motionBlurSamples) || 8))),
+      shutterAngle: Number(renderSettings.shutterAngle) || 180,
+      seed: 2026,
+    };
     // The song the preview plays, cut to [startS, startS + length) and aligned to frame 0.
     const song = resolveExportSong({ source: sampler.source, site, programmerSong: programmerSong || liveAssetFiles.get(SONG_ASSET) || null });
     const audio = bakeAudio && song ? { file: song.file, loopS: song.loopS } : null;
@@ -1116,8 +1143,8 @@ if (sitePreview.active && sitePreview.plan) {
             <Section title="Look">
             <div style={subLabel}>Tone mapping</div>
             <div style={{ display:"flex", gap:3, marginBottom:6 }}>
-              {[["aces","ACES"],["agx","AgX"],["neutral","Neutral"]].map(([id,label])=>(
-                <button key={id} onClick={()=>setToneMapping(id)} title={id==="aces" ? "Default look" : id==="agx" ? "Saturated night LED colour without hue skew" : "Hue-preserving daytime colour"}
+              {[["aces","ACES"],["acescg","ACEScg"],["agx","AgX"],["neutral","Neutral"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setToneMapping(id)} title={id==="aces" ? "Default look" : id==="acescg" ? "ACEScg working colour space" : id==="agx" ? "Saturated night LED colour without hue skew" : "Hue-preserving daytime colour"}
                   style={{ ...btnSm(toneMapping===id), flex:1, textAlign:"center" }}>{label}</button>
               ))}
             </div>
@@ -1175,6 +1202,13 @@ if (sitePreview.active && sitePreview.plan) {
                   style={{ width:"100%", accentColor:"#00aaff" }}/>
               </div>
             ))}
+            <div style={subLabel} title="Laser beams are only visible where light scatters: haze machines, water mist or fog. 0 = clear air (only the spots on the water show).">Haze (laser beams)</div>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
+              <span style={{ color:"#556677", fontSize:9 }}>{laserHaze < 0.1 ? "Clear air" : laserHaze < 0.5 ? "Light haze" : "Heavy haze"}</span>
+              <span style={{ color:"#ec4899", fontSize:9 }}>{Math.round(laserHaze * 100)}%</span>
+            </div>
+            <input type="range" aria-label="Haze for laser beams" min={0} max={1} step={0.05} value={laserHaze}
+              onChange={e=>setLaserHaze(parseFloat(e.target.value))} style={{ width:"100%", accentColor:"#ec4899" }}/>
             </Section>
             <Section title="Overlays">
             {[
@@ -1371,6 +1405,21 @@ if (sitePreview.active && sitePreview.plan) {
                   title={EXPORT_FORMAT_OPTIONS.map(o => `${o.label}: ${o.tip}`).join("\n")}
                   style={{ width:66, fontSize:10, padding:"2px 2px", background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4 }}>
                   {EXPORT_FORMAT_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+            {!bake && (
+              <div style={{ display:"flex", gap:5, fontSize:10, color:"#8ea4b8", alignItems:"center" }}>
+                <label title="Render deterministic subframes and average them, like a camera shutter">
+                  <input type="checkbox" checked={!!motionBlur} onChange={e=>setMotionBlur(e.target.checked)} /> Motion blur
+                </label>
+                <select value={motionBlurSamples} disabled={!motionBlur} onChange={e=>setMotionBlurSamples(Number(e.target.value))}
+                  title="Subframes per output frame" style={{ fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }}>
+                  <option value={4}>4 samples</option><option value={8}>8 samples</option><option value={16}>16 samples</option><option value={32}>32 samples</option>
+                </select>
+                <select value={shutterAngle} disabled={!motionBlur} onChange={e=>setShutterAngle(Number(e.target.value))}
+                  title="Camera shutter angle" style={{ fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }}>
+                  <option value={90}>90°</option><option value={180}>180°</option><option value={270}>270°</option><option value={360}>360°</option>
                 </select>
               </div>
             )}

@@ -11,6 +11,7 @@ import { LAND_SURFACE_TYPES } from "../siteSurfaces";
 import { getEngineeringSymbol, drawEngSymbol } from "./designerCatalog";
 import { entityKey } from "./entities";
 import { drawDraftingOverlays } from "./overlays";
+import { isPyroType, pyroProduct } from "../../show/pyro";
 
 const DRAFT_COLORS = { pool: "#00ffcc", land: "#a7e38c", depth: "#7ec8e3" };
 
@@ -569,6 +570,27 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
   }
 
   if (s.draftOverlay) drawDraftOverlay(ctx, s.draftOverlay, { wx, wy });
+
+  // Firework safety distances (NFPA 1123-style radius per position), drawn under the symbols.
+  for (const f of fixtures) {
+    if (f.visible === false || !isPyroType(f.type)) continue;
+    const R = Number(pyroProduct(f)?.safetyDistanceM) || 0;
+    if (!(R > 0)) continue;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(wx(f.x), wy(f.y), R * zoom, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,110,40,0.05)";
+    ctx.fill();
+    ctx.setLineDash([8, 6]);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(255,140,60,0.75)";
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(255,170,90,0.9)";
+    ctx.font = "10px monospace";
+    ctx.fillText(`safety ${R} m`, wx(f.x) + 6, wy(f.y) - R * zoom - 4);
+    ctx.restore();
+  }
 
   // Draw fixtures using PROFESSIONAL ENGINEERING SYMBOLS
   fixtures.forEach((f, i) => {

@@ -6,6 +6,7 @@
 // hydraulic (`engineering`) and electrical (`electrical`) metadata.
 import EXPANDED_FIXTURES from "./fixture_library_expanded.json";
 import { REFERENCE_PRODUCTS } from "./fixtureReferenceProducts.js";
+import { PYRO_PRODUCTS } from "./pyroLibrary.js";
 import { equipmentKind, genericProvenance, isVerifiedProvenance, normalizeProvenance, SOURCE_MEASURED } from "./fixtureProvenance.js";
 
 const CURATED_FIXTURES = [
@@ -611,7 +612,13 @@ const CURATED_FIXTURES = [
       voltage:220,
       beamAngleDeg:3,
       dmxUniverse:3,
-      dmxAddress:1
+      dmxAddress:1,
+      // Laser look channels (laser/laserRig.js); audience-scanning limit and throw.
+      panRangeDeg:180,
+      tiltRangeDeg:180,
+      mountHeightM:0.5,
+      minBeamHeightM:3,
+      rangeM:150
     }
   },
   {
@@ -628,7 +635,13 @@ const CURATED_FIXTURES = [
       voltage:220,
       beamAngleDeg:2,
       dmxUniverse:3,
-      dmxAddress:30
+      dmxAddress:30,
+      // Laser look channels (laser/laserRig.js); audience-scanning limit and throw.
+      panRangeDeg:180,
+      tiltRangeDeg:180,
+      mountHeightM:0.5,
+      minBeamHeightM:3,
+      rangeM:400
     }
   },
   {
@@ -1551,6 +1564,8 @@ export const FIXTURE_LIBRARY = [
   ...EXPANDED_FIXTURES.map(normalizeFixture),
   // Real catalogue products (OASE, Safe-Rain, Longxin, Huaxin, …) — see fixtureReferenceProducts.js.
   ...REFERENCE_PRODUCTS.map(normalizeFixture),
+  // Fireworks firing positions (category "Pyro") — preview, program and export only.
+  ...PYRO_PRODUCTS.map(normalizeFixture),
 ];
 
 const FIXTURE_BY_KEY = new Map(FIXTURE_LIBRARY.map(f => [f.key, f]));

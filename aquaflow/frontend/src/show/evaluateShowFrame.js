@@ -525,11 +525,13 @@ export function evaluateShowFrameAt(project, seconds, opts = {}) {
           if (win && (!master || win.level > master.level || (win.level === master.level && win.clip.index > master.clip.index))) master = win;
         }
         const rgb = LIGHT_CHANNELS.some(type => channels[type]);
-        record.level = master ? master.level : rgb ? 1 : 0;
+        const white = channels.lighting_white;
+        record.level = master ? master.level : (rgb || white) ? 1 : 0;
         if (rgb) record.color = colorRecord({ r: channels.lighting_red?.level ?? 0, g: channels.lighting_green?.level ?? 0,
           b: channels.lighting_blue?.level ?? 0 }, "channels");
         else if (master?.clip.color) record.color = colorRecord(hexToSrgb(master.clip.color), "clip");
-        record.output = { r: record.color.srgb.r * record.level, g: record.color.srgb.g * record.level, b: record.color.srgb.b * record.level };
+        record.output = { r: record.color.srgb.r * record.level, g: record.color.srgb.g * record.level, b: record.color.srgb.b * record.level,
+          ...(white ? { w: white.level * record.level } : {}) };
         record.source = sourceOf(master?.clip ?? best.clip);
       } else {
         let level = 0;
@@ -583,13 +585,15 @@ export function frameHash(frame) {
  */
 export function lightViewState(record) {
   if (!record || record.kind !== "light") return { intensity: 0, color: DEFAULT_LIGHT };
+  const white = record.output?.w;
+  const extra = white === undefined ? {} : { whiteIntensity: Number(white) || 0 };
   if (record.color?.source === "channels") {
     // Chroma at full scale + brightness, so color × intensity = the emitted output.
     const { r, g, b } = record.output;
     const peak = Math.max(r, g, b);
-    return { intensity: peak, color: peak > 0 ? srgbToHex({ r: r / peak, g: g / peak, b: b / peak }) : DEFAULT_LIGHT };
+    return { intensity: peak, color: peak > 0 ? srgbToHex({ r: r / peak, g: g / peak, b: b / peak }) : DEFAULT_LIGHT, ...extra };
   }
-  return { intensity: record.level, color: record.color?.hex || DEFAULT_LIGHT };
+  return { intensity: record.level, color: record.color?.hex || DEFAULT_LIGHT, ...extra };
 }
 
 /** Siemens/DMX 8-bit drive bytes for a light record (round half up). */

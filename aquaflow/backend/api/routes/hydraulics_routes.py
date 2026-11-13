@@ -11,6 +11,7 @@ from services.hydraulic_solver import solve_network
 from services.pipe_sizing import size_pipes, size_network
 from services.geometry_service import get_geometry_service
 from services.basin_model import normalize_basins
+from services.special_nozzle_dynamics import simulate_compressed_air_shooter, simulate_digital_water_curtain
 
 router = APIRouter()
 
@@ -189,3 +190,31 @@ async def show_hydraulic_timeline(payload: dict):
         raise HTTPException(400, detail=str(exc))
     except Exception as exc:  # pragma: no cover - defensive
         raise HTTPException(500, detail=f"show hydraulics failed: {exc}")
+
+
+@router.post("/special/air-shooter")
+async def special_air_shooter(payload: dict):
+    try:
+        return simulate_compressed_air_shooter(
+            payload.get("config") or {},
+            payload.get("fire_times_s") or [],
+            payload.get("duration_s"),
+            dt_s=payload.get("dt_s", 0.01),
+            provenance=payload.get("provenance"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+
+
+@router.post("/special/digital-curtain")
+async def special_digital_curtain(payload: dict):
+    try:
+        return simulate_digital_water_curtain(
+            payload.get("outlets") or [],
+            payload.get("packets") or [],
+            payload.get("duration_s"),
+            dt_s=payload.get("dt_s", 0.001),
+            provenance=payload.get("provenance"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))

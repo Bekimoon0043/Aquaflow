@@ -22,7 +22,8 @@ describe("tone-mapping selection (AF-3D-024)", () => {
     expect(threeToneMapping(THREE, "AgX")).toBe(THREE.AgXToneMapping);
     expect(threeToneMapping(THREE, "neutral")).toBe(THREE.NeutralToneMapping);
     expect(threeToneMapping(THREE, "aces")).toBe(THREE.ACESFilmicToneMapping);
-    expect(Object.keys(TONE_MAPPING)).toEqual(["aces", "agx", "neutral"]);
+    expect(threeToneMapping(THREE, "acescg")).toBe(THREE.ACESFilmicToneMapping);
+    expect(Object.keys(TONE_MAPPING)).toEqual(["aces", "acescg", "agx", "neutral"]);
   });
 
   it("falls back to ACES when the three build lacks an operator", () => {

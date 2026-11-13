@@ -17,6 +17,7 @@ import { applyTierExtras, setDensityNormalization, applyRenderScale } from "../s
 import { fixturesToNozzleConfigs, geometryToPoolConfig } from "../../../hooks/fixtureTypeMap";
 import { poolCenter, centerToWorld } from "../../../engineering/geometryContract";
 import { toPreviewSiteSurfaces } from "../../../engineering/siteSurfaces";
+import { planBake } from "../../../video/bakedTimeline";
 
 const statusEl = document.getElementById("status");
 const status = text => { if (statusEl) statusEl.textContent = text; };
@@ -69,7 +70,7 @@ function loadSynthetic(scene, { fixtures = 300, colors = "runtime", level = 1 })
 }
 
 /** Lebu pilot (.aqua passed in by the runner) → scene, through the app's own mappers. */
-function loadLebu(scene, aqua, { level = 1 } = {}) {
+function loadLebu(scene, aqua, { level = 1, white = 0 } = {}) {
   const eng = aqua.engineering;
   const { nozzleConfigs, lightConfigs } = fixturesToNozzleConfigs(eng.fixtures || []);
   const center = poolCenter(eng.geometry, eng.params, eng.pool_type);
@@ -81,13 +82,13 @@ function loadLebu(scene, aqua, { level = 1 } = {}) {
   scene.setEngineeringLights(lightConfigs);
   const signals = {
     pump: 1, valve: 1, lighting: level, fog: 0,
-    fixtureLightStates: Object.fromEntries(lightConfigs.map(l => [l.id, { intensity: level, color: l.color }])),
+    fixtureLightStates: Object.fromEntries(lightConfigs.map(l => [l.id, { intensity: level, color: l.color, whiteIntensity: white }])),
   };
   return { signals, views: aqua.render?.cameraViews || [], counts: { nozzles: nozzleConfigs.length, lights: lightConfigs.length } };
 }
 
-function createScene(canvas, { quality = "medium", environment = "night", toneMapping = "aces", baked = false }) {
-  const scene = new FountainScene(canvas, { quality, environment, toneMapping });
+function createScene(canvas, { quality = "medium", environment = "night", toneMapping = "aces", baked = false, advanced = false }) {
+  const scene = new FountainScene(canvas, { quality, environment, toneMapping, advancedNozzles: advanced });
   // A baked (fixed-time) scene stands the live loop down BEFORE init, so not even the
   // first synchronous frame sees wall-clock time.
   if (baked) scene._baking = true;
@@ -206,15 +207,19 @@ async function bench({ quality = "medium", fixtures = 300, width = 1920, height 
  */
 async function shot({ content = "synthetic", fixtures = 300, colors = "design", level = 1, aqua = null,
   view = null, viewId = null, time = 4, seed = 1234, quality = "medium", environment = "night",
-  toneMapping = "aces", width = 960, height = 540, densityNorm = true, ablate = null } = {}) {
+  toneMapping = "aces", width = 960, height = 540, densityNorm = true, ablate = null, white = 0, advanced = false, motionBlur = null, dark = false } = {}) {
   status(`shot ${content} ${viewId || ""}`);
   const realRandom = Math.random;
   Math.random = mulberry32(seed);
   const canvas = makeCanvas(width, height);
   let scene;
   try {
-    scene = createScene(canvas, { quality, environment, toneMapping, baked: true });
-    const loaded = content === "lebu" ? loadLebu(scene, aqua, { level }) : loadSynthetic(scene, { fixtures, colors, level });
+    scene = createScene(canvas, { quality, environment, toneMapping, baked: !motionBlur, advanced });
+    const loaded = content === "lebu" ? loadLebu(scene, aqua, { level, white }) : loadSynthetic(scene, { fixtures, colors, level });
+    if (dark) {
+      loaded.signals.lighting = 0;
+      for (const state of Object.values(loaded.signals.fixtureLightStates || {})) state.intensity = 0;
+    }
     scene._bakeSignalWrite = true;   // a baked scene only accepts signals written by the bake
     try { scene.setSignals(loaded.signals); } finally { scene._bakeSignalWrite = false; }
     scene.setReviewOverlays(false);   // presentation image: no analysis overlays (as a video bake)
@@ -225,11 +230,26 @@ async function shot({ content = "synthetic", fixtures = 300, colors = "design", 
     if (scene._reflection) scene._reflection.interval = 1;
     setDensityNormalization(scene, densityNorm);
     if (ablate) applyAblation(scene, ablate);
+    if (motionBlur) {
+      const plan = planBake({ resolution: motionBlur.resolution || "1080p", fps: 30, startS: 0, durationS: 2 / 30 });
+      plan.motionBlur = { enabled: true, samples: motionBlur.samples || 4, shutterAngle: motionBlur.shutterAngle || 180, seed };
+      let png = null;
+      const encoder = { addFrame: async () => { png = canvas.toDataURL("image/png"); } };
+      await scene.bakeVideo({ plan, sampleSignals: () => loaded.signals, encoder });
+      const stats = scene.getPerfStats();
+      return { png, width, height, counts: loaded.counts, drawCalls: stats.drawCalls, triangles: stats.triangles,
+        exposure: scene.renderer.toneMappingExposure, toneMapping };
+    }
     const dt = 1 / 60;
     const steps = Math.round(time / dt);
     for (let k = 1; k <= steps; k++) scene._update(dt, k * dt);
     scene._updateCamera(dt);
     scene.renderer.info.reset();
+    console.warn("film entries", viewId, advanced, JSON.stringify([...(scene._filmWater?.entries?.values() || [])].map(entry => ({
+      visible: entry.mesh.visible,
+      minY: Math.min(...entry.geometry.attributes.position.array.filter((_, i) => i % 3 === 1)),
+      maxY: Math.max(...entry.geometry.attributes.position.array.filter((_, i) => i % 3 === 1)),
+    }))));
     scene._renderFrame();
     const png = canvas.toDataURL("image/png");
     const stats = scene.getPerfStats();

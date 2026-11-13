@@ -4,6 +4,8 @@ export const LAND_SURFACE_TYPES = [
   { key: "soil", label: "Planting Soil", color: "#775137", roughness: 1 },
   { key: "rock", label: "Rock / Gravel", color: "#6f747b", roughness: 0.9 },
   { key: "sand", label: "Sand", color: "#c4ad78", roughness: 1 },
+  // Where people stand: lasers may not enter this space below their minimum beam height.
+  { key: "audience", label: "Audience area (laser-safe zone)", color: "#7d6f9c", roughness: 0.85 },
 ];
 
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;

@@ -1,5 +1,11 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-13: AquaFlow Studio 1.2.71 - real lasers, fireworks (export-only), Codex lighting and Siemens work**
+
+- **Lasers:** `preview/laser/` - each placed laser projector emits from its own position (mount height), channels `laser_intensity`, RGB, `laser_pattern` (beam/fan/cone/sheet/scan), `laser_pan/tilt/size/speed`; Show Studio `laser` effect with six looks; beams visible only with haze (new Haze slider). Safety: beams kept above `minBeamHeightM` (3 m) over audience areas (new "Audience area" land surface), preflight warns. Not yet mapped to the projectors' 8 DMX channels; Python show-frame mirror has no laser clamp.
+- **Fireworks:** `data/pyroLibrary.js` (31 products, NFPA 1123 rule-of-thumb estimates), `show/pyro.js`, `preview/pyro/` particles on show time. Cues are placed at the burst; ignition = burst - lift time. Safety circles in the 2D plan, preflight (audience/building/walkway inside circle, wind > 9 m/s). AquaFlow never fires pyro: clips are stripped from `compileForSite` and backend preflight; "EXPORT PYRO FIRING SCRIPT (CSV)" for the operator's firing system.
+- **Codex work committed:** film-water layer, fountain indirect light, advanced lighting, motion blur, RGBW lights, photometry/luminaire models, special-nozzle simulation (frontend + backend), Siemens buffered runtime/TIA package updates; electron-builder now packages the freshly built engine.
+
 **2026-11-13: AquaFlow Studio 1.2.70 - installer back to 179 MB, clean camera playback, emblem client show**
 
 - **Installer size:** 1.2.69/1.2.70 builds were 1.93 GB because the build Python (3.12) has CUDA torch 2.5.1 + transformers/datasets installed, and PyInstaller bundled them (3.5 GB) although no engine code imports them. `backend/aquaflow-engine.spec` now excludes torch*, transformers, datasets, tensorflow, tokenizers, tiktoken, huggingface_hub, hf_xet, pyarrow, pandas, fitz/pymupdf. Engine 113 MB, installer 179 MB. librosa/numba/scipy stay (audio routes import librosa lazily).

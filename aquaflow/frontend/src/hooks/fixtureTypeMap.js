@@ -281,6 +281,13 @@ export function fixturesToNozzleConfigs(fixtures) {
         ...(Number(f.engineering?.wattage) > 0 ? { wattage: Number(f.engineering.wattage) } : {}),
         ...(Number(f.engineering?.lumens) > 0 ? { lumens: Number(f.engineering.lumens) } : {}),
         ...(f.engineering?.dataSource ? { dataSource: f.engineering.dataSource } : {}),
+        photometry: f.photometry || f.engineering?.photometry || null,
+        luminaireType: f.luminaireType || f.engineering?.luminaireType || f.type,
+        area: f.area || f.engineering?.area || null,
+        areaLight: f.areaLight || f.engineering?.areaLight || false,
+        gobo: f.gobo || f.engineering?.gobo || null,
+        projection: f.projection || f.engineering?.projection || null,
+        goboRotationDeg: f.goboRotationDeg || f.engineering?.goboRotationDeg || 0,
         // Framing blades (engineering.framing, plan coords) → relative world planes
         // (lightFraming.js); malformed blades are kept as issues for the realism report.
         ...framingFieldsOf(f.engineering?.framing, planX, planZ),
@@ -421,6 +428,9 @@ export function classifyFixtureType(typeString) {
 
   // Steel frames are structure (scenery): never water, light or a programmable output.
   if (isSteelFrameType(k)) return "equipment";
+
+  // Fireworks firing positions: drawn by the pyro system, never as a water jet or a light.
+  if (k.startsWith("pyro_")) return "equipment";
 
   // A framing projector LIGHT (light_projector_*) is a DMX light, not the video-projector
   // equipment the "projector" keyword below means.

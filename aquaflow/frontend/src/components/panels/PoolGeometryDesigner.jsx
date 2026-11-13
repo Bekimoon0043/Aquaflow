@@ -966,7 +966,8 @@ export default function PoolGeometryDesigner() {
   const placeFixture = (world) => {
     const layerKey = toolLayerKey(tool);
     if (layerKey && isLayerLocked(layerKey)) return;
-    if (!pointInAnyBasin(basins, world)) return;
+    // Firework positions normally stand on land behind the pool, so they may go outside a basin.
+    if (!pointInAnyBasin(basins, world) && !String(fixtureType || "").startsWith("pyro_")) return;
     pushUndo("Place fixture");
     const ft = FIXTURE_TYPES.find(t => t.key === fixtureType) || { key: fixtureType, label: fixtureType || "Equipment" };
     setFixtures(prev => [...prev, createFixtureEntity({

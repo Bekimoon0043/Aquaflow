@@ -103,7 +103,47 @@ function shotScenes() {
   const synthView = { position: { x: 0, y: 13, z: 30 }, target: { x: 0, y: 1, z: 0 } };
   const syn = (name, extra, description) => ({ name, description, params: { ...base, content: "synthetic", view: synthView, ...extra } });
   const lebu = (name, viewId, extra = {}, description) => ({ name, description, params: { ...base, content: "lebu", aqua, viewId, ...extra } });
+  const advancedAqua = {
+    ...aqua,
+    engineering: {
+      ...aqua.engineering,
+      fixtures: [
+        ...aqua.engineering.fixtures,
+        { id: "advanced-bell", type: "nozzle_mushroom_g2_saferain", label: "Advanced bell", x: -10, y: 21.65,
+          engineering: { jetHeightM: 0.35, pressureBar: 0.1, flowLpm: 66, group: "Bells" } },
+        { id: "advanced-cascade", type: "nozzle_cascade_curtain", label: "Advanced cascade", x: -11, y: 21.65,
+          engineering: { jetHeightM: 3, fallHeightM: 3, pressureBar: 0.15, group: "Cascade" } },
+        { id: "advanced-gobo", type: "light_projector_framing_5200lm", label: "Advanced gobo", x: -14.15, y: 21.65,
+          engineering: { lumens: 5200, beamAngleDeg: 25, mountHeightM: 3, aimDeg: 45, luminaireType: "framing_gobo", gobo: { pattern: "grid" } } },
+        { id: "advanced-area", type: "light_area_custom", label: "Advanced area", x: -15, y: 21.65,
+          engineering: { lumens: 2000, areaLight: true, area: { widthM: 2, lengthM: 1 }, luminaireType: "rectangular_area" } },
+      ],
+    },
+  };
+  const bellAqua = {
+    ...advancedAqua,
+    engineering: {
+      ...advancedAqua.engineering,
+      fixtures: advancedAqua.engineering.fixtures.filter(f => f.id === "advanced-bell" || f.id === "lebu-center-light"),
+    },
+  };
+  const cascadeAqua = {
+    ...advancedAqua,
+    engineering: {
+      ...advancedAqua.engineering,
+      fixtures: advancedAqua.engineering.fixtures.filter(f => f.id === "advanced-cascade" || f.id === "lebu-center-light"),
+    },
+  };
   return [
+    lebu("advanced-legacy", "center-feature", { aqua: advancedAqua, advanced: false }, "Legacy renderer, same advanced fixture scene"),
+    lebu("advanced-bell-isolated", "plan-top", { aqua: bellAqua, advanced: true, dark: true }, "Isolated thin-film bell, unlit plan view"),
+    lebu("advanced-cascade-isolated", "plan-top", { aqua: cascadeAqua, advanced: true, dark: true }, "Isolated falling-water curtain, unlit plan view"),
+    lebu("advanced-bell", "center-feature", { aqua: advancedAqua, advanced: true }, "Advanced thin-film mushroom bell"),
+    lebu("advanced-cascade", "center-feature", { aqua: advancedAqua, advanced: true }, "Advanced falling-water curtain"),
+    lebu("advanced-lighting", "center-feature", { aqua: advancedAqua, advanced: true }, "Advanced gobo and area lighting"),
+    lebu("advanced-rgbw", "center-feature", { aqua: advancedAqua, white: 0.6, advanced: true }, "Advanced independent RGBW white channel"),
+    lebu("advanced-motion", "center-feature", { aqua: advancedAqua, advanced: true, motionBlur: { samples: 4, shutterAngle: 180 } }, "Advanced deterministic motion-blur export"),
+    lebu("advanced-motion-4k", "center-feature", { aqua: advancedAqua, advanced: true, motionBlur: { samples: 2, shutterAngle: 180, resolution: "4k" } }, "Advanced 4K motion-blur export"),
     syn("synthetic-300-allon-design-aces", { fixtures: 300, colors: "design", toneMapping: "aces" }, "300 fixtures, every light on in its design colour, ACES"),
     syn("synthetic-300-allon-design-aces-before", { fixtures: 300, colors: "design", toneMapping: "aces", densityNorm: false }, "Same, density normalisation OFF (pre-fix reference)"),
     syn("synthetic-300-allon-design-agx", { fixtures: 300, colors: "design", toneMapping: "agx" }, "300 all-on, AgX"),

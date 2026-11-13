@@ -147,7 +147,8 @@ export default function useWorkspaceController({ activePanel, setActivePanel, de
       const proj = useProjectStore.getState();
       const prog = await resolvedProgrammer(proj.programmer, eng);
       const project = buildPreflightProject({ fixtures: eng.fixtures, programmer: prog, hydraulicNetwork: eng.hydraulic_network || null,
-        site: { basins: eng.basins, geometry: eng.geometry, poolType: eng.poolType, params: eng.params } });
+        site: { basins: eng.basins, geometry: eng.geometry, poolType: eng.poolType, params: eng.params, siteSurfaces: eng.siteSurfaces,
+          siteModels: eng.siteModels, wind: { x: proj.render?.windX, z: proj.render?.windZ } } });
       const sid = proj.integrations?.siemensSiteId;
       const target = workspace === "commission" && sid ? { kind: "siemens", site_id: sid } : { kind: "preview" };
       const result = await deps.runPreflight(project, target);

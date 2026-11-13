@@ -5,8 +5,10 @@ import { evaluateShowFrameAt, groupInherits, recipeAudible } from '../../../show
 import { fieldChannels, memberGeometry } from './wavePatterns';
 import { followHardware } from './hardwareFollow';
 import { applySiteSync, buildSyncModel } from './siteSync';
+import { compileLaserRecipe } from '../../preview/laser/laserLooks';
+import { compilePyroRecipe, isPyroClip, isPyroType, validatePyroCues } from '../../../show/pyro';
 
-export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve', 'field'];
+export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve', 'field', 'laser', 'pyro'];
 export const ORDERS = ['engineering', 'left-to-right', 'right-to-left', 'front-to-back', 'clockwise', 'counter-clockwise', 'center-out'];
 export const uid = (prefix = 'show') => `${prefix}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 const num = (x, fallback = 0) => Number.isFinite(Number(x)) ? Number(x) : fallback;
@@ -196,9 +198,25 @@ export function compileStudio(studio, items) {
     const memberIds = recipe.frozenIds || resolveMembers(group, items);
     const missing = memberIds.filter(id => !ids.has(id));
     if (missing.length) issues.push(`${recipe.name}: ${missing.length} fixture(s) removed from Engineering.`);
-    const members = orderMembers(memberIds, items, recipe.effect === 'ripple' ? 'center-out' : recipe.order || group.orderMode);
+    const ordered = orderMembers(memberIds, items, recipe.effect === 'ripple' ? 'center-out' : recipe.order || group.orderMode);
+    // Firework positions only take pyro patterns; water and light patterns pass over them.
+    const members = recipe.effect === 'pyro' ? ordered : ordered.filter(i => !isPyroType(i.type));
     if (!members.length) issues.push(`${recipe.name}: group is empty.`);
     const cycle = duration / cycles;
+    if (recipe.effect === 'pyro') {
+      // Fireworks (show/pyro.js): one cue per position, ignition = burst − lift.
+      const made = compilePyroRecipe(recipe, members);
+      issues.push(...made.issues);
+      clips.push(...made.clips);
+      continue;
+    }
+    if (recipe.effect === 'laser') {
+      // Laser looks (laser/laserLooks.js): keyed clips on each projector's laser channels.
+      const made = compileLaserRecipe(recipe, members, { round });
+      if (!made.length) issues.push(`${recipe.name}: the group has no laser projectors.`);
+      clips.push(...made);
+      continue;
+    }
     if (recipe.effect === 'field') {
       // Wave field: one keyed clip per member and channel (wavePatterns.js).
       const order = recipe.order || group.orderMode;
@@ -273,6 +291,7 @@ export function compileStudio(studio, items) {
     });
     if (clips.length > 50000) { issues.push('Show exceeds 50,000 resolved clips. Reduce cycles or split the show.'); break; }
   }
+  for (const issue of validatePyroCues(clips, items)) issues.push(issue.message);
   // Generated patterns already start early by the water's rise (pattern.leadS): every clip of
   // such a pattern carries it, so the site sync never adds the rise twice (siteSync.js).
   const leads = new Map(studio.recipes.filter(r => Number(r.pattern?.leadS) > 0).map(r => [r.id, Number(r.pattern.leadS)]));
@@ -297,7 +316,8 @@ export function compileStudio(studio, items) {
  */
 export function compileForSite(studio, items, clips = compileStudio(studio, items).clips, site = studio?.site) {
   const model = buildSyncModel(items, site || {});
-  return { ...applySiteSync(clips, model), model };
+  // Pyro is never output by AquaFlow: it leaves only as the exported firing script.
+  return { ...applySiteSync(clips.filter(c => !isPyroClip(c)), model), model };
 }
 
 // Timeline/plan sampler. Evaluated by the canonical show frame (AF-NEXT-004):

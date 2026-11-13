@@ -43,27 +43,11 @@ import {
   isRealWorld, hasLookFeatures, effectiveBandOf, effectiveCrownOf, dropletHeadOf, aeratedLookOf,
   HEAD_MAX_TILT_DEG,
 } from "./realWorldLook";
+import { describeJetNozzle } from "./simulation/jetNozzleModels.js";
+import { filmKindFor } from "./filmWaterLayer.js";
 
-/** Emission primitives, shared with the simulation shader. */
-export const EMIT_MODE = {
-  CONE: 0,
-  RING: 1,
-  FAN: 2,
-  CASCADE: 3,
-  MIST: 4,
-  // Elevated / aimed nozzles (elevatedNozzles.js). Descriptors of these modes carry
-  // ux/uy/uz (a second axis), aux, and their life is solved on the CPU.
-  AIM_FAN: 5,   // a sheet swept cos θ·dir + sin θ·u, θ ∈ [p1, p2] — any aim
-  SPHERE: 6,    // crystal ball: streams over a cap round axis u (p1 = cos half-opening,
-                //   p2 = radius); aux 1 = droplets released at the rim
-  CURTAIN: 7,   // an aimed cascade: a line source along u (width p1) launched along dir
-  // jetLook.js: an aerated crown round the apex — a flame-shaped volume of width p1 and
-  // height p2 (origin = apex); aux 1 = droplets shed from its lower half.
-  TUFT: 8,
-};
-
-/** Particle classes — they differ in gravity, drag and blending. */
-export const EMIT_CLASS = { WATER: "water", SPRAY: "spray" };
+import { EMIT_CLASS, EMIT_MODE } from "./simulation/emitModes.js";
+export { EMIT_CLASS, EMIT_MODE } from "./simulation/emitModes.js";
 
 const DEG = Math.PI / 180;
 
@@ -134,10 +118,22 @@ function emitter(base) {
  * @returns {Array} zero or more emitter descriptors
  */
 export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) {
-  const descs = describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed);
+  if (cfg.advancedNozzleModel && filmKindFor(cfg)) return [];
+  const descs = cfg.advancedNozzleModel
+    ? describeJetNozzle({
+        ...cfg,
+        engineering: {
+          ...(cfg.engineering || {}),
+          jetHeightM: cfg.designHeightM ?? cfg.engineering?.jetHeightM,
+          ...(launchSpeed && launchSpeed(ix, 0) > 0 ? {
+            pressureBar: 998 * launchSpeed(ix, 0) ** 2 / (2 * 0.97 ** 2 * 1e5),
+          } : {}),
+        },
+      }, { intensity: ix, elapsedS: elapsed }).emitters
+    : describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed);
   // A fixture with a design height is drawn to it (see applyDesign); one without keeps
   // exactly the per-type behaviour above. A crystal ball sizes itself (sphere case).
-  const designed = designHeightOf(cfg) == null || cfg?.type === SPHERE_TYPE
+  const designed = cfg.advancedNozzleModel || designHeightOf(cfg) == null || cfg?.type === SPHERE_TYPE
     ? descs : applyDesign(descs, cfg, ix, launchSpeed);
   // Mount height / aim / catch tray (elevatedNozzles.js) — only when the fixture has them.
   const placed = hasSpatialFeatures(cfg) ? applySpatial(designed, cfg, ix, launchSpeed) : designed;

@@ -20,6 +20,7 @@ import { CINEMATIC_SHADER } from "./sceneShaders";
 import { QUALITY_CONFIG } from "./sceneQuality";
 import { SceneDepthProbe } from "./sceneDepth";
 import { HalfResParticlePass, halfResSprayEnabled } from "./halfResParticles";
+import { createACEScgOutputPass } from "./acesCgOutput.js";
 
 // ── Image-based lighting ────────────────────────────────────────────────────
 // The pool, deck and nozzle bodies are MeshStandardMaterial. Without an environment
@@ -132,7 +133,13 @@ export function buildPostFX(scene) {
     // night scene washed out into white fog. Tone-mapping first means bloom sees
     // exactly the image the user sees, and the threshold below reliably selects
     // only genuinely bright screen content — jet cores, fixtures, flame.
-    composer.addPass(sanitizedOutputPass());
+    if (scene.toneMapping === "acescg") {
+      const output = createACEScgOutputPass(ShaderPass);
+      output.uniforms.exposure.value = scene._baseExposure || scene.renderer.toneMappingExposure || 1;
+      composer.addPass(output);
+    } else {
+      composer.addPass(sanitizedOutputPass());
+    }
 
     // Display-referred bloom: threshold 0.82 catches only near-white pixels.
     const bloom = new UnrealBloomPass(

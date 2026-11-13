@@ -18,6 +18,8 @@ import { geometryMetrics } from "../engineering/poolGeometry";
 import { selectEngineeringPipes } from "../engineering/engineeringProject";
 import { toPreviewSiteSurfaces } from "../engineering/siteSurfaces";
 import { isSteelFrameType } from "../components/preview/elevatedNozzles";
+import { isLaserFixture } from "../components/preview/laser/laserRig";
+import { laserConfigs, laserSafetyArea } from "../components/preview/laser/laserSite";
 
 export function useEngineeringSync(sceneRef) {
   const lastKeyRef   = useRef(null);
@@ -118,7 +120,8 @@ const { nozzleConfigs, lightConfigs } =
   fixturesToNozzleConfigs([
     ...nozzleFixtures,
     ...lightFixtures,
-    ...effectFixtures,
+    // Laser projectors are drawn by the laser rig (setLaserFixtures), not as jets or floodlights.
+    ...effectFixtures.filter(f => !isLaserFixture(f?.type)),
   ]);
 
 // 3b. Convert Engineering world coordinates → 3D preview coordinates.
@@ -170,6 +173,11 @@ if (scene.setSteelFrames) {
 
 if (scene.setEngineeringPipes) {
   scene.setEngineeringPipes(manualPipes);
+}
+
+if (scene.setLaserFixtures) {
+  const c = shouldCenterFor3D ? center : null;
+  scene.setLaserFixtures(laserConfigs(effectFixtures, c), laserSafetyArea({ siteSurfaces, basins, geometry }, c));
 }
 
 // 5. AQ-S2-002 Phase 2 — solve the design's hydraulics and hand the per-nozzle

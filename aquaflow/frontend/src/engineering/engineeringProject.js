@@ -1,5 +1,6 @@
 import { normalizeCadUnderlay } from "./cadUnderlay";
 import { reconcileBasins, legacyFromBasins, flattenBasinDepthZones, scopeDepthZones } from "./basins";
+import { migrateFixtureModels } from "./fixtureModelContract.js";
 
 export const DEFAULT_DEPTH_ZONES = [
   { id: "shallow", zone: "shallow", label: "Shallow", depth: 0.3, color: "#7ec8e3", points: [] },
@@ -57,7 +58,7 @@ export function normalizeEngineeringProject(project = {}) {
   const scoped = scopeDepthZones(basins, zones);
   basins = scoped.basins;
   const legacy = hasGeometry ? { geometry: project.geometry } : legacyFromBasins(basins);
-  return {
+  const normalized = {
     ...base,
     ...project,
     geometry: legacy.geometry || null,
@@ -85,6 +86,7 @@ export function normalizeEngineeringProject(project = {}) {
     solved_hydraulics: project.solved_hydraulics || project.solvedHydraulics || null,
     bom: project.bom || project.bomItems || [],
   };
+  return migrateFixtureModels(normalized);
 }
 
 /**

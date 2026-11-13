@@ -85,6 +85,7 @@ export function isNightScene(name) {
 
 export const TONE_MAPPING = Object.freeze({
   aces:    Object.freeze({ id: "aces",    label: "ACES (default)", three: "ACESFilmicToneMapping" }),
+  acescg:  Object.freeze({ id: "acescg",  label: "ACEScg",         three: "ACESFilmicToneMapping" }),
   agx:     Object.freeze({ id: "agx",     label: "AgX (night)",    three: "AgXToneMapping" }),
   neutral: Object.freeze({ id: "neutral", label: "Neutral (day)",  three: "NeutralToneMapping" }),
 });

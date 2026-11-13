@@ -65,11 +65,13 @@ export const ENGINEERING_SYMBOLS_MAP = {
   "motion_1d":       { type: "motion1d", shape: "line",    icon: "─", color: "#ffcc00", size: 0.35 },
   "motion_2d":       { type: "motion2d", shape: "square",  icon: "☖", color: "#ffcc00", size: 0.35 },
   "motion_3d":       { type: "motion3d", shape: "cube",    icon: "⬚", color: "#ffcc00", size: 0.35 },
+  "pyro":            { type: "pyro",     shape: "diamond", icon: "✷", color: "#ff8a3d", size: 0.35 },
 };
 
 export const getEngineeringSymbol = (typeKey) => {
   if (!typeKey) return ENGINEERING_SYMBOLS_MAP["nozzle_geyser"];
   if (ENGINEERING_SYMBOLS_MAP[typeKey]) return ENGINEERING_SYMBOLS_MAP[typeKey];
+  if (typeKey.startsWith("pyro_")) return ENGINEERING_SYMBOLS_MAP["pyro"];
   if (typeKey.includes("geyser")) return ENGINEERING_SYMBOLS_MAP["nozzle_geyser"];
   if (typeKey.includes("foam")) return ENGINEERING_SYMBOLS_MAP["nozzle_foam"];
   if (typeKey.includes("laminar")) return ENGINEERING_SYMBOLS_MAP["nozzle_laminar"];

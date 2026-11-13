@@ -12,6 +12,7 @@ import { setUnderlayLayerVisible, setUnderlayVisible } from "../../../engineerin
 import { ICAN_SITE_PROJECT_NAME } from "../../../data/icanSiteEngineeringProject";
 import { POOL_TYPES, TOOLS, FIXTURE_TYPES } from "../../../engineering/drafting/designerCatalog";
 import { DRAFT_COMMANDS } from "../../../engineering/drafting/shapeDraft";
+import PyroExportButton from "./PyroExportButton";
 
 /** One button per drawing command; the draft session draws the given target. */
 export function DraftShapeButtons({ d, target, color = "#7dd3fc" }) {
@@ -855,6 +856,7 @@ export function ProjectOutputSection({ d }) {
           <button onClick={exportProjectDWG} disabled={cadExportBusy} style={{ width:"100%", padding:"8px", marginBottom:6, background:"#003052", color:"#65d8ff", border:"1px solid #00aaff88", borderRadius:3, cursor:cadExportBusy ? "wait" : "pointer", fontSize:10, fontFamily:"monospace" }}>
             {cadExportBusy ? "CREATING DWG…" : "EXPORT AUTOCAD DWG"}
           </button>
+          <PyroExportButton fixtures={fixtures} />
           <button onClick={() => setShowCADImport(true)} style={{ width:"100%", padding:"7px", marginBottom:6, background:"#001530", color:"#65d8ff", border:"1px solid #00aaff66", borderRadius:3, cursor:"pointer", fontSize:10, fontFamily:"monospace" }}>
             IMPORT AUTOCAD DWG / DXF
           </button>

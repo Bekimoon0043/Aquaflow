@@ -14,6 +14,8 @@
  *   clipId|null, engineeringItemId|null, message, fix: {kind, target}|null, source }
  */
 import { API_BASE_URL } from "../config";
+import { laserDiagnostics } from "../components/preview/laser/laserPreflight";
+import { isPyroClip, pyroSafetyDiagnostics } from "../show/pyro";
 
 export const PREVIEW_ONLY_LABEL = "PREVIEW ONLY — not sent to hardware";
 export const SEVERITIES = Object.freeze(["error", "warning", "info"]);
@@ -108,7 +110,32 @@ export function buildPreflightProject({ fixtures = [], programmer = {}, hydrauli
     // AF-NEXT-008: basin outlines (islands as holes) for the splash envelope.
     ...(site?.basins?.length ? { basins: site.basins } : {}),
     ...(site?.geometry ? { geometry: site.geometry, poolType: site.poolType, params: site.params || {} } : {}),
+    // Audience areas: lasers may not enter them below their minimum beam height (laser/laserPreflight.js).
+    ...(site?.siteSurfaces?.some?.(s => s?.type === "audience") ? { siteSurfaces: site.siteSurfaces.filter(s => s?.type === "audience") } : {}),
+    // Fireworks safety (show/pyro.js): every surface (paving = spectators), buildings and wind.
+    ...(site?.siteSurfaces?.length ? { pyro_surfaces: site.siteSurfaces } : {}),
+    ...(site?.siteModels?.length ? { site_models: site.siteModels } : {}),
+    ...(site?.wind ? { wind: { x: Number(site.wind.x) || 0, z: Number(site.wind.z) || 0 } } : {}),
   };
+}
+
+/** Fireworks safety and firing-script findings (local only: pyro never reaches the backend or hardware). */
+export function loadPyroDiagnostics(project) {
+  try {
+    return pyroSafetyDiagnostics({ fixtures: project.fixtures || [], clips: project.clips || [], siteSurfaces: project.pyro_surfaces || [],
+      siteModels: project.site_models || [], basins: project.basins || [], geometry: project.geometry || null, center: outlineCentre(project), wind: project.wind || null })
+      .map(d => normalizeDiagnostic(d, "pyro"));
+  } catch (error) {
+    return [normalizeDiagnostic({ code: "pyro-check-failed", severity: "warning", message: `Fireworks check could not run: ${error?.message || error}`, source: "pyro" })];
+  }
+}
+
+// Site models are stored relative to the design centre (the 3D frame): the outline's bounding-box centre.
+function outlineCentre(project) {
+  const pts = project.geometry?.points || project.basins?.[0]?.outer || [];
+  if (!pts.length) return { cx: Number(project.geometry?.center?.x) || 0, cy: Number(project.geometry?.center?.y) || 0 };
+  const xs = pts.map(p => Number(p.x ?? p[0]) || 0), ys = pts.map(p => Number(p.y ?? p[1]) || 0);
+  return { cx: (Math.min(...xs) + Math.max(...xs)) / 2, cy: (Math.min(...ys) + Math.max(...ys)) / 2 };
 }
 
 /**
@@ -125,12 +152,21 @@ export async function loadPumpFlowDiagnostics(project, { marginPct } = {}) {
   }
 }
 
+/** Laser beams programmed into audience space (laser/laserPreflight.js); a failure is a warning, never a crash. */
+export function loadLaserDiagnostics(project) {
+  try { return laserDiagnostics(project).map(d => normalizeDiagnostic(d, "laser-safety")); }
+  catch (error) {
+    return [normalizeDiagnostic({ code: "laser-check-failed", severity: "warning", message: `Laser safety check could not run: ${error?.message || error}`, source: "laser-safety" })];
+  }
+}
+
 /** Run the backend gate and merge the hydraulic/splash diagnostics. */
 export async function runPreflight(project, target = { kind: "preview" }, { fetchImpl = fetch, modules } = {}) {
   const [response, local] = await Promise.all([
     fetchImpl(`${API_BASE_URL}/preflight`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project, target }),
+      // Pyro cues go to the firing system as an exported script only, so the hardware gate never sees them.
+      body: JSON.stringify({ project: { ...project, clips: (project.clips || []).filter(c => !isPyroClip(c)) }, target }),
     }),
     // The project carries clips + recipes/groups/tempo (mute/solo): the same show the backend
     // gate hands services/show_hydraulics, so identical findings de-duplicate.
@@ -139,7 +175,7 @@ export async function runPreflight(project, target = { kind: "preview" }, { fetc
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data?.detail === "string" ? data.detail : data?.detail?.message || "Preflight failed");
   // Pump flow limits join the gate once the compile-side flow cap ships (connections work in progress).
-  const issues = mergeDiagnostics(data.issues || [], local);
+  const issues = mergeDiagnostics(data.issues || [], local, loadLaserDiagnostics(project), loadPyroDiagnostics(project));
   const summary = summarizeDiagnostics(issues);
   return { ...data, issues, summary, ok: summary.errors === 0 };
 }

@@ -1148,6 +1148,15 @@ export const FIXTURE_TYPE_MAP = {
     previewCategory: "laser_beam",
   },
 
+  // Fireworks firing position: one-shot cues, exported to the firing system — never output by AquaFlow.
+  pyro: {
+    runtimeType: "pyro", category: "pyro", deviceType: "pyro_position",
+    group: "pyro_positions", protocol: "export-only", latencyMs: 0,
+    channels: ["pyro_fire"],
+    engineering: {},
+    previewCategory: "pyro_effect",
+  },
+
   sparkler: {
     runtimeType: "equipment", category: "generic", deviceType: "sparkler",
     group: "effects_units", protocol: "virtual", latencyMs: 80,
@@ -1430,6 +1439,8 @@ function resolveFromLibrary(key, entry) {
       return fuzzyWithin(key, (info) => info.category === "fog") || FIXTURE_TYPE_MAP.fog;
     case "Laser":
       return FIXTURE_TYPE_MAP.laser;
+    case "Pyro":
+      return FIXTURE_TYPE_MAP.pyro;
     case "Motion Systems":
       return motionTemplate(entry, key);
     case "Sensors":

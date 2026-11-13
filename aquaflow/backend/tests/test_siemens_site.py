@@ -10,9 +10,10 @@ import pytest
 from engine.fake_s7_server import FakeS7Server
 from engine.runtime_authority import RuntimeAuthority
 from engine.s7_client import S7Client
-from engine.siemens_contract import (COMMAND_SIZE, CONTRACT_VERSION, DB_SIZE, HEADER_SIZE,
-                                     LIGHT_CAPACITY, MAGIC, PROGRAM_VERSION, PUMP_CAPACITY,
-                                     VALVE_CAPACITY, parse_header, validate_header)
+from engine.siemens_contract import (BUFFER_CAPACITY, COMMAND_SIZE, CONTRACT_VERSION, CYCLE_MS, DB_SIZE,
+                                     HEADER_SIZE, LEGACY_CONTRACT_VERSION, LEGACY_DB_SIZE,
+                                     LEGACY_PROGRAM_VERSION, LIGHT_CAPACITY, MAGIC, PROGRAM_VERSION,
+                                     PUMP_CAPACITY, VALVE_CAPACITY, parse_header, validate_header)
 from engine.siemens_site import (SiteStore, create_site, create_tia_plcsim_test,
                                  create_tia_plcsim_large_io_test, validate_site, signature,
                                  compile_show, frame_at, frame_from_values, bench_clips)
@@ -307,7 +308,8 @@ def test_openness_bridge_round_trips_cyclic_ob_and_recompiles_before_download():
     assert "generated.Export(" in source and "generated.Delete();" in source
     assert 'secondary.Value = "CyclicInterrupt"' in source
     assert "plc.BlockGroup.Blocks.Import(" in source
-    assert 'GetAttribute("CyclicTime")' in source and "cyclicTime != 100000" in source
+    assert 'GetAttribute("CyclicTime")' in source and "cyclicTime != RequiredCyclicTimeUs" in source
+    assert "RequiredCyclicTimeUs = 10000" in source and '"CyclicTime", RequiredCyclicTimeUs' in source
     assert 'GetAttribute("SecondaryType")' in source and 'cycle.Export(' in source
     download = source.split("private static Dictionary<string, object> DownloadProject()", 1)[1]
     download = download.split("private static Dictionary<string, object> Diagnostics()", 1)[0]
@@ -348,11 +350,26 @@ def test_light_tracks_encode_rgb_with_master_and_tia_maps_three_output_bytes():
 
 def test_contract_header_rejects_wrong_version_and_capacity():
     site = create_site()
+    reserved = struct.pack(">IHHHHI", 0, 0, BUFFER_CAPACITY, 0, 0, 0)
     raw = struct.pack(">HHHHII14HI16s", MAGIC, CONTRACT_VERSION, HEADER_SIZE, 0,
-                      signature(site), PROGRAM_VERSION, 1, 0, 1, 0, 0, 0, 0, 0, 0, 100,
-                      PUMP_CAPACITY, VALVE_CAPACITY, LIGHT_CAPACITY, 0, 0, bytes(16))
+                      signature(site), PROGRAM_VERSION, 1, 0, 1, 0, 0, 0, 0, 0, 0, CYCLE_MS,
+                      PUMP_CAPACITY, VALVE_CAPACITY, LIGHT_CAPACITY, 0, 0, reserved)
     header = parse_header(raw)
-    validate_header(header, signature(site))
+    assert validate_header(header, signature(site))["buffered"] is True
+    # The old streamed program (v2, 100-ms OB) is still accepted, as a fallback profile.
+    legacy = struct.pack(">HHHHII14HI16s", MAGIC, LEGACY_CONTRACT_VERSION, HEADER_SIZE, 0,
+                         signature(site), LEGACY_PROGRAM_VERSION, 1, 0, 1, 0, 0, 0, 0, 0, 0, 100,
+                         PUMP_CAPACITY, VALVE_CAPACITY, LIGHT_CAPACITY, 0, 0, bytes(16))
+    assert validate_header(parse_header(legacy), signature(site))["buffered"] is False
+    # A v3 program in a 100-ms OB, or a v2 program claiming 10 ms, is refused.
+    slow = bytearray(raw)
+    struct.pack_into(">H", slow, 34, 100)
+    with pytest.raises(ValueError, match="requires 10 ms"):
+        validate_header(parse_header(bytes(slow)), signature(site))
+    mixed = bytearray(legacy)
+    struct.pack_into(">I", mixed, 12, PROGRAM_VERSION)
+    with pytest.raises(ValueError, match="program version"):
+        validate_header(parse_header(bytes(mixed)), signature(site))
     bad = bytearray(raw)
     struct.pack_into(">H", bad, 2, CONTRACT_VERSION + 1)
     with pytest.raises(ValueError, match="contract"):
@@ -387,11 +404,13 @@ def test_tia_export_has_matching_identity_and_safe_unmapped_inputs():
         assert f"DW#16#{signature(site):08X}" in db and f"DW#16#{signature(site):08X}" in fb
         assert "S7_Optimized_Access := 'FALSE'" in db
         assert call.count(":= FALSE") == 5
-        assert "#MissedCycles >= 10" in fb and "#Ready := FALSE" in fb
+        assert "#CommandAgeMs >= 1000" in fb and "#Ready := FALSE" in fb
         assert "#PumpAllowed := #Running AND" in fb
         assert "#PumpAllowed := #Running AND (FALSE) AND NOT (FALSE);" in fb
-        assert "ContractVersion : UInt := 2" in db and "LightAppliedRGB" in db
+        assert f"ContractVersion : UInt := {CONTRACT_VERSION}" in db and "LightAppliedRGB" in db
+        assert "CycleMs : UInt := 10" in db and "Ring : Array[0..31] of Struct" in db
         assert manifest["db_size"] == DB_SIZE and manifest["offsets"]["valve_command"] == 112
+        assert manifest["cycle_ms"] == 10 and manifest["buffer"]["slot_size"] == 212
         assert package_manifest["tia_portal"]["minimum_version"] == 17
         assert package_manifest["import_order"] == [
             "AquaFlowSiteIO.db", "AquaFlowSiteControl.scl", "AquaFlowCycle.scl"]
@@ -409,7 +428,7 @@ def test_tia_export_has_matching_identity_and_safe_unmapped_inputs():
         assert archive.read("ShowTimeline.csv").decode().startswith("Order,Channel,Kind")
         assert cyclic == {
             "name": "AquaFlowCycle", "event": "CyclicInterrupt", "minimum_ob_number": 200,
-            "cycle_us": 100000, "phase_us": 0, "language": "SCL",
+            "cycle_us": 10000, "phase_us": 0, "language": "SCL",
             "required_instance_call": "AquaFlowSiteControlInstance", "automatic_generation": True,
             "generation_method": cyclic["generation_method"],
         }
@@ -515,9 +534,11 @@ async def physical_bench(tmp_path, *, tick=True, mode="physical"):
     site = store.save(site, site["revision"])
     store.save_show(site["id"], bench_clips(site), site["revision"])
     server = FakeS7Server()
-    server.dbs[100] = bytearray(DB_SIZE)
-    struct.pack_into(">HHHHII", server.dbs[100], 0, MAGIC, CONTRACT_VERSION, HEADER_SIZE, 0,
-                     signature(site), PROGRAM_VERSION)
+    # This bench hand-emulates the contract v2 (streamed, 100-ms) PLC program: every test that
+    # uses it also proves the old-program fallback. v3 lives in test_siemens_buffered.py.
+    server.dbs[100] = bytearray(LEGACY_DB_SIZE)
+    struct.pack_into(">HHHHII", server.dbs[100], 0, MAGIC, LEGACY_CONTRACT_VERSION, HEADER_SIZE, 0,
+                     signature(site), LEGACY_PROGRAM_VERSION)
     struct.pack_into(">HHHHHHHHHHHHHH", server.dbs[100], 16,
                      1, 0, 1, 0, 0, 0, 0, 0, 0, 100,
                      PUMP_CAPACITY, VALVE_CAPACITY, LIGHT_CAPACITY, 0)

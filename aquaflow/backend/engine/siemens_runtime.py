@@ -7,17 +7,120 @@ DB and access settings documented by the generated TIA package.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
+import struct
 import time
 
 from engine.s7_client import S7Client
 from engine.s7_identify import s7_handshake
 from engine.siemens_contract import (
-    COMMAND_SIZE, FLAG_RUN, FLAG_STAGING, FEEDBACK_SIZE, HEADER_SIZE,
-    PUMP_COMMAND_OFFSET, PUMP_FEEDBACK_OFFSET, decode_feedback, describe_header,
-    parse_header, validate_header,
+    BUFFER_CAPACITY, COMMAND_SIZE, CYCLE_MS, FLAG_BUFFERED, FLAG_RUN, FLAG_STAGING, FEEDBACK_SIZE,
+    HEADER_SIZE, LEGACY_CYCLE_MS, PUMP_COMMAND_OFFSET, PUMP_FEEDBACK_OFFSET, STREAM_CONTROL_OFFSET,
+    STREAM_CONTROL_SIZE, UPDATE_NOTICE, decode_feedback, describe_header, encode_slot,
+    encode_stream_control, parse_header, slot_offset, validate_header,
 )
 from engine.siemens_site import frame_at, frame_from_values, signature
 from services.siemens_readiness import unsupported_input_bindings
+
+
+# Frame-accurate (contract v3) streaming: the PC keeps the PLC's ring LOOKAHEAD_MS ahead of the
+# PLC show clock, refilling every REFILL_PERIOD_S and never spending more than
+# KEEPALIVE_BUDGET_S on slot writes before the control word (keepalive) goes out again.
+LOOKAHEAD_MS = 1500
+REFILL_PERIOD_S = .05
+KEEPALIVE_BUDGET_S = .25
+FADE_STEP_MS = 50
+# Expected cue accuracy for the status line: one fast-OB tick vs. the streamed model
+# (half a ~150-ms frame + S7 write + half a 100-ms cycle, see siteSync.js controlPath).
+BUFFERED_ACCURACY_MS = CYCLE_MS
+STREAMED_ACCURACY_MS = 75
+
+
+def bank_schedule(site, show, step_ms=FADE_STEP_MS):
+    """Timestamped command banks for the PLC ring: (at_ms, bank, values), at_ms ascending.
+
+    A bank is placed at every exact clip edge (start, end of fade-in, start of fade-out, end),
+    rounded to the millisecond, and every `step_ms` inside an interval while the frame keeps
+    changing (fades).  Unchanged banks are skipped.  The last bank, at the show's duration, is
+    all OFF so outputs drop on the PLC clock exactly when the show ends.
+    """
+    duration_ms = int(round(show["duration"] * 1000))
+    edges = {0, duration_ms}
+    for clip in show["clips"]:
+        start = clip["startTime"]
+        end = start + clip["duration"]
+        for t in (start, start + clip.get("fadeIn", 0), end - clip.get("fadeOut", 0), end):
+            ms = int(round(t * 1000))
+            if 0 <= ms <= duration_ms:
+                edges.add(ms)
+    edges = sorted(edges)
+    previous = None
+    for a, b in zip(edges, edges[1:]):
+        t = a
+        while t < b:
+            # Evaluate just after the bank time (inside the interval, never on an edge).
+            probe = t + min(.5, (min(b, t + step_ms) - t) / 2)
+            payload, values = frame_at(site, show, probe / 1000)
+            if payload != previous:
+                yield t, payload, values
+                previous = payload
+            t += step_ms
+    _, values = frame_from_values(site, {})
+    off = {k: ({**v, "master": 0.0} if isinstance(v, dict) else 0.0) for k, v in values.items()}
+    yield duration_ms, bytes(COMMAND_SIZE), off
+
+
+class BankStream:
+    """PC side of the v3 ring for one show: what is queued, what the PLC has applied."""
+
+    def __init__(self, site, show):
+        self.duration_ms = int(round(show["duration"] * 1000))
+        self._source = bank_schedule(site, show)
+        self._next = next(self._source, None)
+        self.write_index = 0
+        self.keepalive = 0
+        self.valid_until = 0
+        self.queued = deque()          # (at_ms, values) written to the ring, not yet applied
+        self.values = None
+        self.banks_written = 0
+        self.underruns = 0
+        self.was_underrun = False
+
+    @property
+    def peek(self):
+        return self._next
+
+    def pop(self):
+        item, self._next = self._next, next(self._source, None)
+        return item
+
+    @property
+    def exhausted(self):
+        return self._next is None
+
+    def pending(self, read_index):
+        return (self.write_index - read_index) & 0xFFFF
+
+    def mark_applied(self, read_index):
+        """Drop banks the PLC has consumed; return the values it is now applying."""
+        while len(self.queued) > self.pending(read_index):
+            self.values = self.queued.popleft()[1]
+        return self.values
+
+
+def base_timing(mode):
+    """Status `timing` block for a PLC program (buffered = contract v3, streamed = v2)."""
+    if mode == "buffered":
+        return {"mode": "buffered", "accuracyMs": BUFFERED_ACCURACY_MS, "cycleMs": CYCLE_MS,
+                "plcClockMs": None, "aheadMs": None, "bufferedBanks": 0, "worstLateMs": None,
+                "lastLateMs": None, "underruns": 0, "notice": None}
+    if mode == "streamed":
+        return {"mode": "streamed", "accuracyMs": STREAMED_ACCURACY_MS, "cycleMs": LEGACY_CYCLE_MS,
+                "plcClockMs": None, "aheadMs": None, "bufferedBanks": 0, "worstLateMs": None,
+                "lastLateMs": None, "underruns": 0, "notice": UPDATE_NOTICE}
+    # "preview": internal simulation, nothing timed on hardware; "unknown": not verified yet.
+    return {"mode": "preview" if mode == "preview" else "unknown", "accuracyMs": None, "cycleMs": None, "plcClockMs": None, "aheadMs": None,
+            "bufferedBanks": 0, "worstLateMs": None, "lastLateMs": None, "underruns": 0, "notice": None}
 
 
 class SiemensRuntime:
@@ -30,6 +133,7 @@ class SiemensRuntime:
         self.tasks = {}
         self.clients = {}
         self.locks = {}
+        self.lookahead_ms = LOOKAHEAD_MS
 
     def status(self, sid):
         site = self.store.get(sid)
@@ -46,6 +150,8 @@ class SiemensRuntime:
                               "S7COMM_CONTRACT_VERIFIED" if state.get("hardware_verified") else
                               "S7COMM_RUNTIME_HARDWARE_UNVERIFIED"),
                      running=sid in self.tasks and not self.tasks[sid].done(),
+                     timing=dict(state.get("timing") or base_timing(
+                         "preview" if site["mode"] == "simulated" else state.get("timing_mode"))),
                      # AF-NEXT-009: internal simulation is a preview path, never hardware output.
                      output_label=("PREVIEW ONLY — not sent to hardware" if site["mode"] == "simulated" else None))
         return state
@@ -143,7 +249,8 @@ class SiemensRuntime:
             if site["mode"] == "simulated":
                 state.update(verified=True, verified_revision=site["revision"], plc_permit=True,
                              plc_heartbeat=0, stop_confirmed=True, connection_state="simulated",
-                             contract_version=2, feedback={}, feedback_valid=True, identity=None)
+                             contract_version=2, feedback={}, feedback_valid=True, identity=None,
+                             timing=base_timing("preview"))
                 return self.status(sid)
             old = self.clients.pop(sid, None)
             if old:
@@ -159,11 +266,17 @@ class SiemensRuntime:
                     if detail:
                         message += f": {detail}"
                     raise ValueError(message)
+                t0 = time.monotonic()
                 first = await self._header(site, client)
+                t1 = time.monotonic()
                 await asyncio.sleep(.25)
+                t2 = time.monotonic()
                 second = await self._header(site, client)
+                t3 = time.monotonic()
                 if first["plc_heartbeat"] == second["plc_heartbeat"]:
-                    raise ValueError("PLC heartbeat is not moving; check the 100-ms cyclic block call")
+                    raise ValueError(f"PLC heartbeat is not moving; check the {second['cycle_ms']}-ms cyclic block call")
+                if second["timing_mode"] == "buffered":
+                    self._check_ob_period(first, second, (t0, t1, t2, t3))
                 if second["plc_running"]:
                     raise ValueError("PLC runtime contract is already running; stop its current controller before verification")
                 feedback = await self._feedback(site, client)
@@ -173,12 +286,29 @@ class SiemensRuntime:
                              heartbeat_seen=time.monotonic(), sequence=second["ack"], feedback=feedback,
                              feedback_valid=True,
                              identity=identity, connected_at=now, last_rx_at=now,
-                             connection_state="verified_idle", stop_confirmed=True, requires_rearm=True)
+                             connection_state="verified_idle", stop_confirmed=True, requires_rearm=True,
+                             timing=base_timing(second["timing_mode"]))
             except BaseException as exc:
                 state.update(connection_state="failed", error=str(exc), stop_confirmed=False)
                 await client.close()
                 raise
             return self.status(sid)
+
+    @staticmethod
+    def _check_ob_period(first, second, times):
+        """The v3 show clock counts fast-OB executions, so the OB period must be right.
+        Bounds use the read windows, so a slow network can never fake a wrong period."""
+        t0, t1, t2, t3 = times
+        ticks = (second["plc_heartbeat"] - first["plc_heartbeat"]) & 0xFFFF
+        cycle = second["cycle_ms"]
+        fastest = (t2 - t1) * 1000 / ticks          # ms per tick, at least
+        slowest = (t3 - t0) * 1000 / ticks          # ms per tick, at most
+        if fastest > 2 * cycle:
+            raise ValueError(f"PLC heartbeat advances only every ~{fastest:.0f} ms; AquaFlowCycle (OB200) must be a "
+                             f"{cycle} ms cyclic interrupt for the frame-accurate program. Fix the OB cycle time in TIA.")
+        if slowest < cycle / 2:
+            raise ValueError(f"PLC heartbeat advances every ~{slowest:.1f} ms; call AquaFlowSiteControlInstance only "
+                             f"once, from the {cycle} ms cyclic interrupt OB.")
 
     async def reconnect(self, sid):
         """Reconnect and re-verify, but never re-arm or resume a previous show."""
@@ -186,7 +316,7 @@ class SiemensRuntime:
         state["reconnect_attempts"] = state.get("reconnect_attempts", 0) + 1
         return await self.verify(sid)
 
-    async def _commit(self, sid, site, payload, run):
+    async def _commit(self, sid, site, payload, run, extra_flags=0):
         if len(payload) != COMMAND_SIZE:
             raise ValueError(f"Command frame must be {COMMAND_SIZE} bytes")
         state = self.states[sid]
@@ -203,7 +333,7 @@ class SiemensRuntime:
             lambda: client.write_word(db, 28, FLAG_STAGING),
             lambda: client.write_bytes(db, PUMP_COMMAND_OFFSET, payload),
             lambda: client.write_word(db, 18, heartbeat),
-            lambda: client.write_word(db, 28, FLAG_RUN if run else 0),
+            lambda: client.write_word(db, 28, (FLAG_RUN | extra_flags) if run else 0),
             lambda: client.write_word(db, 26, sequence),
         )
         for action in actions:
@@ -283,8 +413,7 @@ class SiemensRuntime:
                       value=min(10, pump["max_percent"]))]
         show = compile_show(site, clips)
         await self.arm(sid, flow_path_confirmed, commissioning=True)
-        return await self._start_task(sid, site, lambda: self._play(sid, site, show),
-                                      first_frame=frame_at(site, show, 0), commissioning_test=True)
+        return await self._start_show(sid, site, show, commissioning_test=True)
 
     async def test_device(self, sid, device_id, seconds=3, flow_path_confirmed=False):
         """Commissioning pulse for one device: a valve (with its pump at 10%), a pump (through
@@ -310,8 +439,7 @@ class SiemensRuntime:
                   for i, colour in enumerate(("red", "green", "blue"))]
         show = compile_show(site, clips)
         await self.arm(sid, flow_path_confirmed, commissioning=True)
-        return await self._start_task(sid, site, lambda: self._play(sid, site, show),
-                                      first_frame=frame_at(site, show, 0), commissioning_test=True)
+        return await self._start_show(sid, site, show, commissioning_test=True)
 
     async def peek(self, sid):
         """Read-only snapshot of the PLC DB for the live monitor. While a show runs the
@@ -326,7 +454,8 @@ class SiemensRuntime:
         if running or not client or not state.get("verified"):
             keys = ("plc_heartbeat", "aquaflow_heartbeat", "plc_permit", "permit_bits", "status_bits", "plc_running",
                     "plc_ready", "watchdog_healthy", "fault", "rejected_reason", "ack", "command_sequence",
-                    "feedback_sequence", "last_command_age_ms")
+                    "feedback_sequence", "last_command_age_ms", "timing_mode", "show_clock_ms",
+                    "buffer_read_index", "worst_late_ms", "buffer_underrun")
             return {**snapshot, "source": "last_frame" if running else "not_connected",
                     "header": {k: state.get(k) for k in keys}, "values": state.get("values") or {},
                     "feedback": state.get("feedback") if state.get("feedback_valid") else {},
@@ -371,7 +500,20 @@ class SiemensRuntime:
                     "during": {k: during[k] for k in ("watchdog_healthy", "plc_ready", "fault", "last_command_age_ms")},
                     "after": {k: after[k] for k in ("watchdog_healthy", "plc_ready", "fault")}}
 
-    async def _start_task(self, sid, site, coroutine_factory, *, first_frame, **state_patch):
+    async def _start_show(self, sid, site, show, **state_patch):
+        """Frame-accurate ring playback on a v3 PLC; streamed playback on a v2 PLC or preview."""
+        state = self.states.setdefault(sid, {})
+        if site["mode"] != "simulated" and state.get("timing_mode") == "buffered":
+            stream = BankStream(site, show)
+            return await self._start_task(sid, site, lambda: self._play_buffered(sid, site, stream),
+                                          first_frame=frame_at(site, show, 0),
+                                          prefill=lambda: self._prefill(sid, site, stream),
+                                          run_flags=FLAG_BUFFERED, **state_patch)
+        return await self._start_task(sid, site, lambda: self._play(sid, site, show),
+                                      first_frame=frame_at(site, show, 0), **state_patch)
+
+    async def _start_task(self, sid, site, coroutine_factory, *, first_frame, prefill=None, run_flags=0,
+                          **state_patch):
         async with self._lock(sid):
             self.ensure_idle(sid)
             if self.store.get(sid)["revision"] != site["revision"] or not self.states[sid].get("armed"):
@@ -384,11 +526,15 @@ class SiemensRuntime:
                 # Arm's OFF acknowledgement can therefore expire while an operator
                 # moves the mouse to Start. Refresh OFF immediately before RUN.
                 try:
+                    if prefill:
+                        # Ring first (the PLC ignores it until RUN), then the fresh OFF handshake,
+                        # so the RUN commit still follows the OFF acknowledgement directly.
+                        await prefill()
                     await self._commit(sid, site, bytes(COMMAND_SIZE), False)
                     if state.get("plc_running") or not state.get("plc_permit"):
                         raise ValueError("PLC is running or its local permit is off")
                     payload, values = first_frame
-                    await self._commit(sid, site, payload, True)
+                    await self._commit(sid, site, payload, True, extra_flags=run_flags)
                 except Exception as exc:
                     state.update(armed=False, error=str(exc), requires_rearm=True,
                                  feedback_valid=False, connection_state="start_rejected")
@@ -400,8 +546,14 @@ class SiemensRuntime:
                                      error=f"Start rejected: {exc}; Stop unconfirmed: {stop_exc}")
                     raise
                 state["values"] = values
+            if site["mode"] == "simulated":
+                timing = base_timing("preview")
+            else:
+                timing = base_timing("buffered" if run_flags & FLAG_BUFFERED else "streamed")
+                if not run_flags & FLAG_BUFFERED and state.get("timing_mode") == "buffered":
+                    timing["notice"] = None          # v3 PLC, streamed on purpose (manual hold)
             self.states[sid].update(error=None, elapsed=0, stop_confirmed=False,
-                                    connection_state="running", **state_patch)
+                                    connection_state="running", timing=timing, **state_patch)
             self.tasks[sid] = asyncio.create_task(coroutine_factory())
             return self.status(sid)
 
@@ -419,8 +571,7 @@ class SiemensRuntime:
         if site["mode"] != "simulated" and not self._allowed():
             raise ValueError("Safety permit is off")
         self._assert_owner(sid, site)
-        return await self._start_task(sid, site, lambda: self._play(sid, site, show),
-                                      first_frame=frame_at(site, show, 0), runtime_mode="show")
+        return await self._start_show(sid, site, show, runtime_mode="show")
 
     async def start_manual(self, sid, values):
         site, state = self.store.get(sid), self.states.setdefault(sid, {})
@@ -449,9 +600,12 @@ class SiemensRuntime:
         if now - state.get("heartbeat_seen", now) > 1:
             raise ValueError("PLC heartbeat stopped")
         state.update(header)
+        return header
 
     async def _play(self, sid, site, show):
+        """Streamed playback (contract v2 PLC, or preview): one bank per ~100-ms commit."""
         started = time.monotonic()
+        previous = 0.0
         try:
             while True:
                 elapsed = time.monotonic() - started
@@ -460,7 +614,15 @@ class SiemensRuntime:
                 await self._supervise(sid, site)
                 payload, values = frame_at(site, show, elapsed)
                 await self._commit(sid, site, payload, True)
-                self.states[sid].update(values=values, elapsed=elapsed)
+                state = self.states[sid]
+                state.update(values=values, elapsed=elapsed)
+                if site["mode"] != "simulated":
+                    # A cue just after the previous sample is seen in this frame and applied
+                    # by the time the PLC acknowledged it: that is its worst-case lateness.
+                    late = round((time.monotonic() - started - previous) * 1000)
+                    timing = state.setdefault("timing", base_timing("streamed"))
+                    timing.update(lastLateMs=late, worstLateMs=max(late, timing.get("worstLateMs") or 0))
+                previous = elapsed
                 await asyncio.sleep(.1)
         except asyncio.CancelledError:
             raise
@@ -468,6 +630,91 @@ class SiemensRuntime:
             self.states[sid].update(error=str(exc), verified=False, hardware_verified=False,
                                     feedback_valid=False,
                                     connection_state="lost", requires_rearm=True)
+        finally:
+            await self._finish(sid, site)
+
+    async def _prefill(self, sid, site, stream):
+        """Restart the ring at the PLC's read counter and fill it LOOKAHEAD_MS ahead of 0."""
+        client, db = self.clients[sid], site["plc"]["db"]
+        header = await self._header(site, client)
+        if header["timing_mode"] != "buffered":
+            raise ValueError("The PLC program changed since Verify; verify again")
+        if header["plc_running"] or header["buffer_active"]:
+            raise ValueError("PLC already reports RUN; stop its current controller before starting")
+        control = await client.read_bytes(db, STREAM_CONTROL_OFFSET, STREAM_CONTROL_SIZE)
+        _, keepalive, _ = struct.unpack(">HHI", control)
+        read_index = header["buffer_read_index"]
+        # Whatever an earlier session left in the ring is discarded: writing starts at the PLC's
+        # read counter and the PLC only consumes [read, write) while in buffered RUN.
+        stream.write_index = read_index
+        stream.keepalive = keepalive
+        await self._write_ring(sid, site, stream, 0, read_index, budget_s=None)
+
+    def _valid_until(self, stream, horizon_ms):
+        """Show time up to which the ring holds every bank (the PLC holds, then stops, after it)."""
+        if stream.peek is not None and stream.peek[0] <= horizon_ms:
+            return max(0, stream.peek[0] - 1)       # the ring is full before the horizon
+        return horizon_ms
+
+    async def _write_ring(self, sid, site, stream, clock_ms, read_index, budget_s=KEEPALIVE_BUDGET_S):
+        """Write due banks into free slots, then commit them with one control-word write
+        (write counter + keepalive + horizon). Slots in [read, write) are never touched."""
+        client, db = self.clients[sid], site["plc"]["db"]
+        horizon = clock_ms + self.lookahead_ms
+        began = time.monotonic()
+        while stream.peek is not None and stream.peek[0] <= horizon:
+            if stream.pending(read_index) >= BUFFER_CAPACITY:
+                break
+            if budget_s is not None and time.monotonic() - began > budget_s:
+                break
+            at_ms, payload, values = stream.peek
+            if not await client.write_bytes(db, slot_offset(stream.write_index), encode_slot(at_ms, payload)):
+                raise ValueError("PLC refused a buffered command bank")
+            stream.pop()
+            stream.queued.append((at_ms, values))
+            stream.write_index = (stream.write_index + 1) & 0xFFFF
+            stream.banks_written += 1
+        stream.valid_until = self._valid_until(stream, horizon)
+        stream.keepalive = (stream.keepalive + 1) & 0xFFFF
+        if not await client.write_bytes(db, STREAM_CONTROL_OFFSET, encode_stream_control(
+                stream.write_index, stream.keepalive, stream.valid_until)):
+            raise ValueError("PLC refused the buffer control word")
+
+    async def _play_buffered(self, sid, site, stream):
+        """Frame-accurate playback: the PLC applies each bank on its own clock; the PC only
+        keeps the ring ahead, supervises permits/heartbeat and reports the measured timing."""
+        state = self.states[sid]
+        client = self.clients[sid]
+        try:
+            while True:
+                header = await self._supervise(sid, site)
+                if not header["plc_running"]:
+                    reason = header.get("fault") if header.get("fault_code") else header.get("rejected_reason")
+                    raise ValueError(f"PLC stopped the show: {reason}")
+                clock, read_index = header["show_clock_ms"], header["buffer_read_index"]
+                values = stream.mark_applied(read_index)
+                if header["buffer_underrun"] and not stream.was_underrun:
+                    stream.underruns += 1
+                stream.was_underrun = header["buffer_underrun"]
+                if stream.exhausted and stream.pending(read_index) == 0 and clock >= stream.duration_ms:
+                    break
+                await self._write_ring(sid, site, stream, clock, read_index)
+                feedback = await self._feedback(site, client)
+                timing = state.setdefault("timing", base_timing("buffered"))
+                timing.update(plcClockMs=clock, aheadMs=max(0, stream.valid_until - clock),
+                              bufferedBanks=stream.pending(read_index), worstLateMs=header["worst_late_ms"],
+                              lastLateMs=header["last_late_ms"], underruns=stream.underruns,
+                              banksWritten=stream.banks_written)
+                patch = dict(elapsed=clock / 1000, feedback=feedback, feedback_valid=True, last_rx_at=time.time())
+                if values is not None:
+                    patch["values"] = values
+                state.update(patch)
+                await asyncio.sleep(REFILL_PERIOD_S)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            state.update(error=str(exc), verified=False, hardware_verified=False,
+                         feedback_valid=False, connection_state="lost", requires_rearm=True)
         finally:
             await self._finish(sid, site)
 
