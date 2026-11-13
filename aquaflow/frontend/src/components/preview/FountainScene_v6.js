@@ -3381,7 +3381,8 @@ export class FountainScene {
   /** Show the camera path while the Camera lane is being edited, even in a free view. */
   setCameraPathVisible(on) { this._cameraPathWanted = !!on; this._syncCameraPathVisibility(); }
   _syncCameraPathVisibility() {
-    const show = (this.cameraMode === CAMERA_MODES.ANIMATED || this._cameraPathWanted) && !this._baking;
+    // Looking through the camera the markers sit right in front of the lens, so they only show in a free view.
+    const show = !!this._cameraPathWanted && this.cameraMode !== CAMERA_MODES.ANIMATED && !this._baking;
     if (this._cameraPathLine) this._cameraPathLine.visible = show;
     if (this._cameraKeyMarkers) this._cameraKeyMarkers.visible = show;
   }

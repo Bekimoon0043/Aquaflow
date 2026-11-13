@@ -1,5 +1,11 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-13: AquaFlow Studio 1.2.70 - installer back to 179 MB, clean camera playback, emblem client show**
+
+- **Installer size:** 1.2.69/1.2.70 builds were 1.93 GB because the build Python (3.12) has CUDA torch 2.5.1 + transformers/datasets installed, and PyInstaller bundled them (3.5 GB) although no engine code imports them. `backend/aquaflow-engine.spec` now excludes torch*, transformers, datasets, tensorflow, tokenizers, tiktoken, huggingface_hub, hf_xet, pyarrow, pandas, fitz/pymupdf. Engine 113 MB, installer 179 MB. librosa/numba/scipy stay (audio routes import librosa lazily).
+- **Camera playback:** key markers and the dashed path no longer show while viewing through the animated camera (they sat in front of the lens); they show only in a free view while the Camera lane is open.
+- **Emblem client show:** `frontend/scripts/build-emblem-show.mjs` writes a 30 s show onto the emblem pipe .aquapkg (sun ring, rays, hair, face, small star, staff, crescent, cup groups; 96 editable patterns; camera track from the curved side; slew and flow checks).
+
 **2026-11-04: AquaFlow Studio 1.2.69 - Depence-style camera animation and reliable 3D zoom**
 
 - **Why:** the 3D view only had hard-coded fly paths round one point and a wheel zoom limited to 3-25 m. Research: `reports/Depence camera animation for AquaFlow.md`.

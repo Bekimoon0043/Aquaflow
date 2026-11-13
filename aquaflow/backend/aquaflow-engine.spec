@@ -68,7 +68,10 @@ a = Analysis(
     # Trim heavy libs that are NOT part of the runtime server (they belong to offline
     # validate_*/analysis scripts only). Keep this list conservative — verify on the
     # build machine that the server still starts after excluding.
-    excludes=["tkinter", "matplotlib", "PyQt5", "PySide2", "notebook", "IPython"],
+    excludes=["tkinter", "matplotlib", "PyQt5", "PySide2", "notebook", "IPython",
+              # Not imported by the engine but present in the build Python: CUDA torch alone added ~3.5 GB.
+              "torch", "torchvision", "torchaudio", "torchcodec", "transformers", "datasets", "tensorflow",
+              "tokenizers", "tiktoken", "huggingface_hub", "hf_xet", "pyarrow", "pandas", "fitz", "pymupdf"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
