@@ -12,6 +12,7 @@ export default function PyroRecipeFields({ recipe, clips = [], onChange }) {
     <label>Firing<select aria-label="Pyro firing" value={mode} onChange={e => set({ mode: e.target.value })}>{PYRO_MODES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
     {mode === 'chase' && <label>Chase step (s)<input type="number" min={0.05} max={10} step={0.05} value={recipe.pyro?.intervalS ?? 0.5} onChange={e => { const n = Number(e.target.value); if (Number.isFinite(n) && n > 0) set({ intervalS: n }); }} /></label>}
     <p className="sp-help">Start = first burst (put it on the beat). {mode === 'sweep' || mode === 'barrage' ? 'Duration = time the bursts are spread over. ' : ''}AquaFlow lights each position its lift time earlier (pre-fire) and never fires pyro itself: export the firing script for the firing system.</p>
+    <p className="sp-help">Cold spark, flame, CO2, confetti and smoke machines are not pyro: give them ordinary patterns (static, pulse, chase, curve) — their level sets the spark or flame height and they run on the DMX outputs.</p>
     {cues.length > 0 && <table className="sp-pyro-cues" aria-label="Pyro cues"><thead><tr><th>Position</th><th>Ignition</th><th>Burst</th></tr></thead><tbody>
       {cues.slice(0, 12).map(c => <tr key={c.id}><td>{String(c.name || '').split(' · ')[1] || c.fixtureId}</td><td>{s2(c.startTime)}</td><td>{s2(c.pyro?.burstTime ?? c.startTime)}</td></tr>)}
     </tbody></table>}

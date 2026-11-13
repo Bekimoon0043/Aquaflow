@@ -6,7 +6,8 @@
 // hydraulic (`engineering`) and electrical (`electrical`) metadata.
 import EXPANDED_FIXTURES from "./fixture_library_expanded.json";
 import { REFERENCE_PRODUCTS } from "./fixtureReferenceProducts.js";
-import { PYRO_PRODUCTS } from "./pyroLibrary.js";
+import { PYRO_PRODUCTS, SFX_PRODUCTS } from "./pyroLibrary.js";
+import { LASER_PRODUCTS, LEGACY_LASER_SPECS } from "./laserLibrary.js";
 import { equipmentKind, genericProvenance, isVerifiedProvenance, normalizeProvenance, SOURCE_MEASURED } from "./fixtureProvenance.js";
 
 const CURATED_FIXTURES = [
@@ -159,6 +160,9 @@ const CURATED_FIXTURES = [
       nozzleDiaMm:13,
       sprayAngleDeg:10,
       group:"Laser Laminar",
+      // A laminar jet carries light like a fibre: pair it with a laser (Laser tool) or an LED coupled
+      // into the nozzle; the jet itself stays a nozzle.
+      laserNote:"Couple a laser or LED into the nozzle; place the source with the Laser tool and pair it",
       connectionSize:"DN25",
       material:"SS304"
     }
@@ -1535,6 +1539,15 @@ function deriveElectrical(f) {
   return electrical;
 }
 
+/** The two long-standing laser keys join the laser catalogue (family, optics, safety) under their old keys. */
+function withLaserCatalogue(f) {
+  const spec = LEGACY_LASER_SPECS[f.key];
+  if (!spec) return f;
+  const engineering = { ...(f.engineering || {}), ...spec.engineering };
+  return { ...f, family: spec.family, label: spec.label, engineering,
+    summary: `${engineering.opticalPowerW} W · class ${engineering.laserClass} · ${engineering.ipRating}` };
+}
+
 function normalizeFixture(f) {
   const engineering = { ...(f.engineering || {}) };
   // AF-NEXT-012 — canonical provenance block (data/fixtureProvenance.js). An entry
@@ -1560,12 +1573,16 @@ function normalizeFixture(f) {
 }
 
 export const FIXTURE_LIBRARY = [
-  ...CURATED_FIXTURES.map(normalizeFixture),
+  ...CURATED_FIXTURES.map(withLaserCatalogue).map(normalizeFixture),
   ...EXPANDED_FIXTURES.map(normalizeFixture),
   // Real catalogue products (OASE, Safe-Rain, Longxin, Huaxin, …) — see fixtureReferenceProducts.js.
   ...REFERENCE_PRODUCTS.map(normalizeFixture),
+  // Laser projectors by family (beam, graphics, fan/liquid sky, sky, firefly, moving head, mapping).
+  ...LASER_PRODUCTS.map(normalizeFixture),
   // Fireworks firing positions (category "Pyro") — preview, program and export only.
   ...PYRO_PRODUCTS.map(normalizeFixture),
+  // Fireworks-like special effects (cold spark, flame, CO2, confetti, smoke): DMX equipment, listed with the fireworks.
+  ...SFX_PRODUCTS.map(normalizeFixture),
 ];
 
 const FIXTURE_BY_KEY = new Map(FIXTURE_LIBRARY.map(f => [f.key, f]));

@@ -1,5 +1,11 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-14: AquaFlow Studio 1.2.72 - Laser and Fireworks designer tools with full catalogues**
+
+- **Designer tools:** ◆ Laser and ✷ Fireworks next to Nozzle/Light (`designerCatalog.js` PLACEMENT_TOOLS). Each lists only its catalogue, grouped by family; placement, arrays, properties, undo work like nozzles; lasers/pyro/sfx may stand outside the basin; new LASERS and FIREWORKS layers; plan symbols for lasers, pyro and sfx.
+- **Laser catalogue:** `data/laserLibrary.js`, 38 products (RGB show 1-60 W, single colour, water-screen graphics, fan/sheet, liquid sky, sky/searchlight, firefly/star-field, moving head, facade mapping) with power, kpps, divergence, class, NOHD estimate, control. New looks: water-screen graphics, firefly, searchlight, liquid sky, moving head; sky lasers get an aviation note in preflight.
+- **Fireworks catalogue:** `data/pyroLibrary.js`, 141 products: shells 50-150 mm in 18 effects, cakes, comets/candles, mines, gerbs/waterfalls/wheels/lancework, close-proximity stage pyro, water-surface pyro, plus 11 non-pyro special effects (`sfx_*`: cold spark, flame, CO2/cryo, confetti/streamer, smoke/haze) on normal DMX-style channels. Each effect has its own 3D look. Real pyro stays export-only.
+
 **2026-11-13: AquaFlow Studio 1.2.71 - real lasers, fireworks (export-only), Codex lighting and Siemens work**
 
 - **Lasers:** `preview/laser/` - each placed laser projector emits from its own position (mount height), channels `laser_intensity`, RGB, `laser_pattern` (beam/fan/cone/sheet/scan), `laser_pan/tilt/size/speed`; Show Studio `laser` effect with six looks; beams visible only with haze (new Haze slider). Safety: beams kept above `minBeamHeightM` (3 m) over audience areas (new "Audience area" land surface), preflight warns. Not yet mapped to the projectors' 8 DMX channels; Python show-frame mirror has no laser clamp.

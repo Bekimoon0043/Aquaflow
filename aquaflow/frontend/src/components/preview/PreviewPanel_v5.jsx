@@ -695,7 +695,8 @@ if (sitePreview.active && sitePreview.plan) {
     if (!scene?.setPyroCues) return;
     const eng = useEngineeringStore.getState();
     const fromTracks = (timelineTracks || []).flatMap(track => track?.clips || track?.items || track?.events || []);
-    const byId = new Map([...fromTracks, ...(programmerClips || [])].filter(c => c?.type === "pyro_fire").map(c => [c.id, c]));
+    // pyro_fire cues plus the level clips of the fireworks-like effects (cold spark, CO2, confetti, smoke, flame).
+    const byId = new Map([...fromTracks, ...(programmerClips || [])].filter(c => c?.id && c.fixtureId).map(c => [c.id, c]));
     scene.setPyroCues(pyroCuesFromClips([...byId.values()], engineeringFixtures || [], poolCenter(eng.geometry, eng.params, eng.poolType)));
   }, [timelineTracks, programmerClips, engineeringFixtures, sceneTier]);
   useEffect(() => {

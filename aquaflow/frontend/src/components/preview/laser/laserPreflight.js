@@ -7,9 +7,20 @@ import { laserSafetyArea } from "./laserSite";
 
 const STEP_S = 0.25;
 
+/** Sky / searchlight lasers point into navigable airspace: a standing reminder per projector. */
+export function aviationNotes(lasers = []) {
+  return lasers.filter((f) => f.engineering?.aviation || f.engineering?.laserKind === "sky").map((f) => ({
+    code: "laser-aviation", severity: "info", fixtureId: f.id, engineeringItemId: f.id, timeMs: null,
+    message: `${f.label || f.id}: sky laser — outdoor beams into the sky need the civil aviation authority's approval before use `
+      + `(e.g. FAA Form 7140-1 in the US; ICAO laser-free, critical and sensitive flight zones near airports), a spotter or automatic `
+      + `aircraft shutdown where required, and the show-laser permit.${Number(f.engineering?.nohdM) > 0 ? ` Static-beam NOHD ≈ ${f.engineering.nohdM} m.` : ""}`,
+  }));
+}
+
 export function laserDiagnostics(project = {}) {
   const lasers = (project.fixtures || []).filter((f) => isLaserFixture(f?.type));
   if (!lasers.length) return [];
+  const notes = aviationNotes(lasers);
   const clips = project.clips || [];
   const end = clips.reduce((m, c) => Math.max(m, Number(c.startTime ?? c.start ?? 0) + Number(c.duration || 0)), 0);
   const safety = laserSafetyArea({ siteSurfaces: project.siteSurfaces, basins: project.basins, geometry: project.geometry }, null);
@@ -28,7 +39,7 @@ export function laserDiagnostics(project = {}) {
       found.set(rig.id, seen);
     }
   }
-  return [...found].map(([id, s]) => {
+  return [...notes, ...[...found].map(([id, s]) => {
     const rig = rigs.find((r) => r.id === id);
     const h = Number(rig.engineering.minBeamHeightM) || DEFAULT_MIN_BEAM_HEIGHT_M;
     const where = safety.zones.length ? "an audience area" : "audience space outside the basin";
@@ -39,5 +50,5 @@ export function laserDiagnostics(project = {}) {
         + (s.blanked ? "The projector stands in audience space below that height, so its beams are blanked — raise its mount height or move it into the basin."
           : "The preview raises them to clear it; aim higher (Tilt) so the real show matches."),
     };
-  });
+  })];
 }

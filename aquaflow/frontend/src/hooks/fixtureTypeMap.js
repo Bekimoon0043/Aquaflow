@@ -430,7 +430,8 @@ export function classifyFixtureType(typeString) {
   if (isSteelFrameType(k)) return "equipment";
 
   // Fireworks firing positions: drawn by the pyro system, never as a water jet or a light.
-  if (k.startsWith("pyro_")) return "equipment";
+  // Fireworks-like special effects (cold spark, CO2, confetti, smoke, flame) are drawn by the same system.
+  if (k.startsWith("pyro_") || k.startsWith("sfx_")) return "equipment";
 
   // A framing projector LIGHT (light_projector_*) is a DMX light, not the video-projector
   // equipment the "projector" keyword below means.

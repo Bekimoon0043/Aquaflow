@@ -13,18 +13,18 @@ const shell75 = "pyro_shell_75_peony";
 
 describe("pyro catalogue", () => {
   it("is in the fixture library under Pyro with sane estimates", () => {
-    expect(FIXTURE_LIBRARY.filter((f) => f.category === "Pyro").length).toBe(PYRO_PRODUCTS.length);
+    expect(FIXTURE_LIBRARY.filter((f) => f.category === "Pyro" && f.pyro !== false).length).toBe(PYRO_PRODUCTS.length);
     for (const p of PYRO_PRODUCTS) {
       const e = p.engineering.pyro;
       expect(p.key.startsWith("pyro_")).toBe(true);
       expect(e.dataSource).toMatch(/Estimate/);
       expect(e.safetyDistanceM).toBeGreaterThan(0);
-      expect(e.burstHeightM).toBeGreaterThan(0);
+      expect(e.burstHeightM).toBeGreaterThanOrEqual(0);   // water shells break at the surface
       expect(e.durationS).toBeGreaterThan(0);
       expect(e.liftTimeS).toBeGreaterThanOrEqual(0);
       if (e.kind === "shell") {
         expect(e.liftTimeS).toBeGreaterThanOrEqual(1.5);
-        expect(e.liftTimeS).toBeLessThanOrEqual(3.5);
+        expect(e.liftTimeS).toBeLessThanOrEqual(4);
         expect(e.safetyDistanceM).toBeCloseTo(e.calibreMm * 0.84, 0);   // NFPA 1123 70 ft / inch
       }
     }
@@ -121,7 +121,7 @@ describe("validation, scene cues and the firing script", () => {
     expect(lines[0]).toBe("Cue,Ignition (s),Ignition SMPTE (HH:MM:SS:FF),Burst (s),Lift (s),Position,Module,Pin,Product,Effect,Calibre (mm),Shots,Safety distance (m),Notes");
     expect(lines[1].startsWith("1,2.50,00:00:02:15,4.90,2.4,A,1,1,75 mm Peony shell,peony,75,1,63,")).toBe(true);
     expect(lines[2].startsWith("2,6.00,00:00:06:00,")).toBe(true);
-    expect(lines[2]).toContain(",K,1,2,25-shot cake (30 mm),peony,30,25,");
+    expect(lines[2]).toContain(",K,1,2,25-shot straight cake (30 mm),peony,30,25,");
     expect(firingScriptRows([clip("1", "A", 2.5, 4.9)], [{ ...fixtures[0], engineering: { firingModule: 7, firingPin: 3 } }])[0]).toMatchObject({ module: 7, pin: 3 });
   });
 });

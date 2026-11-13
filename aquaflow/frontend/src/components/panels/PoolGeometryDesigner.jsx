@@ -35,9 +35,9 @@ import { LAND_SURFACE_TYPES, dedupeSurfacePoints, moveSurface, normalizeSiteSurf
 import { createICANSiteEngineeringProject } from "../../data/icanSiteEngineeringProject";
 import { takePendingFocus } from "../../preflight/preflight";
 import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
-import { FIXTURE_TYPES, POOL_TYPES, TOOLS, mergeEngineeringLayers } from "../../engineering/drafting/designerCatalog";
+import { FIXTURE_TYPES, OUTSIDE_BASIN_TOOLS, PLACEMENT_TOOLS, POOL_TYPES, TOOLS, mergeEngineeringLayers } from "../../engineering/drafting/designerCatalog";
 import { renderDesignerCanvas } from "../../engineering/drafting/designerRenderer";
-import { createFixtureEntity, duplicateFixtureEntity, ensureEntityIdentities, entityKey, ownerForPoint, toolLayerKey } from "../../engineering/drafting/entities";
+import { createFixtureEntity, duplicateFixtureEntity, ensureEntityIdentities, entityKey, fixtureLayerKey, ownerForPoint, toolLayerKey } from "../../engineering/drafting/entities";
 import { buildSnapScene } from "../../engineering/drafting/snap";
 import { resolveDraftPoint } from "../../engineering/drafting/session";
 import { patchToStoreFields } from "../../engineering/drafting/commands";
@@ -196,7 +196,7 @@ export default function PoolGeometryDesigner() {
   }, [fixtures]);
 
   useEffect(() => {
-    if (!["nozzle", "light", "equipment"].includes(tool)) return;
+    if (!PLACEMENT_TOOLS.includes(tool)) return;
     const selected = FIXTURE_TYPES.find((fixture) => fixture.key === fixtureType);
     if (selected && fixtureMatchesTool(selected, tool)) return;
     const firstMatch = FIXTURE_TYPES.find((fixture) => fixtureMatchesTool(fixture, tool));
@@ -449,7 +449,7 @@ export default function PoolGeometryDesigner() {
       basins, activeBasinIndex, depthZones, depthDrawPoints, depthZone, freeformPoints, drawStart,
       polylinePoints, selectedFixture, selectedKeys, measurements, selectionBox, draftOverlay, guidePaths, selectedGuideId,
       // eslint-disable-next-line no-use-before-define -- runs after render, when arraySource exists
-      arrayHighlight: arrayMode === "pipe" && ["nozzle", "light", "equipment"].includes(tool) && arraySource ? pipePath(arraySource) : null,
+      arrayHighlight: arrayMode === "pipe" && PLACEMENT_TOOLS.includes(tool) && arraySource ? pipePath(arraySource) : null,
       snapResult: (pipeSnap ? pipeSnap.snap : hoverSnap?.snap) || null,
       polarGuide: polar && polarFrom ? { from: polarFrom, angleDeg: polar.angleDeg, locked: polar.locked, label: `${Math.round(polar.angleDeg)}°` } : null,
     });
@@ -738,7 +738,7 @@ export default function PoolGeometryDesigner() {
   const logLine = (text, tone) => setCmdLine((current) => pushHistory(current, text, tone));
   // With a fixture tool on "Along a line", a typed shape command draws a guide line, not the pool.
   const defaultDraftTarget = () => (tool === "land" ? "land" : tool === "depth" ? "depth"
-    : ["nozzle", "light", "equipment"].includes(tool) && arrayMode === "pipe" ? "guide" : "pool");
+    : PLACEMENT_TOOLS.includes(tool) && arrayMode === "pipe" ? "guide" : "pool");
 
   const startDraft = (command, target = defaultDraftTarget()) => {
     if (target === "pool" && isLayerLocked("pool_outline")) { logLine("The POOL OUTLINE layer is locked", "error"); return; }
@@ -967,7 +967,8 @@ export default function PoolGeometryDesigner() {
     const layerKey = toolLayerKey(tool);
     if (layerKey && isLayerLocked(layerKey)) return;
     // Firework positions normally stand on land behind the pool, so they may go outside a basin.
-    if (!pointInAnyBasin(basins, world) && !String(fixtureType || "").startsWith("pyro_")) return;
+    // Lasers stand on towers, platforms or roofs around the site, so they may go outside a basin too.
+    if (!pointInAnyBasin(basins, world) && !/^(pyro|sfx|laser)_/.test(String(fixtureType || "")) && !OUTSIDE_BASIN_TOOLS.includes(tool)) return;
     pushUndo("Place fixture");
     const ft = FIXTURE_TYPES.find(t => t.key === fixtureType) || { key: fixtureType, label: fixtureType || "Equipment" };
     setFixtures(prev => [...prev, createFixtureEntity({
@@ -1152,7 +1153,7 @@ export default function PoolGeometryDesigner() {
         }
       }
       setSelectionBox({ start: rawWorld, end: rawWorld, additive: e.shiftKey });
-    } else if(tool === "nozzle" || tool === "light" || tool === "equipment") {
+    } else if(PLACEMENT_TOOLS.includes(tool)) {
       placeFixture(world);
     } else if(tool === "measure") {
       if(!measureStart) setMeasureStart(world);
@@ -1454,8 +1455,7 @@ export default function PoolGeometryDesigner() {
   };
 
   const applyFixtureArray = () => {
-    if(fixtureType?.startsWith("nozzle") && isLayerLocked("nozzles")) return;
-    if(fixtureType?.startsWith("light") && isLayerLocked("lights")) return;
+    if (isLayerLocked(fixtureLayerKey(fixtureType))) return;
     const ft = FIXTURE_TYPES.find(t => t.key === fixtureType) || FIXTURE_TYPES[0];
     if (arrayMode === "pipe") { applyPipeArray(ft); return; }
     if(!geometry) return;
@@ -1785,6 +1785,8 @@ export default function PoolGeometryDesigner() {
           {tool==="select" && "Drag grips to stretch · Drag pool to move · Shift+click adds · drag on empty space (or Ctrl+drag) selects: →window ←crossing · Ctrl+G groups · Del deletes · Ctrl+D duplicates · Ctrl+K commands"}
           {tool==="nozzle" && "Click on pool to place nozzle"}
           {tool==="light"  && "Click on pool to place light fixture"}
+          {tool==="laser"  && "Click to place a laser projector (in the pool or on land around it) · rotate it in Properties to aim · arrays work as for nozzles"}
+          {tool==="fireworks" && "Click to place a firework position (usually on land behind the pool) · the dashed circle is its safety distance"}
           {tool==="rectangle" && !drawStart && "Rectangle: click first corner"}
           {tool==="rectangle" && drawStart && "Rectangle: click opposite corner to finish"}
           {tool==="circle" && !drawStart && "Circle: click center point"}

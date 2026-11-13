@@ -92,16 +92,18 @@ export function ensureEntityIdentities(list, ownerFor = () => OWNER_MODEL) {
 
 // ── layers ──────────────────────────────────────────────────────────────────
 
-/** Which standard layer a fixture type lives on (lights / nozzles / equipment). */
+/** Which standard layer a fixture type lives on (nozzles / lights / lasers / fireworks / equipment). */
 export function fixtureLayerKey(type) {
   const t = String(type || "").toLowerCase();
-  if (t.includes("light") || t.includes("laser")) return "lights";
+  if (t.startsWith("pyro_") || t.startsWith("sfx_")) return "fireworks";
+  if (t === "laser" || t.startsWith("laser_")) return "lasers";
   if (t.includes("nozzle") || t.includes("jet") || t.includes("geyser") || t.includes("foam") || t.includes("mist")) return "nozzles";
+  if (t.includes("light") || t.includes("laser")) return "lights";
   return "equipment";
 }
 
 /** The layer a placement tool writes to. */
-export const toolLayerKey = (tool) => ({ nozzle: "nozzles", light: "lights", equipment: "equipment" }[tool] || null);
+export const toolLayerKey = (tool) => ({ nozzle: "nozzles", light: "lights", laser: "lasers", fireworks: "fireworks", equipment: "equipment" }[tool] || null);
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 

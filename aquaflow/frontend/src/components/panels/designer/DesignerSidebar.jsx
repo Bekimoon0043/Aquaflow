@@ -10,7 +10,7 @@ import { bomCitation } from "../../../engineering/bomEngine"; // AF-NEXT-012
 import { LAND_SURFACE_TYPES } from "../../../engineering/siteSurfaces";
 import { setUnderlayLayerVisible, setUnderlayVisible } from "../../../engineering/cadUnderlay";
 import { ICAN_SITE_PROJECT_NAME } from "../../../data/icanSiteEngineeringProject";
-import { POOL_TYPES, TOOLS, FIXTURE_TYPES } from "../../../engineering/drafting/designerCatalog";
+import { PLACEMENT_TOOLS, POOL_TYPES, TOOLS, FIXTURE_TYPES } from "../../../engineering/drafting/designerCatalog";
 import { DRAFT_COMMANDS } from "../../../engineering/drafting/shapeDraft";
 import PyroExportButton from "./PyroExportButton";
 
@@ -407,7 +407,7 @@ export function FixturePickerSection({ d }) {
   );
   return (
     <>
-    <div style={{ display:["nozzle","light","equipment"].includes(tool)?"block":"none", borderBottom:"1px solid #0a2030" }}>
+    <div style={{ display:PLACEMENT_TOOLS.includes(tool)?"block":"none", borderBottom:"1px solid #0a2030" }}>
       <FixtureLibraryBrowser
         fixtures={FIXTURE_TYPES}
         tool={tool}

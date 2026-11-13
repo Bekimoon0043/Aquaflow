@@ -20,6 +20,7 @@ import { toPreviewSiteSurfaces } from "../engineering/siteSurfaces";
 import { isSteelFrameType } from "../components/preview/elevatedNozzles";
 import { isLaserFixture } from "../components/preview/laser/laserRig";
 import { laserConfigs, laserSafetyArea } from "../components/preview/laser/laserSite";
+import { fixtureLayerKey } from "../engineering/drafting/entities";
 
 export function useEngineeringSync(sceneRef) {
   const lastKeyRef   = useRef(null);
@@ -66,7 +67,11 @@ export function useEngineeringSync(sceneRef) {
     const visibleLayers = new Set(
       layers.filter(l => l.visible !== false).map(l => l.key)
     );
+        const hasLayer = (key) => layers.some(l => l.key === key);
         const isLayerVisible = (fixture) => {
+  // Lasers and fireworks have their own designer layers (older projects without them fall through).
+  const designerLayer = fixtureLayerKey(fixture?.type);
+  if ((designerLayer === "lasers" || designerLayer === "fireworks") && hasLayer(designerLayer)) return visibleLayers.has(designerLayer);
   const category = classifyFixtureType?.(fixture?.type);
 
   switch (category) {
@@ -177,7 +182,7 @@ if (scene.setEngineeringPipes) {
 
 if (scene.setLaserFixtures) {
   const c = shouldCenterFor3D ? center : null;
-  scene.setLaserFixtures(laserConfigs(effectFixtures, c), laserSafetyArea({ siteSurfaces, basins, geometry }, c));
+  scene.setLaserFixtures(laserConfigs(effectFixtures, c, visibleFixtures), laserSafetyArea({ siteSurfaces, basins, geometry }, c));
 }
 
 // 5. AQ-S2-002 Phase 2 — solve the design's hydraulics and hand the per-nozzle

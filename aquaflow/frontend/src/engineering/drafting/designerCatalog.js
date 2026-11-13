@@ -26,6 +26,7 @@ export const FIXTURE_TYPES = Array.isArray(FIXTURE_LIBRARY)
       // Searchable in the designer's library browser ("basket" → rotating nozzles).
       family: f.family || "",
       model: f.model || "",
+      ...(f.summary ? { summary: f.summary } : {}),
       ...(Array.isArray(f.tags) ? { tags: f.tags } : {}),
     }))
   : [
@@ -52,7 +53,7 @@ export const ENGINEERING_SYMBOLS_MAP = {
   "nozzle_flame":    { type: "flame",    shape: "circle",  icon: "🔥", color: "#ff8844", size: 0.35 },
   "light_rgb":       { type: "rgb",      shape: "circle",  icon: "★", color: "#ff44aa", size: 0.30 },
   "light_underwater":{ type: "under",    shape: "circle",  icon: "💧", color: "#44aaff", size: 0.30 },
-  "laser":           { type: "laser",    shape: "diamond", icon: "⚡", color: "#ff2266", size: 0.30 },
+  "laser":           { type: "laser",    shape: "laser",   icon: "◆", color: "#ff2266", size: 0.30 },
   "pump":            { type: "pump",     shape: "circle",  icon: "⚙", color: "#22c55e", size: 0.40 },
   "vfd":             { type: "vfd",      shape: "rect",    icon: "▯", color: "#44aaff", size: 0.35 },
   "valve":           { type: "valve",    shape: "diamond", icon: "◊", color: "#ffaa44", size: 0.30 },
@@ -65,13 +66,24 @@ export const ENGINEERING_SYMBOLS_MAP = {
   "motion_1d":       { type: "motion1d", shape: "line",    icon: "─", color: "#ffcc00", size: 0.35 },
   "motion_2d":       { type: "motion2d", shape: "square",  icon: "☖", color: "#ffcc00", size: 0.35 },
   "motion_3d":       { type: "motion3d", shape: "cube",    icon: "⬚", color: "#ffcc00", size: 0.35 },
-  "pyro":            { type: "pyro",     shape: "diamond", icon: "✷", color: "#ff8a3d", size: 0.35 },
+  "pyro":            { type: "pyro",     shape: "mortar",  icon: "✷", color: "#ff8a3d", size: 0.35 },
+  // Special effects listed with the fireworks (sfx_*): DMX machines, drawn as a square base.
+  "sfx_spark":       { type: "spark",    shape: "rect",    icon: "⁂", color: "#ffd27a", size: 0.32 },
+  "sfx_flame":       { type: "flame",    shape: "rect",    icon: "🔥", color: "#ff5a1f", size: 0.32 },
+  "sfx_co2":         { type: "co2",      shape: "rect",    icon: "❄", color: "#cfe8ff", size: 0.32 },
+  "sfx_confetti":    { type: "confetti", shape: "rect",    icon: "✦", color: "#ff7ad9", size: 0.32 },
+  "sfx_smoke":       { type: "smoke",    shape: "rect",    icon: "≋", color: "#a8b4c0", size: 0.32 },
 };
+
+const sfxSymbol = (k) => ENGINEERING_SYMBOLS_MAP[/flame/.test(k) ? "sfx_flame" : /co2|cryo/.test(k) ? "sfx_co2" : /confetti|streamer/.test(k) ? "sfx_confetti"
+  : /smoke|haze|fog/.test(k) ? "sfx_smoke" : "sfx_spark"];
 
 export const getEngineeringSymbol = (typeKey) => {
   if (!typeKey) return ENGINEERING_SYMBOLS_MAP["nozzle_geyser"];
   if (ENGINEERING_SYMBOLS_MAP[typeKey]) return ENGINEERING_SYMBOLS_MAP[typeKey];
   if (typeKey.startsWith("pyro_")) return ENGINEERING_SYMBOLS_MAP["pyro"];
+  if (typeKey.startsWith("laser_")) return ENGINEERING_SYMBOLS_MAP["laser"];
+  if (typeKey.startsWith("sfx_")) return sfxSymbol(typeKey);
   if (typeKey.includes("geyser")) return ENGINEERING_SYMBOLS_MAP["nozzle_geyser"];
   if (typeKey.includes("foam")) return ENGINEERING_SYMBOLS_MAP["nozzle_foam"];
   if (typeKey.includes("laminar")) return ENGINEERING_SYMBOLS_MAP["nozzle_laminar"];
@@ -147,6 +159,22 @@ export const drawEngSymbol = (ctx, cx, cy, rotationDeg, scale, isSelected, symbo
     case "cube":
       ctx.rect(-size/2.5, -size/2.5, size/1.25, size/1.25);
       break;
+    case "laser":
+      // Diamond with an aim tick pointing along the projector's facing (rotation 0 = +x).
+      ctx.moveTo(0, -size/2);
+      ctx.lineTo(size/2, 0);
+      ctx.lineTo(0, size/2);
+      ctx.lineTo(-size/2, 0);
+      ctx.closePath();
+      ctx.moveTo(size/2, 0);
+      ctx.lineTo(size * 1.15, 0);
+      break;
+    case "mortar":
+      // Firing position: a mortar tube seen from above (circle) with a cross.
+      ctx.arc(0, 0, size/2, 0, Math.PI * 2);
+      ctx.moveTo(-size/2, 0); ctx.lineTo(size/2, 0);
+      ctx.moveTo(0, -size/2); ctx.lineTo(0, size/2);
+      break;
     default:
       ctx.arc(0, 0, size/2, 0, Math.PI * 2);
   }
@@ -167,6 +195,10 @@ export const drawEngSymbol = (ctx, cx, cy, rotationDeg, scale, isSelected, symbo
 
   ctx.restore();
 };
+/** Tools that place a product from the fixture library (click, arrays, properties). */
+export const PLACEMENT_TOOLS = Object.freeze(["nozzle", "light", "laser", "fireworks", "equipment"]);
+/** Products of these tools may stand on land outside every basin (towers, platforms, firing sites). */
+export const OUTSIDE_BASIN_TOOLS = Object.freeze(["laser", "fireworks"]);
 export const TOOLS = [
   { key:"select", label:"Select", icon:"↖" },
   { key:"rectangle", label:"Rectangle", icon:"▭" },
@@ -176,6 +208,8 @@ export const TOOLS = [
 { key:"pipe", label:"Pipe", icon:"═" },
   { key:"nozzle", label:"Nozzle", icon:"⬆" },
   { key:"light", label:"Light", icon:"★" },
+  { key:"laser", label:"Laser", icon:"◆" },
+  { key:"fireworks", label:"Fireworks", icon:"✷" },
 { key:"equipment", label:"Equipment", icon:"⚙" },
   { key:"depth", label:"Depth", icon:"▦" },
   { key:"measure", label:"Measure", icon:"↔" },
@@ -188,6 +222,8 @@ export const DEFAULT_LAYERS = [
   { key:"landscape", label:"LANDSCAPE / LAND", color:"#65a30d", visible:true, locked:false },
   { key:"nozzles", label:"NOZZLES", color:"#00ffcc", visible:true, locked:false },
   { key:"lights", label:"LIGHTS", color:"#ffcc00", visible:true, locked:false },
+  { key:"lasers", label:"LASERS", color:"#ff2266", visible:true, locked:false },
+  { key:"fireworks", label:"FIREWORKS", color:"#ff8a3d", visible:true, locked:false },
 { key:"equipment", label:"EQUIPMENT", color:"#22c55e", visible:true, locked:false },
   { key:"measurements", label:"MEASUREMENTS", color:"#ffcc00", visible:true, locked:false },
   { key:"annotations", label:"ANNOTATIONS", color:"#ffcc00", visible:true, locked:false },

@@ -9,7 +9,7 @@ import { drawCadUnderlay } from "../cadUnderlay";
 import { drawBasinOverlay } from "../useDesignerBasins";
 import { LAND_SURFACE_TYPES } from "../siteSurfaces";
 import { getEngineeringSymbol, drawEngSymbol } from "./designerCatalog";
-import { entityKey } from "./entities";
+import { entityKey, fixtureLayerKey } from "./entities";
 import { drawDraftingOverlays } from "./overlays";
 import { isPyroType, pyroProduct } from "../../show/pyro";
 
@@ -573,7 +573,7 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
 
   // Firework safety distances (NFPA 1123-style radius per position), drawn under the symbols.
   for (const f of fixtures) {
-    if (f.visible === false || !isPyroType(f.type)) continue;
+    if (f.visible === false || !isPyroType(f.type) || !isLayerVisible("fireworks")) continue;
     const R = Number(pyroProduct(f)?.safetyDistanceM) || 0;
     if (!(R > 0)) continue;
     ctx.save();
@@ -594,17 +594,7 @@ if (isLayerVisible("pipework")) { renderPipes(ctx, wx, wy, zoom); }
 
   // Draw fixtures using PROFESSIONAL ENGINEERING SYMBOLS
   fixtures.forEach((f, i) => {
-    const fixtureLayer = (() => {
-      const t = (f.type || "").toLowerCase();
-      if (t.includes("light") || t.includes("laser")) return "lights";
-      if (t.includes("nozzle") || t.includes("jet") || t.includes("geyser") || t.includes("foam") || t.includes("mist")) return "nozzles";
-      if (t.includes("pump") || t.includes("valve") || t.includes("solenoid") || t.includes("drain") ||
-          t.includes("sensor") || t.includes("filter") || t.includes("uv") || t.includes("dosing") ||
-          t.includes("vfd") || t.includes("motion")) return "equipment";
-      return "equipment";
-    })();
-
-    if (!isLayerVisible(fixtureLayer)) return;
+    if (!isLayerVisible(fixtureLayerKey(f.type))) return;
 
     const isSelected = selectedFixture === i || (selectedKeys ? selectedKeys.has(String(entityKey(f))) : false);
     const cx = wx(f.x), cy = wy(f.y);

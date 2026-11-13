@@ -4,19 +4,30 @@ import { GENERIC_LABEL, isVerifiedProvenance } from "../../data/fixtureProvenanc
 
 const PAGE_SIZE = 60;
 
+const isLaserProduct = (fixture, key) => String(fixture?.category || "") === "Laser" || key === "laser" || key.startsWith("laser_");
+const isPyroProduct = (fixture, key) => String(fixture?.category || "").startsWith("Pyro") || key.startsWith("pyro_");
+
 export function fixtureMatchesTool(fixture, tool) {
   const key = String(fixture?.key || "").toLowerCase();
+  const laser = isLaserProduct(fixture, key), pyro = isPyroProduct(fixture, key);
+  if (tool === "laser") return laser;
+  if (tool === "fireworks") return pyro;
+  if (laser || pyro) return false;
   if (tool === "nozzle") return key.startsWith("nozzle") || /jet|geyser|spray|mist|cascade/.test(key);
-  if (tool === "light") return key.startsWith("light") || key.startsWith("laser");
+  if (tool === "light") return key.startsWith("light");
   if (tool === "equipment") return !fixtureMatchesTool(fixture, "nozzle") && !fixtureMatchesTool(fixture, "light");
   return false;
 }
+
+/** Laser and firework catalogues are long and alike, so they are browsed by family. */
+export const browseByFamily = (tool) => tool === "laser" || tool === "fireworks";
+const groupOf = (fixture, tool) => (browseByFamily(tool) ? fixture.family || fixture.category : fixture.category) || "Other";
 
 export function filterFixtureLibrary(fixtures, { tool, query = "", category = "all" } = {}) {
   const q = query.trim().toLowerCase();
   return (fixtures || []).filter((fixture) => {
     if (!fixtureMatchesTool(fixture, tool)) return false;
-    if (category !== "all" && String(fixture.category || "Other") !== category) return false;
+    if (category !== "all" && groupOf(fixture, tool) !== category) return false;
     if (!q) return true;
     const hay = [fixture.label, fixture.key, fixture.category, fixture.manufacturer, fixture.family, fixture.model,
       ...(Array.isArray(fixture.tags) ? fixture.tags : [])];
@@ -29,14 +40,18 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
   const [category, setCategory] = useState("all");
   const [limit, setLimit] = useState(PAGE_SIZE);
   const toolFixtures = useMemo(() => (fixtures || []).filter((fixture) => fixtureMatchesTool(fixture, tool)), [fixtures, tool]);
+  const byFamily = browseByFamily(tool);
   const categories = useMemo(
-    () => [...new Set(toolFixtures.map((fixture) => fixture.category || "Other"))].sort(),
-    [toolFixtures]
+    () => [...new Set(toolFixtures.map((fixture) => groupOf(fixture, tool)))].sort(),
+    [toolFixtures, tool]
   );
-  const filtered = useMemo(
-    () => filterFixtureLibrary(fixtures, { tool, query, category }),
-    [fixtures, tool, query, category]
-  );
+  const filtered = useMemo(() => {
+    const list = filterFixtureLibrary(fixtures, { tool, query, category });
+    // Families keep their catalogue order inside each group.
+    if (!byFamily) return list;
+    const order = [...new Set(list.map((f) => groupOf(f, tool)))];
+    return [...list].sort((a, b) => order.indexOf(groupOf(a, tool)) - order.indexOf(groupOf(b, tool)));
+  }, [fixtures, tool, query, category, byFamily]);
   const visible = filtered.slice(0, limit);
   // AF-NEXT-012 — trust summary for the list (library items without a verified
   // provenance are generic estimates and are labelled as such).
@@ -45,7 +60,7 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
   return (
     <div style={{ padding: "8px 10px", borderBottom: "1px solid #0a2030" }}>
       <div style={{ display: "flex", justifyContent: "space-between", color: "#7a96aa", fontSize: 10, marginBottom: 6 }}>
-        <span>FIXTURE LIBRARY</span><span>{filtered.length}/{toolFixtures.length}</span>
+        <span>{tool === "laser" ? "LASER CATALOGUE" : tool === "fireworks" ? "FIREWORKS CATALOGUE" : "FIXTURE LIBRARY"}</span><span>{filtered.length}/{toolFixtures.length}</span>
       </div>
       {filtered.length > verifiedCount && (
         <div data-testid="library-generic-note" style={{ color: "#fbbf24", fontSize: 9, marginBottom: 5, lineHeight: 1.4 }}>
@@ -65,11 +80,16 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
         onChange={(event) => { setCategory(event.target.value); setLimit(PAGE_SIZE); }}
         style={{ width: "100%", padding: 5, marginBottom: 6, background: "#06121c", color: "#a9c4d6", border: "1px solid #16415a", borderRadius: 4, fontSize: 10 }}
       >
-        <option value="all">All categories</option>
+        <option value="all">{byFamily ? "All families" : "All categories"}</option>
         {categories.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
       </select>
       <div style={{ display: "flex", flexDirection: "column", gap: 3, maxHeight: 240, overflowY: "auto" }}>
-        {visible.map((fixture) => (
+        {visible.map((fixture, index) => (<div key={fixture.key} style={{ display: "contents" }}>
+          {byFamily && (index === 0 || groupOf(visible[index - 1], tool) !== groupOf(fixture, tool)) && (
+            <div role="heading" aria-level={4} style={{ color: tool === "laser" ? "#ff6a9a" : "#ffaa66", fontSize: 9, fontWeight: 800, letterSpacing: 0.5, margin: "4px 0 1px" }}>
+              {groupOf(fixture, tool).toUpperCase()}
+            </div>
+          )}
           <button
             key={fixture.key}
             type="button"
@@ -88,7 +108,7 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
             <span style={{ minWidth: 0 }}>
               <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fixture.label}</span>
               <span style={{ display: "flex", justifyContent: "space-between", gap: 4, color: "#587286", fontSize: 9 }}>
-                <span>{fixture.category || "Other"}</span>
+                <span>{byFamily ? (fixture.summary || fixture.category || "Other") : (fixture.category || "Other")}</span>
                 <ProvenanceBadge provenance={fixture.provenance} compact />
               </span>
               {selectedKey === fixture.key && (
@@ -96,7 +116,7 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
               )}
             </span>
           </button>
-        ))}
+        </div>))}
         {!visible.length && <div style={{ padding: 12, color: "#7890a0", textAlign: "center", fontSize: 10 }}>No matching fixtures.</div>}
       </div>
       {filtered.length > visible.length && (

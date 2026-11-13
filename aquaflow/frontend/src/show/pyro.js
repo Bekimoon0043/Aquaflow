@@ -7,7 +7,7 @@
  * last star of the last shot has faded. AquaFlow never sends `pyro_fire` to any hardware: the
  * firing script is exported, and the operator arms and fires on the firing system.
  */
-import { PYRO_BY_KEY } from "../data/pyroLibrary.js";
+import { PYRO_BY_KEY, SFX_BY_KEY } from "../data/pyroLibrary.js";
 
 export const PYRO_CHANNEL = "pyro_fire";
 export const PYRO_MODES = [
@@ -104,18 +104,74 @@ export function validatePyroCues(clips = [], items = []) {
   return issues;
 }
 
-/** World-frame cues for the 3D preview: { id, x, y0, z, ignition, product }. */
+// ─── Fireworks-like special effects (cold spark, flame, CO2, confetti, smoke) ──────────
+
+export const isSfxType = (type) => String(type || "").toLowerCase().startsWith("sfx_");
+
+/** The special-effect data of a fixture (catalogue block, then its own engineering.sfx). */
+export function sfxProduct(fixtureOrType) {
+  const fixture = typeof fixtureOrType === "object" && fixtureOrType ? fixtureOrType : null;
+  const type = String((fixture ? fixture.type : fixtureOrType) || "");
+  const entry = SFX_BY_KEY.get(type);
+  const base = entry?.engineering?.sfx || null;
+  const own = fixture?.engineering?.sfx || null;
+  if (!base && !own) return null;
+  return { label: entry?.label || type, key: type, ...(base || {}), ...(own || {}) };
+}
+
+/** Level 0..1 of a raw clip at show time t (value, or keyed curve relative to the clip start). */
+export function rawClipLevel(clip, t) {
+  const start = num(clip.startTime ?? clip.start), end = start + num(clip.duration);
+  if (t < start || t >= end) return 0;
+  const keys = clip.keys;
+  if (!Array.isArray(keys) || keys.length < 2) return Math.max(0, Math.min(1, num(clip.value, 100) / 100));
+  const u = t - start;
+  let k = 0;
+  while (k + 2 < keys.length && keys[k + 2] <= u) k += 2;
+  if (k + 2 >= keys.length || clip.keyMode === "step") return Math.max(0, Math.min(1, num(keys[k + 1]) / 100));
+  const v = keys[k + 1] + ((keys[k + 3] - keys[k + 1]) * (u - keys[k])) / Math.max(1e-6, keys[k + 2] - keys[k]);
+  return Math.max(0, Math.min(1, v / 100));
+}
+
+const SFX_LEVEL_CHANNELS = /^(device_intensity|fire_intensity|fog_density|lighting_master)$/;
+
+/**
+ * World-frame cues for the 3D preview:
+ *   pyro: { id, x, y0, z, rot, ignition, product }
+ *   sfx:  { id, x, y0, z, rot, sfx: true, ignition (first on), end, segments: [[start, end, clip]], product }
+ * Special effects take one cue per fixture; their level at time t is the highest of their level clips.
+ */
 export function pyroCuesFromClips(clips = [], fixtures = [], center = { cx: 0, cy: 0 }) {
   const byId = new Map(fixtures.map((f) => [f.id, f]));
-  const cues = [];
+  const where = (f) => ({ x: num(f.x) - num(center.cx), y0: num(f.engineering?.mountHeightM), z: num(f.y) - num(center.cy), rot: (num(f.rotation) * Math.PI) / 180 });
+  const cues = [], sfx = new Map();
   for (const clip of clips) {
-    if (!isPyroClip(clip) || clip.muted) continue;
+    if (!clip || clip.muted) continue;
     const f = byId.get(clip.fixtureId);
-    const product = f && pyroProduct(f);
+    if (!f) continue;
+    if (isPyroClip(clip)) {
+      const product = pyroProduct(f);
+      if (!product) continue;
+      cues.push({ id: clip.id, ...where(f), y0: 0, ignition: num(clip.startTime), product: f.engineering?.lanceOutline ? { ...product, outline: f.engineering.lanceOutline } : product });
+      continue;
+    }
+    if (!isSfxType(f.type) || !SFX_LEVEL_CHANNELS.test(String(clip.type || ""))) continue;
+    const product = sfxProduct(f);
     if (!product) continue;
-    cues.push({ id: clip.id, x: num(f.x) - num(center.cx), y0: 0, z: num(f.y) - num(center.cy), ignition: num(clip.startTime), product });
+    const start = num(clip.startTime ?? clip.start), end = start + num(clip.duration);
+    const cue = sfx.get(f.id) || { id: `sfx:${f.id}`, ...where(f), sfx: true, ignition: start, end, segments: [], product };
+    cue.segments.push([start, end, clip]);
+    cue.ignition = Math.min(cue.ignition, start); cue.end = Math.max(cue.end, end);
+    sfx.set(f.id, cue);
   }
-  return cues.sort((a, b) => a.ignition - b.ignition);
+  return [...cues, ...sfx.values()].sort((a, b) => a.ignition - b.ignition);
+}
+
+/** Level 0..1 of a special-effect cue at show time t. */
+export function sfxLevel(cue, t) {
+  let v = 0;
+  for (const [s, e, clip] of cue.segments || []) if (t >= s && t < e) v = Math.max(v, rawClipLevel(clip, t));
+  return v;
 }
 
 // ─── Firing script export ───────────────────────────────────────────────

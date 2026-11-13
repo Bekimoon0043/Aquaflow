@@ -4,7 +4,8 @@
 // Channels (0..1 levels from the canonical show frame, record.channels):
 //   laser_intensity  output level
 //   lighting_red / lighting_green / lighting_blue   colour (else the clip colour, else the fixture colour)
-//   laser_pattern    0 beam · 0.25 fan · 0.5 cone/tunnel · 0.75 sheet · 1 scan
+//   laser_pattern    0 beam · .125 graphics · .25 fan · .375 firefly · .5 cone/tunnel · .625 liquid sky
+//                    · .75 sheet · .875 searchlight · 1 scan  (the original five keep their levels)
 //   laser_pan        aim around the vertical, 0.5 = the fixture's facing
 //   laser_tilt       aim from vertical, 0.5 = straight up, 0/1 = ±tilt half-range
 //   laser_size       fan width / cone angle, 2..90°
@@ -17,7 +18,10 @@
 // outside the basin outline counts as audience space.
 
 export const LASER_TYPES = Object.freeze(["laser_intensity", "laser_pattern", "laser_pan", "laser_tilt", "laser_size", "laser_speed"]);
-export const LASER_PATTERNS = Object.freeze(["beam", "fan", "cone", "sheet", "scan"]);
+// Pattern → channel level. With no pattern clip a projector shows its own kind (engineering.laserKind).
+const PATTERN_LEVELS = Object.freeze({ beam: 0, graphics: 0.125, fan: 0.25, firefly: 0.375, cone: 0.5, liquidsky: 0.625, sheet: 0.75, searchlight: 0.875, scan: 1 });
+export const LASER_PATTERNS = Object.freeze(Object.keys(PATTERN_LEVELS));
+export const KIND_PATTERN = Object.freeze({ beam: "beam", graphics: "graphics", mapping: "graphics", fan: "fan", liquidsky: "liquidsky", sky: "searchlight", firefly: "firefly", movinghead: "beam" });
 export const DEFAULT_MIN_BEAM_HEIGHT_M = 3;
 export const DEFAULT_RANGE_M = 80;
 const DEG = Math.PI / 180;
@@ -29,10 +33,15 @@ export const isLaserFixture = (type) => {
   return k === "laser" || k.startsWith("laser_");
 };
 
-/** Channel level (0..1) → laser pattern name. */
-export const patternOf = (level) => LASER_PATTERNS[clamp(Math.round(num(level, 0) * 4), 0, 4)];
+/** Channel level (0..1) → laser pattern name (nearest level). */
+export function patternOf(level) {
+  const v = clamp(num(level, 0), 0, 1);
+  let best = "beam";
+  for (const [name, at] of Object.entries(PATTERN_LEVELS)) if (Math.abs(at - v) < Math.abs(PATTERN_LEVELS[best] - v)) best = name;
+  return best;
+}
 /** Pattern name → the level that selects it (for writing clips). */
-export const patternLevel = (name) => Math.max(0, LASER_PATTERNS.indexOf(name)) / 4;
+export const patternLevel = (name) => PATTERN_LEVELS[name] ?? 0;
 
 /** ± aim limits of a projector (degrees): half its pan/tilt range, at most 180/90. */
 export function laserLimits(fixture) {
@@ -55,7 +64,7 @@ export function laserState(record, fixture) {
   return {
     intensity: clamp(num(ch.laser_intensity, 0), 0, 1),
     color: { r: color.r, g: color.g, b: color.b },
-    pattern: patternOf(ch.laser_pattern ?? 0),
+    pattern: ch.laser_pattern === undefined ? (KIND_PATTERN[fixture?.engineering?.laserKind] || "beam") : patternOf(ch.laser_pattern),
     pan: ch.laser_pan === undefined ? 0 : (ch.laser_pan - 0.5) * 2 * lim.pan,
     tilt: ch.laser_tilt === undefined ? 0 : (ch.laser_tilt - 0.5) * 2 * lim.tilt,
     size: ch.laser_size === undefined ? 30 : 2 + ch.laser_size * 88,
@@ -63,6 +72,7 @@ export function laserState(record, fixture) {
   };
 }
 
+const hash01 = (i) => { let h = (i + 1) * 2654435761 >>> 0; h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13; return (h >>> 0) / 4294967296; };
 const norm = (v) => { const l = Math.hypot(v.x, v.y, v.z) || 1; return { x: v.x / l, y: v.y / l, z: v.z / l }; };
 const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 /** Rotate `v` by `angle` toward `u` (both unit, u ⟂ v). */
@@ -96,6 +106,27 @@ export function beamDirections(state, rotationDeg, time = 0) {
       return norm(toward(axis, u, half));
     }), sheet: false, cone: true };
     case "scan": return { dirs: [norm(toward(axis, side, half * Math.sin(phase)))], sheet: false, cone: false };
+    case "searchlight": return { dirs: [norm(toward(axis, side, half * 0.5 * Math.sin(phase)))], sheet: false, cone: false, heavy: true };
+    case "liquidsky": {
+      // A near-horizontal sheet scanned across the space, rippled by the fog layer it rides on.
+      const flat = Math.hypot(axis.x, axis.z) > 1e-6 ? norm({ x: axis.x, y: 0, z: axis.z }) : { x: Math.cos(a), y: 0, z: Math.sin(a) };
+      return { dirs: Array.from({ length: 41 }, (_, i) => {
+        const d = toward(flat, side, -half + (2 * half * i) / 40);
+        return norm({ x: d.x, y: 0.035 * Math.sin(phase * 0.7 + i * 0.45), z: d.z });
+      }), sheet: true, cone: false };
+    }
+    case "firefly": {
+      // Many weak dots from a diffraction grating, each drifting and twinkling on its own.
+      const dirs = [], glints = [];
+      for (let i = 0; i < 64; i++) {
+        const k = hash01(i), j = hash01(i + 101);
+        const ang = 2 * Math.PI * k + 0.15 * Math.sin(phase * 0.6 + i), r = half * Math.sqrt(j);
+        const u = { x: side.x * Math.cos(ang) + w.x * Math.sin(ang), y: side.y * Math.cos(ang) + w.y * Math.sin(ang), z: side.z * Math.cos(ang) + w.z * Math.sin(ang) };
+        dirs.push(norm(toward(axis, u, r)));
+        glints.push(0.35 + 0.65 * (0.5 + 0.5 * Math.sin(time * (3 + 5 * hash01(i + 7)) + 6.3 * k)));
+      }
+      return { dirs, sheet: false, cone: false, faint: true, glints };
+    }
     default: return { dirs: [axis], sheet: false, cone: false };
   }
 }
@@ -185,19 +216,79 @@ export function beamEnd(origin, dir, range = DEFAULT_RANGE_M) {
  */
 export function laserFrame(fixture, state, time, safety = {}) {
   const origin = { x: num(fixture.x, 0), y: num(fixture.y, num(fixture.engineering?.mountHeightM, 0.5)), z: num(fixture.z, 0) };
-  const { dirs, sheet, cone } = beamDirections(state, fixture.rotation, time);
   const range = num(fixture.engineering?.rangeM, DEFAULT_RANGE_M);
   const opts = { ...safety, minBeamHeightM: num(fixture.engineering?.minBeamHeightM, safety.minBeamHeightM ?? DEFAULT_MIN_BEAM_HEIGHT_M), range };
+  if (state.pattern === "graphics") return graphicsFrame(fixture, state, time, origin, opts);
+  const { dirs, sheet, cone, faint = false, heavy = false, glints = null } = beamDirections(state, fixture.rotation, time);
   let blanked = 0, clamped = 0;
   const beams = [];
-  for (const d of dirs) {
+  dirs.forEach((d, i) => {
     const safe = safeBeam(origin, d, opts);
-    if (safe.blanked) { blanked++; continue; }
+    if (safe.blanked) { blanked++; return; }
     if (safe.clamped) clamped++;
     const end = beamEnd(origin, safe.dir, range);
-    beams.push({ dir: safe.dir, end: end.point, length: end.length, hit: end.hit, clamped: safe.clamped });
-  }
-  return { id: fixture.id, origin, color: state.color, intensity: state.intensity, sheet, cone, beams, blanked, clamped };
+    beams.push({ dir: safe.dir, end: end.point, length: end.length, hit: end.hit, clamped: safe.clamped, ...(glints ? { glint: glints[i] } : {}) });
+  });
+  return { id: fixture.id, origin, color: state.color, intensity: state.intensity, sheet, cone, faint, heavy, beams, blanked, clamped, outline: [] };
+}
+
+// ── graphics projection ─────────────────────────────────────────────────────
+
+const polygon = (n, r = 1) => Array.from({ length: n + 1 }, (_, i) => [r * Math.cos((i / n) * 2 * Math.PI), r * Math.sin((i / n) * 2 * Math.PI)]);
+/** Vector artwork in unit coordinates (−1..1), as polylines. */
+export const GRAPHICS = Object.freeze({
+  star: [Array.from({ length: 11 }, (_, i) => { const a = Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 0.42 : 1; return [r * Math.cos(a), r * Math.sin(a)]; })],
+  ring: [polygon(32)],
+  wave: [Array.from({ length: 25 }, (_, i) => [-1 + i / 12, 0.45 * Math.sin((i / 24) * 4 * Math.PI)])],
+  logo: [polygon(32), [[-0.5, -0.45], [0, 0.6], [0.5, -0.45], [-0.5, -0.45]]],
+});
+
+/**
+ * Where a graphics laser draws: the water screen it is linked to (fixture.screen, from laserSite),
+ * else a vertical plane `projection.distanceM` along its facing, widthM × heightM, centred
+ * centerHeightM above the ground.
+ */
+export function projectionPlane(fixture) {
+  if (fixture?.screen) return fixture.screen;
+  const p = fixture?.engineering?.projection || {};
+  const a = num(fixture?.rotation, 0) * DEG, d = num(p.distanceM, 15);
+  const fx = Math.cos(a), fz = Math.sin(a);
+  return { center: { x: num(fixture?.x, 0) + fx * d, y: num(p.centerHeightM, 6), z: num(fixture?.z, 0) + fz * d },
+    right: { x: -fz, y: 0, z: fx }, width: num(p.widthM, 14), height: num(p.heightM, 8) };
+}
+
+/** Outline segments [{a, b}] of the artwork on the plane; size 0..1 scales it, spin turns it (rad). */
+export function graphicsOutline(fixture, { size = 0.6, spin = 0 } = {}) {
+  const plane = projectionPlane(fixture);
+  const art = GRAPHICS[fixture?.engineering?.graphic] || GRAPHICS.star;
+  const k = 0.25 + 0.75 * clamp(size, 0, 1), sx = (plane.width / 2) * k, sy = (plane.height / 2) * k;
+  const c = Math.cos(spin), s = Math.sin(spin);
+  const at = ([u, v]) => { const ru = u * c - v * s, rv = u * s + v * c;
+    return { x: plane.center.x + plane.right.x * ru * sx, y: plane.center.y + rv * sy, z: plane.center.z + plane.right.z * ru * sx }; };
+  const segs = [];
+  for (const line of art) for (let i = 1; i < line.length; i++) segs.push({ a: at(line[i - 1]), b: at(line[i]) });
+  return segs;
+}
+
+/**
+ * A graphics/mapping laser draws its artwork on the projection plane; the scanned beam shows only
+ * as a faint pyramid from the head to the artwork. The artwork is never moved, but a beam that
+ * would cross audience space too low is counted (clamped) so preflight tells the programmer.
+ */
+function graphicsFrame(fixture, state, time, origin, opts) {
+  // A projector standing in audience space below the minimum beam height is blanked, as for beams.
+  const here = safeBeam(origin, { x: 0, y: 1, z: 0 }, { ...opts, range: 1e-3 });
+  if (here.blanked) return { id: fixture.id, origin, color: state.color, intensity: state.intensity, sheet: false, cone: false, faint: true, heavy: false, beams: [], blanked: 1, clamped: 0, outline: [] };
+  const outline = graphicsOutline(fixture, { size: (state.size - 2) / 88, spin: 0.5 * Math.PI * state.speed * time });
+  let clamped = 0;
+  const beams = outline.filter((_, i) => i % 3 === 0).map(({ a }) => {
+    const v = { x: a.x - origin.x, y: a.y - origin.y, z: a.z - origin.z }, length = Math.hypot(v.x, v.y, v.z) || 1;
+    const dir = { x: v.x / length, y: v.y / length, z: v.z / length };
+    const safe = safeBeam(origin, dir, { ...opts, range: Math.hypot(v.x, v.z) || 1e-3 });
+    if (safe.clamped || safe.blanked) clamped++;
+    return { dir, end: a, length, hit: false, clamped: safe.clamped || safe.blanked };
+  });
+  return { id: fixture.id, origin, color: state.color, intensity: state.intensity, sheet: false, cone: false, faint: true, heavy: false, beams, blanked: 0, clamped, outline };
 }
 
 /** Beam visibility from haze (0..1): beams are only seen where light scatters. */
