@@ -33,6 +33,19 @@ const MAX_DOTS = 3000;
 const MAX_FLAME = 9000;
 const MAX_FOG = 2400;
 const BEAM_DRAW_M = 70;             // beams are drawn this far (they fade into the night sky)
+const MAX_MIST = 36000;
+const MAX_LAMPS = 2400;
+// Show lighting (Studio renderer). Water is seen only by the light it scatters: city glow alone
+// leaves an unlit jet a faint grey ghost, as at night on a real lake.
+const AMBIENT = [0.012, 0.015, 0.022];
+const WATER_GAIN = 0.42;            // soft drops (the spray volume)
+const STREAK_GAIN = 0.75;           // exposure streaks (the continuous stream a camera sees)
+const EXPOSURE_S = 1 / 40;          // a night camera's shutter: a 20 m/s drop smears 0.5 m
+const MIST_GAIN = 0.2;
+const POOL_GAIN = 0.85;
+const BEAM_TAN = 0.4;               // underwater lamp beam: ~45° full angle
+const LAMP_DEPTH = 0.25;            // underwater lamps sit this far below the surface
+const WIND = { x: 0.7, z: 0.25 };   // m/s: drifting spray
 
 /**
  * Basin water: a planar mirror (Reflector) seen through gentle animated ripples, with a Fresnel
@@ -44,6 +57,9 @@ const WATER_SHADER = {
   uniforms: {
     color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null },
     time: { value: 0 }, waterColor: { value: new THREE.Color(0x041c30) },
+    // 0 = a calm mirror (design view); > 0 stretches reflections into vertical glitter streaks,
+    // as wind-rippled water does with lit jets on a lake at night.
+    streak: { value: 0 }, waveScale: { value: 1 },
   },
   vertexShader: /* glsl */ `
     uniform mat4 textureMatrix;
@@ -62,17 +78,41 @@ const WATER_SHADER = {
     uniform sampler2D tDiffuse;
     uniform float time;
     uniform vec3 waterColor;
+    uniform float streak;
+    uniform float waveScale;
     varying vec4 vUv;
     varying vec3 vWorld;
     #include <logdepthbuf_pars_fragment>
     void main() {
       #include <logdepthbuf_fragment>
+      vec3 w = vWorld / waveScale;
       vec2 rip = vec2(
-        sin(vWorld.x * 3.1 + time * 1.7) + sin(vWorld.z * 4.3 - time * 1.3) + 0.5 * sin((vWorld.x - vWorld.z) * 9.0 + time * 2.9),
-        cos(vWorld.z * 2.7 + time * 1.1) + sin((vWorld.x + vWorld.z) * 5.0 + time * 2.3) + 0.5 * cos(vWorld.x * 8.0 - time * 3.1)) * 0.0028;
+        sin(w.x * 3.1 + time * 1.7) + sin(w.z * 4.3 - time * 1.3) + 0.5 * sin((w.x - w.z) * 9.0 + time * 2.9),
+        cos(w.z * 2.7 + time * 1.1) + sin((w.x + w.z) * 5.0 + time * 2.3) + 0.5 * cos(w.x * 8.0 - time * 3.1)) * 0.0028;
+      // Gusts: the wave height varies across the lake, so ripples are never a regular pattern.
+      float gust = 0.55 + 0.9 * pow(sin(w.x * 0.37 + w.z * 0.53 + time * 0.21) * sin(w.x * 0.11 - w.z * 0.19 + 1.7), 2.0);
       vec4 uv = vUv;
-      uv.xy += rip * uv.w;
-      vec3 refl = texture2DProj(tDiffuse, uv).rgb;
+      uv.xy += rip * uv.w * mix(1.0, gust * 1.6, step(0.0001, streak));
+      vec3 refl;
+      if (streak > 0.0) {
+        // Each wave facet tilts a little toward the camera, so a light's reflection smears into
+        // a long vertical streak, broken into bands by the wave crests.
+        refl = vec3(0.0);
+        float wsum = 0.0;
+        for (int i = -4; i <= 4; i++) {
+          float fi = float(i);
+          float k = exp(-fi * fi / 7.0);
+          vec4 u2 = uv;
+          u2.y += fi * streak * uv.w * (0.75 + 0.25 * sin(w.x * 1.7 + fi * 1.3 + time));
+          refl += texture2DProj(tDiffuse, u2).rgb * k;
+          wsum += k;
+        }
+        refl /= wsum;
+        float crest = sin(w.z * 2.1 + 1.6 * sin(w.x * 0.7 + time * 0.35) + time * 1.4);
+        refl *= 0.55 + 0.9 * smoothstep(-0.35, 0.9, crest);
+      } else {
+        refl = texture2DProj(tDiffuse, uv).rgb;
+      }
       vec3 viewDir = normalize(cameraPosition - vWorld);
       float fres = 0.18 + 0.82 * pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 3.0);
       gl_FragColor = vec4(mix(waterColor, refl * color, fres), 1.0);
@@ -104,6 +144,53 @@ function roundSprite() {
   grad.addColorStop(1, "rgba(255,255,255,0)");
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/**
+ * Spray mist: soft round puffs of any size (per-puff world diameter), lit colour already in
+ * `tint`, added onto the night like glowing fog.
+ */
+function mistMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { projScale: { value: 500 } },
+    vertexShader: /* glsl */ `
+      attribute float size;
+      attribute vec3 tint;
+      uniform float projScale;
+      varying vec3 vTint;
+      void main() {
+        vTint = tint;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = min(900.0, size * projScale / max(0.5, -mv.z));
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */ `
+      varying vec3 vTint;
+      void main() {
+        vec2 d = gl_PointCoord - 0.5;
+        float r2 = dot(d, d) * 4.0;
+        if (r2 > 1.0) discard;
+        gl_FragColor = vec4(vTint * (exp(-r2 * 3.0) - 0.05), 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+}
+
+/** The glowing pool an underwater lamp makes on the lake surface (and the aerated boil above it). */
+function poolGlowSprite() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.18, "rgba(255,255,255,0.55)");
+  grad.addColorStop(0.5, "rgba(255,255,255,0.14)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -245,6 +332,13 @@ function outletsOf(jet, t, rot) {
   return out;
 }
 
+/** Aim of a swinging head (pan/tilt in degrees) in world space, for a fixture turned by `rot`. */
+function showPose(pan, tilt, rot) {
+  const a = (pan * Math.PI) / 180, b = (tilt * Math.PI) / 180;
+  const x0 = Math.sin(a), z0 = Math.sin(b);
+  return { ax: x0 * Math.cos(rot) - z0 * Math.sin(rot), ay: Math.cos(a) * Math.cos(b), az: x0 * Math.sin(rot) + z0 * Math.cos(rot), spin: 0, lift: 0 };
+}
+
 export class EasyScene {
   /**
    * @param {HTMLElement} container
@@ -300,6 +394,7 @@ export class EasyScene {
     });
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500);
+    this.camera.layers.enable(1);
     this.camera.position.set(0, 11, 16);
     this.controls = new OrbitControls(this.camera, r.domElement);
     this.controls.target.set(0, 0.8, 0);
@@ -309,15 +404,16 @@ export class EasyScene {
     this.controls.maxDistance = 140;
     this.controls.screenSpacePanning = false;
 
-    scene.add(new THREE.HemisphereLight(0xc6e2ff, 0x1d2a20, 0.85));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    this.hemi = new THREE.HemisphereLight(0xc6e2ff, 0x1d2a20, 0.85);
+    scene.add(this.hemi);
+    const sun = this.sun = new THREE.DirectionalLight(0xffffff, 1.4);
     sun.position.set(12, 22, 10);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
     Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, far: 80 });
     scene.add(sun);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400),
+    const ground = this.ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400),
       new THREE.MeshStandardMaterial({ color: 0x27322b, roughness: 0.95 }));
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.02;
@@ -356,6 +452,42 @@ export class EasyScene {
     scene.add(this.particles);
     this.jitter = new Float32Array(this.maxParticles * 3);
     for (let i = 0; i < this.jitter.length; i += 1) this.jitter[i] = Math.random() * 2 - 1;
+
+    // Show lighting: lit spray mist, and the glowing pools underwater lamps make on the lake.
+    const mistGeo = new THREE.BufferGeometry();
+    mistGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAX_MIST * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    mistGeo.setAttribute("tint", new THREE.BufferAttribute(new Float32Array(MAX_MIST * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    mistGeo.setAttribute("size", new THREE.BufferAttribute(new Float32Array(MAX_MIST), 1).setUsage(THREE.DynamicDrawUsage));
+    mistGeo.setDrawRange(0, 0);
+    this.mist = new THREE.Points(mistGeo, mistMaterial());
+    this.mist.frustumCulled = false;
+    this.mist.renderOrder = 3;
+    this.mist.visible = false;
+    scene.add(this.mist);
+    this.poolGlowTex = poolGlowSprite();
+    this.poolGlow = new THREE.InstancedMesh(new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: this.poolGlowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }),
+      MAX_LAMPS);
+    this.poolGlow.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.poolGlow.setColorAt(0, new THREE.Color(0));
+    this.poolGlow.count = 0;
+    this.poolGlow.frustumCulled = false;
+    this.poolGlow.renderOrder = 1;
+    this.poolGlow.visible = false;
+    // Layer 1: on the surface itself, so the lake's mirror camera (layer 0 only) does not reflect it.
+    this.poolGlow.layers.set(1);
+    scene.add(this.poolGlow);
+    // Exposure streaks: each drop also drawn as the short line it travels during a camera's shutter.
+    const streakGeo = new THREE.BufferGeometry();
+    streakGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(this.maxParticles * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    streakGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(this.maxParticles * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    streakGeo.setDrawRange(0, 0);
+    this.streaks = new THREE.LineSegments(streakGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending }));
+    this.streaks.frustumCulled = false;
+    this.streaks.renderOrder = 2;
+    this.streaks.visible = false;
+    scene.add(this.streaks);
 
     // Effects: laser beams (camera-facing ribbons), beam dots, flames and fog.
     const dyn = (count, itemSize) => new THREE.BufferAttribute(new Float32Array(count * itemSize), itemSize).setUsage(THREE.DynamicDrawUsage);
@@ -684,8 +816,178 @@ export class EasyScene {
    */
   setShowSource(source) {
     this.showSource = source || null;
+    const show = !!this.showSource;
     // A show site is hundreds of metres across: bigger drops read as continuous streams, as on camera.
-    this.particles.material.size = this.showSource ? 0.3 : 0.13;
+    this.particles.material.size = show ? 0.3 : 0.13;
+    this._applyShowLook();
+    if (!show) { this.mist.geometry.setDrawRange(0, 0); this.poolGlow.count = 0; this.streaks.geometry.setDrawRange(0, 0); }
+    // Show lamps sit under the water: only their light is seen.
+    for (const rec of this.items.values()) if (rec.role === "light") rec.group.visible = !show;
+  }
+
+  /** Night-show look: lit mist, lamp pools, streaked reflections, clear night air, hot cores bloom. */
+  _applyShowLook() {
+    const show = !!this.showSource && this.realistic;
+    this.mist.visible = show;
+    this.poolGlow.visible = show;
+    this.streaks.visible = !!this.showSource;
+    // A night show has no work light: moonlight and the city's glow, the lamps do the rest.
+    this.hemi.intensity = show ? 0.1 : 0.85;
+    this.sun.intensity = show ? 0.06 : 1.4;
+    this.ground.material.color.setHex(show ? 0x0c100e : 0x27322b);
+    if (this.scene.fog) { this.scene.fog.near = show ? 140 : 70; this.scene.fog.far = show ? 800 : 220; }
+    if (this.bloom) {
+      this.bloom.strength = show ? 0.5 : 0.42;
+      this.bloom.radius = show ? 0.4 : 0.45;
+      this.bloom.threshold = show ? 0.82 : 0.9;
+    }
+  }
+
+  /** The lamp lighting a show jet: level × power now, colour (linear), and where it sits. */
+  _showLamp(jet, rec, H) {
+    const cache = this._lampCache || (this._lampCache = new Map());
+    let lamp = cache.get(jet.id);
+    if (!lamp) { lamp = { color: new THREE.Color() }; cache.set(jet.id, lamp); }
+    const src = this.showSource, t = this.time;
+    const lampRec = jet.lightId ? this.items.get(jet.lightId) : null;
+    // Taller jets carry bigger lamp clusters (Bellagio: 4,792 lights under 1,214 nozzles).
+    lamp.power = 0.8 + 0.012 * H;
+    if (lampRec) {
+      lamp.k = src.level(jet.lightId, t);
+      lamp.color.set(src.color(jet.lightId, t) || "#fff1dc");
+      lamp.x = lampRec.group.position.x; lamp.z = lampRec.group.position.z;
+    } else {
+      lamp.k = 0.55;
+      lamp.color.set(0xdcecff);
+      lamp.x = rec.group.position.x; lamp.z = rec.group.position.z;
+    }
+    return lamp;
+  }
+
+  /**
+   * Show lighting beyond the jets themselves:
+   *  · spray mist — every jet throws fine spray at its crown and a boil where it lands; it lingers
+   *    and drifts for seconds and glows in the light of the lamps below (strongest near them);
+   *  · lamp pools — an underwater lamp lights the water around it, brightest where the jet's
+   *    aerated base boils over it;
+   *  · indirect light — the brightest lit areas light the basin rim and the ground around them.
+   */
+  _updateShowLight() {
+    if (!this.realistic || !this.showSource) return;
+    const src = this.showSource, t = this.time, jit = this.jitter, J = jit.length;
+    const lit = this.showLit || [];
+    const [ar, ag, ab] = AMBIENT;
+    // ── mist ──
+    const mg = this.mist.geometry;
+    const mp = mg.attributes.position.array, mc = mg.attributes.tint.array, ms = mg.attributes.size.array;
+    let m = 0;
+    const budget = lit.length ? Math.max(2, Math.floor(MAX_MIST / lit.length)) : 0;
+    for (let ji = 0; ji < lit.length; ji += 1) {
+      const { jet, rec, H, rot, oyBase, lamp } = lit[ji];
+      if (H < 3) continue;
+      const o = rec.group.position;
+      const K = Math.min(budget, jet.swing ? 7 : Math.min(16, 3 + Math.round(H / 8)));
+      const Tm = Math.min(9, 3.5 + 0.045 * H);
+      const aNom = Math.sqrt((2 * H) / G);
+      const lk = lamp.k * lamp.power, lc = lamp.color;
+      const reach = 2.5 + 0.06 * H;
+      for (let i = 0; i < K && m < MAX_MIST; i += 1) {
+        const j = (((ji * 131 + i * 17) * 3) % (J - 3) + J) % (J - 3);
+        const u = (((i + 0.5 + 0.4 * jit[j]) / K) % 1 + 1) % 1;
+        const age = (((t / Tm + u) % 1) + 1) % 1 * Tm;
+        const tb = t - age;
+        const crown = i % 3 !== 2;
+        const te = tb - (crown ? aNom * (0.9 + 0.5 * Math.abs(jit[j + 1])) : 2 * aNom);
+        const L = src.level(jet.id, te);
+        if (L < 0.05) continue;
+        let dx = 0, dy = 1, dz = 0, ox = o.x, oz = o.z, y0 = oyBase;
+        if (jet.swing) {
+          const st = showPose(src.pan(jet.id, te), src.tilt(jet.id, te), rot);
+          dx = st.ax; dy = st.ay; dz = st.az;
+          const tip = this._headOutlet(rec, st);
+          ox = o.x + tip.x; oz = o.z + tip.z; y0 = o.y + tip.y;
+        }
+        const v0 = Math.sqrt(2 * G * H * L), vy = v0 * dy;
+        const tL = (vy + Math.sqrt(vy * vy + 2 * G * y0)) / G;
+        const a = crown ? Math.min(tL * 0.95, (vy / G) * (0.85 + 0.4 * Math.abs(jit[j + 2]))) : tL;
+        const fx = (1 - Math.exp(-DRAG * a)) / DRAG;
+        const spread = (crown ? 0.05 * H * L : 0.8 + 0.02 * H * L) * (1 + 0.5 * age);
+        const px = ox + v0 * dx * fx + jit[j] * spread + WIND.x * age;
+        const pz = oz + v0 * dz * fx + jit[j + 1] * spread + WIND.z * age;
+        const py = Math.max(0.3, crown ? y0 + vy * a - 0.5 * G * a * a - 0.35 * age : 0.4 + 1.4 * Math.abs(jit[j + 2]) + 0.25 * age);
+        const fadeIn = Math.min(1, age / 0.5), fadeOut = (1 - age / Tm) ** 1.5;
+        const alpha = L * fadeIn * fadeOut * (crown ? 1 : 0.9) * (jet.swing ? 0.55 : 1);
+        if (alpha < 0.01) continue;
+        // Lit by the lamp's upward beam: bright inside its cone, fading with height (spreading
+        // light), dark once the drift carries the spray out of the beam — plus the glow next to the lamp.
+        const h = py + LAMP_DEPTH, r = Math.hypot(px - lamp.x, pz - lamp.z);
+        const cone = Math.exp(-((r / (0.6 + BEAM_TAN * h)) ** 2));
+        const beam = cone / (1 + (h / (0.45 * H + 6)) ** 2);
+        const e = lk * (1.4 * Math.exp(-Math.hypot(r, h) / reach) + 1.2 * beam) * alpha * MIST_GAIN;
+        const k3 = m * 3;
+        mp[k3] = px; mp[k3 + 1] = py; mp[k3 + 2] = pz;
+        mc[k3] = lc.r * e + ar * alpha * 0.5; mc[k3 + 1] = lc.g * e + ag * alpha * 0.5; mc[k3 + 2] = lc.b * e + ab * alpha * 0.5;
+        ms[m] = Math.min(14, (crown ? 1.0 + 0.06 * H * L : 1.5 + 0.03 * H * L) * (1 + 0.8 * age));
+        m += 1;
+      }
+    }
+    mg.setDrawRange(0, m);
+    mg.attributes.position.needsUpdate = true;
+    mg.attributes.tint.needsUpdate = true;
+    mg.attributes.size.needsUpdate = true;
+    const vh = this.renderer.getDrawingBufferSize(this._dbSize || (this._dbSize = new THREE.Vector2())).y;
+    this.mist.material.uniforms.projScale.value = vh / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+
+    // ── lamp pools on the lake, and indirect light ──
+    if (!this._lampJets || this._lampJetsFor !== this.data.jets) {
+      this._lampJetsFor = this.data.jets;
+      this._lampJets = new Map((this.data.jets || []).filter((j) => j.lightId).map((j) => [j.lightId, j]));
+      this._lampIds = (this.data.items || []).filter((it) => it.role === "light").map((it) => it.id);
+    }
+    const mesh = this.poolGlow, mtx = this._mtx || (this._mtx = new THREE.Matrix4()), c = this._col || (this._col = new THREE.Color());
+    const hex = this._hexCol || (this._hexCol = new THREE.Color());
+    const cands = [];
+    let g = 0;
+    for (const id of this._lampIds) {
+      if (g >= MAX_LAMPS) break;
+      const k = src.level(id, t);
+      if (k < 0.01) continue;
+      const rec = this.items.get(id);
+      if (!rec) continue;
+      const jet = this._lampJets.get(id);
+      const H = jet ? Math.max(1, jet.nominalHeightM || 2) : 4;
+      const wL = jet ? src.level(jet.id, t) : 0;
+      const power = 0.8 + 0.012 * H;
+      // A lamp under a still surface shows only as a faint spot; the boil of a running jet glows.
+      const e = k * power * (0.05 + 0.95 * wL);
+      const r = 1.6 + 0.05 * H * (0.3 + 0.7 * wL);
+      const p = rec.group.position;
+      mtx.makeScale(r, 1, r).setPosition(p.x, 0.03, p.z);
+      mesh.setMatrixAt(g, mtx);
+      hex.set(src.color(id, t) || "#fff1dc");
+      c.copy(hex).multiplyScalar(e * POOL_GAIN);
+      mesh.setColorAt(g, c);
+      g += 1;
+      if (e > 0.15) cands.push({ x: p.x, z: p.z, e, color: hex.getHex() });
+    }
+    mesh.count = g;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    cands.sort((a, b) => b.e - a.e);
+    const picked = [];
+    for (const cd of cands) {
+      if (picked.length >= this.glowLights.length) break;
+      if (picked.every((p) => Math.hypot(p.x - cd.x, p.z - cd.z) > 30)) picked.push(cd);
+    }
+    this.glowLights.forEach((l, i) => {
+      const cd = picked[i];
+      if (!cd) { l.intensity = 0; return; }
+      l.position.set(cd.x, 4, cd.z);
+      l.color.setHex(cd.color);
+      l.distance = 45;
+      l.decay = 1.2;
+      l.intensity = 2 * Math.min(1.5, cd.e);
+    });
   }
   /** Show time source for live playback (seconds); null returns to design mode. */
   setClock(fn) { this.clockFn = typeof fn === "function" ? fn : null; }
@@ -705,8 +1007,14 @@ export class EasyScene {
     } else this.controls.update();
     if (this.showSource) this._updateShowWater(); else this._updateWater(dt);
     this._updateEffects();
-    this._updateGlow();
-    if (this.waterMirror) this.waterMirror.material.uniforms.time.value = this.time;
+    if (this.showSource) this._updateShowLight(); else this._updateGlow();
+    if (this.waterMirror) {
+      const u = this.waterMirror.material.uniforms;
+      u.time.value = this.time;
+      // A lake hundreds of metres across: longer waves, reflections smeared into streaks.
+      u.streak.value = this.showSource ? 0.0065 : 0;
+      u.waveScale.value = this.showSource ? 3.5 : 1;
+    }
     if (this.realistic && this.composer) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
   }
@@ -723,13 +1031,11 @@ export class EasyScene {
       if (L > 0.01) active.push(j);
     }
     const per = active.length ? Math.min(2600, Math.floor(max / active.length)) : 0;
-    let n = 0, q = 0;
-    const tmp = new THREE.Color(), white = new THREE.Color(0xd8f1ff), lightCol = new THREE.Color();
-    const pose = (pan, tilt, rot) => {
-      const a = (pan * Math.PI) / 180, b = (tilt * Math.PI) / 180;
-      const x0 = Math.sin(a), z0 = Math.sin(b);
-      return { ax: x0 * Math.cos(rot) - z0 * Math.sin(rot), ay: Math.cos(a) * Math.cos(b), az: x0 * Math.sin(rot) + z0 * Math.cos(rot), spin: 0, lift: 0 };
-    };
+    let n = 0, q = 0, ns = 0;
+    const sGeo = this.streaks.geometry, sp6 = sGeo.attributes.position.array, sc6 = sGeo.attributes.color.array;
+    const pose = (pan, tilt, rot) => showPose(pan, tilt, rot);
+    const [ar, ag, ab] = AMBIENT;
+    const lit = this.showLit = [];
     for (const jet of active) {
       const rec = this.items.get(jet.id);
       if (!rec) continue;
@@ -739,14 +1045,15 @@ export class EasyScene {
       const vmax = Math.sqrt(2 * G * H);
       const T = (vmax + Math.sqrt(vmax * vmax + 2 * G * oyBase)) / G + SPLASH_S;
       if (jet.swing) this._aimHead(rec, pose(src.pan(jet.id, t), src.tilt(jet.id, t), rot));
-      // The water takes the colour of its light while that light is on.
-      tmp.copy(white);
-      let bright = 0.6 * (this.realistic ? 0.62 : 1);
-      if (jet.lightId) {
-        const k = src.level(jet.lightId, t), hex = src.color(jet.lightId, t);
-        // Lit water takes its light's colour strongly (Bellagio's warm white reads gold on camera).
-        if (k > 0.01 && hex) { tmp.lerp(lightCol.set(hex), Math.min(1, 0.6 + 0.4 * k)); bright *= 0.9 + 0.5 * k; }
-      }
+      // Light is instantaneous: every drop in the air now is lit by its lamp's level now. A jet
+      // without a lamp keeps a neutral work light so designs without lights stay visible.
+      const lamp = this._showLamp(jet, rec, H);
+      const lk = lamp.k * lamp.power, lc = lamp.color, lx = lamp.x, lz = lamp.z;
+      const hotR = 1.2 + 0.04 * H;
+      // Fewer drops per jet (a crowded show) → each drop carries more of the jet's light.
+      const density = Math.min(1.6, Math.max(0.7, Math.sqrt(1300 / Math.max(200, per))));
+      const gain = WATER_GAIN * density, sGain = STREAK_GAIN * density;
+      lit.push({ jet, rec, H, rot, oyBase, lamp });
       const outlets = jet.swing ? [{ swing: true, spread: 0.02 }] : outletsOf({ ...jet, motion: null }, t, rot);
       const each = Math.max(8, Math.floor(per / outlets.length));
       for (const out of outlets) {
@@ -779,11 +1086,32 @@ export class EasyScene {
           const k = n * 3;
           if (age < tLand) {
             const fx = (1 - Math.exp(-DRAG * age)) / DRAG;
-            pos[k] = ox + vx * fx;
-            pos[k + 1] = Math.max(0.01, y0 + vy * age - 0.5 * G * age * age);
-            pos[k + 2] = oz + vz * fx;
-            const fade = bright * (1 - 0.5 * breakup) * (breakup < 0.15 ? 1.25 : 1);
-            col[k] = tmp.r * fade; col[k + 1] = tmp.g * fade; col[k + 2] = tmp.b * fade;
+            const px = ox + vx * fx, py = Math.max(0.01, y0 + vy * age - 0.5 * G * age * age), pz = oz + vz * fx;
+            pos[k] = px; pos[k + 1] = py; pos[k + 2] = pz;
+            // Light guide: the lamp's light enters the coherent stream at its base and travels up
+            // inside it, leaking out where the surface roughens and the stream breaks into drops,
+            // so it fades along the flight. Next to the lamp the aerated base is lit directly
+            // (the hot core every Bellagio jet has at the water line).
+            // Light lost along the stream depends on the metres it has travelled (≈ twice the
+            // apex over the whole flight): a 22 m arc stays lit end to end, a 73 m shooter's
+            // crown is a dim glow above a blazing base.
+            const path = 2 * H * L * (age / tLand);
+            const guide = (0.2 + 0.8 * Math.exp(-path / 28)) * (0.6 + 0.6 * breakup);
+            const dB = Math.hypot(px - lx, py + LAMP_DEPTH, pz - lz);
+            const lum = lk * (guide + 1.6 * Math.exp(-dB / hotR));
+            const e = lum * gain;
+            col[k] = lc.r * e + ar; col[k + 1] = lc.g * e + ag; col[k + 2] = lc.b * e + ab;
+            // The same drop as the camera records it: a streak back along its path over one shutter.
+            if (ns < max) {
+              const a2 = Math.max(0, age - EXPOSURE_S), fx2 = (1 - Math.exp(-DRAG * a2)) / DRAG;
+              // A broken-up crown is a spray, not a stream: its drops smear far less visibly.
+              const k6 = ns * 6, es = lum * sGain * (1 - breakup) ** 1.5;
+              sp6[k6] = px; sp6[k6 + 1] = py; sp6[k6 + 2] = pz;
+              sp6[k6 + 3] = ox + vx * fx2; sp6[k6 + 4] = Math.max(0.01, y0 + vy * a2 - 0.5 * G * a2 * a2); sp6[k6 + 5] = oz + vz * fx2;
+              sc6[k6] = lc.r * es; sc6[k6 + 1] = lc.g * es; sc6[k6 + 2] = lc.b * es;
+              sc6[k6 + 3] = lc.r * es * 0.4; sc6[k6 + 4] = lc.g * es * 0.4; sc6[k6 + 5] = lc.b * es * 0.4;
+              ns += 1;
+            }
           } else {
             const sp = age - tLand;
             if (sp > SPLASH_S) continue;
@@ -791,11 +1119,12 @@ export class EasyScene {
             const impact = Math.min(1.5, Math.abs(vy - G * tLand) / 8);
             const r = (0.05 + 1.1 * sp) * (0.3 + 0.7 * Math.abs(jit[j + 2])) * impact;
             const a = 6.283 * (0.5 + 0.5 * jit[j]);
-            pos[k] = ox + vx * fx + r * Math.cos(a);
-            pos[k + 1] = 0.02 + 3.2 * impact * sp * (SPLASH_S - sp);
-            pos[k + 2] = oz + vz * fx + r * Math.sin(a);
-            const fade = 0.55 * bright * (1 - sp / SPLASH_S);
-            col[k] = fade; col[k + 1] = fade; col[k + 2] = fade;
+            const px = ox + vx * fx + r * Math.cos(a), py = 0.02 + 3.2 * impact * sp * (SPLASH_S - sp), pz = oz + vz * fx + r * Math.sin(a);
+            pos[k] = px; pos[k + 1] = py; pos[k + 2] = pz;
+            // White water scatters strongly but is lit only if it lands near a lamp.
+            const dB = Math.hypot(px - lx, py + LAMP_DEPTH, pz - lz);
+            const e = lk * (0.12 + 2.0 * Math.exp(-dB / hotR)) * gain * (1 - sp / SPLASH_S);
+            col[k] = lc.r * e + ar; col[k + 1] = lc.g * e + ag; col[k + 2] = lc.b * e + ab;
           }
           n += 1;
         }
@@ -805,6 +1134,9 @@ export class EasyScene {
     geo.setDrawRange(0, n);
     geo.attributes.position.needsUpdate = true;
     geo.attributes.color.needsUpdate = true;
+    sGeo.setDrawRange(0, ns * 2);
+    sGeo.attributes.position.needsUpdate = true;
+    sGeo.attributes.color.needsUpdate = true;
   }
 
   /** Realistic render (bloom, reflective water, indirect light) on/off — off for slow computers. */
@@ -818,6 +1150,7 @@ export class EasyScene {
     this.poolKey = null;
     if (this.data.pool) { this.poolKey = JSON.stringify(this.data.pool); this._buildBasin(this.data.pool); }
     for (const l of this.glowLights) l.intensity = 0;
+    this._applyShowLook();
   }
 
   /**
@@ -843,6 +1176,8 @@ export class EasyScene {
     lights.forEach((l, i) => {
       const c = cands[i];
       if (!c) { l.intensity = 0; return; }
+      l.distance = 14;
+      l.decay = 1.6;
       l.position.set(c.p.x, c.p.y, c.p.z);
       l.color.set(c.color);
       l.intensity = 9 * c.k;

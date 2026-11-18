@@ -30,7 +30,7 @@ The equipment counts are Bellagio's published ones: 208 oarsmen, 798 mini-shoote
 | Mini-shooters | Comet jet DN25 set to 30 m | 798 | a row in front of the line, the outer and inner rings of the big ring, the small ring |
 | Super-shooters | Comet jet DN80 set to 73 m | 192 | a row behind the line; the big and small rings |
 | Extreme-shooters | Comet jet DN80 set to 140 m | 16 | 6 at the big ring centre, 4 at the small ring centre, 3 at each line end |
-| Lights | warm white `#ffd9a6` | 208 | one per oarsman |
+| Lights | warm white `#ffca82` (gold on the film) | 1,214 | one underwater lamp under every nozzle, paired with it |
 | Fog | fog unit | 24 | along the line and round the big ring |
 
 ## Choreography: song time = film time
@@ -84,9 +84,41 @@ Before this pass, three sweeps asked for 100–256°/s. They were slowed to with
   - **Vocal run at 3:15–3:45:** the middle 80 m of the line.
 - **Limit:** word timing is estimated from audio energy, not transcribed lyrics.
 
+## Lighting (third pass)
+
+Read from the official film and the two audience videos:
+
+- **Every jet has a hot core at the water line.** A lamp sits under each nozzle and shines up into the aerated base, so the bottom metres glow almost white.
+- **The stream carries the light up.** A coherent jet works like a light guide. Light enters at the base and travels inside the stream, leaking out where the surface roughens and the stream breaks into drops. A 22 m oarsman arc stays lit end to end. A 73 m super-shooter's crown is a dim glow over a blazing base.
+- **Spray mist glows.** Fine spray hangs over the crowns and boils up where the water lands. It drifts for seconds and glows only where the lamps' upward beams reach it.
+- **The lake glows around the lamps.** Pools of light sit on the surface around each running jet.
+- **Reflections are streaks.** Wind ripples smear every lit jet into broken vertical streaks.
+- **Unlit water is almost invisible** at night.
+- **The light follows the water.** It flashes on the biggest hits, such as the 3:36 flash.
+
+How AquaFlow does it:
+
+- **The show:** 1,214 lamps, one paired with each nozzle. Each lamp is lit only where water is in its light, so every water pattern is also the light pattern.
+- **House level:**
+  - 90 % for the opening and the groove
+  - 50 % for the breakdown
+  - 95 % for the walls
+  - 55 % for the bass section
+  - 100 % from the big hit to the end
+- **Hit flashes:** every lamp punches to full and settles within a second at 1:12, 2:00, 3:16, 3:36, 4:30 and 4:49.
+- **The Studio renderer** (`EasyScene` show mode):
+  - per-drop light from its lamp: a light-guide term that fades with the metres travelled, plus the hot core near the lamp;
+  - a camera-exposure streak behind each drop (1/40 s), so streams read continuous as on film;
+  - lit mist puffs inside the lamps' beam cones;
+  - lamp pools on the lake;
+  - streaked, gusty reflections;
+  - moonlight-only night lighting, with bloom on the hot cores.
+- **Size:** 2,428 fixtures, 160 patterns and 31,772 clips. The lamps hold one clip per section rather than copying every water pattern; copying put the show over 88 MB and 41,900 clips, and it would not open.
+
 ## Simplifications (not verified against WET's data)
 
 - **Dimensions:** the lake outline, the 300 m line, the 48 m and 22 m rings and the spacings are estimated from the drone footage, not surveyed.
 - **Oarsmen:** modelled as one-axis swing nozzles, as the user asked. WET's real oarsman mechanism is proprietary.
 - **Shooters:** modelled as water jets whose level pulses. The real ones are air-powered bursts.
+- **Lights:** one lamp per nozzle stands in for Bellagio's 4,792 lights. The light model is tuned by eye against the films, not measured.
 - **Pumps:** no pumps are modelled, so the show plays from its timeline. The Easy Fountain Design panel will report the nozzles as "no pump".

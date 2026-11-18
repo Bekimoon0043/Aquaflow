@@ -1,5 +1,42 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-19: AquaFlow Studio 1.2.80 - Real-world fountain lighting in the 3D Preview Studio look; Bellagio lit like the film**
+
+- **Request:** after the water patterns were approved, make the lighting look like the original video, based on how light really behaves on water.
+- **Study:** frames from the official film (iNQpcDuE6e4) and both audience videos.
+  - Every jet has a hot, near-white core at the water line, turning gold higher up and pale at a tall shooter's crown.
+  - Lit spray mist hangs over the jets and glows.
+  - Golden pools sit on the lake around the lamps, and reflections are smeared into broken vertical streaks.
+  - Unlit water is almost invisible.
+  - Light follows the water.
+- **Renderer** (`EasyScene` show mode, used by the Studio look and its video export):
+  - **Per-drop light** from the jet's paired lamp:
+    - A light-guide term: light enters the coherent stream at the base and leaks out where it breaks up, fading with the metres travelled.
+    - A hot core near the lamp.
+    - A faint city-light ambient, so unlit water nearly vanishes.
+  - **Camera-exposure streaks** (1/40 s) behind each drop, so streams read continuous; they fade where the stream has broken into spray.
+  - **Lit spray mist:** crown and landing puffs that linger and drift, lit inside each lamp's upward beam cone (custom point shader).
+  - **Lamp pools** on the lake: an instanced layer that the mirror camera does not reflect.
+  - **Reflections:** gusty ripples with vertical streak sampling and crest banding.
+  - **Night lighting:** no daylight or sky light, a dark promenade and tuned bloom.
+  - Underwater lamp housings are hidden. Jets without a lamp keep a neutral work light.
+- **Bellagio show:**
+  - **Lamps:** one under every nozzle, 1,214 in total, each paired with its jet. Colour `#ffca82`, the film's gold.
+  - **House levels follow the song:**
+    - 90 % for the opening and the groove
+    - 50 % for the breakdown
+    - 95 % for the walls
+    - 55 % for the bass section
+    - 100 % from the big hit to the end
+  - **Hit flashes:** all lamps at 1:12, 2:00, 3:16, 3:36, 4:30 and 4:49.
+  - **Size:** 2,428 fixtures, 160 patterns, 31,772 clips, 62.7 MB. Copying every water pattern onto the lamps made an 88 MB show that crashed the browser on load, so I dropped that approach.
+  - Notes are in `reports/Bellagio Tiesto rebuild.md` ("Lighting").
+- **Verified:**
+  - Headless Edge renders on the GT 730 at 0:07, 0:41, 2:05, 2:20, 2:40, 3:05, 3:36 and 4:36, compared with the film frames over seven tuning rounds.
+  - A 6 s 1080p test clip: no frame-to-frame flicker, 0.57 s per frame.
+  - All 2,043 frontend tests pass.
+- **Not checked:** the classic preview with the new 1,214 lamps.
+
 **2026-11-18: AquaFlow Studio 1.2.79 - 3D Preview "Studio look" (the Easy Fountain Design renderer), 1D crossing dances, lyric-synced Bellagio show, video**
 
 - **Why:** the user's 1D oarsmen did not read as crossing jets in the 3D Preview, which drew tall vertical columns, and the user preferred the Easy Fountain Design rendering.

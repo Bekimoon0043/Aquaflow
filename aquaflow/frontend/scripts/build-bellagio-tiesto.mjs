@@ -60,7 +60,7 @@ const oarEng = { jetHeightM: 22, flowLpm: 420, pressureBar: 2.7, angleRangeDeg: 
 const miniEng = { jetHeightM: 30, flowLpm: 520, pressureBar: 3.6, equipmentModel: "Mini-shooter (100 ft)" };
 const superEng = { jetHeightM: 73, flowLpm: 2600, pressureBar: 8.5, equipmentModel: "Super-shooter (240 ft)" };
 const xtEng = { jetHeightM: 140, flowLpm: 5200, pressureBar: 16, equipmentModel: "Extreme-shooter (460 ft)" };
-const WARM = "#ffd9a6";
+const WARM = "#ffca82";             // Bellagio's white light reads warm gold on the official film
 const ids = {};
 const put = (k, id) => (ids[k] ||= []).push(id);
 
@@ -108,6 +108,14 @@ ring("xt-S", SMALL, 2, 4, SUPER, xtEng, "xtSmall", "Extreme-shooter · small rin
 // Fog: Bellagio's fog system along the line and round the big ring.
 // No fog: the user does not want it for this show (Bellagio's fog system is left out).
 ids.fogLine = []; ids.fogRing = [];
+// A lamp under every shooter too (Bellagio: 4,792 white lights under its 1,214 nozzles), paired
+// with its jet so the light rides up the stream. Oarsmen already have theirs.
+const lampOf = new Map(fixtures.filter((f) => f.type === LIGHT).map((f) => [f.engineering.pairedNozzleId, f.id]));
+for (const f of fixtures.filter((x) => x.type === MINI || x.type === SUPER)) {
+  const id = add(`light-${f.id}`, LIGHT, `Light · ${f.label}`, f.x + 0.35, f.y, { pairedNozzleId: f.id, beamAngleDeg: 30 },
+    { color: WARM, groupId: `${f.groupId}_lights` });
+  lampOf.set(f.id, id);
+}
 
 const count = (k) => ids[k]?.length || 0;
 const census = {
@@ -155,10 +163,18 @@ group("xtAll", "Extreme · all 16", [...ids.xtRing, ...ids.xtSmall, ...ids.xtEnd
 group("allMini", "All mini-shooters", [...ids.lineMini, ...ids.ringMini, ...ids.innerMini, ...ids.smallMini]);
 group("allSuper", "All super-shooters", [...ids.lineSuper, ...ids.ringSuper, ...ids.innerSuper, ...ids.smallSuper]);
 group("allOar", "All oarsmen (water)", [...ids.lineOar, ...ids.ringOar, ...ids.smallOar]);
-group("lineLight", "Line · lights", ids.lineLight);
-group("ringLight", "Big ring · lights", ids.ringLight);
-group("smallLight", "Small ring · lights", ids.smallLight);
-group("allLight", "All lights", [...ids.lineLight, ...ids.ringLight, ...ids.smallLight]);
+group("lineLight", "Line · oarsman lights", ids.lineLight);
+group("ringLight", "Big ring · oarsman lights", ids.ringLight);
+group("smallLight", "Small ring · oarsman lights", ids.smallLight);
+// Every water group has the matching group of lamps under it.
+const LAMP_GROUP = { lineOar: "lineLight", ringOar: "ringLight", smallOar: "smallLight" };
+for (const g of [...G]) {
+  if (LAMP_GROUP[g.id] || /Swing$|Odd$|Even$|Left$|Right$/.test(g.id)) continue;
+  const lamps = g.memberFixtureIds.map((id) => lampOf.get(id)).filter(Boolean);
+  if (lamps.length !== g.memberFixtureIds.length) continue;
+  LAMP_GROUP[g.id] = group(`${g.id}Light`, `${g.name.replace(/ \(.*\)$/, "")} · lights`, lamps);
+}
+group("allLight", "All lights", fixtures.filter((f) => f.type === LIGHT).map((f) => f.id));
 
 
 // ─── pattern helpers (all editable in Show Programming) ────────────────────
@@ -343,16 +359,30 @@ VOCALS.forEach((phrase, i) => {
   const envelope = sungCurve(phrase, d);
   const sing = (g, high, label) => base(g, `${label} ${i + 1} · ${phrase.words.length} words`, phrase.start, d,
     { effect: "curve", envelope, intensity: high, sampleRate: 20, spread: 0.03, order: "center-out", ease: 0 });
-  R.push(sing(who.water, who.high, "Sung line"), sing(who.light, 100, "Sung line light"));
+  R.push(sing(who.water, who.high, "Sung line"));
 });
-// Light level: 208 lights at full output wash the water into solid white bands in the 3D view;
-// the film's base glow is a warm, modest light under each jet.
-const LIGHT_SCALE = 0.45;
-for (const r of R) {
-  if (!r || !/Light$/.test(r.groupId)) continue;
-  if (r.effect === "field" && r.field) { r.field.high = r2(r.field.high * LIGHT_SCALE); r.field.low = r2((r.field.low || 0) * LIGHT_SCALE); }
-  else r.intensity = r2(r.intensity * LIGHT_SCALE);
-}
+
+// ─── lighting ────────────────────────────────────────────────────────────────
+// Bellagio is lit from under the water: a lamp below each jet, white light only (warm gold on
+// camera). Light shows only where water scatters it, so with every lamp burning, each water
+// pattern is also the light pattern: a travelling wave is a travelling band of light, a shot a
+// column of light. On top of that the house level follows the song — bright through the
+// builds, drops and finale, dimmed for the breakdown and the bass section so the lake breathes —
+// and on the biggest hits every lamp punches to full and settles back (the film's 3:36 flash).
+// (One clip per lamp per section keeps the 1,214-lamp show small enough to open anywhere.)
+const HOUSE = [[6.2, 133.9, 90], [133.9, 149.5, 50], [149.5, 179.9, 95], [179.9, 195.63, 55], [195.63, 293, 100]];
+const LR = HOUSE.map(([s, e, level]) => hold("allLight", `House light ${level} %`, s, e - s, level));
+// The dark lake before the first note: the rings glow faintly from below.
+LR.push(hold("ringLight", "Ring glows in the dark", 0, 6.2, 18), hold("ringMiniLight", "Ring glows in the dark", 0, 6.2, 14),
+  hold("smallMiniLight", "Small ring glows", 0, 6.2, 10));
+// The biggest hits: every lamp punches to full and settles back to its pattern's level within a
+// second (one keyed clip per lamp). Smaller hits are carried by the shooters' own lamps above.
+const flash = (name, s, holdS) => base("allLight", name, s, holdS + 1, { effect: "curve", intensity: 100, sampleRate: 25, ease: 0,
+  envelope: [{ time: 0, value: 1 }, { time: r2(holdS / (holdS + 1)), value: 1 }, { time: 1, value: 0 }] });
+LR.push(flash("Impact flash", 71.9, 0.2), flash("Drop flash", 119.9, 0.2), flash("Big hit flash", 195.63, 0.25),
+  flash("FLASH", 216.24, 0.4), flash("Finale flash", 270.49, 0.25), flash("Last shot flash", 289.18, 0.3));
+for (let i = R.length - 1; i >= 0; i--) if (R[i] && /Light$/.test(R[i].groupId)) R.splice(i, 1);
+R.push(...LR);
 const recipes = R.filter((r) => r && r.groupId && r.duration > 0 && !/^fog/.test(r.groupId));
 
 const markers = [[0, "Intro · the lake waits"], [6.24, "Opening columns"], [12.96, "Ring draws on"], [24.36, "Crown · line draws on"], [37.1, "Build"],
