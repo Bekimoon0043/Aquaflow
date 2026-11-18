@@ -3,6 +3,7 @@ import { evaluateShowFrameAt, lightViewState, normalizeCurve, parseKeys } from "
 import { LASER_TYPES, isLaserFixture } from "../components/preview/laser/laserRig";
 
 const WATER_TYPES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity"]);
+const EFFECT_TYPES = new Set(["fire_intensity", "fog_density"]);
 const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
 const LIGHT_TYPES = new Set(["lighting_master", "lighting_red", "lighting_green", "lighting_blue"]);
 const PUMP_TYPES = new Set(["pump_speed"]);
@@ -25,7 +26,8 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
     const type = clip.type;
     const allowed = isLaserFixture(fixture.type) ? LASER_TYPES.includes(type) || LIGHT_TYPES.has(type)
       : category === "light" ? LIGHT_TYPES.has(type)
-      : category === "equipment" ? /pump/i.test(fixture.type) && PUMP_TYPES.has(type)
+      : category === "effect" && EFFECT_TYPES.has(type) ? true
+      : category === "equipment" ? (/pump/i.test(fixture.type) && PUMP_TYPES.has(type)) || (/valve|solenoid/i.test(fixture.type) && WATER_TYPES.has(type))
         : WATER_TYPES.has(type) || PUMP_TYPES.has(type) // any water nozzle may be driven by its pump speed (e.g. rotating_jet)
           || (String(fixture.type).startsWith("motion") && MOTION_TYPES.has(type));
     if (!allowed) {
@@ -96,21 +98,25 @@ export function evaluateFullShowPreview(plan, position, fixtures = EMPTY, stoppe
     else if (category !== "equipment") fixtureIntensities[fixture.id] = 0;
     if (String(fixture.type).startsWith("motion")) fixtureMotion[fixture.id] = { pan: 0, tilt: 0 };
   });
-  let pump = 0;
+  let pump = 0, valve = 0, flame = 0, fog = 0, laser = 0;
   for (const [id, record] of Object.entries(frame.fixtures)) {
     if (record.kind === "light") fixtureLightStates[id] = lightViewState(record);
     else if (record.kind === "pump") pump = Math.max(pump, record.level);
-    else if (record.kind !== "valve" && record.kind !== "equipment") fixtureIntensities[id] = record.level;
+    else if (record.kind === "valve") valve = Math.max(valve, record.level > 0 ? 1 : 0);
+    else if (record.kind !== "equipment") fixtureIntensities[id] = record.level;
+    flame = Math.max(flame, record.channels.fire_intensity || 0);
+    fog = Math.max(fog, record.channels.fog_density || 0);
+    laser = Math.max(laser, record.channels.laser_intensity || 0);
     if (fixtureMotion[id] && record.motion) fixtureMotion[id] = { ...record.motion };
   }
   const active = Object.values(fixtureIntensities).filter(value => value > 0).length;
   const lightsActive = Object.values(fixtureLightStates).filter(state => state.intensity > 0).length;
   const representative = Object.values(fixtureLightStates).find(state => state.intensity > 0);
   const color = representative?.color || "#ffffff";
-  return { source: "full-show-simulation", pump, valve: 0, lighting: lightsActive ? 1 : 0,
+  return { source: "full-show-simulation", pump, valve, lighting: lightsActive ? 1 : 0,
     lightingColor: { r: parseInt(color.slice(1, 3), 16) / 255, g: parseInt(color.slice(3, 5), 16) / 255,
       b: parseInt(color.slice(5, 7), 16) / 255, w: 0 },
-    flame: 0, fog: 0, laser: 0, groups: {}, fixtureIntensities, fixtureLightStates, fixtureMotion,
+    flame, fog, laser, groups: {}, fixtureIntensities, fixtureLightStates, fixtureMotion,
     active, lightsActive, mapped: 0, unmapped: 0, supportSelected: false, protectedSelected: false,
     stepIndex: 0, passIndex: Math.min(plan.repeat, Math.floor(Math.max(0, Number(position) || 0) * 1000 / plan.passMs) + 1), ended,
     showFrame: frame };

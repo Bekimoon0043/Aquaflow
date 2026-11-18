@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { buildFountainIndirect } from "../fountainIndirect.js";
+import { FountainIndirectLights } from "../fountainIndirect3D.js";
 
 const lights = [
   { id: "light-a", x: 0, y: 0, z: 0, radius: 5, intensity: 4, color: "#0066ff", pairedNozzleId: "jet-a" },
@@ -31,6 +33,15 @@ describe("fountain indirect approximation", () => {
   it("returns no indirect emitters for unlit or inactive water", () => {
     expect(buildFountainIndirect(jets, [])).toEqual([]);
     expect(buildFountainIndirect([jets[2]], lights)).toEqual([]);
+  });
+
+  it("can disable the approximation without affecting the fixture lights", () => {
+    const layer = new FountainIndirectLights(THREE, new THREE.Scene());
+    layer.update(jets, lights, "high", false);
+    expect(layer.lights.every(light => !light.visible && light.intensity === 0)).toBe(true);
+    layer.update(jets, lights, "high", true);
+    expect(layer.lights.some(light => light.visible && light.intensity > 0)).toBe(true);
+    layer.dispose();
   });
 
   it("is deterministic", () => {

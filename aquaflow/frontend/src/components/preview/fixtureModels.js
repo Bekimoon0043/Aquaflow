@@ -1,3 +1,5 @@
+import { equipmentAssetForKind, loadEquipmentAsset, socketWorld } from "./equipmentAssets";
+
 /**
  * fixtureModels.js — AF-3D-014 (realism plan, Phase R4)
  *
@@ -9,10 +11,10 @@
  * the basin sees plumbing that looks nothing like the plumbing being quoted, and a
  * laminar jet is indistinguishable from a geyser head.
  *
- * The bodies here are built from primitives rather than loaded from glTF. That keeps
- * the module consistent with the rest of the realism work (no binary assets to ship,
- * nothing to fetch, deterministic in tests) and the shapes are genuinely simple:
- * fountain nozzles ARE turned parts — flanges, bores, tapers and rings.
+ * The original generated GLB equipment is preferred. Primitive bodies remain a
+ * procedural fallback for missing model types or failed loads. Fountain nozzles are
+ * mostly turned parts — flanges, bores, tapers and rings — with separate pivots and
+ * sockets for moving assemblies and water/light alignment.
  *
  * All fixtures of one kind are drawn with a single InstancedMesh. A default layout
  * has 33 nozzles; as individual meshes that is 33 draw calls before a drop of water
@@ -103,6 +105,7 @@ export function buildFixtureGeometry(THREE, kind) {
       add(new T.CylinderGeometry(0.045, 0.045, 0.012, 16), 0.216, 1);
       break;
     }
+    case "pirouette":
     case "ring": {
       // A ring header: a manifold torus with small risers around it.
       flange();
@@ -203,8 +206,8 @@ export function fixtureKindFor(type) {
     case "screen":  return "fan_jet";
     case "motion_1d":
     case "motion_2d":
-    case "motion_3d":
-    case "pirouette": return "motion";
+    case "motion_3d": return "motion";
+    case "pirouette": return "pirouette";
     default: return "jet";
   }
 }
@@ -223,14 +226,13 @@ export class FixtureInstances {
     this.group.name = "fixtures";
     this._byKind = new Map();
     this._geoCache = new Map();
+    this._assetGroups = new Map();
+    this._assetErrors = new Map();
+    this._revision = 0;
 
-    // Wet-service stainless: fairly rough, genuinely metallic. High metalness with a
-    // low roughness would mirror the sky and read as chrome jewellery.
     this.metal = new THREE.MeshStandardMaterial({
       color: 0x9aa4ad, roughness: 0.38, metalness: 0.92,
     });
-    // The bore/lens. Emissive so it still reads at night, when a fixture is otherwise
-    // a silhouette against dark water.
     this.lens = new THREE.MeshStandardMaterial({
       color: 0x101820, roughness: 0.15, metalness: 0.1,
       emissive: new THREE.Color(emissive), emissiveIntensity: 0.55,
@@ -244,20 +246,56 @@ export class FixtureInstances {
     return this._geoCache.get(kind);
   }
 
-  /**
-   * Rebuild the instance set.
-   * @param {Array} items [{id, kind, x, y, z, rotationX, rotationY, rotationZ, scale, up?}]
-   *   `up` ([x, y, z]): the body's axis points along it (an aimed / elevated nozzle or
-   *   light); it wins over the Euler rotations.
-   */
+  _place(object, item) {
+    const T = this.T;
+    object.position.set(item.x || 0, item.y || 0, item.z || 0);
+    if (Array.isArray(item.up) && Math.hypot(...item.up) > 1e-6) {
+      object.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), new T.Vector3(...item.up).normalize());
+    } else {
+      object.quaternion.setFromEuler(new T.Euler(
+        (item.rotationX || 0) * Math.PI / 180,
+        (item.rotationY || 0) * Math.PI / 180,
+        (item.rotationZ || 0) * Math.PI / 180,
+      ));
+    }
+    object.scale.setScalar(item.scale || 1);
+    object.userData.nodeId = item.id || null;
+    object.updateMatrix();
+  }
+
+  _mountAsset(kind, items, revision) {
+    loadEquipmentAsset(this.T, kind).then((asset) => {
+      if (!asset || revision !== this._revision) return;
+      const fallback = this._byKind.get(kind);
+      if (fallback) {
+        this.group.remove(fallback);
+        fallback.dispose?.();
+        this._byKind.delete(kind);
+      }
+      for (const item of items) {
+        const root = asset.template.clone(true);
+        root.userData.equipmentAssetId = asset.id;
+        this._place(root, item);
+        this.group.add(root);
+        this._assetGroups.set(item.id, { root, kind });
+      }
+    }).catch((error) => {
+      if (revision !== this._revision) return;
+      this._assetErrors.set(kind, String(error?.message || error));
+      console.warn(`[AquaFlow] ${kind} GLB could not load; using procedural fixture geometry.`, error);
+    });
+  }
+
   setFixtures(items) {
     const T = this.T;
-    // Drop the previous meshes; geometry is cached and deliberately survives.
+    const revision = ++this._revision;
     for (const mesh of this._byKind.values()) {
       this.group.remove(mesh);
       mesh.dispose?.();
     }
     this._byKind.clear();
+    for (const { root } of this._assetGroups.values()) this.group.remove(root);
+    this._assetGroups.clear();
 
     const byKind = new Map();
     for (const it of items || []) {
@@ -266,51 +304,69 @@ export class FixtureInstances {
       byKind.get(kind).push(it);
     }
 
-    const m = new T.Matrix4();
-    const q = new T.Quaternion();
-    const pos = new T.Vector3();
-    const scl = new T.Vector3();
-    const yAxis = new T.Vector3(0, 1, 0), axis = new T.Vector3();
     for (const [kind, list] of byKind) {
       const mesh = new T.InstancedMesh(this._geometryFor(kind), [this.metal, this.lens], list.length);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       for (let i = 0; i < list.length; i++) {
-        const it = list[i];
-        pos.set(it.x || 0, it.y || 0, it.z || 0);
-        if (Array.isArray(it.up) && Math.hypot(it.up[0], it.up[1], it.up[2]) > 1e-6) {
-          q.setFromUnitVectors(yAxis, axis.set(it.up[0], it.up[1], it.up[2]).normalize());
-        } else {
-          q.setFromEuler(new T.Euler(
-            (it.rotationX || 0) * Math.PI / 180,
-            (it.rotationY || 0) * Math.PI / 180,
-            (it.rotationZ || 0) * Math.PI / 180,
-          ));
-        }
-        const s = it.scale || 1;
-        scl.set(s, s, s);
-        m.compose(pos, q, scl);
-        mesh.setMatrixAt(i, m);
+        const placement = new T.Object3D();
+        this._place(placement, list[i]);
+        mesh.setMatrixAt(i, placement.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
-      // SceneEditor resolves a raycast's instanceId through this table. This keeps
-      // batching efficient while making the actual stainless fixture body clickable.
       mesh.userData.nodeIds = list.map(item => item.id || null);
       this.group.add(mesh);
       this._byKind.set(kind, mesh);
+      if (equipmentAssetForKind(kind)) this._mountAsset(kind, list, revision);
     }
   }
 
-  /** Tint the emissive bores/lenses to the current fixture colour. */
+  animate(configs = [], elapsed = 0) {
+    for (const config of configs) {
+      const mounted = this._assetGroups.get(config.id);
+      if (!mounted) continue;
+      const { root, kind } = mounted;
+      if (kind === "pirouette") {
+        const rpm = Number(config.engineering?.rotationRpm);
+        const rate = Number.isFinite(rpm) && rpm > 0 ? rpm * Math.PI * 2 / 60 : 2.5;
+        const rotor = root.getObjectByName("Rotor_Z");
+        if (rotor) rotor.rotation.y = elapsed * rate;
+      } else if (kind === "motion") {
+        const type = config.type || "motion_2d";
+        const animX = Math.sin(elapsed * 1.5 + (config.x || 0) * 0.5) * 0.5 + 0.5;
+        const animZ = Math.cos(elapsed * 1.1 + (config.z || 0) * 0.6) * 0.5 + 0.5;
+        const sweep = type === "motion_1d" ? 30 : type === "motion_2d" ? 25 : 35;
+        const panDeg = type === "motion_1d" ? 0 : config.motionOverride ? config.motionOverride.tilt : (config.tiltZ || 0) + animZ * sweep;
+        const tiltDeg = config.motionOverride ? config.motionOverride.pan : (config.tiltX || 0) + animX * sweep;
+        const pan = root.getObjectByName("Pan_Z"), tilt = root.getObjectByName("Tilt_X");
+        if (pan) pan.rotation.y = panDeg * Math.PI / 180;
+        if (tilt) tilt.rotation.x = tiltDeg * Math.PI / 180;
+      }
+      if (kind === "pirouette") {
+        config.modelOutlets = [1, 2, 3].map((index) => socketWorld(this.T, root, `Outlet_${index}`)).filter(Boolean);
+      } else {
+        const socket = kind === "laser" ? "LaserSocket" : kind === "flame" ? "FlameSocket" : "NozzleSocket";
+        config.modelOutlet = socketWorld(this.T, root, socket);
+      }
+    }
+  }
+
+  getAssetStatus() {
+    return { loaded: this._assetGroups.size, errors: Object.fromEntries(this._assetErrors) };
+  }
+
   setEmissive(color, intensity = 0.55) {
     if (color) this.lens.emissive.copy(color);
     this.lens.emissiveIntensity = intensity;
   }
 
   dispose() {
+    this._revision++;
     for (const mesh of this._byKind.values()) mesh.dispose?.();
     this._byKind.clear();
+    for (const { root } of this._assetGroups.values()) this.group.remove(root);
+    this._assetGroups.clear();
     for (const g of this._geoCache.values()) g.dispose();
     this._geoCache.clear();
     this.metal.dispose();

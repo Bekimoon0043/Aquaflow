@@ -21,7 +21,7 @@ import useEngineeringStore from "../../store/engineeringStore";
 import { useShowStore } from "../../store/showStore";
 import { usePipeDrawing } from "../../engineering/usePipeDrawing";
 import PipePropertiesPanel from "./PipePropertiesPanel";
-import { fixtureMatchesTool } from "./FixtureLibraryBrowser";
+import { FIXTURE_DRAG_MIME, fixtureMatchesTool, fixtureToolForKey } from "./FixtureLibraryBrowser";
 import CADImportDialog from "./CADImportDialog";
 import { useDesignerBasins } from "../../engineering/useDesignerBasins";
 import { pointInAnyBasin, zonesForBasin, upsertBasinDepthZone } from "../../engineering/basins";
@@ -37,7 +37,7 @@ import { takePendingFocus } from "../../preflight/preflight";
 import { usePanelAction } from "../../workspaces/navigation"; // AF-NEXT-014
 import { FIXTURE_TYPES, OUTSIDE_BASIN_TOOLS, PLACEMENT_TOOLS, POOL_TYPES, TOOLS, mergeEngineeringLayers } from "../../engineering/drafting/designerCatalog";
 import { renderDesignerCanvas } from "../../engineering/drafting/designerRenderer";
-import { createFixtureEntity, duplicateFixtureEntity, ensureEntityIdentities, entityKey, fixtureLayerKey, ownerForPoint, toolLayerKey } from "../../engineering/drafting/entities";
+import { createFixtureEntity, duplicateFixtureEntity, ensureEntityIdentities, entityKey, fixtureLayerKey, ownerForPoint } from "../../engineering/drafting/entities";
 import { buildSnapScene } from "../../engineering/drafting/snap";
 import { resolveDraftPoint } from "../../engineering/drafting/session";
 import { patchToStoreFields } from "../../engineering/drafting/commands";
@@ -963,22 +963,41 @@ export default function PoolGeometryDesigner() {
     setPipeContextMenu(null);
   };
 
-  const placeFixture = (world) => {
-    const layerKey = toolLayerKey(tool);
-    if (layerKey && isLayerLocked(layerKey)) return;
+  const placeFixture = (world, requestedType = fixtureType, placementTool = tool) => {
+    const layerKey = fixtureLayerKey(requestedType);
+    if (layerKey && isLayerLocked(layerKey)) { setSaveStatus(`The ${layerKey} layer is locked. Unlock it before placing equipment.`); return false; }
     // Firework positions normally stand on land behind the pool, so they may go outside a basin.
     // Lasers stand on towers, platforms or roofs around the site, so they may go outside a basin too.
-    if (!pointInAnyBasin(basins, world) && !/^(pyro|sfx|laser)_/.test(String(fixtureType || "")) && !OUTSIDE_BASIN_TOOLS.includes(tool)) return;
+    if (!pointInAnyBasin(basins, world) && !/^(pyro|sfx|laser)_/.test(String(requestedType || "")) && !OUTSIDE_BASIN_TOOLS.includes(placementTool)) {
+      setSaveStatus("Place this equipment inside a basin. Lasers and fireworks may also be placed on land.");
+      return false;
+    }
+    const ft = FIXTURE_TYPES.find(t => t.key === requestedType);
+    if (!ft) { setSaveStatus("That equipment model is not in the library."); return false; }
     pushUndo("Place fixture");
-    const ft = FIXTURE_TYPES.find(t => t.key === fixtureType) || { key: fixtureType, label: fixtureType || "Equipment" };
-    setFixtures(prev => [...prev, createFixtureEntity({
-      type: fixtureType,
+    const entity = createFixtureEntity({
+      type: requestedType,
       x: Math.round(world.x * 10) / 10,
       y: Math.round(world.y * 10) / 10,
-      label: `${ft.label} ${fixtures.filter(f=>f.type===fixtureType).length+1}`,
+      label: `${ft.label} ${fixtures.filter(f=>f.type===requestedType).length+1}`,
       zone: depthZone,
       owner: ownerForPoint(basins, world),
-    })]);
+    });
+    setFixtures(prev => [...prev, entity]);
+    setSelection([keyOf(entity)]);
+    setSelectedObject("fixture");
+    setSaveStatus(`${ft.label} placed · edit its flow, pressure and connections in Properties.`);
+    return true;
+  };
+
+  const onCanvasDrop = (event) => {
+    const requestedType = event.dataTransfer?.getData(FIXTURE_DRAG_MIME);
+    const nextTool = fixtureToolForKey(requestedType, FIXTURE_TYPES);
+    if (!nextTool) return;
+    event.preventDefault();
+    setFixtureType(requestedType);
+    setTool(nextTool);
+    placeFixture(snapPoint(toWorld(event.clientX, event.clientY)), requestedType, nextTool);
   };
 
   const startFixtureDrag = (hitIndex, rawWorld, additive) => {
@@ -1706,6 +1725,13 @@ export default function PoolGeometryDesigner() {
           aria-label="Engineering pool plan canvas"
           tabIndex={0}
           onContextMenu={onCanvasContextMenu}
+          onDrop={onCanvasDrop}
+          onDragOver={(event) => {
+            if (event.dataTransfer?.types?.includes(FIXTURE_DRAG_MIME)) {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+            }
+          }}
           style={{
             width:"100%", height:"100%", display:"block",
             cursor: isPanning || isDraggingGeometry || isDraggingSurface ? "grabbing" : isSpaceDown ? "grab" : tool==="select" ? "default" : "crosshair",

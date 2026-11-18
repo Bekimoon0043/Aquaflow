@@ -1,5 +1,15 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-18: AquaFlow Studio 1.2.73 - Easy Fountain Design: drag-and-drop 3D designer with live connections**
+
+- **Why:** the Easy Fountain window was a small settings form. It is now a full-workspace designer: big 3D space, asset tray below, properties on the right (`components/panels/EasyFountainPanel.jsx`, `panels/easy/EasyScene.js`, logic in `fx/easyDesigner.js`, 8 tests). Menu entry renamed "Easy Fountain Design".
+- **Assets:** tray tabs Nozzles / Pumps / Valves / Lights / Effects with search, straight from the fixture library (600+ items). Drag a card into the 3D space (or double-click to add at the view centre). Items use the procedural GLB equipment models (2.5× size so they can be grabbed).
+- **Auto-connect:** a new nozzle joins the nearest pump (through a free valve standing next to it); a new pump picks up every nozzle/valve without one; a valve plugs into the nearest jet without a valve; a light pairs with the nearest jet. Written only through `engineering/connections.js`, so Show Programming, Siemens I/O and the compiler read the same links.
+- **Lines and plugs:** connections are drawn as cables (blue water supply, purple valve outlet, yellow light pairing) with a white plug at each end. Drag a plug onto another item to re-plug (green = allowed, red = not), drop it on empty ground to unplug; or edit the line in the sidebar.
+- **Live properties:** pump power kW and VFD speed (jet height scales with speed squared; when the jets ask more than the motor gives, heights drop by (P_have/P_need)^(2/3) and the pump shows its load %), jet height/flow/bore/pressure, light colour/intensity/beam, valve open/closed, on/off switches, position/rotation, plus every other datasheet field under "All properties". Water particles ease to the new height like a pump ramp and take their paired lights' colour.
+- **Also:** basin rectangle/circle sizing, problems list with one-click fixes, undo (Ctrl+Z), Delete, Ctrl+D, starter fountain (old one-click builder; now a 7.5 kW pump so it is not overloaded, and real library light types). Committed the earlier uncommitted Easy Fountain / equipment-model work (`src/fx/`, `equipmentAssets.js`, `public/models/equipment/`, `tools/generate_fountain_assets.py`) that this depends on.
+- **Verified:** production build; all 2,030 frontend tests pass; headless Edge with real mouse drags: tray drop → auto-connect, plug dragged from pump 1 onto pump 2 re-plugs, item drag moves, pump speed 100→55 % lowers jets and load 83→14 %. Not checked by hand: real GPU frame rate with large designs, touch input.
+
 **2026-11-14: AquaFlow Studio 1.2.72 - Laser and Fireworks designer tools with full catalogues**
 
 - **Designer tools:** ◆ Laser and ✷ Fireworks next to Nozzle/Light (`designerCatalog.js` PLACEMENT_TOOLS). Each lists only its catalogue, grouped by family; placement, arrays, properties, undo work like nozzles; lasers/pyro/sfx may stand outside the basin; new LASERS and FIREWORKS layers; plan symbols for lasers, pyro and sfx.

@@ -74,6 +74,7 @@ import { launchSpeed as JP_launchSpeed, jetHeightFor as JP_jetHeightFor, normali
 // AQ-S3-012 — a real mirror image in the pool, and a record of where the water lands.
 import { WaterReflectionProbe } from "./waterReflection";
 import { SplashMap, insidePool as SM_insidePool, litresPerImpact as SM_litresPerImpact } from "./splashMap";
+import { architecturalCollision, basinRimCollision, colliderFromBounds, nearestColliders } from "./simulation/particleCollisions";
 import { WaterHeightField } from "./waterHeightField";
 // AF-3D Phase R1 (realism plan) — the night-look upgrades:
 //   billboard particles (velocity-stretched quads + soft depth fade), procedural
@@ -281,9 +282,25 @@ class GPUParticleSystem {
       this.velocities[i*3]   += ax * delta;
       this.velocities[i*3+1] += ay * delta;
       this.velocities[i*3+2] += az * delta;
+      const previous = [this.positions[i*3], this.positions[i*3+1], this.positions[i*3+2]];
       this.positions[i*3]   += this.velocities[i*3]   * delta;
       this.positions[i*3+1] += this.velocities[i*3+1] * delta;
       this.positions[i*3+2] += this.velocities[i*3+2] * delta;
+
+      const impactPool = this.poolBounds?.();
+      const position = [this.positions[i*3], this.positions[i*3+1], this.positions[i*3+2]];
+      const velocity = [this.velocities[i*3], this.velocities[i*3+1], this.velocities[i*3+2]];
+      const rim = basinRimCollision(previous, position, velocity, impactPool);
+      const collision = rim || architecturalCollision(previous, position, velocity, this.collisionSurfaces?.() || [], delta);
+      if (collision) {
+        this.positions.set(collision.position, i*3);
+        this.velocities.set(collision.velocity, i*3);
+        this.bounced[i] = 1;
+        this.lives[i] = Math.min(this.lives[i], 0.5);
+        this.scales[i] *= 1.35;
+        this.stretches[i] *= 0.3;
+        this.impactSink?.(collision.position[0], collision.position[2], 1, collision.insideBasin);
+      }
 
       // ── Impact ──────────────────────────────────────────────────────────────
       // Landing in the basin and landing on the deck are different events, and the
@@ -1524,7 +1541,12 @@ export class FountainScene {
       }
     };
     const bounds = () => this._poolBoundsForSplash();
-    [this.waterSys, this.spraySys].forEach(ps => { ps.impactSink = sink; ps.poolBounds = bounds; });
+    this._particleColliders = this._particleColliders || [];
+    [this.waterSys, this.spraySys].forEach(ps => {
+      ps.impactSink = sink;
+      ps.poolBounds = bounds;
+      ps.collisionSurfaces = () => this._particleColliders;
+    });
   }
 
   /**
@@ -1536,6 +1558,7 @@ export class FountainScene {
   _poolBoundsForSplash() {
     const b = this._splashBounds || (this._splashBounds = {});
     b.mask = null;
+    b.kerbY = this._poolKerbY ?? 0.45;
     if (this._poolType === "circular") {
       b.type = "circular";
       b.radius = this._poolRadius || 6;
@@ -1758,7 +1781,28 @@ export class FountainScene {
     }
   }
 
-  syncModelGraph(graph) { return this._modelLayer?.syncGraph(graph); }
+  syncModelGraph(graph) {
+    const result = this._modelLayer?.syncGraph(graph);
+    this._refreshParticleColliders();
+    result?.then?.(() => this._refreshParticleColliders());
+    return result;
+  }
+
+  _refreshParticleColliders() {
+    const colliders = [];
+    const root = this._modelLayer?.root;
+    if (root && this.THREE) {
+      root.updateWorldMatrix(true, true);
+      for (const object of root.children) {
+        if (!object.visible) continue;
+        const bounds = new this.THREE.Box3().setFromObject(object);
+        const collider = colliderFromBounds(object.userData?.nodeId || object.name || object.uuid,
+          bounds.min.toArray(), bounds.max.toArray());
+        if (collider) colliders.push(collider);
+      }
+    }
+    this._particleColliders = nearestColliders(colliders);
+  }
 
   pickableModels() {
     return [
@@ -1841,6 +1885,16 @@ export class FountainScene {
   getSplashContainment() {
     if (!this._splash) return null;
     return { ...this._splash.containment(), peakWetness: this._splash.peakWetness() };
+  }
+
+  getParticleSimulationStatus() {
+    return {
+      backend: this._gpuWater && this._gpuSpray ? "GPU" : "CPU",
+      impactSampler: "CPU",
+      rimCollisions: true,
+      architecturalColliders: this._particleColliders?.length || 0,
+      architecturalModel: "axis-aligned boxes",
+    };
   }
 
   /** Clear the accumulated splash record and dry the deck immediately. */
@@ -2566,6 +2620,7 @@ export class FountainScene {
     this.nozzles.forEach((nz, idx) => {
       const t = nz.config.type;
       nz.config.motionOverride = I.fixtureMotion?.[nz.config.id] || null;
+      this._fixtureInstances?.animate([nz.config], elapsed);
       let live = 0;
 
       if (this._perNozzle) {
@@ -2634,7 +2689,7 @@ export class FountainScene {
     this._fountainIndirect?.update(this.nozzles.map((nozzle) => ({
       ...nozzle.config,
       runtimeIntensity: nozzle.intensity,
-    })), this._engLights || [], this.quality);
+    })), this._engLights || [], this.quality, this._fountainIndirectEnabled !== false);
     this._advancedLighting?.update(this._engLights || [], elapsed);
 
     // ─── GPU particle simulation ───────────────────────────────────────
@@ -2650,8 +2705,8 @@ export class FountainScene {
       }
       this._gpuWater.setEmitters(emitWater);
       this._gpuSpray.setEmitters(emitSpray);
-      this._gpuWater.step(delta, elapsed, { wind: this.wind, pool });
-      this._gpuSpray.step(delta, elapsed, { wind: this.wind, pool });
+      this._gpuWater.step(delta, elapsed, { wind: this.wind, pool, colliders: this._particleColliders });
+      this._gpuSpray.step(delta, elapsed, { wind: this.wind, pool, colliders: this._particleColliders });
     }
       
     // ─── Particle systems ──────────────────────────────────────────────
@@ -3689,7 +3744,8 @@ export class FountainScene {
     if (this._initialized) { this._disposePostFX(); this._buildPostFX(); }
     return this.toneMapping;
   }
-  setWaterSimulation({ response, damping, boundaryDamping } = {}) {
+  setWaterSimulation({ response, damping, boundaryDamping, fountainIndirect } = {}) {
+    if (fountainIndirect !== undefined) this._fountainIndirectEnabled = fountainIndirect !== false;
     const nextResponse = Number(response);
     if (Number.isFinite(nextResponse)) {
       this._waveResponse = Math.max(0, Math.min(2, nextResponse));

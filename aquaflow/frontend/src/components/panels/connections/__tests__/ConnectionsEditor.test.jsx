@@ -78,8 +78,35 @@ describe("Connections editor", () => {
     fireEvent.click(shape("pumpA"));
     const pumpInsp = screen.getByTestId("inspector");
     expect(within(pumpInsp).getByText(/2 outlets/)).toBeTruthy();
+    fireEvent.change(within(pumpInsp).getByLabelText("Rated flow value"), { target: { value: "18" } });
+    expect(onCommit.mock.calls.at(-1)[0].find((f) => f.id === "pumpA").engineering.flowM3Hr).toBe(18);
+    expect(screen.getByTestId("load-pumpA").textContent).toMatch(/rated 300 L\/min/);
     fireEvent.click(within(pumpInsp).getByRole("button", { name: "Remove Jet 0" }));
     expect(readConnections(onCommit.mock.calls.at(-1)[0]).pumps.get("pumpA").nozzleIds).toEqual(["jet1"]);
+  });
+
+  it("edits nozzle flow, pressure and height from the same inspector", () => {
+    const onCommit = vi.fn();
+    render(<Harness onCommit={onCommit} />);
+    fireEvent.click(shape("jet2"));
+    fireEvent.change(screen.getByLabelText("Nozzle flow value"), { target: { value: "125" } });
+    fireEvent.change(screen.getByLabelText("Pressure value"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("Jet height value"), { target: { value: "4" } });
+    expect(onCommit.mock.calls.at(-1)[0].find((f) => f.id === "jet2").engineering).toMatchObject({ flowLpm: 125, pressureBar: 1.5, jetHeightM: 4 });
+  });
+
+  it("drag-connects a pump to a nozzle, a valve to a nozzle and a light to a nozzle", () => {
+    const onCommit = vi.fn();
+    render(<Harness onCommit={onCommit} />);
+    const transfer = () => ({ data: {}, effectAllowed: "", setData(kind, value) { this.data[kind] = value; }, getData(kind) { return this.data[kind]; } });
+    const pumpDrag = transfer();
+    fireEvent.dragStart(shape("pumpB"), { dataTransfer: pumpDrag });
+    fireEvent.drop(shape("jet2"), { dataTransfer: pumpDrag });
+    expect(readConnections(onCommit.mock.calls.at(-1)[0]).nozzleById.get("jet2").pumpId).toBe("pumpB");
+    fireEvent.drop(shape("jet2"), { dataTransfer: { getData: () => "valve1" } });
+    expect(readConnections(onCommit.mock.calls.at(-1)[0]).nozzleById.get("jet2").valveId).toBe("valve1");
+    fireEvent.drop(shape("jet3"), { dataTransfer: { getData: () => "light0" } });
+    expect(readConnections(onCommit.mock.calls.at(-1)[0]).lights[0].nozzleId).toBe("jet3");
   });
 
   it("auto-connect previews first and applies as one change", () => {

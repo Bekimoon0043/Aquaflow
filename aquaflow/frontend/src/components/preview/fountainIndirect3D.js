@@ -15,8 +15,8 @@ export class FountainIndirectLights {
     scene.add(this.group);
   }
 
-  update(nozzles, lights, quality = "medium") {
-    const enabled = quality === "medium" || quality === "high" || quality === "ultra";
+  update(nozzles, lights, quality = "medium", userEnabled = true) {
+    const enabled = userEnabled && (quality === "medium" || quality === "high" || quality === "ultra");
     const emitters = enabled ? buildFountainIndirect(nozzles, lights, { maxEmitters: this.lights.length }) : [];
     this.lights.forEach((light, index) => {
       const emitter = emitters[index];

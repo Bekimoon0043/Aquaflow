@@ -48,6 +48,9 @@ export function useEngineeringPreview({ sceneRef, sitePreview, wind }) {
   const [gustFactor, setGustFactor] = useState(SPLASH_DEFAULTS.gustFactor);
   const [uncertainty, setUncertainty] = useState(SPLASH_DEFAULTS.nozzleUncertainty);
   const [physics, setPhysics] = useState(null);
+  const [heatmapOn, setHeatmapOn] = useState(false);
+  const [wetOn, setWetOn] = useState(true);
+  const [containment, setContainment] = useState(null);
   const overlayRef = useRef(null);
 
   const fixtures = useEngineeringStore(s => s.fixtures);
@@ -87,13 +90,19 @@ export function useEngineeringPreview({ sceneRef, sitePreview, wind }) {
     return () => clearInterval(id);
   }, [sceneRef, engineering, samples]);
 
-  // getPhysicsStatus consumer (2 Hz).
+  // Poll live physics, particle impacts and wetness without re-rendering at frame rate.
   useEffect(() => {
-    const read = () => setPhysics(sceneRef.current?.getPhysicsStatus?.() || null);
+    const read = () => {
+      const scene = sceneRef.current;
+      setPhysics(scene ? { ...scene.getPhysicsStatus?.(), particles: scene.getParticleSimulationStatus?.() } : null);
+      setContainment(scene?.getSplashContainment?.() || null);
+      scene?.setSplashHeatmap?.(heatmapOn);
+      scene?.setWetSurfaces?.(wetOn);
+    };
     read();
     const id = setInterval(read, 500);
     return () => clearInterval(id);
-  }, [sceneRef]);
+  }, [sceneRef, heatmapOn, wetOn]);
 
   // Splash envelope at the playhead.
   const water = useMemo(() => createWaterTest(projectBasins(project)), [project]);
@@ -120,11 +129,17 @@ export function useEngineeringPreview({ sceneRef, sitePreview, wind }) {
   }, [sceneRef, regions, splashOn]);
   useEffect(() => () => { overlayRef.current?.dispose(); overlayRef.current = null; }, []);
 
+  const resetSplash = () => {
+    sceneRef.current?.resetSplash?.();
+    setContainment(sceneRef.current?.getSplashContainment?.() || null);
+  };
+
   return {
     mode, setMode, engineering, timeline, status, samples, tMs, show,
     diagnostics: timeline ? activeHydraulicDiagnostics(timeline, tMs) : EMPTY,
     pumps: timeline ? samplePumps(timeline, tMs) : null,
     physics, splashOn, setSplashOn, gustFactor, setGustFactor, uncertainty, setUncertainty, regions,
+    heatmapOn, setHeatmapOn, wetOn, setWetOn, containment, resetSplash,
     assumptions: splashAssumptions(splashOpts, windPlan, engineering && !!timeline),
   };
 }
@@ -146,7 +161,8 @@ export function fmtTime(ms) {
  *  status/diagnostics only in Engineering mode, splash detail only when the envelope is on. */
 export default function HydraulicPreviewPanel(props) {
   const { engineering, setMode, status, diagnostics, pumps, physics, splashOn, setSplashOn, gustFactor,
-    setGustFactor, uncertainty, setUncertainty, regions, assumptions, show, timeline } = props;
+    setGustFactor, uncertainty, setUncertainty, regions, assumptions, show, timeline,
+    heatmapOn = false, setHeatmapOn = () => {}, wetOn = true, setWetOn = () => {}, containment = null, resetSplash = () => {} } = props;
   const offending = regions.filter(r => r.outside);
   const basis = `${engineering && timeline ? "ENGINEERING TIMELINE" : physics?.basis || "ESTIMATED"}`
     + `${physics ? ` · solved nozzles ${physics.solvedNozzles}` : ""}`
@@ -166,6 +182,29 @@ export default function HydraulicPreviewPanel(props) {
           title="Jets follow pump curves, valve states, ramps and pipe fill at the playhead (simulated).">
           Engineering
         </button>
+      </div>
+
+      <div style={{ marginTop: 7, paddingTop: 6, borderTop: "1px solid #12303a" }} data-testid="live-particle-analysis">
+        <div style={{ ...head, marginBottom: 4 }}>LIVE PARTICLES · {physics?.particles?.backend || "CPU"}</div>
+        <label style={{ ...head, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+          <input type="checkbox" checked={heatmapOn} onChange={event => setHeatmapOn(event.target.checked)} aria-label="Show particle splash heatmap" />
+          Particle splash heat map
+        </label>
+        <label style={{ ...head, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", marginTop: 4 }}>
+          <input type="checkbox" checked={wetOn} onChange={event => setWetOn(event.target.checked)} aria-label="Enable wet deck drying" />
+          Wet deck + drying
+        </label>
+        <div style={{ ...small, marginTop: 5 }} data-testid="particle-containment">
+          {containment?.totalImpacts > 0
+            ? `${Math.round(containment.totalImpacts).toLocaleString()} sampled impacts · ${(containment.percentOutside || 0).toFixed(1)}% outside basin`
+            : "Play the show to collect real particle impacts."}
+        </div>
+        {containment?.totalImpacts > 0 && <div style={small}>Peak deck wetness {Math.round((containment.peakWetness || 0) * 100)}%</div>}
+        {containment?.calibrated && <div style={small}>Estimated spill {containment.spillLpm?.toFixed(1)} L/min</div>}
+        <div style={{ ...small, marginTop: 3 }}>
+          Basin rim collisions · {physics?.particles?.architecturalColliders || 0} nearby site-object box colliders. Counts are sampled particles, not a fluid-volume solve.
+        </div>
+        <button type="button" onClick={resetSplash} style={{ ...btn(false), marginTop: 5, flex: "none" }}>Reset impacts & dry deck</button>
       </div>
 
       {engineering && (

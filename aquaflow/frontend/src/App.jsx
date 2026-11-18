@@ -14,6 +14,7 @@ import InspectorPanel from "./components/panels/InspectorPanel";
 // geometry designer, show programmer, fixture library) stay out of the initial
 // bundle. The switch below is wrapped in a single <Suspense> boundary.
 const PreviewPanel = lazy(() => import("./components/preview/PreviewPanel_v5"));
+const EasyFountainPanel = lazy(() => import("./components/panels/EasyFountainPanel"));
 const AIPanel = lazy(() => import("./components/panels/AIPanel"));
 const DeviceDiscoveryPanel = lazy(() => import("./components/panels/DeviceDiscoveryPanel"));
 const AudioPanel = lazy(() => import("./components/panels/AudioPanel"));
@@ -65,7 +66,8 @@ import GuidanceStrip from "./components/workspace/GuidanceStrip";
 import StartCard from "./components/workspace/StartCard";
 import useWorkspaceController from "./workspaces/useWorkspaceController";
 
-
+// Panels that take the whole workspace (no device list, inspector or timeline beside them).
+const FULL_WORKSPACE_PANELS = new Set(["geometry", "show_programmer", "easybuilder"]);
 
 function StudioApp() {
   useICANPreviewClock();
@@ -142,12 +144,22 @@ function StudioApp() {
         preflightError={guided.preflightError}
       />
       <div className="workspace-frame">
-      <div className={`workspace${activePanel === "geometry" ? " engineering-workspace" : ""}`} ref={workspaceRef}>
+      <div className={`workspace${activePanel === "geometry" || activePanel === "easybuilder" ? " engineering-workspace" : ""}`} ref={workspaceRef}>
         {visitedPanelsRef.current.has("geometry") && (
           <div className="engineering-workspace-content" hidden={activePanel !== "geometry"} aria-hidden={activePanel !== "geometry"}>
             <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
               <PoolGeometryDesigner />
             </Suspense>
+          </div>
+        )}
+        {/* Easy Fountain Design: the 3D space, asset tray and properties need the whole workspace. */}
+        {visitedPanelsRef.current.has("easybuilder") && (
+          <div className="engineering-workspace-content" hidden={activePanel !== "easybuilder"} aria-hidden={activePanel !== "easybuilder"}>
+            <PanelErrorBoundary name="Easy Fountain Design">
+              <Suspense fallback={<div style={{ padding: 24 }}>Loading Easy Fountain Design…</div>}>
+                <EasyFountainPanel />
+              </Suspense>
+            </PanelErrorBoundary>
           </div>
         )}
         {visitedPanelsRef.current.has("show_programmer") && (
@@ -159,7 +171,7 @@ function StudioApp() {
             </PanelErrorBoundary>
           </div>
         )}
-        <div className="standard-workspace-content" hidden={activePanel === "geometry" || activePanel === "show_programmer"} aria-hidden={activePanel === "geometry" || activePanel === "show_programmer"}>
+        <div className="standard-workspace-content" hidden={FULL_WORKSPACE_PANELS.has(activePanel)} aria-hidden={FULL_WORKSPACE_PANELS.has(activePanel)}>
         {/* The 3D preview carries its own inspector sidebar, so the device list and the
             general inspector are hidden there to give the viewport the room. */}
         {activePanel !== "preview" && <DevicePanel width={layout.leftWidth} />}

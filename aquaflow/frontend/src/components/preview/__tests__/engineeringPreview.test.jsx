@@ -55,6 +55,27 @@ describe("preview mode toggle", () => {
     expect(html).toContain("410 L/min");
   });
 
+  it("exposes live particle heatmap, wetness, containment and reset controls", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    let heatmap = false, wet = true, resets = 0;
+    act(() => root.render(<HydraulicPreviewPanel {...baseProps} mode="creative" setMode={() => {}} engineering={false}
+      physics={{ ...baseProps.physics, particles: { backend: "GPU", architecturalColliders: 2 } }}
+      heatmapOn={heatmap} setHeatmapOn={value => { heatmap = value; }} wetOn={wet} setWetOn={value => { wet = value; }}
+      containment={{ totalImpacts: 1250, percentOutside: 2.5, peakWetness: 0.4, calibrated: false }} resetSplash={() => { resets += 1; }} />));
+    expect(host.textContent).toContain("LIVE PARTICLES · GPU");
+    expect(host.textContent).toContain("1,250 sampled impacts · 2.5% outside basin");
+    expect(host.textContent).toContain("2 nearby site-object box colliders");
+    act(() => host.querySelector('[aria-label="Show particle splash heatmap"]').click());
+    act(() => host.querySelector('[aria-label="Enable wet deck drying"]').click());
+    act(() => [...host.querySelectorAll("button")].find(button => button.textContent === "Reset impacts & dry deck").click());
+    expect(heatmap).toBe(true);
+    expect(wet).toBe(false);
+    expect(resets).toBe(1);
+    act(() => root.unmount());
+  });
+
   it("splash section shows the advisory label and the assumptions", () => {
     const html = renderToStaticMarkup(<HydraulicPreviewPanel {...baseProps} mode="creative" setMode={() => {}} engineering={false}
       splashOn regions={[{ id: "A", clipId: "c", outside: true, distanceOutsideM: 1.2, heightM: 8, basis: "nominal" }]} />);

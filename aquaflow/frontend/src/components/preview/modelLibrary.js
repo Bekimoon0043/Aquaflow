@@ -1,6 +1,11 @@
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { NODE_TYPES } from "./editor/sceneGraph";
 import { venueLayout } from "./venueModels";
+import { EQUIPMENT_ASSETS } from "./equipmentAssets";
+
+const EQUIPMENT_MODELS = Object.values(EQUIPMENT_ASSETS).map(asset => ({
+  id: asset.id, name: asset.name, category: asset.category, height: asset.height, url: asset.file,
+}));
 
 export const BUILTIN_MODELS = [
   { id: "venue:person-reading", name: "Person · reading", category: "People", height: 1.76, url: "/models/venue/person_reading.glb" },
@@ -15,6 +20,7 @@ export const BUILTIN_MODELS = [
   { id: "venue:tree-common-1", name: "Textured tree · broad", category: "Landscaping", height: 6.2, url: "/models/venue/tree_common_1.glb" },
   { id: "venue:tree-common-2", name: "Textured tree · tall", category: "Landscaping", height: 7.1, url: "/models/venue/tree_common_2.glb" },
   { id: "venue:tree-common-3", name: "Textured tree · spreading", category: "Landscaping", height: 5.7, url: "/models/venue/tree_common_3.glb" },
+  ...EQUIPMENT_MODELS,
 ];
 
 const DB_NAME = "aquaflow-model-library-v1";
@@ -203,7 +209,8 @@ export class ModelLayer {
 
   async syncGraph(graph) {
     const revision = ++this.revision;
-    const nodes = graph.flatten().map(({ node }) => node).filter(node => node.type === NODE_TYPES.MODEL && node.props?.assetId);
+    const visualTypes = new Set([NODE_TYPES.MODEL, NODE_TYPES.PUMP, NODE_TYPES.VALVE, NODE_TYPES.DISTRIBUTOR]);
+    const nodes = graph.flatten().map(({ node }) => node).filter(node => visualTypes.has(node.type) && node.props?.assetId);
     const wanted = new Set(nodes.map(node => node.id));
     for (const [id, entry] of this.instances) {
       if (wanted.has(id)) continue;

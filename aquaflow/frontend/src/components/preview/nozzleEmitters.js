@@ -45,6 +45,7 @@ import {
 } from "./realWorldLook";
 import { describeJetNozzle } from "./simulation/jetNozzleModels.js";
 import { filmKindFor } from "./filmWaterLayer.js";
+import { applyModelOutlets } from "./equipmentAssets.js";
 
 import { EMIT_CLASS, EMIT_MODE } from "./simulation/emitModes.js";
 export { EMIT_CLASS, EMIT_MODE } from "./simulation/emitModes.js";
@@ -138,7 +139,8 @@ export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launch
   // Mount height / aim / catch tray (elevatedNozzles.js) — only when the fixture has them.
   const placed = hasSpatialFeatures(cfg) ? applySpatial(designed, cfg, ix, launchSpeed) : designed;
   // Lit band / apex head / crown — real-world (realWorldLook.js) or artistic (jetLook.js).
-  return hasLookFeatures(cfg) ? applyJetLook(placed, cfg, ix, tintColor) : placed;
+  const looked = hasLookFeatures(cfg) ? applyJetLook(placed, cfg, ix, tintColor) : placed;
+  return applyModelOutlets(looked, cfg);
 }
 
 function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) {

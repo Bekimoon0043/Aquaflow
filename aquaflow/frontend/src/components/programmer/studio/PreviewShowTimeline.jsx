@@ -17,6 +17,9 @@ import './showStudio.css';
 
 const clock = value => `${String(Math.floor(value / 60)).padStart(2, '0')}:${(value % 60).toFixed(2).padStart(5, '0')}`;
 
+export const canPlayPreview = (resolved, plan) => !resolved?.issues?.length
+  && Boolean(resolved?.clips?.length || plan?.visualClips?.length);
+
 export default function PreviewShowTimeline({ height = 300 }) {
   const fixtures = useEngineeringStore(s => s.fixtures);
   const models = useEngineeringStore(s => s.siteModels);
@@ -149,7 +152,7 @@ export default function PreviewShowTimeline({ height = 300 }) {
 
   const editable = selectedIds.length === 1 ? studio.recipes.find(r => r.id === selectedIds[0] && r.pattern) : null;
   const play = () => {
-    if (!resolved.clips.length || resolved.issues.length) return;
+    if (!canPlayPreview(resolved, preview.plan)) return;
     if (preview.position >= end || preview.playback === 'complete') preview.seek(0);
     preview.playback === 'playing' ? preview.pause() : preview.play();
   };
@@ -158,7 +161,7 @@ export default function PreviewShowTimeline({ height = 300 }) {
     <div className="sp-transport preview-timeline-transport">
       <span className="preview-timeline-title"><i />3D SHOW TIMELINE</span>
       <button onClick={() => preview.stop()} title="Stop preview">■</button>
-      <button className="sp-play" onClick={play} disabled={!resolved.clips.length || !!resolved.issues.length}>
+      <button className="sp-play" onClick={play} disabled={!canPlayPreview(resolved, preview.plan)}>
         {preview.playback === 'playing' ? 'Ⅱ Pause' : '▶ Play preview'}
       </button>
       <output>{clock(preview.position)}</output>

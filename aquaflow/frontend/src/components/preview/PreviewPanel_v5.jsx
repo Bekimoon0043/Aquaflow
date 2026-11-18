@@ -164,6 +164,8 @@ export default function PreviewPanel() {
   const setWaveResponse = setRenderField("waveResponse");
   const setWaveDamping = setRenderField("waveDamping");
   const setWaveBoundaryDamping = setRenderField("waveBoundaryDamping");
+  const fountainIndirect = renderSettings.fountainIndirect !== false;
+  const setFountainIndirect = setRenderField("fountainIndirect");
   const setReviewMode = setRenderField("reviewMode");
   const setReviewOverlays = setRenderField("reviewOverlays");
   const setShowPerf = setRenderField("showPerformance");
@@ -448,6 +450,7 @@ if (sitePreview.active && sitePreview.plan) {
       response: waveResponse,
       damping: waveDamping,
       boundaryDamping: waveBoundaryDamping,
+      fountainIndirect,
     });
     scene.setReviewOverlays?.(reviewOverlays);
     scene.fitCameraToDesign?.();
@@ -710,8 +713,9 @@ if (sitePreview.active && sitePreview.plan) {
       response: waveResponse,
       damping: waveDamping,
       boundaryDamping: waveBoundaryDamping,
+      fountainIndirect,
     });
-  }, [waveResponse, waveDamping, waveBoundaryDamping]);
+  }, [waveResponse, waveDamping, waveBoundaryDamping, fountainIndirect]);
   useEffect(() => { sceneRef.current?.setReviewOverlays?.(reviewOverlays); }, [reviewOverlays]);
   useEffect(() => { sceneRef.current?.setToneMapping?.(toneMapping); }, [toneMapping]);
   useEffect(() => { sceneRef.current?.setHalfResSpray?.(halfResSpray); }, [halfResSpray]);
@@ -1190,6 +1194,11 @@ if (sitePreview.active && sitePreview.plan) {
                   style={{ width:"100%", accentColor:"#21b6d7" }} />
               </label>
             ))}
+
+            <label title="Virtual point-light clusters around illuminated jets. This is a real-time approximation, not path-traced water illumination." style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, color:"#71869a", fontSize:9 }}>
+              <input type="checkbox" aria-label="Fountain indirect lighting" checked={fountainIndirect} onChange={event => setFountainIndirect(event.target.checked)} />
+              Fountain indirect light · approximation
+            </label>
 
             <div style={subLabel}>Wind</div>
             {[["X",windX,setWindX],["Z",windZ,setWindZ]].map(([axis,val,setter])=>(

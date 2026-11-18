@@ -3,6 +3,13 @@ import ProvenanceBadge from "./ProvenanceBadge";
 import { GENERIC_LABEL, isVerifiedProvenance } from "../../data/fixtureProvenance";
 
 const PAGE_SIZE = 60;
+export const FIXTURE_DRAG_MIME = "application/x-aquaflow-fixture";
+
+export function fixtureToolForKey(key, fixtures = []) {
+  const fixture = fixtures.find((entry) => entry.key === key);
+  if (!fixture) return null;
+  return ["nozzle", "light", "laser", "fireworks", "equipment"].find((tool) => fixtureMatchesTool(fixture, tool)) || null;
+}
 
 const isLaserProduct = (fixture, key) => String(fixture?.category || "") === "Laser" || key === "laser" || key.startsWith("laser_");
 const isPyroProduct = (fixture, key) => String(fixture?.category || "").startsWith("Pyro") || key.startsWith("pyro_");
@@ -62,6 +69,7 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
       <div style={{ display: "flex", justifyContent: "space-between", color: "#7a96aa", fontSize: 10, marginBottom: 6 }}>
         <span>{tool === "laser" ? "LASER CATALOGUE" : tool === "fireworks" ? "FIREWORKS CATALOGUE" : "FIXTURE LIBRARY"}</span><span>{filtered.length}/{toolFixtures.length}</span>
       </div>
+      <div style={{ color: "#65d9d0", fontSize: 9, marginBottom: 6, lineHeight: 1.4 }}>Drag a model onto the plan, or click it and then click the plan. Select the placed part to edit its properties.</div>
       {filtered.length > verifiedCount && (
         <div data-testid="library-generic-note" style={{ color: "#fbbf24", fontSize: 9, marginBottom: 5, lineHeight: 1.4 }}>
           {verifiedCount === 0 ? "All items: " : `${filtered.length - verifiedCount} item(s): `}{GENERIC_LABEL}
@@ -93,7 +101,15 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
           <button
             key={fixture.key}
             type="button"
+            draggable
+            title="Drag onto the pool plan, or click to select and then click the plan"
             aria-pressed={selectedKey === fixture.key}
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = "copy";
+              event.dataTransfer.setData(FIXTURE_DRAG_MIME, fixture.key);
+              event.dataTransfer.setData("text/plain", fixture.key);
+              onSelect(fixture.key);
+            }}
             onClick={() => onSelect(fixture.key)}
             style={{
               display: "grid", gridTemplateColumns: "20px 1fr", gap: 6, alignItems: "center",

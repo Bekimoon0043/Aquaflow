@@ -56,13 +56,13 @@ describe("fades and curves", () => {
     expect(showDiagnostics({ clips: [{ ...clip, curveType: "bounce" }] }).map(d => d.code)).toContain("unsupported-curve");
   });
 
-  it("can build the main 3D timeline while skipping nonvisual control channels", () => {
+  it("builds the main 3D timeline with water and solenoid channels", () => {
     const water = { ...curves.clips[0], effects: [] };
     const control = { ...water, id: "control", fixtureId: "controller", type: "solenoid_open" };
     const fixture = { id: "controller", type: "valve" };
     const preview = createFullShowPreview([water, control], [...curves.fixtures, fixture], "Timeline", { skipUnsupported: true });
-    expect(preview.visualClips.map(c => c.id)).toEqual([water.id]);
-    expect(preview.skippedClips).toBe(1);
+    expect(preview.visualClips.map(c => c.id)).toEqual([water.id, control.id]);
+    expect(preview.skippedClips).toBe(0);
   });
 });
 

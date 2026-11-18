@@ -12,7 +12,7 @@ export const AQUA_VERSION = "1.1";
 /**
  * Serialize current store state into a .aqua file object
  */
-export function serializeShow(state, engineeringProject = null, projectDocument = null) {
+export function serializeShow(state, engineeringProject = null, projectDocument = null, fxScene = null) {
   const engineering = normalizeEngineeringProject(
     engineeringProject || state.engineeringProject || state.engineering || {}
   );
@@ -59,6 +59,7 @@ export function serializeShow(state, engineeringProject = null, projectDocument 
     // .aqua envelope makes Save/Open/Auto-save atomic: choreography can never be loaded
     // without the geometry and fixture registry it was authored against.
     engineering,
+    ...(fxScene ? { aquafx: fxScene } : {}),
     // v1.1 keeps the original top-level fields for older AquaFlow builds while adding
     // a versioned document for workspace-wide state. One .aqua file now restores the
     // Engineering, 3D, Show Programmer and Siemens context together.
@@ -102,6 +103,7 @@ export function deserializeShow(data) {
       ...data.show,
       loop: Boolean(data.show?.loop ?? false),
     },
+    aquafx: data.aquafx || null,
     nodes: (data.nodes || []).map((n) => ({
       ...n,
       status: n.status || "ready",
@@ -133,8 +135,8 @@ export function deserializeShow(data) {
 /**
  * Download a .aqua file to the user's computer
  */
-export function downloadShowFile(state, engineeringProject = null, projectDocument = null) {
-  const data = serializeShow(state, engineeringProject, projectDocument);
+export function downloadShowFile(state, engineeringProject = null, projectDocument = null, fxScene = null) {
+  const data = serializeShow(state, engineeringProject, projectDocument, fxScene);
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);

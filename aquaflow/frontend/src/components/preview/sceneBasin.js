@@ -87,6 +87,7 @@ export function buildPool(scene) {
   // at -0.45 m, wall from the floor up to the 0.45 m kerb, coping on top.
   const levels = basinLevels(geom?.geometry);
   scene._poolFloorY = levels.floorY;
+  scene._poolKerbY = levels.kerbY;
 
   const gt = scene._ensureGroundTextures();
 

@@ -33,7 +33,7 @@ const appSource = fs.readFileSync(path.resolve(here, "..", "..", "App.jsx"), "ut
 /** Panels App.jsx actually renders. */
 function appPanels() {
   const ids = new Set([...appSource.matchAll(/keepAlivePanel\("([a-z0-9_]+)"/g)].map(m => m[1]));
-  ["geometry", "show_programmer"].forEach(id => { if (appSource.includes(`visitedPanelsRef.current.has("${id}")`)) ids.add(id); });
+  ["geometry", "show_programmer", "easybuilder"].forEach(id => { if (appSource.includes(`visitedPanelsRef.current.has("${id}")`)) ids.add(id); });
   return ids;
 }
 
@@ -83,7 +83,7 @@ afterEach(() => cleanup());
 describe("AF-NEXT-014 workspace model", () => {
   it("covers every panel App.jsx renders, every menu panel and the All tools menu", () => {
     const app = appPanels();
-    expect(app.size).toBe(34);
+    expect(app.size).toBe(35);
     expect(new Set(Object.keys(PANEL_CATALOG))).toEqual(app);
     const menuPanels = new Set(Object.values(MENU_ITEMS).flat().filter(e => e[1] === "panel").map(e => e[2]));
     expect(menuPanels).toEqual(app);
@@ -109,7 +109,7 @@ describe("AF-NEXT-014 workspace switching", () => {
   it("first run picks Design (and the designer), persists the choice and switches workspaces", async () => {
     render(<Harness deps={baseDeps()} />);
     expect(tab("Design").getAttribute("aria-selected")).toBe("true");
-    expect(activePanel()).toBe("geometry");
+    expect(activePanel()).toBe("easybuilder");
     expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe("design");
     expect(screen.getByRole("dialog", { name: /Start a fountain project/ })).toBeTruthy(); // first-run Start card
     fireEvent.click(screen.getByRole("button", { name: "Continue with the current project" }));

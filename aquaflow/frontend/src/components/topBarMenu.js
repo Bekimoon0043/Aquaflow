@@ -31,6 +31,7 @@ export const MENU_ITEMS = {
     ["Deselect All", "action", "Deselect All", "Esc"],
   ],
   Design: [
+    ["Easy Fountain Design", "panel", "easybuilder"],
     ["Nodes", "panel", "nodes"],
     ["3D Preview", "panel", "preview"],
     ["Keyframes", "panel", "keyframes"],

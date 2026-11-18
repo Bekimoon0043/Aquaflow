@@ -13,6 +13,7 @@
  */
 
 import { NODE_TYPES } from "./sceneGraph";
+import { equipmentAssetForEngineeringType } from "../equipmentAssets";
 import { classifyFixtureType, resolveFixtureType } from "../../../hooks/fixtureTypeMap";
 import { engineeringToWorld, worldToEngineering } from "../../../engineering/geometryContract";
 
@@ -211,6 +212,7 @@ export function importEngineeringFixtures(graph, fixtures = [], { center = { cx:
       locked: fixture.locked,
       props: {
         engineeringType: fixture.type,
+        assetId: equipmentAssetForEngineeringType(fixture.type)?.id || null,
         nozzleType: mapped.nozzleType,
         engineering: fixture.engineering || null,
         color: fixture.color || fixture.params?.color || fixture.engineering?.color || mapped.color,

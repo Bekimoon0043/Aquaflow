@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterFixtureLibrary, fixtureMatchesTool } from "../FixtureLibraryBrowser.jsx";
+import { filterFixtureLibrary, fixtureMatchesTool, fixtureToolForKey } from "../FixtureLibraryBrowser.jsx";
 import { FIXTURE_TYPES } from "../../../engineering/drafting/designerCatalog";
 
 const fixtures = [
@@ -14,6 +14,13 @@ describe("searchable categorized fixture library", () => {
     expect(fixtureMatchesTool(fixtures[0], "nozzle")).toBe(true);
     expect(fixtureMatchesTool(fixtures[1], "nozzle")).toBe(false);
     expect(filterFixtureLibrary(fixtures, { tool: "equipment" })).toEqual([fixtures[2]]);
+  });
+
+  it("identifies the placement tool for a dragged library model", () => {
+    expect(fixtureToolForKey("nozzle_geyser_acme", fixtures)).toBe("nozzle");
+    expect(fixtureToolForKey("light_rgb_marine", fixtures)).toBe("light");
+    expect(fixtureToolForKey("pump_variable", fixtures)).toBe("equipment");
+    expect(fixtureToolForKey("missing", fixtures)).toBe(null);
   });
 
   it("searches label, model key, category, and manufacturer", () => {

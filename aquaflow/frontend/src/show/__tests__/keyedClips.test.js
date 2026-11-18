@@ -58,13 +58,13 @@ describe("keyed clips", () => {
     expect(steps.map(c => [c.startTime, c.duration, c.value])).toEqual([[10, 1, 20], [11, 2, 80], [13, 1, 40]]);
   });
 
-  it("accepts VFD pump channels and skips solenoid channels in the 3D preview", () => {
+  it("accepts VFD pump and solenoid channels in the 3D preview", () => {
     const pump = { id: "p1", type: "pump_inline_vfd_pump_4_0kw" }, valve = { id: "v1", type: "valve_solenoid_dn25_24v" };
     const plan = createFullShowPreview([keyed(),
       { id: "ps", fixtureId: "p1", type: "pump_speed", startTime: 0, duration: 20, value: 60 },
       { id: "vo", fixtureId: "v1", type: "solenoid_open", startTime: 0, duration: 20, value: 100 }], [jet, pump, valve], "s", { skipUnsupported: true });
-    expect(plan.visualClips.map(c => c.id)).toEqual(["k", "ps"]);
-    expect(plan.skippedClips).toBe(1);
+    expect(plan.visualClips.map(c => c.id)).toEqual(["k", "ps", "vo"]);
+    expect(plan.skippedClips).toBe(0);
     expect(createFullShowPreview([keyed(), { id: "x", fixtureId: "p1", type: "lighting_red", startTime: 0, duration: 1, value: 1 }],
       [jet, pump], "s", { skipUnsupported: true }).skippedClips).toBe(1);
   });

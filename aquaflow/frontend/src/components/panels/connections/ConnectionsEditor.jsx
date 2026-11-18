@@ -158,6 +158,18 @@ export function ConnectionsEditorView({ fixtures = [], clips = null, onCommit, o
     setPreview({ title, lines: res.lines, fixtures: res.fixtures });
   };
 
+  const linkItems = useCallback((sourceId, targetId) => {
+    const source = roleOf(sourceId), target = roleOf(targetId);
+    if (source === "pump" && (target === "nozzle" || target === "valve")) {
+      apply(connectToPump(fixtures, [targetId], sourceId, design), `Connect to ${name(itemOf(sourceId))}`);
+    } else if (source === "valve" && target === "nozzle") {
+      apply(setValveNozzle(fixtures, sourceId, targetId, design), "Link valve to nozzle");
+    } else if (source === "nozzle" && target === "valve") {
+      apply(setNozzleValve(fixtures, sourceId, targetId, design), "Link nozzle to valve");
+    } else if ((source === "light" && target === "nozzle") || (source === "nozzle" && target === "light")) {
+      apply(pairLights(fixtures, [source === "light" ? sourceId : targetId], source === "nozzle" ? sourceId : targetId, design), "Pair light");
+    } else setStatus("Drag a pump to a nozzle or valve, a valve to a nozzle, or a light to a nozzle.");
+  }, [apply, design, fixtures, roleOf, itemOf]);
   const sel = mode === "select" ? (selected.length === 1 ? selected[0] : null) : active;
   return (
     <div data-testid="connections-editor" style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 11 }}>
@@ -176,12 +188,13 @@ export function ConnectionsEditorView({ fixtures = [], clips = null, onCommit, o
         {onUndo && <button type="button" style={btn()} disabled={!canUndo} onClick={onUndo} title={undoLabel || ""}>↶ Undo{undoLabel ? ` ${undoLabel}` : ""}</button>}
       </div>
       <div style={small}>{HINT[mode]}{active && mode !== "select" ? ` · Picked: ${name(itemOf(active))}` : ""}</div>
+      <div style={{ ...small, color: "var(--text-accent, #9fd)" }}>Quick connect: drag a pump onto nozzles or valves, drag a valve onto a nozzle, or drag a light onto a nozzle. Click any part to edit its ratings and connections.</div>
       {status && <div role="status" style={{ ...small, color: "var(--text-accent, #9fd)" }}>{status}</div>}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ flex: "2 1 420px", minWidth: 300 }}>
           <PlanView design={design} colorOf={colorOf} flagged={flagged} mode={mode} active={active} selected={mode === "select" ? selected : []}
-            show={show} onItem={onItem} onBox={onBox} />
+            show={show} onItem={onItem} onBox={onBox} onLink={linkItems} />
           <div style={{ display: "flex", gap: 10, ...small, marginTop: 4 }}>
             {[["pumps", "Pump lines"], ["valves", "Valve lines"], ["lights", "Light lines"]].map(([k, label]) => (
               <label key={k}><input type="checkbox" checked={show[k]} onChange={() => setShow((s) => ({ ...s, [k]: !s[k] }))} /> {label}</label>
@@ -275,6 +288,20 @@ function LoadBar({ load: l, color, onPick, hasShow }) {
   );
 }
 
+function RatingField({ label, unit, min, max, step, value, onChange }) {
+  const current = Number(value) || 0;
+  return (
+    <label style={{ display: "grid", gridTemplateColumns: "72px 1fr 64px", alignItems: "center", gap: 5, margin: "4px 0", fontSize: 10 }}>
+      <span>{label}</span>
+      <input aria-label={label} type="range" min={min} max={max} step={step} value={current} onChange={(event) => onChange(Number(event.target.value))} />
+      <span style={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <input aria-label={`${label} value`} type="number" min={min} max={max} step={step} value={current} onChange={(event) => onChange(Number(event.target.value))} style={{ width: 42, fontSize: 10 }} />
+        <span style={small}>{unit}</span>
+      </span>
+    </label>
+  );
+}
+
 function sortByDistance(list, from) {
   return [...list].sort((a, b) => Math.hypot(a.item.x - from.x, a.item.y - from.y) - Math.hypot(b.item.x - from.x, b.item.y - from.y));
 }
@@ -295,9 +322,16 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
     if (n.valveId && !valves.some((v) => v.id === n.valveId)) valves.unshift(design.valves.get(n.valveId));
     const paired = design.lights.filter((l) => (l.item.engineering?.pairedNozzleId || l.item.pairedNozzleId) === id);
     const free = sortByDistance(design.lights.filter((l) => !paired.includes(l)), n.item).slice(0, 30);
+    const setNozzleRating = (key, value) => apply(fixtures.map((fixture) => fixture.id === id ? { ...fixture, engineering: { ...(fixture.engineering || {}), [key]: value } } : fixture), `Adjust ${name(n.item)}`);
     return (
       <section data-testid="inspector">
         <h4 style={{ margin: "0 0 4px", fontSize: 11 }}>{name(n.item)} <span style={small}>nozzle · {Math.round(jetFlowLpm(n.item))} L/min · {n.heightM} m</span></h4>
+        <fieldset style={{ border: "1px solid var(--border, #234)", borderRadius: 4, margin: "6px 0", padding: 6 }}>
+          <legend style={small}>Nozzle design data</legend>
+          <RatingField label="Nozzle flow" unit="L/m" min={0} max={5000} step={1} value={n.item.engineering?.flowLpm} onChange={(value) => setNozzleRating("flowLpm", value)} />
+          <RatingField label="Pressure" unit="bar" min={0} max={30} step={0.1} value={n.item.engineering?.pressureBar} onChange={(value) => setNozzleRating("pressureBar", value)} />
+          <RatingField label="Jet height" unit="m" min={0} max={100} step={0.1} value={n.item.engineering?.jetHeightM} onChange={(value) => setNozzleRating("jetHeightM", value)} />
+        </fieldset>
         {field("Valve", (
           <select aria-label="Valve" value={n.valveId || ""} onChange={(e) => apply(setNozzleValve(fixtures, id, e.target.value || null, design), "Set valve")} style={{ flex: 1, fontSize: 10 }}>
             <option value="">— none —</option>
@@ -352,10 +386,18 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
   const p = design.pumps.get(id);
   const load = loads.find((x) => x.id === id);
   const addable = selected.filter((sid) => design.nozzleById.has(sid) || design.valves.has(sid));
+  const setRating = (key, value) => apply(fixtures.map((fixture) => fixture.id === id ? { ...fixture, engineering: { ...(fixture.engineering || {}), [key]: value } } : fixture), `Adjust ${p.name}`);
   return (
     <section data-testid="inspector">
       <h4 style={{ margin: "0 0 4px", fontSize: 11, color: colorOf(id) }}>{p.name} <span style={small}>pump · {load?.vfd ? "VFD" : "fixed speed"}{load?.ratedLpm ? ` · ${load.ratedLpm} L/min` : ""}</span></h4>
       <div style={small}>{p.nozzleIds.length} outlet{p.nozzleIds.length === 1 ? "" : "s"} · {p.valveIds.length} valve{p.valveIds.length === 1 ? "" : "s"}</div>
+      <fieldset style={{ border: "1px solid var(--border, #234)", borderRadius: 4, margin: "6px 0", padding: 6 }}>
+        <legend style={small}>Design ratings · not motor commands</legend>
+        <RatingField label="Rated flow" unit="m³/h" min={0} max={500} step={1} value={p.item.engineering?.flowM3Hr} onChange={(value) => setRating("flowM3Hr", value)} />
+        <RatingField label="Rated head" unit="m" min={0} max={200} step={0.5} value={p.item.engineering?.headM} onChange={(value) => setRating("headM", value)} />
+        <RatingField label="Motor power" unit="kW" min={0} max={1000} step={0.1} value={p.item.engineering?.powerKw} onChange={(value) => setRating("powerKw", value)} />
+        <div style={small}>Use Show Studio to animate pump and valve output. Flow and head warnings update here.</div>
+      </fieldset>
       <div style={{ maxHeight: 160, overflow: "auto", margin: "4px 0" }}>
         {p.nozzleIds.map((nid) => {
           const n = design.nozzleById.get(nid);
@@ -377,7 +419,7 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
 }
 
 /** The 2D plan: shapes in plan metres (y down, as the Engineering Designer draws it). */
-function PlanView({ design, colorOf, flagged, mode, active, selected, show, onItem, onBox }) {
+function PlanView({ design, colorOf, flagged, mode, active, selected, show, onItem, onBox, onLink }) {
   const svgRef = useRef(null);
   const [box, setBox] = useState(null);
   const all = useMemo(() => [...design.nozzles, ...design.valves.values(), ...design.pumps.values(), ...design.lights].map((x) => x.item), [design]);
@@ -431,26 +473,36 @@ function PlanView({ design, colorOf, flagged, mode, active, selected, show, onIt
     const explicit = (l.item.engineering?.pairedNozzleId || l.item.pairedNozzleId) === l.nozzleId;
     if (Math.hypot(a - c, b - d) > 1e-3) lines.push(<line key={`l${l.id}`} x1={a} y1={b} x2={c} y2={d} stroke="#facc15" strokeWidth={u * 0.2} strokeDasharray={explicit ? undefined : `${u} ${u}`} />);
   }
+  const linkProps = (id) => ({
+    draggable: true,
+    onDragStart: (event) => {
+      event.dataTransfer.effectAllowed = "link";
+      event.dataTransfer.setData("application/x-aquaflow-connection", id);
+      event.dataTransfer.setData("text/plain", id);
+    },
+    onDragOver: (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "link"; },
+    onDrop: (event) => { event.preventDefault(); event.stopPropagation(); onLink(event.dataTransfer.getData("application/x-aquaflow-connection"), id); },
+  });
   const lightShapes = design.lights.map((l) => {
     const [x, y] = P(l.item);
     return <circle key={l.id} data-id={l.id} data-role="light" cx={x} cy={y} r={u * 1.6} fill="transparent" stroke={ring(l.id) !== "none" ? ring(l.id) : "#facc15"}
-      strokeWidth={u * (ring(l.id) !== "none" ? 0.7 : 0.35)} style={{ cursor: "pointer" }} onClick={click(l.id)}><title>{name(l.item)}</title></circle>;
+      strokeWidth={u * (ring(l.id) !== "none" ? 0.7 : 0.35)} style={{ cursor: "grab" }} {...linkProps(l.id)} onClick={click(l.id)}><title>{name(l.item)}</title></circle>;
   });
   const nozzleShapes = design.nozzles.map((n) => {
     const [x, y] = P(n.item);
     return <circle key={n.id} data-id={n.id} data-role="nozzle" cx={x} cy={y} r={u * 1.1} fill={colorOf(n.pumpId)} stroke={ring(n.id)} strokeWidth={u * 0.6}
-      style={{ cursor: "pointer" }} onClick={click(n.id)}><title>{`${name(n.item)}${n.pumpId ? ` · ${design.pumps.get(n.pumpId).name}` : " · no pump"}${n.valveId ? "" : " · no valve"}`}</title></circle>;
+      style={{ cursor: "grab" }} {...linkProps(n.id)} onClick={click(n.id)}><title>{`${name(n.item)}${n.pumpId ? ` · ${design.pumps.get(n.pumpId).name}` : " · no pump"}${n.valveId ? "" : " · no valve"}`}</title></circle>;
   });
   const valveShapes = [...design.valves.values()].map((v) => {
     const [x, y] = P(v.item), s = u * 0.8;
     return <polygon key={v.id} data-id={v.id} data-role="valve" points={`${x},${y - s} ${x + s},${y} ${x},${y + s} ${x - s},${y}`} fill="#f97316"
-      stroke={ring(v.id)} strokeWidth={u * 0.5} style={{ cursor: "pointer" }} onClick={click(v.id)}><title>{name(v.item)}</title></polygon>;
+      stroke={ring(v.id)} strokeWidth={u * 0.5} style={{ cursor: "grab" }} {...linkProps(v.id)} onClick={click(v.id)}><title>{name(v.item)}</title></polygon>;
   });
   const pumpShapes = [...design.pumps.values()].map((p) => {
     const [x, y] = P(p.item), s = u * 2.2;
-    return <g key={p.id}>
+    return <g key={p.id} {...linkProps(p.id)}>
       <rect data-id={p.id} data-role="pump" x={x - s} y={y - s} width={2 * s} height={2 * s} fill={colorOf(p.id)} stroke={ring(p.id) === "none" ? "#0b1622" : ring(p.id)}
-        strokeWidth={u * 0.6} style={{ cursor: "pointer" }} onClick={click(p.id)}><title>{p.name}</title></rect>
+        strokeWidth={u * 0.6} style={{ cursor: "grab" }} onClick={click(p.id)}><title>{p.name}</title></rect>
       <text x={x} y={y - s - u * 0.8} fontSize={u * 2.6} fill={colorOf(p.id)} textAnchor="middle" pointerEvents="none">{p.name}</text>
     </g>;
   });

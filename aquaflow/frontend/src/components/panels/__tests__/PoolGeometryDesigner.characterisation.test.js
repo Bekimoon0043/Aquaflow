@@ -8,7 +8,7 @@
  * Default view: pan (60,60), zoom 30 px/m; default pool: 12 m × 8 m rectangle at (0,0)-(12,8).
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { mountDesigner, cleanup, wait, act } from "./designerHarness";
+import { mountDesigner, cleanup, wait, act, fireEvent } from "./designerHarness";
 
 afterEach(() => cleanup());
 
@@ -40,6 +40,23 @@ describe("PoolGeometryDesigner characterisation (AF-CAD-030)", () => {
     expect(nozzles[0].id).toBeDefined();
     expect(nozzles[0].engineering).toBeTruthy();
     expect(d.container.textContent).toContain("1 fixtures placed");
+  });
+
+  it("accepts a nozzle dragged from the equipment library onto the plan", async () => {
+    const d = await mountDesigner();
+    await d.tool("Nozzle");
+    const libraryItem = [...d.container.querySelectorAll("button")].find((button) => button.getAttribute("aria-pressed") !== null && button.textContent.includes("Geyser"));
+    expect(libraryItem).toBeTruthy();
+    const data = {};
+    const dataTransfer = { effectAllowed: "", setData: (kind, value) => { data[kind] = value; }, getData: (kind) => data[kind] };
+    await act(async () => { fireEvent.dragStart(libraryItem, { dataTransfer }); });
+    expect(data["application/x-aquaflow-fixture"]).toBe("nozzle_geyser");
+    const drop = new MouseEvent("drop", { bubbles: true, clientX: 150, clientY: 150 });
+    Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
+    await act(async () => { fireEvent(d.canvas, drop); });
+    await d.settle();
+    expect(d.fixtures()).toHaveLength(1);
+    expect(d.fixtures()[0]).toMatchObject({ type: "nozzle_geyser", x: 3, y: 3 });
   });
 
   it("a locked NOZZLES layer blocks placement", async () => {

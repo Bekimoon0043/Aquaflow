@@ -21,6 +21,7 @@ export const PANEL_CATALOG = Object.freeze({
   show_programmer: "Show Studio",
   nodes: "Node Editor",
   preview: "3D Preview",
+  easybuilder: "Easy Fountain Design",
   ai: "AI Assistant",
   devices: "Device Discovery",
   fountain: "Fountain Control (I-CAN)",
@@ -64,7 +65,9 @@ export const WORKSPACES = Object.freeze([
     label: "Design",
     hint: "Site, basins, CAD drawing, fixtures, hydraulics and equipment data",
     nav: [
+      entry("design-easybuilder", "Easy fountain design", "easybuilder"),
       entry("design-designer", "Site & basin designer", "geometry"),
+      entry("design-connections", "Connect pumps & nozzles", "engtools", tab("engtools", "connections")),
       entry("design-cad", "Import CAD drawing", "geometry", { action: "cad-import" }),
       entry("design-hydraulics", "Hydraulics", "engtools", tab("engtools", "hydraulics")),
       entry("design-verified", "Verified equipment models", "engtools", tab("engtools", "verified")),

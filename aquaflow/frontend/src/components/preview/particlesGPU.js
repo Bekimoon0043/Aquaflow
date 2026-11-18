@@ -72,6 +72,7 @@ export function applyPoolUniforms(u, pool, THREE, blankMask = null) {
   } else if (u.uPoolMask && blankMask) {
     u.uPoolMask.value = blankMask;
   }
+  if (u.uPoolKerb) u.uPoolKerb.value = Number.isFinite(Number(pool.kerbY)) ? Number(pool.kerbY) : 0.45;
 }
 
 /**
@@ -104,6 +105,10 @@ uniform vec2  uWind;
 uniform vec4  uPool;      // x: 1 = circular, 0 = rect, 2 = polygon mask; y: radius, z: width, w: length
 uniform sampler2D uPoolMask;     // AF-3D-017: rasterised basin (polygon with holes)
 uniform vec4  uPoolMaskBounds;   // xy = mask origin (world xz), zw = 1 / mask size
+uniform float uPoolKerb;
+uniform vec3  uBoxMin[4];
+uniform vec3  uBoxMax[4];
+uniform int   uBoxCount;
 varying vec2  vUv;
 
 float hash11(float p){ p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
@@ -127,6 +132,26 @@ bool insidePool(vec2 xz){
   }
   if (uPool.x > 0.5) return dot(xz, xz) <= uPool.y * uPool.y;
   return abs(xz.x) <= uPool.z * 0.5 && abs(xz.y) <= uPool.w * 0.5;
+}
+
+bool boxImpact(vec3 a, vec3 b, vec3 lo, vec3 hi, out vec3 hit, out vec3 normal){
+  vec3 d = b - a;
+  vec3 safeD = vec3(abs(d.x) < 1e-8 ? 1e-8 : d.x,
+                    abs(d.y) < 1e-8 ? 1e-8 : d.y,
+                    abs(d.z) < 1e-8 ? 1e-8 : d.z);
+  vec3 d0 = (lo - a) / safeD;
+  vec3 d1 = (hi - a) / safeD;
+  vec3 nearT = min(d0, d1), farT = max(d0, d1);
+  float enter = max(nearT.x, max(nearT.y, nearT.z));
+  float leave = min(farT.x, min(farT.y, farT.z));
+  normal = vec3(0.0);
+  hit = a;
+  if (enter < 0.0 || enter > 1.0 || enter > leave) return false;
+  if (enter == nearT.x) normal = vec3(d.x > 0.0 ? -1.0 : 1.0, 0.0, 0.0);
+  else if (enter == nearT.y) normal = vec3(0.0, d.y > 0.0 ? -1.0 : 1.0, 0.0);
+  else normal = vec3(0.0, 0.0, d.z > 0.0 ? -1.0 : 1.0);
+  hit = a + d * enter;
+  return true;
 }
 
 /** Fresh state for a particle being (re)born at its emitter. */
@@ -291,6 +316,24 @@ void simulate(vec2 uv, out vec3 outPos, out vec3 outVel, out float outLife, out 
     v.y  = abs(v.y) * 0.12;
     v.xz *= 0.45;
     life = min(life, 0.12);
+  }
+
+  if (insidePool(p.xz) != insidePool(np.xz) && np.y < uPoolKerb && np.y >= 0.05 && p.y >= 0.05) {
+    np = p;
+    v.xz *= -0.15;
+    v.y = abs(v.y) * 0.08;
+    life = min(life, 0.4);
+  }
+
+  for (int i = 0; i < 4; i++) {
+    if (i >= uBoxCount) break;
+    vec3 hit, normal;
+    if (boxImpact(p, np, uBoxMin[i], uBoxMax[i], hit, normal)) {
+      np = hit + normal * 0.008;
+      v = (v - 1.1 * dot(v, normal) * normal) * 0.35;
+      life = min(life, 0.5);
+      break;
+    }
   }
 
   // Impact. Water into water punches in and throws a compact splash back up; water
@@ -499,6 +542,10 @@ export class GPUParticleField {
       uPool: { value: new T.Vector4(1, 6, 12, 8) },
       uPoolMask: { value: this._blankMask },
       uPoolMaskBounds: { value: new T.Vector4(0, 0, 1, 1) },
+      uPoolKerb: { value: 0.45 },
+      uBoxMin: { value: Array.from({ length: 4 }, () => new T.Vector3()) },
+      uBoxMax: { value: Array.from({ length: 4 }, () => new T.Vector3()) },
+      uBoxCount: { value: 0 },
     });
 
     this.velMat = new T.ShaderMaterial({ vertexShader: SIM_VERT, fragmentShader: VEL_FRAG, uniforms: simUniforms(), depthTest: false, depthWrite: false });
@@ -634,7 +681,7 @@ export class GPUParticleField {
   }
 
   /** Advance the simulation one frame. */
-  step(delta, elapsed, { wind, pool } = {}) {
+  step(delta, elapsed, { wind, pool, colliders = [] } = {}) {
     const r = this.renderer;
     const read = this.cur, write = 1 - this.cur;
     const dt = Math.min(delta, 0.05);
@@ -647,6 +694,14 @@ export class GPUParticleField {
       u.uDt.value = dt;
       if (wind) u.uWind.value.set(wind.x || 0, wind.z || 0);
       if (pool) applyPoolUniforms(u, pool, this.T, this._blankMask);
+      u.uBoxCount.value = Math.min(4, colliders.length);
+      for (let i = 0; i < 4; i++) {
+        const collider = colliders[i];
+        if (collider) {
+          u.uBoxMin.value[i].set(...collider.min);
+          u.uBoxMax.value[i].set(...collider.max);
+        }
+      }
     }
 
     const prevTarget = r.getRenderTarget();

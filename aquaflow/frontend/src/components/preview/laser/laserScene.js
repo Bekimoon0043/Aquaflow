@@ -2,6 +2,7 @@
 // glow around them, translucent sheets for sheet looks and hit spots where beams meet the water.
 // Geometry and the audience safety rule come from laserRig.js; this file only draws.
 import { hazeVisibility, laserFrame, laserState } from "./laserRig";
+import { loadEquipmentAsset, socketWorld } from "../equipmentAssets";
 
 const MAX_BEAMS = 600;
 const MAX_SHEET_TRIS = 1200;
@@ -67,6 +68,12 @@ export class LaserScene {
 
     this.group.add(this.glows, this.sheets, this.cores, this.spots, this.art, this.dots);
     parent.add(this.group);
+    this.bodies = new T.Group();
+    this.bodies.name = "laser-projector-bodies";
+    parent.add(this.bodies);
+    this._projectors = new Map();
+    this._assetError = null;
+    this._assetRevision = 0;
     this.fixtures = [];
     this.safety = {};
     this.stats = { beams: 0, blanked: 0, clamped: 0 };
@@ -78,6 +85,30 @@ export class LaserScene {
   setFixtures(fixtures = [], safety = {}) {
     this.fixtures = fixtures || [];
     this.safety = safety || {};
+    const revision = ++this._assetRevision;
+    for (const root of this._projectors.values()) this.bodies.remove(root);
+    this._projectors.clear();
+    if (!this.fixtures.length) return;
+    loadEquipmentAsset(this.T, "laser").then((asset) => {
+      if (revision !== this._assetRevision) return;
+      for (const fixture of this.fixtures) {
+        const root = asset.template.clone(true);
+        const mountY = Number.isFinite(Number(fixture.y)) ? Number(fixture.y) : Number(fixture.engineering?.mountHeightM) || 0.5;
+        root.position.set(fixture.x || 0, mountY, fixture.z || 0);
+        root.rotation.y = (fixture.rotation || 0) * Math.PI / 180;
+        root.userData.nodeId = fixture.id;
+        const localSocket = socketWorld(this.T, root, "LaserSocket");
+        if (localSocket) root.position.y = mountY - (localSocket.position[1] - mountY);
+        this.bodies.add(root);
+        this._projectors.set(fixture.id, root);
+      }
+    }).catch((error) => {
+      if (revision === this._assetRevision) this._assetError = String(error?.message || error);
+    });
+  }
+
+  getAssetStatus() {
+    return { loaded: this._projectors.size, error: this._assetError };
   }
 
   /** records: show-frame fixture records by id; time: show seconds (bake-safe). */
@@ -90,7 +121,8 @@ export class LaserScene {
       const frame = laserFrame(fx, state, time, this.safety);
       blanked += frame.blanked; clamped += frame.clamped;
       const k = state.intensity, { r, g, b } = frame.color;
-      const o = frame.origin;
+      const socket = this._projectors.has(fx.id) ? socketWorld(this.T, this._projectors.get(fx.id), "LaserSocket") : null;
+      const o = socket ? { x: socket.position[0], y: socket.position[1], z: socket.position[2] } : frame.origin;
       for (const seg of frame.outline || []) {
         if (art >= MAX_ART_SEGS) break;
         this._artPos.set([seg.a.x, seg.a.y, seg.a.z, seg.b.x, seg.b.y, seg.b.z], 6 * art);
@@ -151,7 +183,10 @@ export class LaserScene {
   }
 
   dispose() {
+    this._assetRevision++;
     this.group.parent?.remove(this.group);
+    this.bodies.parent?.remove(this.bodies);
+    this._projectors.clear();
     for (const o of [this.cores, this.glows, this.spots, this.sheets, this.art, this.dots]) { o.geometry?.dispose?.(); o.material?.dispose?.(); }
   }
 }
