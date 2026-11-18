@@ -1,5 +1,12 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-18: AquaFlow Studio 1.2.77 - Easy Fountain Design: water attached to moving heads, Depence-style realistic render**
+
+- **Gap fix (user report):** moving nozzles turned the whole model about its foot while the water left from a fixed point 0.55 m up (about 0.5 m gap at 60 deg tilt). Now the GLB rig is driven (`readRig`: Pan_Z about +Y, Tilt_X about +X, NozzleSocket outlet; 3D head spins on Tilt_X; lift raises only the head on a drawn telescopic column) and every drop leaves from the outlet position it had when fired. Rotating baskets use their real Outlet_1..3 on the turning Rotor_Z. Measured outlet-to-water distance in headless Edge: 0-2 cm (was 19-50 cm).
+- **Depence R4 study:** vendor/help pages (Pangolin, Syncronorm help "Indirect Lighting") and the R4 brochure renders (extracted images): glow/bloom on bright sources, water lit in its light colour lighting its surroundings, mirror-like rippled water, night sky, tone mapping.
+- **Realistic render** (toolbar toggle, on by default, remembered per PC): UnrealBloom (threshold 0.9 so lit water keeps its colour) + OutputPass tone mapping; basin water as a Reflector with animated ripples and Fresnel; indirect lighting (6 point lights at the brightest lit jets and flames); night sky dome with horizon glow and stars; design grid and light cones hidden in this mode. Fast mode keeps the previous look.
+- **Verified:** hero renders of the starter fountain + laser (low and high angle, realistic vs fast) reviewed and tuned; all 2,036 frontend tests pass. Not checked: frame rate of the reflection + bloom passes on the user's GPU.
+
 **2026-11-18: AquaFlow Studio 1.2.76 - Easy Fountain Design: real-world motion, water, laser and flame looks**
 
 - **User report:** some 3D objects too big, some visuals poor, no visible difference between 1D, 2D and 3D nozzles.

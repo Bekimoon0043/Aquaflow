@@ -61,6 +61,12 @@ export default function EasyFountainPanel() {
   const [query, setQuery] = useState("");
   const [showLinks, setShowLinks] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+  // Realistic render (bloom, reflective water, indirect light); remembered per computer.
+  const [realistic, setRealistic] = useState(() => { try { return localStorage.getItem("aquaflow.easy.realistic") !== "0"; } catch { return true; } });
+  useEffect(() => {
+    sceneRef.current?.setRealistic(realistic);
+    try { localStorage.setItem("aquaflow.easy.realistic", realistic ? "1" : "0"); } catch { /* private mode */ }
+  }, [realistic]);
   const [status, setStatus] = useState("Drag a pump and some nozzles from the tray below into the 3D space — they connect themselves.");
   const [confirm, setConfirm] = useState(null);
   const history = useRef([]);
@@ -169,6 +175,7 @@ export default function EasyFountainPanel() {
       return undefined;
     }
     sceneRef.current = scene;
+    scene.setRealistic(realistic);
     if (import.meta.env?.DEV) window.__aquaflowEasyScene = scene;   // dev-only hook for UI checks
     return () => { scene.dispose(); sceneRef.current = null; };
   }, []);
@@ -248,6 +255,7 @@ export default function EasyFountainPanel() {
         <button style={S.btn} onClick={() => { const r = autoConnectAll(fixturesRef.current); commit(r.fixtures, r.lines.length ? `Auto-connected ${r.lines.length}: ${r.lines.slice(0, 4).join("; ")}${r.lines.length > 4 ? " …" : ""}` : "Everything is already connected."); }}>⚡ Auto-connect all</button>
         <button style={{ ...S.btn, ...(showLinks ? S.btnOn : {}) }} onClick={() => setShowLinks((v) => !v)}>Lines</button>
         <button style={{ ...S.btn, ...(showLabels ? S.btnOn : {}) }} onClick={() => setShowLabels((v) => !v)}>Labels</button>
+        <button title="Bloom, reflective water and indirect light (turn off on a slow computer)" style={{ ...S.btn, ...(realistic ? S.btnOn : {}) }} onClick={() => setRealistic((v) => !v)}>Realistic</button>
         <label title="Haze in the air: laser beams are only visible where haze scatters them (shared with the full 3D preview)" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
           Haze <input type="range" min="0" max="1" step="0.05" value={haze} onChange={(e) => setHaze(Number(e.target.value))} style={{ width: 80 }} />
           <span style={{ width: 30 }}>{Math.round(haze * 100)}%</span>
