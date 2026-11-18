@@ -179,7 +179,11 @@ describe("easy fountain designer", () => {
     expect(jet().motion).toMatchObject({ axes: 2, pattern: "circle" });
     r = { fixtures: setEngineeringField(r.fixtures, id, "motionPattern", "figure8") };
     r = { fixtures: setEngineeringField(r.fixtures, id, "motionSpeedHz", 0.6) };
-    expect(jet().motion).toMatchObject({ pattern: "figure8", speedHz: 0.6 });
+    // Asked 0.6 Hz, but a ±70° figure 8 at 0.6 Hz needs ~400°/s: the 120°/s drive slows it.
+    expect(jet().motion).toMatchObject({ pattern: "figure8", wantedHz: 0.6, limited: true, driveDegS: 120 });
+    expect(jet().motion.speedHz).toBeLessThan(0.6);
+    r = { fixtures: setEngineeringField(r.fixtures, id, "motionSpeedHz", 0.1) };
+    expect(jet().motion).toMatchObject({ speedHz: 0.1, limited: false });
     const keys = fieldsFor(r.fixtures.find((f) => f.id === id)).map((d) => d.key);
     expect(keys).toEqual(expect.arrayContaining(["motionPattern", "motionSpeedHz", "panRangeDeg"]));
     expect(motionOf({ type: NOZZLE, engineering: {} })).toBeNull();
@@ -204,5 +208,20 @@ describe("easy fountain designer", () => {
     r = drop(r.fixtures, "control_plc_main_32io", 1, 0);
     const dry = liveJets(r.fixtures).jets.find((j) => j.id === r.id);
     expect(dry?.heightM ?? 0).toBe(0);
+  });
+
+  it("models 1D, 2D and 3D drives the way real ones move", () => {
+    const one = motionOf({ type: "motion_nozzle_1d_tilt_motor", engineering: { motionPattern: "figure8" } });
+    expect(one).toMatchObject({ axes: 1, pattern: "sweep", outlets: 1, spinRpm: 0, pan: 0 });
+    const two = motionOf({ type: "motion_nozzle_2d_pan_tilt_motor", engineering: {} });
+    expect(two).toMatchObject({ axes: 2, pattern: "circle", outlets: 1, spinRpm: 0, pan: 360 });
+    const three = motionOf({ type: "motion_nozzle_3d_robotic_module", engineering: {} });
+    expect(three).toMatchObject({ axes: 3, outlets: 3, spinRpm: 30 });
+    expect(three.splayDeg).toBeGreaterThan(0);
+    const keys3 = fieldsFor({ type: "motion_nozzle_3d_robotic_module", engineering: {} }).map((d) => d.key);
+    expect(keys3).toEqual(expect.arrayContaining(["headSpinRpm", "outletCount", "outletSplayDeg", "speedDegSec"]));
+    const keys1 = fieldsFor({ type: "motion_nozzle_1d_tilt_motor", engineering: {} }).map((d) => d.key);
+    expect(keys1).not.toContain("panRangeDeg");
+    expect(keys1).not.toContain("headSpinRpm");
   });
 });

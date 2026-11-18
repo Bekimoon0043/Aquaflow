@@ -50,6 +50,9 @@ export default function EasyFountainPanel() {
   const params = useEngineeringStore((s) => s.params);
   const poolType = useEngineeringStore((s) => s.poolType);
   const updateEngineering = useEngineeringStore((s) => s.updateEngineering);
+  // Haze is shared with the full 3D preview (render.laserHaze): beams are only seen where it scatters them.
+  const haze = useProjectStore((s) => (Number.isFinite(Number(s.render?.laserHaze)) ? Number(s.render.laserHaze) : 0.35));
+  const setHaze = (v) => useProjectStore.getState().updateRender({ laserHaze: v });
 
   const [selectedId, setSelectedId] = useState(null);
   const [selectedLinkId, setSelectedLinkId] = useState(null);
@@ -190,8 +193,8 @@ export default function EasyFountainPanel() {
       if (kind === "flame") return { id: f.id, kind, ...flameOf(f, on) };
       return { id: f.id, kind, ...fogOf(f, on) };
     });
-    scene.setData({ items, links, jets: water.jets, effects, pool, safetyBasin, selectedId, selectedLinkId, showLinks, showLabels });
-  }, [fixtures, links, water, pool, safetyBasin, center, selectedId, selectedLinkId, showLinks, showLabels, live]);
+    scene.setData({ items, links, jets: water.jets, effects, pool, safetyBasin, haze, selectedId, selectedLinkId, showLinks, showLabels });
+  }, [fixtures, links, water, pool, safetyBasin, haze, center, selectedId, selectedLinkId, showLinks, showLabels, live]);
 
   // Keyboard: Delete, Ctrl+Z, Ctrl+D, Esc — only while this panel is visible and not typing.
   const rootRef = useRef(null);
@@ -245,6 +248,10 @@ export default function EasyFountainPanel() {
         <button style={S.btn} onClick={() => { const r = autoConnectAll(fixturesRef.current); commit(r.fixtures, r.lines.length ? `Auto-connected ${r.lines.length}: ${r.lines.slice(0, 4).join("; ")}${r.lines.length > 4 ? " …" : ""}` : "Everything is already connected."); }}>⚡ Auto-connect all</button>
         <button style={{ ...S.btn, ...(showLinks ? S.btnOn : {}) }} onClick={() => setShowLinks((v) => !v)}>Lines</button>
         <button style={{ ...S.btn, ...(showLabels ? S.btnOn : {}) }} onClick={() => setShowLabels((v) => !v)}>Labels</button>
+        <label title="Haze in the air: laser beams are only visible where haze scatters them (shared with the full 3D preview)" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
+          Haze <input type="range" min="0" max="1" step="0.05" value={haze} onChange={(e) => setHaze(Number(e.target.value))} style={{ width: 80 }} />
+          <span style={{ width: 30 }}>{Math.round(haze * 100)}%</span>
+        </label>
         <button style={S.btn} onClick={() => sceneRef.current?.frameAll()}>Frame view</button>
         <button style={S.btn} onClick={undo} title="Ctrl+Z">↶ Undo</button>
         <button style={S.btn} onClick={() => setConfirm("starter")}>Starter fountain</button>
@@ -397,6 +404,11 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
         <div style={{ background: "var(--bg-surface)", borderRadius: 6, padding: 8, fontSize: 12 }}>
           Jet now <b>{jet.heightM.toFixed(2)} m</b> of {jet.nominalHeightM.toFixed(2)} m · {Math.round(jet.flowLpm)} L/min
           {jet.reason && <div style={{ color: jet.on ? "var(--amber)" : "var(--red)", marginTop: 3 }}>{jet.reason}</div>}
+          {jet.motion && <div style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 3 }}>
+            {jet.motion.axes === 1 ? "1D: swings in one plane" : jet.motion.axes === 2 ? "2D: tilts and rotates (any direction in a cone)" : `3D: tilts, rotates and spins its ${jet.motion.outlets}-outlet head`}
+            {" · "}{jet.motion.speedHz} Hz
+            {jet.motion.limited && <div style={{ color: "var(--amber)" }}>Slowed from {jet.motion.wantedHz} Hz: the drive turns at most {jet.motion.driveDegS}°/s.</div>}
+          </div>}
         </div>
       )}
       {pump && (

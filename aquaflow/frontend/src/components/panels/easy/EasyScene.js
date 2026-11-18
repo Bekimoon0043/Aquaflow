@@ -14,11 +14,13 @@ import { loadEquipmentAsset } from "../../preview/equipmentAssets";
 import { laserFrame } from "../../preview/laser/laserRig";
 
 const G = 9.81;
-const MODEL_SCALE = 2.5;          // equipment is drawn 2.5× life size so a 0.2 m nozzle can be seen and grabbed
-const MAX_PARTICLES = 26000;
+const MODEL_SCALE = 1;            // equipment at its real size; the coloured base disc keeps small parts easy to grab
+const MAX_PARTICLES = 42000;
 const ROLE_COLOR = { pump: 0x38bdf8, valve: 0xa78bfa, nozzle: 0x5eead4, light: 0xfacc15, effect: 0xfb923c };
 const LINK_COLOR = { pump: 0x38bdf8, valve: 0xa78bfa, light: 0xfacc15 };
 const PORT_Y = 0.18;
+const DRAG = 0.35;                  // 1/s: air drag on the drops' horizontal speed
+const SPLASH_S = 0.45;              // how long a landing splash lasts (s)
 const MAX_BEAM_VERTS = 6 * 2400;   // 2 400 ribbon quads
 const MAX_DOTS = 3000;
 const MAX_FLAME = 9000;
@@ -57,9 +59,12 @@ function textSprite(text, color = "#e2e8f0") {
   g.fillText(text, 12, 23);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  // Constant size on screen (not in metres), so close-ups are not covered by giant name tags.
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false });
   const s = new THREE.Sprite(mat);
-  s.scale.set(w / 110, 44 / 110, 1);
+  const k = 0.026 / 44;
+  s.scale.set(w * k, 44 * k, 1);
+  s.center.set(0.5, 0);
   s.renderOrder = 10;
   return s;
 }
@@ -68,47 +73,76 @@ function placeholder(role) {
   const color = ROLE_COLOR[role] ?? 0x94a3b8;
   const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.45 });
   let geo;
-  if (role === "pump") geo = new THREE.CylinderGeometry(0.32, 0.36, 0.6, 20).translate(0, 0.3, 0);
-  else if (role === "valve") geo = new THREE.BoxGeometry(0.3, 0.3, 0.3).translate(0, 0.15, 0);
-  else if (role === "light") geo = new THREE.CylinderGeometry(0.17, 0.2, 0.14, 20).translate(0, 0.07, 0);
-  else if (role === "nozzle") geo = new THREE.CylinderGeometry(0.06, 0.11, 0.3, 14).translate(0, 0.15, 0);
-  else geo = new THREE.BoxGeometry(0.4, 0.3, 0.4).translate(0, 0.15, 0);
+  if (role === "pump") geo = new THREE.CylinderGeometry(0.2, 0.22, 0.45, 20).translate(0, 0.225, 0);
+  else if (role === "valve") geo = new THREE.BoxGeometry(0.16, 0.16, 0.16).translate(0, 0.08, 0);
+  else if (role === "light") geo = new THREE.CylinderGeometry(0.1, 0.12, 0.1, 20).translate(0, 0.05, 0);
+  else if (role === "nozzle") geo = new THREE.CylinderGeometry(0.03, 0.06, 0.2, 14).translate(0, 0.1, 0);
+  else geo = new THREE.BoxGeometry(0.3, 0.25, 0.3).translate(0, 0.125, 0);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
   return mesh;
 }
 
 /**
- * Where a moving nozzle points at time τ: tilt from vertical (th), azimuth (ph) and lift (m).
- * Each drop keeps the direction it left with, so the water traces the motion (curving ropes).
+ * Where a moving nozzle's head points at time tau (world frame) and how far its head has spun.
+ *   1D  one swing axis: tilt in the vertical plane of the fixture's facing
+ *   2D  tilt + rotation: anywhere in the cone; rotation limited to the pan range
+ *   3D  as 2D, plus the head spins (its outlets are splayed round the head axis)
+ * Each drop keeps the direction it left with, so the water traces the motion.
+ * @returns {{ ax, ay, az, spin, lift }}
  */
-function motionDir(m, rot, tau) {
+function motionState(m, rot, tau) {
   const w = 2 * Math.PI * m.speedHz;
-  const half = ((m.range / 2) * Math.PI) / 180;
+  const amp = ((m.range / 2) * Math.PI) / 180;
   const panHalf = ((m.pan / 2) * Math.PI) / 180;
   const fullPan = m.pan >= 359;
-  switch (m.pattern) {
-    case "wave":
-    case "sweep": {
-      const a = half * Math.sin(w * tau + (m.pattern === "wave" ? m.phase : 0));
-      return { th: Math.abs(a), ph: rot + (a < 0 ? Math.PI : 0), lift: 0 };
-    }
-    case "circle":
-      return { th: half * 0.8, ph: fullPan ? rot + w * tau : rot + panHalf * Math.sin(w * tau), lift: 0 };
-    case "figure8": {
-      const ax = half * Math.sin(w * tau), az = half * 0.6 * Math.sin(2 * w * tau);
-      return { th: Math.hypot(ax, az), ph: rot + Math.atan2(az, ax), lift: 0 };
-    }
+  // Rotation within the pan range: full turns with a slip ring, else back and forth.
+  const turn = (a) => (fullPan ? a : panHalf * Math.sin(a));
+  let tx = 0, tz = 0;                              // tilt as a 2-vector (radians) in the fixture frame
+  switch (m.axes >= 2 ? m.pattern : (m.pattern === "wave" ? "wave" : "sweep")) {
+    case "wave": tx = amp * Math.sin(w * tau + m.phase); break;
+    case "circle": { const a = turn(w * tau); tx = amp * 0.8 * Math.cos(a); tz = amp * 0.8 * Math.sin(a); break; }
+    case "figure8": tx = amp * Math.sin(w * tau); tz = amp * 0.55 * Math.sin(2 * w * tau); break;
     case "cross": {
-      const a = half * Math.sin(w * tau);
-      const along = Math.floor((w * tau) / (2 * Math.PI)) % 2 ? Math.PI / 2 : 0;
-      return { th: Math.abs(a), ph: rot + along + (a < 0 ? Math.PI : 0), lift: 0 };
+      const a = amp * Math.sin(w * tau);
+      if (Math.floor((w * tau) / (2 * Math.PI)) % 2) tz = a; else tx = a;
+      break;
     }
-    case "spiral":
-    default:
-      return { th: half * (0.55 + 0.45 * Math.sin(0.3 * w * tau)), ph: fullPan ? rot + w * tau : rot + panHalf * Math.sin(w * tau),
-        lift: m.liftM * (0.5 + 0.5 * Math.sin(0.5 * w * tau)) };
+    case "dance":                                  // smooth and non-repeating: incommensurate sines
+      tx = amp * (0.6 * Math.sin(w * tau) + 0.4 * Math.sin(1.73 * w * tau + 1.1));
+      tz = amp * (0.6 * Math.sin(1.31 * w * tau + 0.4) + 0.4 * Math.sin(2.17 * w * tau));
+      break;
+    case "spiral": {
+      const a = turn(w * tau), r = amp * (0.25 + 0.75 * (0.5 + 0.5 * Math.sin(0.23 * w * tau)));
+      tx = r * Math.cos(a); tz = r * Math.sin(a);
+      break;
+    }
+    case "sweep":
+    default: tx = amp * Math.sin(w * tau);
   }
+  const th = Math.min(Math.PI / 2, Math.hypot(tx, tz));
+  const ph = rot + Math.atan2(tz, tx);
+  const st = Math.sin(th);
+  return { ax: st * Math.cos(ph), ay: Math.cos(th), az: st * Math.sin(ph),
+    spin: (m.spinRpm / 60) * 2 * Math.PI * tau,
+    lift: m.liftM ? m.liftM * (0.5 + 0.5 * Math.sin(0.5 * w * tau)) : 0 };
+}
+
+/** Direction of outlet k of n on a head with axis (ax, ay, az), splayed `splay` rad and spun `spin` rad. */
+function outletDir(st, k, n, splay, out) {
+  if (!(splay > 0) || n <= 1) { out[0] = st.ax; out[1] = st.ay; out[2] = st.az; return out; }
+  // Basis (u, v) perpendicular to the head axis.
+  let ux = -st.az, uz = st.ax;
+  const uy = 0;
+  let l = Math.hypot(ux, uz);
+  if (l < 1e-6) { ux = 1; uz = 0; l = 1; }
+  ux /= l; uz /= l;
+  const vx = st.ay * uz - st.az * uy, vy = st.az * ux - st.ax * uz, vz = st.ax * uy - st.ay * ux;
+  const a = st.spin + (2 * Math.PI * k) / n, c = Math.cos(splay), s = Math.sin(splay);
+  out[0] = c * st.ax + s * (Math.cos(a) * ux + Math.sin(a) * vx);
+  out[1] = c * st.ay + s * (Math.cos(a) * uy + Math.sin(a) * vy);
+  out[2] = c * st.az + s * (Math.cos(a) * uz + Math.sin(a) * vz);
+  return out;
 }
 
 /** Outlets of a jet: fixed directions (th, ph) or `at(τ)` for moving / rotating ones. */
@@ -116,10 +150,11 @@ function outletsOf(jet, t, rot) {
   const kind = jet.kind;
   const out = [];
   if (jet.motion) {
-    out.push({ at: (tau) => motionDir(jet.motion, rot, tau), spread: 0.018 });
+    const m = jet.motion, n = Math.max(1, m.outlets || 1);
+    for (let k = 0; k < n; k += 1) out.push({ motion: m, k, n, splay: ((m.splayDeg || 0) * Math.PI) / 180, spread: 0.02 });
   } else if (kind === "basket") {
     const n = Math.max(2, jet.outlets || 3);
-    for (let i = 0; i < n; i += 1) out.push({ at: (tau) => ({ th: 0.32, ph: tau * 2.4 + (i * Math.PI * 2) / n, lift: 0 }), spread: 0.035 });
+    for (let i = 0; i < n; i += 1) out.push({ basket: true, th: 0.32, ph0: (i * Math.PI * 2) / n, spread: 0.03 });
   } else if (kind === "ring") {
     const n = 12;
     for (let i = 0; i < n; i += 1) out.push({ th: 0.42, ph: (i * Math.PI * 2) / n, spread: 0.03 });
@@ -253,7 +288,7 @@ export class EasyScene {
     };
     this.dots = pointsOf(MAX_DOTS, new THREE.PointsMaterial({ size: 0.35, map: this.sprite, vertexColors: true, transparent: true,
       depthWrite: false, blending: THREE.AdditiveBlending }));
-    this.flames = pointsOf(MAX_FLAME, new THREE.PointsMaterial({ size: 0.7, map: this.sprite, vertexColors: true, transparent: true,
+    this.flames = pointsOf(MAX_FLAME, new THREE.PointsMaterial({ size: 0.26, map: this.sprite, vertexColors: true, transparent: true,
       depthWrite: false, blending: THREE.AdditiveBlending }));
     this.fog = pointsOf(MAX_FOG, new THREE.PointsMaterial({ size: 2.6, map: this.sprite, vertexColors: true, transparent: true,
       opacity: 0.22, depthWrite: false }));
@@ -328,7 +363,7 @@ export class EasyScene {
         rec.labelSprite = null;
         if (labelOn) {
           rec.labelSprite = textSprite(it.label);
-          rec.labelSprite.position.y = (it.role === "pump" ? 1.7 : 0.95);
+          rec.labelSprite.position.y = (it.role === "pump" ? 0.75 : 0.45);
           rec.labelSprite.userData.fixtureId = it.id;
           rec.group.add(rec.labelSprite);
         }
@@ -366,7 +401,7 @@ export class EasyScene {
   _createItem(it) {
     const group = new THREE.Group();
     group.userData.fixtureId = it.id;
-    const base = new THREE.Mesh(new THREE.CircleGeometry(it.role === "pump" ? 0.55 : 0.36, 32),
+    const base = new THREE.Mesh(new THREE.CircleGeometry(it.role === "pump" ? 0.45 : 0.22, 32),
       new THREE.MeshBasicMaterial({ color: ROLE_COLOR[it.role] ?? 0x94a3b8, transparent: true, opacity: 0.55, depthWrite: false }));
     base.rotation.x = -Math.PI / 2;
     base.position.y = 0.012;
@@ -375,9 +410,9 @@ export class EasyScene {
     group.add(ph);
     let lamp = null;
     if (it.role === "light") {
-      lamp = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 10),
+      lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 10),
         new THREE.MeshBasicMaterial({ color: it.color || "#ffffff", transparent: true, opacity: 1 }));
-      lamp.position.y = 0.2;
+      lamp.position.y = 0.12;
       group.add(lamp);
     }
     const rec = { group, base, model: ph, role: it.role, modelKind: it.modelKind, data: it, lamp, label: "", token: Symbol("model") };
@@ -392,6 +427,7 @@ export class EasyScene {
         const model = asset.template.clone(true);
         model.scale.setScalar(MODEL_SCALE);
         model.userData.sharedAsset = true;
+        cur.outletY = (asset.height || 0.15) * MODEL_SCALE;   // water leaves from the top of the real nozzle
         group.remove(cur.model);
         disposeObject(cur.model);
         cur.model = model;
@@ -550,40 +586,41 @@ export class EasyScene {
     const jets = this.data.jets || [];
     const pos = this.pPos, col = this.pCol, jit = this.jitter;
     const active = jets.filter((j) => (j.heightM > 0.02) || (this.jetState.get(j.id) || 0) > 0.02);
-    const per = active.length ? Math.min(1400, Math.floor(MAX_PARTICLES / active.length)) : 0;
+    const per = active.length ? Math.min(3000, Math.floor(MAX_PARTICLES / active.length)) : 0;
     let n = 0, q = 0;
     const t = this.time;
     const tmp = new THREE.Color();
     const white = new THREE.Color(0xd8f1ff);
+    const dir = [0, 1, 0];
     for (const jet of jets) {
       // Pump ramp: the jet eases to its new height like a real pump changing speed.
       const target = Math.max(0, jet.heightM || 0);
       const cur = this.jetState.get(jet.id) ?? 0;
       const h = cur + (target - cur) * Math.min(1, dt * 2.2);
       this.jetState.set(jet.id, h);
-      if (h < 0.02) continue;
       const rec = this.items.get(jet.id);
       if (!rec) continue;
-      const o = rec.group.position;
-      const oy = o.y + 0.25;
       const rot = rec.group.rotation.y * -1;
+      if (jet.motion) this._aimHead(rec, motionState(jet.motion, rot, t));
+      if (h < 0.02) continue;
+      const o = rec.group.position;
+      const oy = o.y + (rec.outletY ?? 0.15);
       const outlets = outletsOf(jet, t, rot);
-      const each = Math.max(8, Math.floor(per / outlets.length));
+      // A moving head's outlets each get a full stream (they are few and are what the eye follows).
+      const each = Math.max(8, Math.floor(jet.motion ? per * Math.min(1, 1.6 / outlets.length) * 1.4 : per / outlets.length));
       tmp.copy(white);
       if (jet.color) tmp.lerp(new THREE.Color(jet.color), Math.min(1, 0.35 + 0.65 * (jet.intensity || 0)));
-      const bright = jet.color ? 0.55 + 0.45 * (jet.intensity || 0) : 0.55;
+      const bright = jet.color ? 0.6 + 0.4 * (jet.intensity || 0) : 0.6;
       for (const out of outlets) {
         let hh = h;
         if (out.mist) hh = Math.min(h, 1.2);
-        if (out.pulse) {
-          const cyc = (t % 1.6) / 1.6;
-          if (cyc > 0.7) continue;
-        }
+        if (out.pulse && (t % 1.6) / 1.6 > 0.7) continue;
         const v0 = Math.sqrt(2 * G * hh);
-        // Flight time of a vertical drop (the longest); tilted drops land earlier and are hidden below the water.
-        const T = Math.max(0.25, (2 * v0) / G + 0.08);
-        let dx = 0, dz = 0, dy = 1, lift = 0;
-        if (!out.at) {
+        // Cycle = flight of a vertical drop + the splash it makes when it lands.
+        const tFly = (v0 + Math.sqrt(v0 * v0 + 2 * G * oy)) / G;
+        const T = Math.max(0.3, tFly + SPLASH_S);
+        let dx = 0, dz = 0, dy = 1;
+        if (!out.motion && !out.basket) {
           const sTh = Math.sin(out.th), cTh = Math.cos(out.th);
           dx = sTh * Math.cos(out.ph); dz = sTh * Math.sin(out.ph); dy = cTh;
         }
@@ -591,25 +628,49 @@ export class EasyScene {
           const j = (q++ * 3) % jit.length;
           const u = (i / each + 0.37 * jit[j + 2] * 0.05 + 1) % 1;
           const age = ((t / T + u) % 1) * T;
-          if (out.at) {
+          let lift = 0;
+          if (out.motion) {
             // Direction at the moment this drop left the nozzle.
-            const d = out.at(t - age);
-            const sTh = Math.sin(d.th);
-            dx = sTh * Math.cos(d.ph); dz = sTh * Math.sin(d.ph); dy = Math.cos(d.th); lift = d.lift || 0;
+            const st = motionState(out.motion, rot, t - age);
+            outletDir(st, out.k, out.n, out.splay, dir);
+            dx = dir[0]; dy = dir[1]; dz = dir[2]; lift = st.lift;
+          } else if (out.basket) {
+            const ph = out.ph0 + (t - age) * 2.4, sTh = Math.sin(out.th);
+            dx = sTh * Math.cos(ph); dz = sTh * Math.sin(ph); dy = Math.cos(out.th);
           }
-          const s = out.spread * (out.foam ? 1 + age : 1);
+          const y0 = oy + lift;
+          const vy = v0 * dy * (1 + out.spread * 0.4 * jit[j + 2]);
+          const tLand = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * G * y0))) / G;
+          const breakup = Math.min(1, age / Math.max(0.2, tLand));
+          // Tight glassy stream near the nozzle, breaking up into a spreading spray higher up.
+          // (a 10 m straight jet spreads about 1-1.5 m at its top)
+          const s = out.spread * (out.foam ? 1 + 3 * breakup : 0.25 + 1.4 * breakup ** 1.6);
           const vx = v0 * (dx + s * jit[j]);
           const vz = v0 * (dz + s * jit[j + 1]);
-          const vy = v0 * dy * (1 + s * 0.5 * jit[j + 2]);
-          const y = oy + lift + vy * age - 0.5 * G * age * age;
-          if (y < 0) continue;                       // already back in the basin
           const k = n * 3;
+          if (age < tLand) {
+            // Air drag on the drops shortens the horizontal reach: x = v (1 - e^(-c t)) / c.
+            const fx = (1 - Math.exp(-DRAG * age)) / DRAG;
+            pos[k] = o.x + vx * fx;
+            pos[k + 1] = Math.max(0.01, y0 + vy * age - 0.5 * G * age * age);
+            pos[k + 2] = o.z + vz * fx;
+            const fade = bright * (1 - 0.5 * breakup) * (out.mist ? 0.45 : 1) * (breakup < 0.15 ? 1.25 : 1);
+            col[k] = tmp.r * fade; col[k + 1] = tmp.g * fade; col[k + 2] = tmp.b * fade;
+          } else {
+            // Splash: drops hitting the water throw up a short crown of white spray.
+            const sp = age - tLand;
+            if (sp > SPLASH_S || out.mist) continue;
+            const fx = (1 - Math.exp(-DRAG * tLand)) / DRAG;
+            const impact = Math.min(1.5, Math.abs(vy - G * tLand) / 8);
+            const r = (0.05 + 1.1 * sp) * (0.3 + 0.7 * Math.abs(jit[j + 2])) * impact;
+            const a = 6.283 * (0.5 + 0.5 * jit[j]);
+            pos[k] = o.x + vx * fx + r * Math.cos(a);
+            pos[k + 1] = 0.02 + 3.2 * impact * sp * (SPLASH_S - sp);
+            pos[k + 2] = o.z + vz * fx + r * Math.sin(a);
+            const fade = 0.55 * bright * (1 - sp / SPLASH_S);
+            col[k] = fade; col[k + 1] = fade; col[k + 2] = fade;
+          }
           n += 1;
-          pos[k] = o.x + vx * age;
-          pos[k + 1] = Math.max(0.01, y);
-          pos[k + 2] = o.z + vz * age;
-          const fade = bright * (1 - 0.55 * (age / T)) * (out.mist ? 0.45 : 1);
-          col[k] = tmp.r * fade; col[k + 1] = tmp.g * fade; col[k + 2] = tmp.b * fade;
         }
       }
     }
@@ -617,6 +678,18 @@ export class EasyScene {
     geo.setDrawRange(0, n);
     geo.attributes.position.needsUpdate = true;
     geo.attributes.color.needsUpdate = true;
+  }
+
+  /** Turn a moving nozzle's model to where its head points (and spin it for a 3D head). */
+  _aimHead(rec, st) {
+    if (!rec.model) return;
+    if (!rec.aim) rec.aim = { q: new THREE.Quaternion(), qs: new THREE.Quaternion(), inv: new THREE.Quaternion(), up: new THREE.Vector3(0, 1, 0), d: new THREE.Vector3() };
+    const A = rec.aim;
+    A.d.set(st.ax, st.ay, st.az).normalize();
+    A.q.setFromUnitVectors(A.up, A.d);
+    A.inv.copy(rec.group.quaternion).invert();
+    A.qs.setFromAxisAngle(A.up, st.spin || 0);
+    rec.model.quaternion.copy(A.inv).multiply(A.q).multiply(A.qs);
   }
 
   /**
@@ -634,7 +707,7 @@ export class EasyScene {
     let bv = 0, dn = 0, fn = 0, gn = 0;
     const cam = this.camera.position;
 
-    const quad = (ax, ay, az, bx, by, bz, width, r, g, b) => {
+    const quad = (ax, ay, az, bx, by, bz, width, r, g, b, endK = 1) => {
       if (bv + 6 > MAX_BEAM_VERTS) return;
       // Width across the beam, facing the camera.
       const mx = (ax + bx) / 2 - cam.x, my = (ay + by) / 2 - cam.y, mz = (az + bz) / 2 - cam.z;
@@ -644,9 +717,11 @@ export class EasyScene {
       wx = (wx / l) * width * 0.5; wy = (wy / l) * width * 0.5; wz = (wz / l) * width * 0.5;
       const v = [ax - wx, ay - wy, az - wz, ax + wx, ay + wy, az + wz, bx + wx, by + wy, bz + wz,
         ax - wx, ay - wy, az - wz, bx + wx, by + wy, bz + wz, bx - wx, by - wy, bz - wz];
+      // Vertices 2, 4, 5 sit at the far end: the beam fades as it scatters away into the haze.
       for (let i = 0; i < 18; i += 3) {
+        const f = i === 6 || i === 12 || i === 15 ? endK : 1;
         bPos[bv * 3] = v[i]; bPos[bv * 3 + 1] = v[i + 1]; bPos[bv * 3 + 2] = v[i + 2];
-        bCol[bv * 3] = r; bCol[bv * 3 + 1] = g; bCol[bv * 3 + 2] = b;
+        bCol[bv * 3] = r * f; bCol[bv * 3 + 1] = g * f; bCol[bv * 3 + 2] = b * f;
         bv += 1;
       }
     };
@@ -674,7 +749,10 @@ export class EasyScene {
         const frame = laserFrame({ id: fx.id, x: o.x, z: o.z, y: Math.max(o.y, fx.mountM ?? 0.5), rotation: rec.data.rotation || 0,
           engineering: fx.engineering || {} }, fx.state, t, { basin: this.data.safetyBasin || null });
         fx.frame = frame;
-        const k = frame.intensity * (frame.faint ? 0.5 : 1);
+        // Beams are only seen where the haze scatters them (same rule as the full preview).
+        const haze = Math.max(0, Math.min(1, this.data.haze ?? 0.35));
+        const vis = 0.12 + 0.88 * haze;
+        const k = frame.intensity * (frame.faint ? 0.5 : 1) * vis;
         const { r, g, b } = frame.color;
         const end = (beam) => {
           const len = Math.min(beam.length, BEAM_DRAW_M);
@@ -682,17 +760,18 @@ export class EasyScene {
         };
         const ends = frame.beams.map(end);
         if (frame.sheet && ends.length > 1) {
-          for (let i = 1; i < ends.length; i += 1) tri(frame.origin, ends[i - 1], ends[i], r * k * 0.12, g * k * 0.12, b * k * 0.12);
+          for (let i = 1; i < ends.length; i += 1) tri(frame.origin, ends[i - 1], ends[i], r * k * 0.06, g * k * 0.06, b * k * 0.06);
         }
         frame.beams.forEach((beam, i) => {
           const e = ends[i];
           const gk = k * (beam.glint ?? 1);
-          const core = frame.heavy ? 0.22 : frame.faint ? 0.02 : 0.045;
-          quad(frame.origin.x, frame.origin.y, frame.origin.z, e.x, e.y, e.z, core, r * gk, g * gk, b * gk);
-          quad(frame.origin.x, frame.origin.y, frame.origin.z, e.x, e.y, e.z, core * 7, r * gk * 0.16, g * gk * 0.16, b * gk * 0.16);
+          // A real show beam is a few millimetres wide: a thin bright core and a faint haze glow.
+          const core = frame.heavy ? 0.06 : frame.faint ? 0.008 : 0.014;
+          quad(frame.origin.x, frame.origin.y, frame.origin.z, e.x, e.y, e.z, core, r * gk, g * gk, b * gk, 0.25);
+          quad(frame.origin.x, frame.origin.y, frame.origin.z, e.x, e.y, e.z, core * 5, r * gk * 0.12 * haze, g * gk * 0.12 * haze, b * gk * 0.12 * haze, 0.1);
           if (beam.hit || frame.faint) dot(e, r * gk, g * gk, b * gk);
         });
-        for (const s of frame.outline || []) quad(s.a.x, s.a.y, s.a.z, s.b.x, s.b.y, s.b.z, 0.08, r * k, g * k, b * k);
+        for (const s of frame.outline || []) quad(s.a.x, s.a.y, s.a.z, s.b.x, s.b.y, s.b.z, 0.03, r * k * 1.4, g * k * 1.4, b * k * 1.4);
         dot(frame.origin, r * k, g * k, b * k);
       } else if (fx.kind === "flame") {
         if (!(fx.intensity > 0)) continue;
@@ -700,20 +779,24 @@ export class EasyScene {
         const env = fx.burst ? Math.max(0, Math.sin(Math.min(1, (t % 2.5) / 0.8) * Math.PI)) * ((t % 2.5) < 0.8 ? 1 : 0) : 1;
         if (env <= 0.01) continue;
         const H = fx.heightM * fx.intensity * env;
-        const count = 900;
+        const count = 1800;
         for (let i = 0; i < count && fn < MAX_FLAME; i += 1) {
           const j = (i * 3) % this.jitter.length;
-          const T = 0.7 + 0.25 * this.jitter[j];
+          // Fast-rising gas (a flame jet leaves the burner at several m/s), a little turbulence.
+          const T = 0.55 + 0.2 * this.jitter[j];
           const age = ((t / T + i / count) % 1);
-          // Wide at the burner, licking to a point at the top.
-          const rad = 0.42 * Math.sqrt(1 - age) * (0.55 + 0.45 * this.jitter[j + 1]) * Math.max(0.5, fx.intensity);
-          const a = i * 2.39996 + t * 3;
-          fPos[fn * 3] = o.x + rad * Math.cos(a) + 0.06 * Math.sin(t * 11 + i);
-          fPos[fn * 3 + 1] = o.y + 0.25 + age * H * (0.85 + 0.15 * this.jitter[j + 2]);
-          fPos[fn * 3 + 2] = o.z + rad * Math.sin(a) + 0.06 * Math.cos(t * 9 + i);
-          const heat = 1 - age;                     // white-yellow at the base → orange → dark red
-          const fade = Math.min(1, Math.max(0, 1 - age * 1.05) * 1.25);
-          fCol[fn * 3] = fade; fCol[fn * 3 + 1] = (0.22 + 0.7 * heat * heat) * fade; fCol[fn * 3 + 2] = 0.25 * heat * heat * heat * fade;
+          const tongue = (i % 5) * 1.2566 + 0.6 * Math.sin(t * 2.3 + i);          // 5 licking tongues
+          const wob = 0.10 * age * Math.sin(t * 13 + i * 0.7) + 0.05 * Math.sin(t * 29 + i);
+          const rad = 0.22 * Math.sqrt(Math.max(0, 1 - age)) * (0.5 + 0.5 * Math.abs(this.jitter[j + 1])) * Math.max(0.5, fx.intensity) * (1 + 0.6 * age);
+          fPos[fn * 3] = o.x + rad * Math.cos(tongue) + wob;
+          fPos[fn * 3 + 1] = o.y + 0.2 + H * (age + 0.08 * age * this.jitter[j + 2]);
+          fPos[fn * 3 + 2] = o.z + rad * Math.sin(tongue) + 0.6 * wob;
+          // Colour by temperature: white-yellow root, orange body, deep red tips.
+          const heat = 1 - age;
+          // Many particles overlap (additive), so each is dim: the sum reads yellow at the root,
+          // orange in the body and see-through red at the tips instead of saturating to white.
+          const fade = 0.32 * Math.max(0, 1 - age * 1.05) * (0.75 + 0.25 * Math.sin(t * 17 + i));
+          fCol[fn * 3] = fade; fCol[fn * 3 + 1] = (0.1 + 0.62 * heat * heat) * fade; fCol[fn * 3 + 2] = 0.12 * heat ** 4 * fade;
           fn += 1;
         }
       } else if (fx.kind === "fog") {

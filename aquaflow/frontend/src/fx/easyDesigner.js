@@ -481,36 +481,63 @@ export function liveJets(fixtures = [], live = {}, design = readConnections(fixt
 
 // ─── moving nozzles ─────────────────────────────────────────────────────────
 
-/** Motion patterns a moving nozzle can run (1D nozzles only swing in their plane). */
+/**
+ * Motion patterns, by the axes they need. Real drives (Huaxin, OASE, Longxin, Symphony …):
+ *   1D  one swing axis: the jet sweeps in one vertical plane (typically ±60°)
+ *   2D  tilt axis (±80°) + 360° rotation: the jet can point anywhere in a cone
+ *   3D  2D + a 360° spinning nozzle head: a multi-outlet / fan head twists the water into helices
+ */
 export const MOTION_PATTERNS = [
   { id: "sweep", label: "Sweep (swing side to side)", axes: 1 },
   { id: "wave", label: "Wave (sweep, offset along the row)", axes: 1 },
-  { id: "circle", label: "Circle (cone)", axes: 2 },
+  { id: "circle", label: "Rotating cone", axes: 2 },
   { id: "figure8", label: "Figure 8", axes: 2 },
   { id: "cross", label: "Cross (+)", axes: 2 },
-  { id: "spiral", label: "Spiral + lift", axes: 3 },
+  { id: "dance", label: "Free dance", axes: 2 },
+  { id: "spiral", label: "Spiral (cone opening and closing)", axes: 2 },
 ];
+
+/** Peak angular speed (°/s) of a pattern at `hz` with tilt amplitude `amp` (°). */
+function peakDegPerSec(pattern, amp, hz) {
+  const w = 2 * Math.PI * hz;
+  if (pattern === "circle") return w * Math.sin((amp * 0.8 * Math.PI) / 180) * (180 / Math.PI);  // rotation speed at the cone
+  if (pattern === "figure8") return w * amp * 1.56;
+  if (pattern === "dance") return w * amp * 1.3;
+  return w * amp;
+}
 
 /**
  * How a moving nozzle moves (null for a fixed one). Angles in degrees, speed in cycles per second.
- *   range   tilt / swing range (full, e.g. 120 = ±60°)
- *   pan     pan range (2D/3D)
- *   liftM   lift stroke (3D)
+ *   range     full swing / tilt range (120 = ±60°)
+ *   pan       rotation range (2D/3D)
+ *   driveDegS the drive's top speed: the motion is slowed to it, as a real stepper drive would be
+ *   spinRpm, outlets, splayDeg   the spinning head of a 3D nozzle
  */
 export function motionOf(item) {
   const axes = isMovingNozzle({ type: item?.type, key: item?.type, engineering: item?.engineering, category: getFixtureLibraryEntry(item?.type)?.category })
     ? axesOf(item) : 0;
   if (!axes) return null;
   const e = item.engineering || {};
-  const range = Math.max(0, Math.min(180, num(e.tiltRangeDeg, num(e.swingRangeDeg, num(e.angleRangeDeg, 90)))));
+  const rangeDefault = axes === 1 ? 120 : 140;
+  const range = Math.max(0, Math.min(180, num(e.tiltRangeDeg, num(e.swingRangeDeg, num(e.angleRangeDeg, rangeDefault)))));
   const pan = Math.max(0, Math.min(360, num(e.panRangeDeg, axes >= 2 ? 360 : 0)));
-  const degPerSec = num(e.speedDegSec, 90);
-  // Default speed: one full swing over the range at the drive's rated speed, at most 1 Hz.
-  const speedHz = num(e.motionSpeedHz, 0) > 0 ? num(e.motionSpeedHz) : Math.min(1, degPerSec / Math.max(20, 2 * range));
+  const driveDegS = Math.max(10, num(e.speedDegSec, axes === 1 ? 90 : 120));
   const allowed = MOTION_PATTERNS.filter((p) => p.axes <= axes).map((p) => p.id);
-  const pattern = allowed.includes(e.motionPattern) ? e.motionPattern : (axes >= 3 ? "spiral" : axes === 2 ? "circle" : "sweep");
-  return { axes, pattern, range, pan, speedHz: Math.round(speedHz * 100) / 100,
-    liftM: axes >= 3 ? num(e.liftStrokeMm, 300) / 1000 : 0, phase: num(item.x, 0) * 0.35 };
+  const pattern = allowed.includes(e.motionPattern) ? e.motionPattern : (axes >= 2 ? "circle" : "sweep");
+  const amp = range / 2;
+  const wanted = num(e.motionSpeedHz, 0) > 0 ? num(e.motionSpeedHz) : 0.25;
+  // Slew limit: the drive cannot turn faster than its rated °/s.
+  const peak = peakDegPerSec(pattern, Math.max(1, amp), wanted);
+  const speedHz = peak > driveDegS ? wanted * (driveDegS / peak) : wanted;
+  return {
+    axes, pattern, range, pan, driveDegS,
+    speedHz: Math.round(speedHz * 1000) / 1000, wantedHz: wanted, limited: peak > driveDegS * 1.001,
+    spinRpm: axes >= 3 ? num(e.headSpinRpm, 30) : 0,
+    outlets: axes >= 3 ? Math.max(1, Math.min(6, Math.round(num(e.outletCount, 3)))) : 1,
+    splayDeg: axes >= 3 ? num(e.outletSplayDeg, 12) : 0,
+    liftM: axes >= 3 ? num(e.liftStrokeMm, 0) / 1000 : 0,
+    phase: num(item.x, 0) * 0.35,
+  };
 }
 
 // ─── lasers, flames, fog ────────────────────────────────────────────────────
@@ -663,11 +690,16 @@ export function fieldsFor(item) {
     out.push(
       { key: "motionPattern", label: `Motion (${motion.axes}D)`, select: true, fallback: motion.pattern,
         options: MOTION_PATTERNS.filter((p) => p.axes <= motion.axes).map((p) => ({ value: p.id, label: p.label })) },
-      { key: "motionSpeedHz", label: "Motion speed", unit: "Hz", min: 0.02, max: 2, step: 0.02, slider: true, fallback: motion.speedHz },
-      { key: rangeKey, label: "Swing range", unit: "°", min: 0, max: 180, step: 5, slider: true, fallback: motion.range },
+      { key: "motionSpeedHz", label: "Motion speed", unit: "Hz", min: 0.02, max: 2, step: 0.02, slider: true, fallback: motion.wantedHz },
+      { key: rangeKey, label: motion.axes === 1 ? "Swing range" : "Tilt range", unit: "°", min: 0, max: 180, step: 5, slider: true, fallback: motion.range },
+      { key: "speedDegSec", label: "Drive top speed", unit: "°/s", min: 10, max: 360, step: 5, fallback: motion.driveDegS },
     );
-    if (motion.axes >= 2) out.push({ key: "panRangeDeg", label: "Pan range", unit: "°", min: 0, max: 360, step: 5, slider: true, fallback: motion.pan });
-    if (motion.axes >= 3) out.push({ key: "liftStrokeMm", label: "Lift stroke", unit: "mm", min: 0, max: 1000, step: 10, slider: true, fallback: motion.liftM * 1000 });
+    if (motion.axes >= 2) out.push({ key: "panRangeDeg", label: "Rotation range", unit: "°", min: 0, max: 360, step: 5, slider: true, fallback: motion.pan });
+    if (motion.axes >= 3) out.push(
+      { key: "headSpinRpm", label: "Head spin", unit: "rpm", min: -120, max: 120, step: 1, slider: true, fallback: motion.spinRpm },
+      { key: "outletCount", label: "Outlets on the head", unit: "", min: 1, max: 6, step: 1, slider: true, fallback: motion.outlets },
+      { key: "outletSplayDeg", label: "Outlet splay", unit: "°", min: 0, max: 40, step: 1, slider: true, fallback: motion.splayDeg },
+    );
   }
   const fx = effectOf(item);
   if (fx === "laser") {

@@ -1,5 +1,16 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-18: AquaFlow Studio 1.2.76 - Easy Fountain Design: real-world motion, water, laser and flame looks**
+
+- **User report:** some 3D objects too big, some visuals poor, no visible difference between 1D, 2D and 3D nozzles.
+- **Research** (Huaxin, Himalaya, Symphony product pages; jet drag/breakup papers): 1D = one swing axis (about +/-60 deg, sweeps in one vertical plane); 2D = tilt (up to +/-80 deg) + 360 deg rotation (any direction in a cone); 3D = 2D + a 360 deg spinning nozzle head (a multi-outlet/fan head twists the water). Real jets: glassy stream near the nozzle breaking into spray, drag shortens reach, splashes on landing.
+- **Motion** (`fx/easyDesigner.js` motionOf, `EasyScene.js` motionState/outletDir): patterns by axes (1D sweep/wave; 2D rotating cone, figure 8, cross, free dance, spiral); 3D adds head spin (rpm), outlets on the head and their splay; motion slowed to the drive's top speed in deg/s (shown when it limits); the nozzle model now tilts, rotates and spins with its head.
+- **Water:** drops keep the direction they left with; tight core breaking up into spray (10 m jet spreads about 1-1.5 m), horizontal air drag, landing splashes; water leaves from the real nozzle outlet height; moving heads get a full particle budget per outlet.
+- **Sizes:** equipment at real size (was 2.5x), smaller base discs, name labels a constant size on screen.
+- **Lasers:** thin cores (14 mm) with a faint haze glow fading with distance; visibility follows the Haze slider (new in the toolbar, shared with the full preview's render.laserHaze).
+- **Flame:** fine particles in licking tongues, yellow root, orange body, see-through red tips (no longer a white blob).
+- **Verified:** study scene in headless Edge (pump, 1D/2D/3D nozzles, straight jet with light, laser, flame), close-ups reviewed and tuned over three rounds; 2 new/updated tests; all 2,036 frontend tests pass.
+
 **2026-11-18: AquaFlow Studio 1.2.75 - Easy Fountain Design: moving 1D/2D/3D nozzles, laser beams, flames and fog in 3D**
 
 - **User report:** 1D/2D/3D nozzles were missing from the list (they were under Effects), and lasers/effects showed only their model in 3D.
