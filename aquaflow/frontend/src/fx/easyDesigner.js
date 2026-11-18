@@ -21,7 +21,7 @@ import { createFixtureEntity, fixtureLayerKey } from "../engineering/drafting/en
 import { partRole, nozzleKind } from "../components/programmer/studio/fountainDesign";
 import { inventory } from "../components/programmer/studio/showModel";
 import {
-  readConnections, connectToPump, setNozzleValve, setValveNozzle, disconnectValve, pairLights, autoPumps, autoPairLights,
+  readConnections, connectToPump, setNozzleValve, setValveNozzle, disconnectValve, pairLights, autoPumps,
 } from "../engineering/connections";
 import { jetFlowLpm, jetHeadM } from "../engineering/pumpFlow";
 
@@ -174,7 +174,13 @@ export function connectPair(fixtures, aId, bId) {
     const valvePump = up.engineering?.pumpId;
     const jet = d.nozzleById.get(down.id);
     if (valvePump && d.pumps.has(valvePump) && jet?.pumpId !== valvePump) next = connectToPump(next, [down.id], valvePump);
-  } else if (key === "light-nozzle") next = pairLights(fixtures, [up.id], down.id);
+  } else if (key === "light-nozzle") {
+    next = pairLights(fixtures, [up.id], down.id);
+    const h = num(down.engineering?.jetHeightM, 0) > 0 ? num(down.engineering.jetHeightM) : 2;
+    if (!(lightCoverage(up, down, h, nozzleKind(down).id) > 0)) {
+      return { fixtures: next, ok: true, message: `${nameOf(up)} → ${nameOf(down)} paired, but the light's beam does not reach that jet — move the light next to it (or widen its beam) to colour the water.` };
+    }
+  }
   return { fixtures: next, ok: true, message: `${nameOf(up)} → ${nameOf(down)} connected.` };
 }
 
@@ -275,10 +281,11 @@ export function autoConnectItem(fixtures, id) {
       }
     }
   } else if (role === "light") {
-    const jet = nearest(design.nozzles, item);
+    // Only a jet the beam really reaches.
+    const jet = litNozzle(fixtures, id, design);
     if (jet) {
-      next = pairLights(next, [id], jet.item.id);
-      lines.push(`${nameOf(item)} lights ${nameOf(jet.item.item)}`);
+      next = pairLights(next, [id], jet.id);
+      lines.push(`${nameOf(item)} lights ${nameOf(jet.item)}`);
     }
   }
   return { fixtures: next, lines };
@@ -307,11 +314,38 @@ function defaultLightColor(entry) {
 
 const round = (v) => Math.round(num(v) * 1000) / 1000;
 
-/** Connect everything that is still loose: jets to pumps, lights to jets. */
+/** Connect everything that is still loose: jets to pumps, lights to the jet their beam reaches. */
 export function autoConnectAll(fixtures = []) {
   const a = autoPumps(fixtures, { mode: "nearest" });
-  const b = autoPairLights(a.fixtures);
-  return { fixtures: b.fixtures, lines: [...a.lines, ...b.lines] };
+  let next = a.fixtures;
+  const lines = [...a.lines];
+  const design = readConnections(next);
+  for (const l of design.lights) {
+    const explicit = l.item.engineering?.pairedNozzleId || l.item.pairedNozzleId;
+    if (explicit && design.nozzleById.has(explicit)) continue;
+    const jet = litNozzle(next, l.id, design);
+    if (!jet) continue;
+    next = pairLights(next, [l.id], jet.id);
+    lines.push(`${nameOf(l.item)} → ${nameOf(jet.item)}`);
+  }
+  return { fixtures: next, lines };
+}
+
+/** After an item moved: re-pair the lights whose beams it affects (the light itself, or a jet's lights). */
+export function afterMove(fixtures, id) {
+  const item = fixtures.find((f) => f.id === id);
+  const role = roleOf(item);
+  if (role === "light") return repairLight(fixtures, id);
+  if (role !== "nozzle") return { fixtures, message: "" };
+  let next = fixtures, message = "";
+  for (const l of readConnections(fixtures).lights) {
+    const paired = l.item.engineering?.pairedNozzleId || l.item.pairedNozzleId;
+    if (paired && paired !== id) continue;     // a light lighting another jet keeps its jet
+    const r = repairLight(next, l.id);
+    next = r.fixtures;
+    if (r.message) message += ` ${nameOf(l.item)}:${r.message}`;
+  }
+  return { fixtures: next, message };
 }
 
 /** Remove fixtures and every link that pointed at them. */
@@ -381,16 +415,10 @@ export function liveJets(fixtures = [], live = {}, design = readConnections(fixt
       needKw: Math.round(need * 100) / 100, loadPct: have > 0 ? Math.round((100 * need) / have) : null,
       jets: p.nozzleIds.length, open: open.length, heightScale: on ? speed ** 2 * powerScale : 0 });
   }
-  // Light colour on each jet: paired lights (or nearest), mixed by intensity.
-  const tint = new Map();
-  for (const l of design.lights) {
-    if (!l.nozzleId || !isOn(l.id)) continue;
-    const k = Math.max(0, Math.min(100, num(l.item.engineering?.intensityPct, 100))) / 100;
-    if (!(k > 0)) continue;
-    const list = tint.get(l.nozzleId) || [];
-    list.push({ color: lightColorOf(l.item), k });
-    tint.set(l.nozzleId, list);
-  }
+  // Light colour on a jet only where a light's beam really reaches the water (not by pairing:
+  // a light moved away from its jet no longer colours it), mixed by intensity × coverage.
+  const lightsOn = design.lights.map((l) => ({ l, k: Math.max(0, Math.min(100, num(l.item.engineering?.intensityPct, 100))) / 100 }))
+    .filter(({ l, k }) => k > 0 && isOn(l.id));
   const jets = design.nozzles.map((n) => {
     const e = n.item.engineering || {};
     const base = num(e.jetHeightM, 0) > 0 ? num(e.jetHeightM) : 2;
@@ -406,13 +434,70 @@ export function liveJets(fixtures = [], live = {}, design = readConnections(fixt
       else if (p.powerKw <= 0) reason = "Pump has no power";
       else if (p.loadPct > 100) reason = `Pump overloaded (${p.loadPct}%) — jets drop`;
     }
-    const lights = tint.get(n.id) || [];
+    const lights = [];
+    for (const { l, k } of lightsOn) {
+      const c = lightCoverage(l.item, n.item, base * scale, n.kind);
+      if (c > 0) lights.push({ color: lightColorOf(l.item), k: k * c });
+    }
     const strength = Math.min(1, lights.reduce((s, x) => s + x.k, 0));
     return { id: n.id, kind: n.kind, heightM: base * scale, nominalHeightM: base, flowLpm: jetFlowLpm(n.item) * Math.sqrt(scale),
       color: lights.length ? mixColors(lights) : null, intensity: strength, on: scale > 0, reason,
       spreadDeg: num(e.sprayAngleDeg, 0), outlets: Math.max(1, Math.round(num(e.outletCount, 0))) };
   });
   return { jets, pumps };
+}
+
+const LIGHT_LENS_M = 0.15;   // beam width at the lens: a light right beside a jet still reaches it
+
+/** How far the water of a jet spreads sideways from its nozzle (m). */
+function jetSpreadM(kind, heightM) {
+  if (kind === "ring" || kind === "basket" || kind === "curtain") return 0.4 * heightM;
+  if (kind === "mist") return 0.6;
+  if (kind === "jumping" || kind === "swing") return 0.5 * heightM;
+  return 0.05;
+}
+
+/**
+ * Share (0..1) of a jet's water inside a light's beam. The beam is a cone straight up from the
+ * light with its beam angle; the jet is lit from the height where the cone has widened to reach
+ * it up to the top of the water. 0 when the beam never touches the jet.
+ */
+export function lightCoverage(light, nozzle, heightM, kind = "jet") {
+  if (!(heightM > 0)) return 0;
+  const d = Math.max(0, dist(light, nozzle) - jetSpreadM(kind, heightM));
+  const beam = Math.max(5, Math.min(170, num(light?.engineering?.beamAngleDeg, 40)));
+  const t = Math.tan((beam * Math.PI) / 360);
+  const reachAt = d <= LIGHT_LENS_M ? 0 : (d - LIGHT_LENS_M) / t;   // height where the cone reaches the jet
+  if (reachAt >= heightM) return 0;
+  return 1 - reachAt / heightM;
+}
+
+/** The nozzle a light's beam covers best (null when its beam reaches none). */
+export function litNozzle(fixtures, lightId, design = readConnections(fixtures)) {
+  const light = fixtures.find((f) => f.id === lightId);
+  if (!light) return null;
+  let best = null, bestC = 0;
+  for (const n of design.nozzles) {
+    const h = num(n.item.engineering?.jetHeightM, 0) > 0 ? num(n.item.engineering.jetHeightM) : 2;
+    const c = lightCoverage(light, n.item, h, n.kind);
+    if (c > bestC) { bestC = c; best = n; }
+  }
+  return best;
+}
+
+/**
+ * After a light moved: pair it with the jet its beam now reaches best, or unpair it when its
+ * beam reaches no jet. @returns {{ fixtures, message }}
+ */
+export function repairLight(fixtures, lightId) {
+  const design = readConnections(fixtures);
+  const light = fixtures.find((f) => f.id === lightId);
+  if (!light || roleOf(light) !== "light") return { fixtures, message: "" };
+  const target = litNozzle(fixtures, lightId, design);
+  const current = light.engineering?.pairedNozzleId || light.pairedNozzleId || null;
+  if (target?.id === current) return { fixtures, message: "" };
+  if (target) return { fixtures: pairLights(fixtures, [lightId], target.id, design), message: ` Now lights ${nameOf(target.item)}.` };
+  return { fixtures: current ? pairLights(fixtures, [lightId], null, design) : fixtures, message: " Its beam reaches no jet, so it no longer colours any water." };
 }
 
 function mixColors(list) {

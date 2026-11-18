@@ -1,5 +1,11 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-18: AquaFlow Studio 1.2.74 - Easy Fountain Design: lights colour only the water their beam reaches**
+
+- **Bug (user report):** a light moved to another area still coloured its old jet, because the colour followed the light's pairing (and an unpaired light followed the nearest jet at any distance).
+- **Fix** (`fx/easyDesigner.js`): `lightCoverage()` models the beam as a cone up from the light (beam angle, 0.15 m lens, jet spread by nozzle kind); a jet takes a light's colour only for the share of its height inside the cone. Moving a light (drag or X/Y fields) re-pairs it to the jet its beam reaches best, or unpairs it; moving a jet re-checks its lights; dropping a light and Auto-connect all pair only within reach; plugging a light into an out-of-reach jet says so.
+- **Verified:** 2 new tests (light beside jet A colours A only; moved to an empty corner colours nothing and unpairs; moved beside jet B colours B); all 2,032 frontend tests pass; installer rebuilt and installed on this PC.
+
 **2026-11-18: AquaFlow Studio 1.2.73 - Easy Fountain Design: drag-and-drop 3D designer with live connections**
 
 - **Why:** the Easy Fountain window was a small settings form. It is now a full-workspace designer: big 3D space, asset tray below, properties on the right (`components/panels/EasyFountainPanel.jsx`, `panels/easy/EasyScene.js`, logic in `fx/easyDesigner.js`, 8 tests). Menu entry renamed "Easy Fountain Design".

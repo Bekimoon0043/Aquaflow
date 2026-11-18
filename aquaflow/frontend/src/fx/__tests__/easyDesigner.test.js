@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   assetsFor, roleOf, dropAsset, designLinks, replugLink, connectPair, liveJets, removeFixtures,
-  autoConnectAll, setEngineeringField, modelKindOf, ASSET_GROUPS,
+  autoConnectAll, setEngineeringField, modelKindOf, ASSET_GROUPS, afterMove, setFixtureFields, lightCoverage,
 } from "../easyDesigner";
 import { readConnections } from "../../engineering/connections";
 import { buildEasyFountain } from "../easyFountain";
@@ -117,5 +117,44 @@ describe("easy fountain designer", () => {
     expect(links.filter((l) => l.kind === "valve")).toHaveLength(6);
     expect(links.filter((l) => l.kind === "light")).toHaveLength(7);
     expect(liveJets(fixtures).jets.every((j) => j.heightM > 0)).toBe(true);
+  });
+
+  it("colours water only where a light's beam reaches it, also after the light is moved", () => {
+    let r = drop([], PUMP, 0, 0);
+    r = drop(r.fixtures, NOZZLE, 2, 0);
+    const jetA = r.id;
+    r = drop(r.fixtures, NOZZLE, 12, 0);
+    const jetB = r.id;
+    r = drop(r.fixtures, LIGHT, 2.2, 0);
+    const light = r.id;
+    let fx = setEngineeringField(r.fixtures, r.fixtures.find((f) => f.type === PUMP).id, "powerKw", 50);
+    const color = (fixtures, id) => liveJets(fixtures).jets.find((j) => j.id === id).color;
+    expect(color(fx, jetA)).not.toBeNull();
+    expect(color(fx, jetB)).toBeNull();
+
+    // Moved to an empty corner: no water is coloured, and the pairing is dropped.
+    let moved = afterMove(setFixtureFields(fx, light, { x: 7, y: 8 }), light);
+    expect(color(moved.fixtures, jetA)).toBeNull();
+    expect(color(moved.fixtures, jetB)).toBeNull();
+    expect(designLinks(moved.fixtures).some((l) => l.kind === "light")).toBe(false);
+
+    // Moved beside the other jet: that jet takes the colour.
+    moved = afterMove(setFixtureFields(moved.fixtures, light, { x: 12.2, y: 0 }), light);
+    expect(color(moved.fixtures, jetB)).not.toBeNull();
+    expect(color(moved.fixtures, jetA)).toBeNull();
+    expect(designLinks(moved.fixtures).some((l) => l.kind === "light" && l.to === jetB)).toBe(true);
+
+    // A light dropped far from every jet pairs with nothing.
+    const far = drop(moved.fixtures, LIGHT, 30, 30);
+    expect(designLinks(far.fixtures).filter((l) => l.from === far.id)).toHaveLength(0);
+  });
+
+  it("measures beam coverage from distance, beam angle and jet height", () => {
+    const light = { x: 0, y: 0, engineering: { beamAngleDeg: 40 } };
+    expect(lightCoverage(light, { x: 0.1, y: 0 }, 3)).toBe(1);
+    expect(lightCoverage(light, { x: 5, y: 0 }, 3)).toBe(0);
+    const mid = lightCoverage(light, { x: 0.6, y: 0 }, 3);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
   });
 });

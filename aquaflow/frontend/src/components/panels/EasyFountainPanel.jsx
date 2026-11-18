@@ -15,7 +15,7 @@ import { readConnections, connectionProblems } from "../../engineering/connectio
 import {
   ASSET_GROUPS, assetsFor, assetSummary, roleOf, modelKindOf, designLinks, LINK_STYLE, canConnect, connectPair,
   replugLink, disconnectLink, dropAsset, autoConnectAll, removeFixtures, liveJets, ROLE_FIELDS, LINK_FIELDS,
-  setEngineeringField, setFixtureFields, lightColorOf,
+  setEngineeringField, setFixtureFields, lightColorOf, afterMove,
 } from "../../fx/easyDesigner";
 import { EasyScene } from "./easy/EasyScene";
 
@@ -121,7 +121,8 @@ export default function EasyFountainPanel() {
     onSelectLink: (id) => { setSelectedLinkId(id); setSelectedId(null); },
     onMoveEnd: (id, p) => {
       const plan = toPlan(p);
-      commit(setFixtureFields(fixturesRef.current, id, { x: plan.x, y: plan.y }), `Moved ${byId.get(id)?.label || "item"} to ${plan.x.toFixed(2)}, ${plan.y.toFixed(2)} m.`);
+      const r = afterMove(setFixtureFields(fixturesRef.current, id, { x: plan.x, y: plan.y }), id);
+      commit(r.fixtures, `Moved ${byId.get(id)?.label || "item"} to ${plan.x.toFixed(2)}, ${plan.y.toFixed(2)} m.${r.message}`);
     },
     onReplug: (linkId, end, target) => {
       const link = designLinks(fixturesRef.current).find((l) => l.id === linkId);
@@ -321,7 +322,12 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
   const entry = getFixtureLibraryEntry(f.type);
   const e = f.engineering || {};
   const setEng = (key, value) => commit(setEngineeringField(fixturesRef.current, f.id, key, value));
-  const setTop = (patch) => commit(setFixtureFields(fixturesRef.current, f.id, patch));
+  const setTop = (patch) => {
+    const moved = setFixtureFields(fixturesRef.current, f.id, patch);
+    if (!("x" in patch || "y" in patch)) { commit(moved); return; }
+    const r = afterMove(moved, f.id);
+    commit(r.fixtures, r.message ? r.message.trim() : undefined);
+  };
   const mine = links.filter((l) => l.from === f.id || l.to === f.id);
   const candidates = fixtures.filter((x) => x.id !== f.id && canConnect(fixtures, f.id, x.id) && !mine.some((l) => l.from === x.id || l.to === x.id));
   const fields = ROLE_FIELDS[role] || [];
