@@ -17,6 +17,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { Reflector } from "three/examples/jsm/objects/Reflector.js";
 import { loadEquipmentAsset } from "../../preview/equipmentAssets";
 import { laserFrame } from "../../preview/laser/laserRig";
+import { sampleCameraTrack } from "../../preview/camera/cameraTrack";
 
 const G = 9.81;
 const MODEL_SCALE = 1;            // equipment at its real size; the coloured base disc keeps small parts easy to grab
@@ -245,7 +246,13 @@ function outletsOf(jet, t, rot) {
 }
 
 export class EasyScene {
-  constructor(container, handlers = {}) {
+  /**
+   * @param {HTMLElement} container
+   * @param {object} handlers  design-mode callbacks (drop, select, move, re-plug)
+   * @param {{ maxParticles?: number }} options  a show with ~1,000 jets needs far more drops than a design
+   */
+  constructor(container, handlers = {}, options = {}) {
+    this.maxParticles = Math.max(MAX_PARTICLES, Number(options.maxParticles) || 0);
     this.container = container;
     this.handlers = handlers;
     this.items = new Map();        // id → { group, role, modelKind, data, label, modelToken }
@@ -334,8 +341,8 @@ export class EasyScene {
 
     // Water particles.
     const geo = new THREE.BufferGeometry();
-    this.pPos = new Float32Array(MAX_PARTICLES * 3);
-    this.pCol = new Float32Array(MAX_PARTICLES * 3);
+    this.pPos = new Float32Array(this.maxParticles * 3);
+    this.pCol = new Float32Array(this.maxParticles * 3);
     geo.setAttribute("position", new THREE.BufferAttribute(this.pPos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute("color", new THREE.BufferAttribute(this.pCol, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setDrawRange(0, 0);
@@ -347,7 +354,7 @@ export class EasyScene {
     this.particles.frustumCulled = false;
     this.particles.renderOrder = 2;
     scene.add(this.particles);
-    this.jitter = new Float32Array(MAX_PARTICLES * 3);
+    this.jitter = new Float32Array(this.maxParticles * 3);
     for (let i = 0; i < this.jitter.length; i += 1) this.jitter[i] = Math.random() * 2 - 1;
 
     // Effects: laser beams (camera-facing ribbons), beam dots, flames and fog.
@@ -668,6 +675,138 @@ export class EasyScene {
     this.poolKey = null;
   }
 
+  // ─── show mode: the Studio renderer of the 3D preview ─────────────────────
+
+  /**
+   * Drive the water from a show (studio/showHistory.js): level(id, τ), pan(id, τ), tilt(id, τ),
+   * color(id, τ). Each drop leaves with the level and swing its nozzle had when it was fired.
+   * data.jets then lists the jets: { id, kind, nominalHeightM, swing, lightId, outlets }.
+   */
+  setShowSource(source) {
+    this.showSource = source || null;
+    // A show site is hundreds of metres across: bigger drops read as continuous streams, as on camera.
+    this.particles.material.size = this.showSource ? 0.3 : 0.13;
+  }
+  /** Show time source for live playback (seconds); null returns to design mode. */
+  setClock(fn) { this.clockFn = typeof fn === "function" ? fn : null; }
+  /** Follow the project's camera track (preview/camera/cameraTrack.js) while it has keys. */
+  setCameraTrack(track, follow = true) { this.cameraTrack = track || null; this.followCamera = !!follow; }
+  /** Render one exact frame at show time t (video export). */
+  renderAt(t, dt = 1 / 30) { this._renderShowFrame(t, dt); }
+
+  _renderShowFrame(t, dt) {
+    this.time = Math.max(0, Number(t) || 0);
+    const cam = this.followCamera && this.cameraTrack ? sampleCameraTrack(this.cameraTrack, this.time) : null;
+    if (cam) {
+      this.camera.position.set(cam.position.x, cam.position.y, cam.position.z);
+      if (Number(cam.fov) > 0 && Math.abs(this.camera.fov - cam.fov) > 1e-3) { this.camera.fov = cam.fov; this.camera.updateProjectionMatrix(); }
+      this.controls.target.set(cam.target.x, cam.target.y, cam.target.z);
+      this.camera.lookAt(this.controls.target);
+    } else this.controls.update();
+    if (this.showSource) this._updateShowWater(); else this._updateWater(dt);
+    this._updateEffects();
+    this._updateGlow();
+    if (this.waterMirror) this.waterMirror.material.uniforms.time.value = this.time;
+    if (this.realistic && this.composer) this.composer.render(dt);
+    else this.renderer.render(this.scene, this.camera);
+  }
+
+  _updateShowWater() {
+    const src = this.showSource, jets = this.data.jets || [];
+    const pos = this.pPos, col = this.pCol, jit = this.jitter, max = this.maxParticles;
+    const t = this.time;
+    // Jets with water now or still in the air from the last few seconds.
+    const active = [];
+    for (const j of jets) {
+      const L = Math.max(src.level(j.id, t), src.level(j.id, t - 1), src.level(j.id, t - 2.5), src.level(j.id, t - 4));
+      this.jetState.set(j.id, (j.nominalHeightM || 0) * src.level(j.id, t));
+      if (L > 0.01) active.push(j);
+    }
+    const per = active.length ? Math.min(2600, Math.floor(max / active.length)) : 0;
+    let n = 0, q = 0;
+    const tmp = new THREE.Color(), white = new THREE.Color(0xd8f1ff), lightCol = new THREE.Color();
+    const pose = (pan, tilt, rot) => {
+      const a = (pan * Math.PI) / 180, b = (tilt * Math.PI) / 180;
+      const x0 = Math.sin(a), z0 = Math.sin(b);
+      return { ax: x0 * Math.cos(rot) - z0 * Math.sin(rot), ay: Math.cos(a) * Math.cos(b), az: x0 * Math.sin(rot) + z0 * Math.cos(rot), spin: 0, lift: 0 };
+    };
+    for (const jet of active) {
+      const rec = this.items.get(jet.id);
+      if (!rec) continue;
+      const o = rec.group.position, rot = -rec.group.rotation.y;
+      const H = Math.max(0.2, jet.nominalHeightM || 2);
+      const oyBase = o.y + (rec.outletY ?? 0.15);
+      const vmax = Math.sqrt(2 * G * H);
+      const T = (vmax + Math.sqrt(vmax * vmax + 2 * G * oyBase)) / G + SPLASH_S;
+      if (jet.swing) this._aimHead(rec, pose(src.pan(jet.id, t), src.tilt(jet.id, t), rot));
+      // The water takes the colour of its light while that light is on.
+      tmp.copy(white);
+      let bright = 0.6 * (this.realistic ? 0.62 : 1);
+      if (jet.lightId) {
+        const k = src.level(jet.lightId, t), hex = src.color(jet.lightId, t);
+        // Lit water takes its light's colour strongly (Bellagio's warm white reads gold on camera).
+        if (k > 0.01 && hex) { tmp.lerp(lightCol.set(hex), Math.min(1, 0.6 + 0.4 * k)); bright *= 0.9 + 0.5 * k; }
+      }
+      const outlets = jet.swing ? [{ swing: true, spread: 0.02 }] : outletsOf({ ...jet, motion: null }, t, rot);
+      const each = Math.max(8, Math.floor(per / outlets.length));
+      for (const out of outlets) {
+        let sdx = 0, sdy = 1, sdz = 0;
+        if (!out.swing && !out.basket) {
+          const sTh = Math.sin(out.th || 0);
+          sdx = sTh * Math.cos(out.ph || 0); sdz = sTh * Math.sin(out.ph || 0); sdy = Math.cos(out.th || 0);
+        }
+        for (let i = 0; i < each && n < max; i += 1) {
+          const j = (q++ * 3) % jit.length;
+          const u = (i / each + 0.37 * jit[j + 2] * 0.05 + 1) % 1;
+          const age = ((t / T + u) % 1) * T;
+          const tau = t - age;
+          const L = src.level(jet.id, tau);
+          if (L < 0.01) continue;
+          const v0 = Math.sqrt(2 * G * H * L);
+          let dx = sdx, dy = sdy, dz = sdz, ox = o.x, oz = o.z, y0 = oyBase;
+          if (out.swing) {
+            // Direction and outlet at the moment this drop left the swinging head.
+            const st = pose(src.pan(jet.id, tau), src.tilt(jet.id, tau), rot);
+            dx = st.ax; dy = st.ay; dz = st.az;
+            const tip = this._headOutlet(rec, st);
+            ox = o.x + tip.x; oz = o.z + tip.z; y0 = o.y + tip.y;
+          }
+          const vy = v0 * dy * (1 + out.spread * 0.4 * jit[j + 2]);
+          const tLand = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * G * y0))) / G;
+          const breakup = Math.min(1, age / Math.max(0.2, tLand));
+          const s = out.spread * (0.25 + 1.4 * breakup ** 1.6);
+          const vx = v0 * (dx + s * jit[j]), vz = v0 * (dz + s * jit[j + 1]);
+          const k = n * 3;
+          if (age < tLand) {
+            const fx = (1 - Math.exp(-DRAG * age)) / DRAG;
+            pos[k] = ox + vx * fx;
+            pos[k + 1] = Math.max(0.01, y0 + vy * age - 0.5 * G * age * age);
+            pos[k + 2] = oz + vz * fx;
+            const fade = bright * (1 - 0.5 * breakup) * (breakup < 0.15 ? 1.25 : 1);
+            col[k] = tmp.r * fade; col[k + 1] = tmp.g * fade; col[k + 2] = tmp.b * fade;
+          } else {
+            const sp = age - tLand;
+            if (sp > SPLASH_S) continue;
+            const fx = (1 - Math.exp(-DRAG * tLand)) / DRAG;
+            const impact = Math.min(1.5, Math.abs(vy - G * tLand) / 8);
+            const r = (0.05 + 1.1 * sp) * (0.3 + 0.7 * Math.abs(jit[j + 2])) * impact;
+            const a = 6.283 * (0.5 + 0.5 * jit[j]);
+            pos[k] = ox + vx * fx + r * Math.cos(a);
+            pos[k + 1] = 0.02 + 3.2 * impact * sp * (SPLASH_S - sp);
+            pos[k + 2] = oz + vz * fx + r * Math.sin(a);
+            const fade = 0.55 * bright * (1 - sp / SPLASH_S);
+            col[k] = fade; col[k + 1] = fade; col[k + 2] = fade;
+          }
+          n += 1;
+        }
+      }
+    }
+    const geo = this.particles.geometry;
+    geo.setDrawRange(0, n);
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.color.needsUpdate = true;
+  }
+
   /** Realistic render (bloom, reflective water, indirect light) on/off — off for slow computers. */
   setRealistic(on) {
     const next = !!on;
@@ -728,8 +867,10 @@ export class EasyScene {
   _loop() {
     if (this.disposed) return;
     this.frame = requestAnimationFrame(this._loop);
+    if (this.baking) return;                 // a video render draws its frames itself (renderAt)
     const dt = Math.min(0.05, this.clock.getDelta());
     if (!this.container.clientWidth || !this.container.isConnected) return;
+    if (this.clockFn) { this._renderShowFrame(this.clockFn(), dt); return; }
     this.time += dt;
     this.controls.update();
     this._updateWater(dt);
@@ -745,7 +886,7 @@ export class EasyScene {
     const jets = this.data.jets || [];
     const pos = this.pPos, col = this.pCol, jit = this.jitter;
     const active = jets.filter((j) => (j.heightM > 0.02) || (this.jetState.get(j.id) || 0) > 0.02);
-    const per = active.length ? Math.min(3000, Math.floor(MAX_PARTICLES / active.length)) : 0;
+    const per = active.length ? Math.min(3000, Math.floor(this.maxParticles / active.length)) : 0;
     let n = 0, q = 0;
     const t = this.time;
     const tmp = new THREE.Color();
@@ -790,7 +931,7 @@ export class EasyScene {
           const sTh = Math.sin(out.th), cTh = Math.cos(out.th);
           dx = sTh * Math.cos(out.ph); dz = sTh * Math.sin(out.ph); dy = cTh;
         }
-        for (let i = 0; i < each && n < MAX_PARTICLES; i += 1) {
+        for (let i = 0; i < each && n < this.maxParticles; i += 1) {
           const j = (q++ * 3) % jit.length;
           const u = (i / each + 0.37 * jit[j + 2] * 0.05 + 1) % 1;
           const age = ((t / T + u) % 1) * T;
@@ -1234,6 +1375,7 @@ export class EasyScene {
   }
 
   resize() {
+    if (this.baking) return;                 // a video render holds the canvas at its export size
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);

@@ -57,6 +57,33 @@ The tempo is 128.02 BPM, with the first beat at 0.239 s (1 bar = 1.875 s). The h
 | 250–270 | Red Lights | the line returns, rings with shooters, finale build |
 | 270.5–289 | Finale | everything; shooter waves; peak at 286; last shot at 289.18; then the lake goes still |
 
+## 1D dances and the sung words (second pass)
+
+**1D oarsman dances along the line.** Every swing is checked against a 90°/s drive limit; the fastest is 52°/s.
+
+| Time | Dance |
+|---|---|
+| 0:37 | **Cross**: odd and even oarsmen swing in mirror image, so neighbouring jets cross into an X lattice |
+| 1:38 | **Scissors**: mirror-image pairs snap past each other |
+| 2:00 | **Scissors on the beat** for the drop |
+| 2:30 | **Fan**: the north and south halves open outward and close back |
+| 3:37 | **Rowing**: the whole line leans together |
+| 4:10 | **Travelling cross**: the X points run along the line |
+| 4:30 | Crossing sweeps in the finale |
+
+Before this pass, three sweeps asked for 100–256°/s. They were slowed to within the drive's rating.
+
+**The water follows the lyrics.** No captions exist for the film. Sung phrases were found in the song's centre channel instead: vocals are mixed in the centre and the synths are wide. The detector looked at voiced frames in the 250–3500 Hz band.
+
+- **What was found:** 15 phrases and 232 word onsets, stored in `scripts/data/bellagio-tiesto-vocals.json`.
+- **Check against the film:** the film starts drawing the ring on the first vocal entry (12.7 s) and raises the crown on the next one (24.4 s).
+- **How it plays:** each phrase is a "Sung line" pattern, sampled 20 times a second. Each word gives a pulse that ripples out from the centre of a singer group, and that group's lights flash with it.
+- **Singer groups:**
+  - **Footprints verses:** the inner ring.
+  - **Calls at 1:28–2:36:** the small ring and the centre of the line.
+  - **Vocal run at 3:15–3:45:** the middle 80 m of the line.
+- **Limit:** word timing is estimated from audio energy, not transcribed lyrics.
+
 ## Simplifications (not verified against WET's data)
 
 - **Dimensions:** the lake outline, the 300 m line, the 48 m and 22 m rings and the spacings are estimated from the drone footage, not surveyed.

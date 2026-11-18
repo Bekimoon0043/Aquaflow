@@ -92,7 +92,7 @@ import { createStoneMaps, cloneStoneMaps, disposeStoneMaps } from "./groundTextu
 // CPU field can carry. The CPU field stays as the low-tier fallback AND as the
 // invisible statistical sample that keeps the splash/containment analysis honest.
 import { GPUParticleField, gpuParticlesSupported } from "./particlesGPU";
-import { describeNozzleEmitters, allocatePool, EMIT_CLASS, spawnDesignNozzle } from "./nozzleEmitters";
+import { describeNozzleEmitters, allocatePool, EMIT_CLASS, spawnDesignNozzle, motionDirectionOf } from "./nozzleEmitters";
 // AF-3D-014 (Phase R4) — real nozzle and luminaire bodies, drawn instanced.
 import { FixtureInstances, LightMarkerInstances, fixtureKindFor } from "./fixtureModels";
 // Elevated / aimed nozzles and the stainless frames that carry them.
@@ -902,10 +902,12 @@ export class NozzleV2 {
         const spawnN = Math.floor(delta * 380 * ix);
         for (let s = 0; s < spawnN; s++) {
           const speed = this._launchSpeed(ix, 5.5 + ix * 7.0);
-          const vy = Math.cos(tiltX) * speed;
+          // The show's swing pose, turned with the fixture (same as the GPU field); else the idle sway.
+          const sw = motionDirectionOf(cfg);
+          const vy = sw ? sw[1] * speed : Math.cos(tiltX) * speed;
           const localX = Math.sin(tiltX) * speed;
-          const vx = localX*cosYaw + (Math.random()-0.5)*0.1 + wind.x*0.1;
-          const vz = -localX*sinYaw + (Math.random()-0.5)*0.1 + wind.z*0.1;
+          const vx = (sw ? sw[0] * speed : localX*cosYaw) + (Math.random()-0.5)*0.1 + wind.x*0.1;
+          const vz = (sw ? sw[2] * speed : -localX*sinYaw) + (Math.random()-0.5)*0.1 + wind.z*0.1;
           const life = vy/9.81*2.0*1.05;
           const sc = 0.10 + ix*0.06;
           this.waterSys.spawn(ox+(Math.random()-0.5)*0.04, 0.08, oz+(Math.random()-0.5)*0.04,
@@ -922,10 +924,11 @@ export class NozzleV2 {
         const spawnN = Math.floor(delta * 400 * ix);
         for (let s = 0; s < spawnN; s++) {
           const speed = this._launchSpeed(ix, 5.5 + ix * 7.0);
-          const vy = Math.cos(tiltX) * Math.cos(tiltZ) * speed;
+          const sw = motionDirectionOf(cfg);
+          const vy = sw ? sw[1] * speed : Math.cos(tiltX) * Math.cos(tiltZ) * speed;
           const localX = Math.sin(tiltX) * speed, localZ = Math.sin(tiltZ) * speed;
-          const vx = localX*cosYaw + localZ*sinYaw + (Math.random()-0.5)*0.12 + wind.x*0.1;
-          const vz = -localX*sinYaw + localZ*cosYaw + (Math.random()-0.5)*0.12 + wind.z*0.1;
+          const vx = (sw ? sw[0] * speed : localX*cosYaw + localZ*sinYaw) + (Math.random()-0.5)*0.12 + wind.x*0.1;
+          const vz = (sw ? sw[2] * speed : -localX*sinYaw + localZ*cosYaw) + (Math.random()-0.5)*0.12 + wind.z*0.1;
           const life = vy/9.81*2.0*1.05;
           const sc = 0.10 + ix*0.06;
           this.waterSys.spawn(ox+(Math.random()-0.5)*0.04, 0.08, oz+(Math.random()-0.5)*0.04,
@@ -944,10 +947,11 @@ export class NozzleV2 {
 
         for (let s = 0; s < spawnN; s++) {
           const speed = 6.0 + ix * 7.5 + animY * 2.0;
-          const vy = Math.cos(tiltX) * Math.cos(tiltZ) * speed;
+          const sw = motionDirectionOf(cfg);
+          const vy = sw ? sw[1] * speed : Math.cos(tiltX) * Math.cos(tiltZ) * speed;
           const localX = Math.sin(tiltX) * speed, localZ = Math.sin(tiltZ) * speed;
-          const vx = localX*cosYaw + localZ*sinYaw + (Math.random() - 0.5) * 0.15 + wind.x * 0.12;
-          const vz = -localX*sinYaw + localZ*cosYaw + (Math.random() - 0.5) * 0.15 + wind.z * 0.12;
+          const vx = (sw ? sw[0] * speed : localX*cosYaw + localZ*sinYaw) + (Math.random() - 0.5) * 0.15 + wind.x * 0.12;
+          const vz = (sw ? sw[2] * speed : -localX*sinYaw + localZ*cosYaw) + (Math.random() - 0.5) * 0.15 + wind.z * 0.12;
           const life = vy / 9.81 * 2.0 * 1.1;
           const sc = 0.11 + ix * 0.07;
 

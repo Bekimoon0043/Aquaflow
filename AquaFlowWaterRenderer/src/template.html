@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AquaFlow Water Renderer</title>
+  <style>
+    :root{color-scheme:dark;--bg:#071116;--panel:rgba(8,21,27,.88);--line:rgba(154,216,228,.18);--cyan:#84deea;--muted:#87a5ae;--text:#edf9fb;--gold:#f4c77a}
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);font:13px/1.35 Inter,Segoe UI,Arial,sans-serif;color:var(--text)}
+    #viewport{position:fixed;inset:0}canvas{display:block;width:100%;height:100%;outline:none}
+    .top{position:fixed;left:18px;right:18px;top:16px;height:56px;display:flex;align-items:center;gap:12px;padding:9px 12px;background:linear-gradient(110deg,rgba(9,26,33,.94),rgba(8,18,23,.82));border:1px solid var(--line);border-radius:15px;box-shadow:0 14px 45px rgba(0,0,0,.28);backdrop-filter:blur(18px)}
+    .brand{display:flex;align-items:center;gap:10px;min-width:235px}.mark{width:34px;height:34px;border-radius:12px;background:radial-gradient(circle at 38% 28%,#eaffff 0 8%,#81e5ef 9% 28%,#168cad 55%,#0a425a);box-shadow:0 0 28px rgba(71,206,227,.32)}
+    .brand b{display:block;letter-spacing:.04em}.brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:.13em;text-transform:uppercase}.spacer{flex:1}
+    button,.fileLabel,select{appearance:none;border:1px solid var(--line);background:#10262e;color:var(--text);height:36px;padding:0 13px;border-radius:10px;font:inherit;cursor:pointer;transition:.18s ease}button:hover,.fileLabel:hover,select:hover{border-color:rgba(132,222,234,.48);background:#14313a}button.primary,.fileLabel.primary{background:linear-gradient(135deg,#158ba4,#0f647e);border-color:#43bed0;font-weight:650}.fileLabel input{display:none}
+    .side{position:fixed;right:18px;top:88px;width:282px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:15px;backdrop-filter:blur(18px);box-shadow:0 16px 50px rgba(0,0,0,.28)}
+    .side h2{font-size:14px;margin:0 0 14px}.row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0;color:var(--muted)}.row output{color:var(--text);font-variant-numeric:tabular-nums}.row input[type=range]{width:145px;accent-color:#5ed4e4}.row select{width:145px}
+    .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:15px}.stat{padding:10px;border-radius:10px;background:rgba(116,188,202,.07);border:1px solid rgba(148,211,224,.12)}.stat span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}.stat b{display:block;margin-top:3px;font-size:15px}.notice{margin-top:12px;padding:10px;border-radius:10px;background:rgba(244,199,122,.08);color:#dbc9a8;font-size:11px}
+    .bottom{position:fixed;left:18px;right:318px;bottom:17px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:15px;backdrop-filter:blur(18px)}
+    .transport{display:flex;align-items:center;gap:10px}.transport button{width:42px;padding:0;font-size:16px}.time{width:94px;font-variant-numeric:tabular-nums;color:#d8f5f8}.timeline{position:relative;flex:1;height:8px;border-radius:99px;background:#17313a;overflow:hidden;cursor:pointer}.timeline>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4ac5d8,#b9f7f7);box-shadow:0 0 14px #5dd9e8}.project{margin-top:8px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.project strong{color:var(--text)}
+    .drop{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(circle at 50% 35%,#163744 0,#09171d 48%,#050d11 100%);z-index:4}.drop.hidden{display:none}.dropCard{width:min(570px,90vw);text-align:center;padding:45px;border:1px solid rgba(129,220,234,.24);border-radius:24px;background:rgba(7,20,26,.72);box-shadow:0 24px 90px rgba(0,0,0,.4)}.dropCard h1{font-size:30px;margin:16px 0 7px}.dropCard p{color:var(--muted);max-width:430px;margin:0 auto 24px}.dropCard .orb{width:82px;height:82px;margin:auto;border-radius:50%;background:radial-gradient(circle at 35% 25%,#fff,#8ce8ee 16%,#1d8fab 42%,#0b3347 68%,#061117);box-shadow:0 0 80px rgba(61,193,217,.35)}
+    .toast{position:fixed;left:50%;top:86px;transform:translate(-50%,-12px);opacity:0;pointer-events:none;padding:10px 15px;border-radius:10px;background:#102830;border:1px solid #367888;transition:.25s;z-index:8}.toast.show{opacity:1;transform:translate(-50%,0)}
+    @media(max-width:850px){.side{display:none}.bottom{right:18px}.brand{min-width:auto}.brand div{display:none}.top button:not(.primary){display:none}}
+  </style>
+</head>
+<body>
+  <div id="viewport"></div>
+  <div class="top">
+    <div class="brand"><span class="mark"></span><div><b>AquaFlow Water Renderer</b><small>Real-time fountain presentation</small></div></div>
+    <label class="fileLabel primary">Open AquaFlow file<input id="file" type="file" accept=".aqua,.aquapkg,application/json,application/zip"></label>
+    <div class="spacer"></div>
+    <button id="camera">Reset camera</button><button id="capture">Capture PNG</button><button id="record">Record show</button>
+  </div>
+  <aside class="side">
+    <h2>Water rendering</h2>
+    <label class="row"><span>Quality</span><select id="quality"><option value="eco" selected>Eco · GT 730</option><option value="balanced">Balanced</option><option value="cinematic">Cinematic</option></select></label>
+    <label class="row"><span>Water clarity</span><input id="clarity" type="range" min="0" max="100" value="72"><output id="clarityOut">72%</output></label>
+    <label class="row"><span>Wave strength</span><input id="waves" type="range" min="0" max="100" value="44"><output id="wavesOut">44%</output></label>
+    <label class="row"><span>Droplet amount</span><input id="spray" type="range" min="0" max="100" value="58"><output id="sprayOut">58%</output></label>
+    <label class="row"><span>Sun angle</span><input id="sun" type="range" min="0" max="360" value="135"><output id="sunOut">135°</output></label>
+    <div class="stats"><div class="stat"><span>Nozzles</span><b id="jets">—</b></div><div class="stat"><span>Duration</span><b id="duration">—</b></div><div class="stat"><span>Resolution</span><b id="resolution">—</b></div><div class="stat"><span>Frame rate</span><b id="fps">—</b></div></div>
+    <div class="notice">The imported AquaFlow file is read-only. Rendering settings stay inside this renderer and never change the original project.</div>
+  </aside>
+  <section class="bottom"><div class="transport"><button id="play">▶</button><span class="time" id="time">00:00.00</span><div class="timeline" id="timeline"><i id="progress"></i></div><span class="time" id="end">00:30.00</span></div><div class="project">Project: <strong id="project">No file loaded</strong></div></section>
+  <div class="drop" id="drop"><div class="dropCard"><div class="orb"></div><h1>Real water for AquaFlow</h1><p>Open an AquaFlow project to render its basin, fixtures, 30-second choreography, ripples, droplets, foam, reflections and light.</p><label class="fileLabel primary">Choose .aqua or .aquapkg<input id="fileWelcome" type="file" accept=".aqua,.aquapkg,application/json,application/zip"></label></div></div>
+  <div class="toast" id="toast"></div>
+  <!-- APP_BUNDLE -->
+</body>
+</html>
+

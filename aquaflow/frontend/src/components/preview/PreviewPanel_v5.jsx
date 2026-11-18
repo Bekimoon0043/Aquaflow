@@ -28,6 +28,7 @@ import HydraulicPreviewPanel, { useEngineeringPreview } from "./HydraulicPreview
 import { planBake } from "../../video/bakedTimeline";
 import { createBakeSampler } from "../../video/bakeSignalSampler";
 import { resolveExportSong } from "../../video/soundtrack";
+import StudioShowView from "./studio/StudioShowView";
 import { useProgrammerSong, SONG_ASSET } from "../programmer/studio/musicSync";
 import { liveAssetFiles } from "../../utils/assetManifest";
 // AQ-S3-013 — the 3D view as an editing workspace, not just a render.
@@ -898,9 +899,16 @@ if (sitePreview.active && sitePreview.plan) {
       onDrop={libraryDrop.onDrop}
       style={{ position:"relative", width:"100%", height:"100%", background:"#030806", overflow:"hidden", display:"flex" }}>
 
-      {/* ── 3D Canvas ── */}
-      <canvas ref={canvasRef} aria-label="Interactive 3D fountain viewport" style={{ flex:1, display:"block", minWidth:0 }}
-        onPointerEnter={() => sceneRef.current && setActiveScene(sceneRef.current)} />
+      {/* ── 3D Canvas ── (the Studio look, the Easy Fountain Design renderer, draws over it) */}
+      <div style={{ position:"relative", flex:1, minWidth:0, display:"flex" }}>
+        <canvas ref={canvasRef} aria-label="Interactive 3D fountain viewport" style={{ flex:1, display:"block", minWidth:0 }}
+          onPointerEnter={() => sceneRef.current && setActiveScene(sceneRef.current)} />
+        {renderSettings.studioLook !== false && (
+          <StudioShowView cameraTrack={cameraTrack} followCamera={cam === CAMERA_MODES.ANIMATED}
+            song={resolveExportSong({ source: sitePreview.active && sitePreview.plan ? "site-preview" : "timeline", site: sitePreview, programmerSong: programmerSong || liveAssetFiles.get(SONG_ASSET) || null })}
+            render={renderSettings} onClose={() => updateRender({ studioLook: false })} />
+        )}
+      </div>
       {freeLook && cam === CAMERA_MODES.ANIMATED && (
         <button type="button" onClick={() => { sceneRef.current?.resumeCameraTrack?.(); setFreeLook(false); }}
           style={{ position:"absolute", top:44, left:"50%", transform:"translateX(-50%)", zIndex:20, background:"#0f3346", color:"#33d6ff", border:"1px solid #33d6ff", borderRadius:12, padding:"3px 12px", fontSize:11, cursor:"pointer" }}>
@@ -1070,6 +1078,11 @@ if (sitePreview.active && sitePreview.plan) {
           {/* ── RENDER TAB ── */}
           {tab==="render" && (<>
             <Section title="Real-world" defaultOpen>
+              <label title="Play the show with the Easy Fountain Design renderer: drops keep the swing they left with, bloom, reflective water, night sky"
+                style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#cde", margin:"2px 0 6px" }}>
+                <input type="checkbox" checked={renderSettings.studioLook !== false} onChange={(e) => updateRender({ studioLook: e.target.checked })} />
+                Studio look (Easy Fountain Design renderer)
+              </label>
               <RealismReport fixtures={engineeringFixtures} realWorld={realWorld} onToggle={setRealWorld} />
             </Section>
             <Section title="View" defaultOpen>

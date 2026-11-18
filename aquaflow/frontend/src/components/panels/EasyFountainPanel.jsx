@@ -19,6 +19,7 @@ import {
   setEngineeringField, setFixtureFields, lightColorOf, afterMove,
 } from "../../fx/easyDesigner";
 import { EasyScene } from "./easy/EasyScene";
+import { poolShape, basinPolygon } from "./easy/sceneData";
 import { laserFrame, insidePoly } from "../preview/laser/laserRig";
 
 const ROLE_UI = {
@@ -327,27 +328,6 @@ function roleHint(role, design) {
 /** Design settings worth copying on duplicate (not links). */
 function pickProps(e = {}) {
   return Object.fromEntries(Object.entries(e).filter(([k]) => !LINK_FIELDS.has(k)));
-}
-
-/** Basin outline in world space (centred on the origin). */
-function poolShape(geometry, params, poolType, center) {
-  if (geometry?.type === "circle") return { shape: "circle", radius: Number(geometry.radius) || Number(params?.radius) || 6 };
-  if (geometry?.type === "ellipse") return { shape: "ellipse", rx: Number(geometry.rx) || 6, ry: Number(geometry.ry) || 4 };
-  if (Array.isArray(geometry?.points) && geometry.points.length >= 3) {
-    return { shape: "poly", points: geometry.points.map((p) => ({ x: Number(p.x) - center.cx, z: Number(p.y) - center.cy })) };
-  }
-  const b = poolBounds(geometry, params, poolType);
-  if (b.radius) return { shape: "circle", radius: b.radius };
-  const w = (b.maxX - b.minX) / 2, l = (b.maxY - b.minY) / 2;
-  return { shape: "poly", points: [{ x: -w, z: -l }, { x: w, z: -l }, { x: w, z: l }, { x: -w, z: l }] };
-}
-
-/** World-space basin outline [[x, z], ...] for the laser safety rule. */
-function basinPolygon(pool) {
-  if (!pool) return null;
-  if (pool.shape === "poly") return pool.points.map((p) => [p.x, p.z]);
-  const rx = pool.shape === "circle" ? pool.radius : pool.rx, rz = pool.shape === "circle" ? pool.radius : pool.ry;
-  return Array.from({ length: 48 }, (_, i) => [rx * Math.cos((i / 48) * 2 * Math.PI), rz * Math.sin((i / 48) * 2 * Math.PI)]);
 }
 
 // ─── properties: one item ───────────────────────────────────────────────────

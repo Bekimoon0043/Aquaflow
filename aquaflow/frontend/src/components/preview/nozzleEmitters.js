@@ -118,6 +118,21 @@ function emitter(base) {
  * @param {function} launchSpeed (demand, fallback) => m/s — solved hydraulics when available
  * @returns {Array} zero or more emitter descriptors
  */
+/**
+ * Swing pose of a moving nozzle from the show (cfg.motionOverride: pan = swing angle, tilt = second
+ * axis), as a unit direction. The swing plane turns with the fixture's rotation (0 = along world X).
+ * null when the nozzle is not a moving one or the show does not drive it.
+ */
+export function motionDirectionOf(cfg) {
+  const type = cfg?.type;
+  if (!cfg?.motionOverride || !/^motion_[123]d$/.test(String(type))) return null;
+  const tx = (Number(cfg.motionOverride.pan) || 0) * DEG;
+  const tz = type === "motion_1d" ? 0 : (Number(cfg.motionOverride.tilt) || 0) * DEG;
+  const x0 = Math.sin(tx), y = Math.cos(tx) * Math.cos(tz), z0 = Math.sin(tz);
+  const rot = (Number(cfg.rotation) || 0) * DEG;
+  return [x0 * Math.cos(rot) - z0 * Math.sin(rot), y, x0 * Math.sin(rot) + z0 * Math.cos(rot)];
+}
+
 export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) {
   if (cfg.advancedNozzleModel && filmKindFor(cfg)) return [];
   const descs = cfg.advancedNozzleModel
@@ -132,6 +147,12 @@ export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launch
         },
       }, { intensity: ix, elapsedS: elapsed }).emitters
     : describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed);
+  // The advanced (datasheet) jet model draws a moving nozzle's jet straight up; turn its jet
+  // cones to the swing pose the show gives it.
+  const swing = motionDirectionOf(cfg);
+  if (swing && cfg.advancedNozzleModel) {
+    for (const e of descs) if (e.mode === EMIT_MODE.CONE) { e.dx = swing[0]; e.dy = swing[1]; e.dz = swing[2]; }
+  }
   // A fixture with a design height is drawn to it (see applyDesign); one without keeps
   // exactly the per-type behaviour above. A crystal ball sizes itself (sphere case).
   const designed = cfg.advancedNozzleModel || designHeightOf(cfg) == null || cfg?.type === SPHERE_TYPE
@@ -140,7 +161,8 @@ export function describeNozzleEmitters(cfg, ix, elapsed, wind, tintColor, launch
   const placed = hasSpatialFeatures(cfg) ? applySpatial(designed, cfg, ix, launchSpeed) : designed;
   // Lit band / apex head / crown — real-world (realWorldLook.js) or artistic (jetLook.js).
   const looked = hasLookFeatures(cfg) ? applyJetLook(placed, cfg, ix, tintColor) : placed;
-  return applyModelOutlets(looked, cfg);
+  // A moving nozzle's model gives the outlet position; the direction stays the show's swing pose.
+  return applyModelOutlets(looked, swing ? { ...cfg, keepDirection: true } : cfg);
 }
 
 function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) {

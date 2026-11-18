@@ -150,3 +150,17 @@ describe("1D swing nozzles turn their swing plane with the fixture", () => {
     expect(b.dy).toBeCloseTo(a.dy, 6);
   });
 });
+
+describe("moving nozzles follow the show's swing in every jet model", () => {
+  const cfg = { type: "motion_1d", x: 0, z: 0, rotation: 0, designHeightM: 22, engineering: { jetHeightM: 22 }, motionOverride: { pan: 20, tilt: 0 } };
+  it("the advanced (datasheet) jet model tilts with the swing instead of standing upright", () => {
+    const [main] = describeNozzleEmitters({ ...cfg, advancedNozzleModel: true }, 0.5, 0, { x: 0, z: 0 }, TINT, null);
+    expect(main.dx).toBeGreaterThan(0.3);
+    expect(main.dy).toBeLessThan(0.97);
+  });
+  it("a model outlet socket moves the jet's start but keeps the swing direction", () => {
+    const [main] = describeNozzleEmitters({ ...cfg, advancedNozzleModel: true, modelOutlet: { position: [0, 0.55, 0], direction: [0, 1, 0] } }, 0.5, 0, { x: 0, z: 0 }, TINT, null);
+    expect(main.oy).toBeCloseTo(0.55, 5);
+    expect(main.dx).toBeGreaterThan(0.3);
+  });
+});

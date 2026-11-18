@@ -76,6 +76,6 @@ export function applyModelOutlets(emitters, cfg) {
   return emitters.map((emitter) => ({
     ...emitter,
     ox: position[0], oy: position[1], oz: position[2],
-    ...(emitter.mode === 0 ? { dx: direction[0], dy: direction[1], dz: direction[2] } : {}),
+    ...(emitter.mode === 0 && !cfg.keepDirection ? { dx: direction[0], dy: direction[1], dz: direction[2] } : {}),
   }));
 }

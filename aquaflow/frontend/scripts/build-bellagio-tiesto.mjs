@@ -106,8 +106,8 @@ ring("mini-S", SMALL, SMALL.R + 1, 64, MINI, miniEng, "smallMini", "Mini-shooter
 ring("super-S", SMALL, SMALL.R - 1.5, 16, SUPER, superEng, "smallSuper", "Super-shooter · small ring", { groupId: "small_super" });
 ring("xt-S", SMALL, 2, 4, SUPER, xtEng, "xtSmall", "Extreme-shooter · small ring centre", { groupId: "extreme" });
 // Fog: Bellagio's fog system along the line and round the big ring.
-for (let i = 0; i < 12; i++) { const p = along(((i + 0.5) / 12) * LINE_LEN); put("fogLine", add(`fog-L-${pad(i + 1)}`, FOG, `Fog · line ${i + 1}`, p.x, p.y + 2, { fogRadiusM: 9 }, { groupId: "fog" })); }
-ring("fog-R", RING, RING.R + 4, 12, FOG, { fogRadiusM: 9 }, "fogRing", "Fog · big ring", { groupId: "fog" });
+// No fog: the user does not want it for this show (Bellagio's fog system is left out).
+ids.fogLine = []; ids.fogRing = [];
 
 const count = (k) => ids[k]?.length || 0;
 const census = {
@@ -126,6 +126,15 @@ const halves = (list) => [list.filter((_, i) => i % 2 === 0), list.filter((_, i)
 const [superA, superB] = halves(ids.lineSuper);
 group("lineOar", "Line · oarsmen (water)", ids.lineOar);
 group("lineOarSwing", "Line · oarsmen (swing)", ids.lineOar);
+const [oarOdd, oarEven] = halves(ids.lineOar);
+const xOf = new Map(fixtures.map((f) => [f.id, f.x]));
+group("lineOarOdd", "Line · oarsmen odd (swing)", oarOdd);
+group("lineOarEven", "Line · oarsmen even (swing)", oarEven);
+const centreMini = ids.lineMini.filter((id) => Math.abs(xOf.get(id)) < 40);
+group("lineCentreMini", "Line · centre mini-shooters (singer)", centreMini);
+group("lineCentreLight", "Line · centre lights (singer)", ids.lineLight.filter((id) => Math.abs(xOf.get(id)) < 40));
+group("lineOarLeft", "Line · oarsmen north half (swing)", ids.lineOar.filter((id) => xOf.get(id) < 0));
+group("lineOarRight", "Line · oarsmen south half (swing)", ids.lineOar.filter((id) => xOf.get(id) >= 0));
 group("lineMini", "Line · mini-shooters", ids.lineMini);
 group("lineSuper", "Line · super-shooters", ids.lineSuper);
 group("lineSuperA", "Line · super-shooters A (odd)", superA);
@@ -150,12 +159,11 @@ group("lineLight", "Line · lights", ids.lineLight);
 group("ringLight", "Big ring · lights", ids.ringLight);
 group("smallLight", "Small ring · lights", ids.smallLight);
 group("allLight", "All lights", [...ids.lineLight, ...ids.ringLight, ...ids.smallLight]);
-group("fogAll", "Fog · everywhere", [...ids.fogLine, ...ids.fogRing], "#cbd5e1");
-group("fogRing", "Fog · big ring", ids.fogRing, "#cbd5e1");
+
 
 // ─── pattern helpers (all editable in Show Programming) ────────────────────
 const base = (groupId, name, start, duration, extra) => ({ ...newRecipe(groupId, start), name, start: r2(start), duration: r2(duration), cycles: 1, spread: 1,
-  intensity: 100, order: "engineering", color: G.find((g) => g.id === groupId).color, ...extra });
+  intensity: 100, order: "engineering", color: G.find((g) => g.id === groupId)?.color || "#cbd5e1", ...extra });
 const hold = (g, name, s, d, level) => base(g, name, s, d, { effect: "static", intensity: level });
 const field = (g, name, s, d, f, order = "engineering") => base(g, name, s, d, { effect: "field", order, field: { ease: 0.6, ...f } });
 const ramp = (g, name, s, d, from, to) => base(g, name, s, d, { effect: "field", field: { kind: "custom", shape: "drawn", path: "together", motion: "repeat",
@@ -188,6 +196,17 @@ const swing = (g, name, s, d, cycles, amp, spread = 1, centre = 0) => base(g, na
   envelope: [{ time: 0, value: A(centre) / 100 }, { time: 0.25, value: A(centre + amp) / 100 }, { time: 0.5, value: A(centre) / 100 },
     { time: 0.75, value: A(centre - amp) / 100 }, { time: 1, value: A(centre) / 100 }] });
 const lean = (g, name, s, d, degrees) => base(g, name, s, d, { effect: "static", attribute: "motion_angle", intensity: A(degrees) });
+/**
+ * 1D oarsman dances along the line (one swing axis each, along the line):
+ *   cross     odd and even jets swing in mirror image, so neighbours cross into an X lattice
+ *   fan       the two halves open outward together and close back to the centre
+ *   scissors  mirror-image pairs snapping past each other on the beat
+ *   rowing    the whole line leans together, back and forth, like oars
+ */
+const cross = (name, s, d, cycles, amp, spread = 0) => [swing("lineOarOdd", `${name} (odd)`, s, d, cycles, amp, spread), swing("lineOarEven", `${name} (even)`, s, d, cycles, -amp, spread)];
+const fan = (name, s, d, cycles, amp) => [swing("lineOarLeft", `${name} (north half)`, s, d, cycles, -amp / 2, 0, -amp / 2), swing("lineOarRight", `${name} (south half)`, s, d, cycles, amp / 2, 0, amp / 2)];
+const scissors = (name, s, d, cycles, amp) => cross(name, s, d, cycles, amp, 0);
+const rowing = (name, s, d, cycles, amp) => [swing("lineOarSwing", name, s, d, cycles, amp, 0)];
 const LAMP = 85;
 
 const R = [];
@@ -209,7 +228,7 @@ sec(lean("ringOarSwing", "Crown: ring oarsmen lean out", 24.36, 12.8, 28), drawO
 sec(swing("ringOarSwing", "Ring oarsmen cross (X)", 37.1, 7.5, 2, 30, 0.5), field("ringOar", "Ring swells", 37.1, 7.5, swell(3.75, 40, 70)),
   field("ringMini", "Crown rotates clockwise", 44.6, 12, travel(1, 4, 3.75, 15, 70)), swing("ringOarSwing", "Ring oarsmen roll", 44.6, 12, 3, 22, 1),
   field("ringOar", "Ring oarsmen roll", 44.6, 12, travel(1, 2, 3.75, 35, 75)),
-  field("lineOar", "Line breathes", 37.1, 19.5, swell(7.5, 25, 50)), swing("lineOarSwing", "Line sways", 37.1, 19.5, 4, 25, 1),
+  field("lineOar", "Oarsmen full for the cross", 37.1, 19.5, swell(7.5, 65, 85)), ...cross("Cross · X lattice along the line", 37.1, 19.5, 4, 42),
   drawOn("smallMini", "Small ring draws on", 44.71, 12, 3, 45), drawOn("smallOar", "Small ring oarsmen", 44.71, 12, 3, 60),
   lean("smallOarSwing", "Small ring crown", 44.71, 12, 25), hold("smallLight", "Small ring lit", 44.71, 27.3, LAMP),
   shot("smallSuper", "Small ring shooters", 56.72, 1.2, 80), shot("ringSuper", "Big ring shooters", 56.72, 1.5, 70),
@@ -225,19 +244,19 @@ sec(shot("allSuper", "Impact · all super-shooters", 71.9, 1.4, 92), shot("xtRin
 sec(field("lineOar", "Oarsmen waves along the line", 75.85, 22.5, travel(1, 3, 3.75, 30, 75)),
   swing("lineOarSwing", "Leaning arcs travel south", 75.85, 22.5, 6, 32, 1),
   shot("lineSuperA", "Accent · odd line shooters", 80.54, 2.5, 70), shot("lineSuperB", "Accent · even line shooters", 88.1, 2.5, 70),
-  field("lineMini", "Curtain chase", 95.9, 14, stadium(3.75, 12, 72)), field("lineOar", "Oarsmen under the chase", 98.35, 21.6, swell(3.75, 35, 60)),
-  swing("lineOarSwing", "Oarsmen counter-sweep", 98.35, 21.6, 6, 28, 1),
+  field("lineMini", "Curtain chase", 95.9, 14, stadium(3.75, 12, 72)), field("lineOar", "Oarsmen high for the scissors", 98.35, 21.6, swell(3.75, 60, 85)),
+  ...scissors("Scissors · neighbours snap past each other", 98.35, 21.6, 11, 26),
   field("ringMini", "Ring ripples", 75.85, 34, travel(-1, 2, 7.5, 18, 55)), lean("ringOarSwing", "Ring dome (oarsmen lean in)", 75.85, 34, -30),
   field("ringOar", "Ring dome breathes", 75.85, 34, swell(7.5, 40, 70)),
   hold("fogRing", "Fog round the ring", 109.9, 10, 80), shot("ringSuper", "Ring shooters in the fog", 110, 1.5, 80),
   shot("smallSuper", "Small ring answers", 114.06, 1, 80), hold("allLight", "Groove light", 75.9, 44, LAMP));
 // 120 – 134 · DROP: everything on the beat; shooters fire in alternating halves (receivers refill)
 sec(field("lineMini", "Drop · line pumps on the beat", 119.9, 14, travel(1, 8, 1.875, 25, 85)),
-  field("lineOar", "Drop · oarsmen full", 119.9, 14, swell(0.94, 60, 90)), swing("lineOarSwing", "Drop · fast sweeps", 119.9, 14, 15, 38, 1),
+  field("lineOar", "Drop · oarsmen full", 119.9, 14, swell(0.94, 60, 90)), ...scissors("Drop · scissors on the beat", 119.9, 14, 7, 26),
   shot("lineSuperA", "Drop shot · odd shooters", 121.77, 0.8, 90), shot("lineSuperB", "Drop shot · even shooters", 125.5, 0.8, 90),
   shot("lineSuperA", "Drop shot · odd shooters", 129.25, 0.8, 90), shot("xtEnds", "Drop · end extremes", 127.4, 0.4, 100, 1),
   field("ringMini", "Drop · ring spins", 119.9, 14, travel(1, 6, 1.875, 25, 85)), field("innerMini", "Drop · inner ring counter-spins", 119.9, 14, travel(-1, 6, 1.875, 20, 80)),
-  swing("ringOarSwing", "Drop · ring breathes in and out", 119.9, 14, 7, 32, 0), field("ringOar", "Drop · ring oarsmen", 119.9, 14, swell(1.875, 55, 85)),
+  swing("ringOarSwing", "Drop · ring breathes in and out", 119.9, 14, 7, 25, 0), field("ringOar", "Drop · ring oarsmen", 119.9, 14, swell(1.875, 55, 85)),
   field("smallMini", "Drop · small ring", 119.9, 14, swell(0.94, 30, 80)), hold("allLight", "Drop light", 119.9, 14, 100));
 // 134 – 150 · breakdown: fog over the lake, the ring alone, slow columns in the haze
 sec(hold("fogAll", "Breakdown fog", 133.9, 16, 90), fall("lineMini", "Line falls", 133.9, 2, 60), fall("lineOar", "Line oarsmen fall", 133.9, 3, 70),
@@ -246,7 +265,7 @@ sec(hold("fogAll", "Breakdown fog", 133.9, 16, 90), fall("lineMini", "Line falls
   hold("ringLight", "Ring glows in the fog", 135.9, 14, 70));
 // 150 – 180 · walls and tall shooters (film 2:24–3:00); hits 149.5, 157.4
 sec(drawOn("lineMini", "The wall rises", 149.5, 22.5, 2, 80), field("lineOar", "Leaning arcs on the wall", 150.5, 21.5, travel(1, 2, 7.5, 50, 80)),
-  swing("lineOarSwing", "Arcs lean and travel", 150.5, 21.5, 3, 35, 1), shot("lineSuper", "Shooters race the line", 157.4, 5, 85),
+  ...fan("Fan · halves open out and close", 150.5, 21.5, 3, 44), shot("lineSuper", "Shooters race the line", 157.4, 5, 85),
   field("ringMini", "Ring wall", 149.5, 22.5, swell(3.75, 50, 80)), field("ringOar", "Ring crown high", 149.5, 22.5, swell(3.75, 60, 85)),
   lean("ringOarSwing", "Crown out", 149.5, 22.5, 25), hold("allLight", "Wall light", 149.5, 30.5, LAMP),
   shot("lineSuperA", "Tall shooters behind the wall", 172, 3, 90), shot("lineSuperB", "Tall shooters behind the wall", 176, 3, 90),
@@ -265,7 +284,7 @@ sec(shot("allSuper", "Big hit · all super-shooters", 195.63, 1.6, 95), shot("xt
   hold("allLight", "Build light", 197.6, 18.6, LAMP), hold("allLight", "FLASH", 216.24, 0.35, 100),
   shot("xtAll", "Flash · extremes", 216.24, 0.3, 100, 0.8), ramp("allLight", "After the flash", 216.6, 1, 100, LAMP),
   field("allMini", "Converge & split", 216.6, 10.7, converge(5.6, 15, 80)),
-  swing("lineOarSwing", "Oarsmen fan out", 216.6, 10.7, 3, 40, 0.3), field("lineOar", "Oarsmen high", 216.6, 10.7, swell(1.875, 60, 90)),
+  ...rowing("Rowing · the whole line leans together", 216.6, 10.7, 4, 36), field("lineOar", "Oarsmen high", 216.6, 10.7, swell(1.875, 60, 90)),
   shot("ringSuper", "Ring shooters", 222.78, 1.5, 90), shot("smallSuper", "Small ring shooters", 227.24, 1, 90));
 // 227 – 250 · the double ring (film 3:51–4:06), then the dip with fog
 sec(field("ringMini", "Outer ring spins", 227.2, 10, travel(1, 3, 3.75, 30, 85)), field("innerMini", "Inner ring spins the other way", 227.2, 10, travel(-1, 3, 3.75, 30, 85)),
@@ -274,14 +293,14 @@ sec(field("ringMini", "Outer ring spins", 227.2, 10, travel(1, 3, 3.75, 30, 85))
   hold("fogRing", "Fog in the ring", 237.1, 13, 85), ramp("ringMini", "Ring settles", 237.1, 3, 85, 30), field("ringOar", "Ring low", 237.1, 13, swell(7.5, 20, 45)),
   lean("ringOarSwing", "Ring dome", 237.1, 13, -30), hold("allLight", "Rings lit", 227.2, 22.9, LAMP));
 // 250 – 270 · Red Lights: the line rises again, rings with shooters, a finale build
-sec(drawOn("lineOar", "Line returns", 250, 20.4, 5, 60), swing("lineOarSwing", "Line rocks", 250, 20.4, 5, 25, 1),
+sec(drawOn("lineOar", "Line returns", 250, 20.4, 5, 80), ...cross("Travelling cross · X points run along the line", 250, 20.4, 5, 42, 1),
   field("lineMini", "Finale build", 255.6, 14.8, finale(3.75, 15, 75)), shot("ringSuper", "Rings with shooters", 255.6, 1.5, 80),
   shot("smallSuper", "Small ring shooters", 258, 1, 80), field("smallMini", "Small ring", 255.6, 14.8, swell(3.75, 30, 70)),
   hold("allLight", "Red Lights", 250, 20.4, LAMP));
 // 270.5 FINALE · everything, shooters in waves, peak 286, last shot 289.2, then the lake goes still
 sec(shot("allSuper", "Finale · super-shooter wave", 270.49, 4, 95), shot("xtAll", "Finale · extremes", 270.6, 1.2, 100, 1.5),
   field("lineMini", "Finale · full line", 270.4, 18.7, travel(1, 6, 1.875, 45, 92)), field("lineOar", "Finale · oarsmen", 270.4, 18.7, swell(0.94, 70, 95)),
-  swing("lineOarSwing", "Finale · sweeps", 270.4, 18.7, 18, 40, 1),
+  ...cross("Finale · crossing sweeps", 270.4, 18.7, 9, 28, 1),
   field("ringMini", "Finale · ring", 270.4, 18.7, travel(1, 6, 1.875, 45, 92)), field("innerMini", "Finale · inner ring", 270.4, 18.7, travel(-1, 6, 1.875, 40, 90)),
   lean("ringOarSwing", "Finale crown", 270.4, 18.7, 25), field("ringOar", "Finale crown", 270.4, 18.7, swell(0.94, 70, 95)),
   field("smallMini", "Finale · small ring", 270.4, 18.7, swell(0.94, 50, 90)), field("smallOar", "Finale · small oarsmen", 270.4, 18.7, swell(0.94, 60, 90)),
@@ -290,7 +309,51 @@ sec(shot("allSuper", "Finale · super-shooter wave", 270.49, 4, 95), shot("xtAll
   fall("lineMini", "Line falls", 289.1, 2.5, 92), fall("lineOar", "Oarsmen fall", 289.1, 2.5, 95), fall("ringMini", "Ring falls", 289.1, 2.5, 92),
   fall("innerMini", "Inner ring falls", 289.1, 2.5, 90), fall("ringOar", "Ring oarsmen fall", 289.1, 2.5, 95), fall("smallMini", "Small ring falls", 289.1, 2.5, 90),
   fall("smallOar", "Small oarsmen fall", 289.1, 2.5, 90), ramp("allLight", "Lights fade", 289.2, 3.5, 100, 0));
-const recipes = R.filter((r) => r && r.groupId && r.duration > 0);
+// ─── the water sings: one pattern per sung phrase, a pulse on every sung word ──
+// Phrases and word onsets: scripts/data/bellagio-tiesto-vocals.json (estimated from the song's
+// centre channel, 250–3500 Hz voiced frames). The film starts its ring and crown on the vocal
+// entries (12.7 s, 24.4 s), so the singer groups follow the words.
+const VOCALS = JSON.parse(fs.readFileSync("scripts/data/bellagio-tiesto-vocals.json", "utf8")).phrases;
+const singerFor = (t) => t < 60 ? { water: "innerMini", light: "ringLight", high: 62, glow: 22 }
+  : t < 160 ? { water: t < 100 ? "smallMini" : "lineCentreMini", light: t < 100 ? "smallLight" : "lineCentreLight", high: 70, glow: 25 }
+    : { water: "lineCentreMini", light: "lineCentreLight", high: 78, glow: 28 };
+/** A drawn level curve over one phrase: each word spikes, settles to a glow, the phrase end falls. */
+const sungCurve = (phrase, P) => {
+  const pts = [{ time: 0, value: 0 }];
+  for (const w of phrase.words) {
+    const u = (w - phrase.start) / P;
+    const prev = pts.at(-1);
+    if (u - 0.0005 > prev.time) pts.push({ time: u - 0.0005, value: Math.max(0.36, Math.min(prev.value, 0.36)) });
+    pts.push({ time: u + 0.08 / P, value: 1 }, { time: u + 0.32 / P, value: 0.38 });
+  }
+  const end = (phrase.end - phrase.start) / P;
+  pts.push({ time: Math.max(pts.at(-1).time + 0.001, end), value: 0.36 }, { time: end + 0.6 / P, value: 0 }, { time: 1, value: 0 });
+  // Round, then keep strictly increasing times inside the pattern (the compiler requires it).
+  const out = [];
+  for (const p of pts) {
+    const time = Math.min(1, Math.round(p.time * 10000) / 10000);
+    if (!out.length || time > out.at(-1).time) out.push({ time, value: r2(Math.max(0, Math.min(1, p.value))) });
+  }
+  return out;
+};
+VOCALS.forEach((phrase, i) => {
+  // Keyed curves sampled 20×/s (a field pattern this long would be sampled only every 0.25 s and
+  // blur the words); a small spread ripples each word out from the group's centre.
+  const d = phrase.end - phrase.start + 0.8, who = singerFor(phrase.start);
+  const envelope = sungCurve(phrase, d);
+  const sing = (g, high, label) => base(g, `${label} ${i + 1} · ${phrase.words.length} words`, phrase.start, d,
+    { effect: "curve", envelope, intensity: high, sampleRate: 20, spread: 0.03, order: "center-out", ease: 0 });
+  R.push(sing(who.water, who.high, "Sung line"), sing(who.light, 100, "Sung line light"));
+});
+// Light level: 208 lights at full output wash the water into solid white bands in the 3D view;
+// the film's base glow is a warm, modest light under each jet.
+const LIGHT_SCALE = 0.45;
+for (const r of R) {
+  if (!r || !/Light$/.test(r.groupId)) continue;
+  if (r.effect === "field" && r.field) { r.field.high = r2(r.field.high * LIGHT_SCALE); r.field.low = r2((r.field.low || 0) * LIGHT_SCALE); }
+  else r.intensity = r2(r.intensity * LIGHT_SCALE);
+}
+const recipes = R.filter((r) => r && r.groupId && r.duration > 0 && !/^fog/.test(r.groupId));
 
 const markers = [[0, "Intro · the lake waits"], [6.24, "Opening columns"], [12.96, "Ring draws on"], [24.36, "Crown · line draws on"], [37.1, "Build"],
   [59.9, "Curtain"], [71.9, "Impact"], [75.85, "Footprints groove"], [119.9, "Drop"], [133.9, "Breakdown · fog"], [149.5, "Walls"],
@@ -318,6 +381,19 @@ for (const c of clips) {
 }
 let refillViolations = 0;
 for (const list of shots.values()) { list.sort((a, b) => a - b); for (let i = 1; i < list.length; i++) if (list[i] - list[i - 1] < 3.5) refillViolations++; }
+// Swing drive limit: no oarsman may be asked to turn faster than its drive (90°/s).
+let worstSwing = 0, worstSwingAt = "";
+for (const c of clips) {
+  if (c.type !== "motion_angle" || !c.keys) continue;
+  for (let k = 2; k < c.keys.length; k += 2) {
+    const dt = c.keys[k] - c.keys[k - 2];
+    if (dt <= 0) continue;
+    const rate = (0.9 * Math.abs(c.keys[k + 1] - c.keys[k - 1])) / dt;
+    if (rate > worstSwing) { worstSwing = rate; worstSwingAt = `${c.name} @ ${r2(c.startTime + c.keys[k])} s`; }
+  }
+}
+console.log("fastest swing", Math.round(worstSwing), "°/s", worstSwingAt);
+if (worstSwing > 90 * 1.05) throw new Error(`swing faster than the 90°/s drive: ${Math.round(worstSwing)}°/s (${worstSwingAt})`);
 console.log("census", census, "fixtures", fixtures.length, "groups", G.length, "patterns", recipes.length, "clips", clips.length, "refill violations", refillViolations);
 
 // ─── write the project ──────────────────────────────────────────────────────
@@ -342,13 +418,17 @@ const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
 const W = (x, y, h) => ({ x, y: h, z: y - cy });
 const key = (t, pos, tgt, fov, ease = "smooth") => ({ id: `cam-${t}`, t, position: pos, target: tgt, fov, roll: 0, ease });
 const RINGC = W(RING.cx, RING.cy, 8), LINEC = W(0, -15, 10), SM = W(SMALL.cx, SMALL.cy, 8);
+// Shot list: close and low like the film's audience and drone shots, chosen per section so each
+// pattern is readable (along the line for crossings and waves, close for ring domes and crowns).
+const ALONG = W(-150, 6, 5), ALONG_T = W(0, -18, 9);
 const cameraKeys = [
-  key(0, W(170, 160, 120), W(0, -10, 0), 45), key(12, W(130, 130, 90), RINGC, 42), key(24, W(40, 80, 30), RINGC, 45),
-  key(36, W(150, 110, 75), LINEC, 50), key(60, W(0, 135, 5), LINEC, 55), key(72, W(0, 125, 6), W(0, -15, 30), 60),
-  key(96, W(-60, 115, 8), LINEC, 55), key(120, W(0, 120, 6), W(0, -15, 20), 62), key(134, W(25, 75, 18), RINGC, 45),
-  key(150, W(0, 125, 5), W(0, -15, 18), 60), key(180, W(0, 40, 220), W(0, -10, 0), 55), key(196, W(0, 120, 6), W(0, -15, 25), 62),
-  key(216, W(80, 110, 12), LINEC, 55), key(227, W(-30, 80, 22), RINGC, 45), key(250, W(120, 95, 30), SM, 50),
-  key(270, W(0, 130, 6), W(0, -15, 30), 64), key(END, W(0, 150, 25), W(0, -15, 15), 60),
+  key(0, W(150, 120, 80), W(0, -10, 0), 45), key(10, W(70, 75, 38), RINGC, 45), key(22, W(32, 52, 9), RINGC, 50),
+  key(34, W(-40, 45, 6), W(-60, -20, 9), 55), key(56, W(30, 55, 6), W(10, -14, 11), 55),
+  key(70, W(0, 115, 6), W(0, -15, 30), 62), key(76, ALONG, ALONG_T, 45), key(98, W(-95, 30, 5), W(-20, -15, 10), 50),
+  key(119, W(0, 105, 5), W(0, -15, 18), 62), key(133, W(30, 60, 12), RINGC, 48), key(149, W(0, 100, 5), W(0, -15, 14), 60),
+  key(172, W(60, 95, 6), W(0, -15, 30), 60), key(180, W(0, -10, 210), W(0, -10.01, 0), 55), key(194, W(0, 100, 5), W(0, -15, 25), 62),
+  key(214, W(150, 4, 5), W(0, -16, 9), 45), key(226, W(-32, 58, 14), RINGC, 48), key(249, W(-70, 70, 6), W(-20, -15, 10), 52),
+  key(269, W(0, 115, 6), W(0, -15, 30), 64), key(END, W(0, 150, 24), W(0, -15, 15), 60),
 ];
 proj.render = { ...proj.render, environment: "night", cameraMode: "animated", activeCameraView: null, laserHaze: 0.35,
   cameraTrack: { enabled: true, keys: cameraKeys },

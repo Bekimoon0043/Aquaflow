@@ -1,0 +1,107 @@
+{
+  "task": "AF-NEXT-013",
+  "date": "2026-11-04",
+  "gpuName": "NVIDIA GeForce GT 730",
+  "webgl": "ANGLE (NVIDIA, NVIDIA GeForce GT 730 (0x00000F02) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "sizeLimitBytes": 307200,
+  "threshold": 24,
+  "tolerance": 0.02,
+  "scenes": [
+    {
+      "name": "advanced-motion",
+      "description": "Advanced deterministic motion-blur export",
+      "ms": 5730,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 25,
+        "lights": 18
+      },
+      "drawCalls": 1649,
+      "triangles": 3895977,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 861087,
+      "jpgBytes": 145852,
+      "colour": {
+        "litPixels": 1548055,
+        "meanSaturation": 0.1781,
+        "nearWhiteShare": 0.5698
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "center-feature",
+        "advanced": true,
+        "motionBlur": {
+          "samples": 4,
+          "shutterAngle": 180
+        }
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\advanced-motion.png",
+        "created": true
+      },
+      "pngSha256": "c88f3fea41222b98a9e6c5f28d97cd0eae5e733ae89223345e65c55b4ffb07a0",
+      "committed": [
+        "2026-11-04/advanced-motion.jpg"
+      ],
+      "baselineSha256": "c88f3fea41222b98a9e6c5f28d97cd0eae5e733ae89223345e65c55b4ffb07a0",
+      "baselineBytes": 861087
+    },
+    {
+      "name": "advanced-motion-4k",
+      "description": "Advanced 4K motion-blur export",
+      "ms": 6024,
+      "width": 960,
+      "height": 540,
+      "counts": {
+        "nozzles": 25,
+        "lights": 18
+      },
+      "drawCalls": 825,
+      "triangles": 1948189,
+      "exposure": 1.55,
+      "toneMapping": "aces",
+      "pngBytes": 2621072,
+      "jpgBytes": 396879,
+      "colour": {
+        "litPixels": 6002539,
+        "meanSaturation": 0.1723,
+        "nearWhiteShare": 0.5829
+      },
+      "params": {
+        "time": 4,
+        "seed": 1234,
+        "quality": "medium",
+        "environment": "night",
+        "width": 960,
+        "height": 540,
+        "content": "lebu",
+        "aqua": "(Lebu pilot .aqua)",
+        "viewId": "center-feature",
+        "advanced": true,
+        "motionBlur": {
+          "samples": 2,
+          "shutterAngle": 180,
+          "resolution": "4k"
+        }
+      },
+      "compare": {
+        "baseline": "C:\\Users\\user\\Documents\\aquaflow\\docs\\preview-realism\\_local\\baseline\\advanced-motion-4k.png",
+        "created": true
+      },
+      "pngSha256": "0454ff8a931439643e383d80d85140ef90c178a9cb6257eafaf4bfc3a04eabd4",
+      "committed": [],
+      "baselineSha256": "0454ff8a931439643e383d80d85140ef90c178a9cb6257eafaf4bfc3a04eabd4",
+      "baselineBytes": 2621072
+    }
+  ],
+  "pairs": []
+}

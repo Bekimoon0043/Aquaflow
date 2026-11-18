@@ -75,3 +75,9 @@ aquaflow/desktop/resources/smoke-*/
 
 # Test scratch
 pytest_summary*.txt
+
+# Local caches, downloaded tools and extracted show packages (packages can hold licensed music)
+.build-cache/
+.tmp/
+.tools/
+aquaflow_packages/
