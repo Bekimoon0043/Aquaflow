@@ -385,7 +385,12 @@ function describeLegacyEmitters(cfg, ix, elapsed, wind, tintColor, launchSpeed) 
       const tiltX = cfg.motionOverride ? cfg.motionOverride.pan : (cfg.tiltX || 0) + animX * sweep;
       const tiltZ = type === "motion_1d" ? 0 : cfg.motionOverride ? cfg.motionOverride.tilt : (cfg.tiltZ || 0) + animZ * sweep;
       const speed = spd(type === "motion_3d" ? 6.0 + ix * 7.5 : 5.5 + ix * 7.0);
-      const [dx, dy, dz] = tilted(tiltX, tiltZ);
+      // The swing plane turns with the fixture (rotation 0 = along world X, as before), so a ring
+      // of 1D nozzles can swing radially (dome / crown) and a line of them along its own direction.
+      const rot = (cfg.rotation || 0) * DEG;
+      const [tx0, dy, tz0] = tilted(tiltX, tiltZ);
+      const dx = tx0 * Math.cos(rot) - tz0 * Math.sin(rot);
+      const dz = tx0 * Math.sin(rot) + tz0 * Math.cos(rot);
       return [emitter({
         mode: EMIT_MODE.CONE, ox, oz, dx: dx + wx * 0.02, dy, dz: dz + wz * 0.02,
         speed, spread: 0.12, spawnRadius: 0.05,

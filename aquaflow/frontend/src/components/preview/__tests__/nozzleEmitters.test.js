@@ -138,3 +138,15 @@ describe("allocatePool", () => {
     expect(allocatePool([mk(1)], 0)).toEqual([]);
   });
 });
+
+describe("1D swing nozzles turn their swing plane with the fixture", () => {
+  const aim = (rotation) => describeNozzleEmitters({ type: "motion_1d", x: 0, z: 0, rotation, motionOverride: { pan: 30, tilt: 0 } }, 1, 0, [0, 0], [1, 1, 1])[0];
+  it("swings along world X at rotation 0 (unchanged) and along world Z at rotation 90", () => {
+    const a = aim(0), b = aim(90);
+    expect(a.dx).toBeGreaterThan(0.4);
+    expect(Math.abs(a.dz)).toBeLessThan(0.05);
+    expect(b.dz).toBeGreaterThan(0.4);
+    expect(Math.abs(b.dx)).toBeLessThan(0.05);
+    expect(b.dy).toBeCloseTo(a.dy, 6);
+  });
+});

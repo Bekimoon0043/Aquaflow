@@ -1,5 +1,13 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-18: AquaFlow Studio 1.2.78 - Fountains of Bellagio · Tiësto rebuilt on the real layout**
+
+- **Request:** Kimi's `Bellagio_Tiesto_Full_Site_Show.aquapkg` used a 360 x 180 m rectangle, scattered nozzles, 2D movers and one "recorded" block of 21,692 cues. Rebuilt from the three films and research; notes in `reports/Bellagio Tiesto rebuild.md`.
+- **Evidence:** official Bellagio film of this show (YouTube iNQpcDuE6e4; its soundtrack is identical to Kimi's audio, lag 0.0 s) gives the layout from drone shots: one ~300 m curved line, a big double ring and a small ring tangent to it, fog, white light only. Published counts: 208 oarsmen, 798 mini-, 192 super-, 16 extreme-shooters. Song: Tiësto 2014 medley (Footprints / Rocky / Red Lights), 128.02 BPM, first beat 0.239 s.
+- **Build:** `frontend/scripts/build-bellagio-tiesto.mjs` → `Desktop/Bellagio_Tiesto_Real_Layout.aquapkg` (1,214 nozzles + 208 warm-white lights + 24 fog; oarsmen as 1D swing nozzles, along the line / radial on the rings). 156 named editable patterns in 28 groups (draw-ons, crowns, domes, sweeps, curtains, chases, shooter shots, fog, the 216 s flash), 19,938 clips, section markers, animated camera following the film's angles, 4 saved views. Checks: census, compile, shooter refill (no refire within 3.5 s: 0 violations).
+- **Preview fix:** 1D/2D/3D swing jets now turn their swing plane with the fixture's rotation (`nozzleEmitters.js`, rotation 0 unchanged), so ring oarsmen form domes and crowns; new test.
+- **Verified:** loaded in the full app headless (1,446 fixtures, no errors) and rendered at 0:26 (crown), 2:05 (drop, from the Strip) and 3:50 (double ring); all 2,036 frontend tests + 1 new pass (the designer tests time out only while a software-GPU render runs beside them). Not verified: dimensions are estimated from video, not surveyed.
+
 **2026-11-18: AquaFlow Studio 1.2.77 - Easy Fountain Design: water attached to moving heads, Depence-style realistic render**
 
 - **Gap fix (user report):** moving nozzles turned the whole model about its foot while the water left from a fixed point 0.55 m up (about 0.5 m gap at 60 deg tilt). Now the GLB rig is driven (`readRig`: Pan_Z about +Y, Tilt_X about +X, NozzleSocket outlet; 3D head spins on Tilt_X; lift raises only the head on a drawn telescopic column) and every drop leaves from the outlet position it had when fired. Rotating baskets use their real Outlet_1..3 on the turning Rotor_Z. Measured outlet-to-water distance in headless Edge: 0-2 cm (was 19-50 cm).
