@@ -1,5 +1,15 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-18: AquaFlow Studio 1.2.75 - Easy Fountain Design: moving 1D/2D/3D nozzles, laser beams, flames and fog in 3D**
+
+- **User report:** 1D/2D/3D nozzles were missing from the list (they were under Effects), and lasers/effects showed only their model in 3D.
+- **Tray:** new tabs Moving 1D/2D/3D (33 items: motion_nozzle_*, OASE/Huaxin/Longxin/ICONVINA/… swing drives, dancing jets; All/1D/2D/3D chips), Lasers (38), Flame & fog. Motor-only actuators are no longer offered as nozzles; items that are not water outlets (control panels, tanks) never spray.
+- **Moving water** (`EasyScene.js` motionDir): each drop keeps the direction the nozzle had when it was fired, so swinging jets trace real curving ropes. Patterns sweep, wave (offset along the row), circle, figure 8, cross (2D) and spiral + lift (3D); 1D nozzles only sweep. Sidebar: motion, speed (Hz), swing range, pan range, lift stroke, jet height (6 m default when the datasheet has none). Rotating baskets now spiral too.
+- **Lasers:** driven by the shared `preview/laser/laserRig.js` laserFrame (same looks and the same 3 m audience rule as the full preview) and drawn as glowing camera-facing ribbons with sheets, cone, firefly dots and graphics outlines. Sidebar: look, colour, output, fan width, scan speed, tilt, pan, mount height, and the safety status (beams, raised beams, blanked + "Mount on a 3.5 m truss"). A laser dropped outside the basin is put on a 3.5 m truss (with a mast drawn) and the user is told why. Beam show lasers default to a fan.
+- **Flames and fog:** flame column (white core → orange → red, steady or bursts, height/size) and a drifting fog cloud (density, spread).
+- **Render fix:** the basin water surface is drawn before all particles, so jets, flames and beams above the water are no longer dimmed by it.
+- **Verified:** 3 new tests; all 2,035 frontend tests pass; headless Edge: 1D/2D/3D nozzles dropped from the tray, figure-8 selected live, two lasers firing (1 and 9 beams, none blanked, the outside one on its truss), flame and fog visible. Not checked: real-GPU frame rate with many lasers.
+
 **2026-11-18: AquaFlow Studio 1.2.74 - Easy Fountain Design: lights colour only the water their beam reaches**
 
 - **Bug (user report):** a light moved to another area still coloured its old jet, because the colour followed the light's pairing (and an unpaired light followed the nearest jet at any distance).

@@ -11,6 +11,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { loadEquipmentAsset } from "../../preview/equipmentAssets";
+import { laserFrame } from "../../preview/laser/laserRig";
 
 const G = 9.81;
 const MODEL_SCALE = 2.5;          // equipment is drawn 2.5× life size so a 0.2 m nozzle can be seen and grabbed
@@ -18,6 +19,11 @@ const MAX_PARTICLES = 26000;
 const ROLE_COLOR = { pump: 0x38bdf8, valve: 0xa78bfa, nozzle: 0x5eead4, light: 0xfacc15, effect: 0xfb923c };
 const LINK_COLOR = { pump: 0x38bdf8, valve: 0xa78bfa, light: 0xfacc15 };
 const PORT_Y = 0.18;
+const MAX_BEAM_VERTS = 6 * 2400;   // 2 400 ribbon quads
+const MAX_DOTS = 3000;
+const MAX_FLAME = 9000;
+const MAX_FOG = 2400;
+const BEAM_DRAW_M = 70;             // beams are drawn this far (they fade into the night sky)
 
 function roundSprite() {
   const c = document.createElement("canvas");
@@ -72,13 +78,48 @@ function placeholder(role) {
   return mesh;
 }
 
-/** Outlet directions of a jet kind at time t (tilt from vertical θ, azimuth φ). */
+/**
+ * Where a moving nozzle points at time τ: tilt from vertical (th), azimuth (ph) and lift (m).
+ * Each drop keeps the direction it left with, so the water traces the motion (curving ropes).
+ */
+function motionDir(m, rot, tau) {
+  const w = 2 * Math.PI * m.speedHz;
+  const half = ((m.range / 2) * Math.PI) / 180;
+  const panHalf = ((m.pan / 2) * Math.PI) / 180;
+  const fullPan = m.pan >= 359;
+  switch (m.pattern) {
+    case "wave":
+    case "sweep": {
+      const a = half * Math.sin(w * tau + (m.pattern === "wave" ? m.phase : 0));
+      return { th: Math.abs(a), ph: rot + (a < 0 ? Math.PI : 0), lift: 0 };
+    }
+    case "circle":
+      return { th: half * 0.8, ph: fullPan ? rot + w * tau : rot + panHalf * Math.sin(w * tau), lift: 0 };
+    case "figure8": {
+      const ax = half * Math.sin(w * tau), az = half * 0.6 * Math.sin(2 * w * tau);
+      return { th: Math.hypot(ax, az), ph: rot + Math.atan2(az, ax), lift: 0 };
+    }
+    case "cross": {
+      const a = half * Math.sin(w * tau);
+      const along = Math.floor((w * tau) / (2 * Math.PI)) % 2 ? Math.PI / 2 : 0;
+      return { th: Math.abs(a), ph: rot + along + (a < 0 ? Math.PI : 0), lift: 0 };
+    }
+    case "spiral":
+    default:
+      return { th: half * (0.55 + 0.45 * Math.sin(0.3 * w * tau)), ph: fullPan ? rot + w * tau : rot + panHalf * Math.sin(w * tau),
+        lift: m.liftM * (0.5 + 0.5 * Math.sin(0.5 * w * tau)) };
+  }
+}
+
+/** Outlets of a jet: fixed directions (th, ph) or `at(τ)` for moving / rotating ones. */
 function outletsOf(jet, t, rot) {
   const kind = jet.kind;
   const out = [];
-  if (kind === "basket") {
+  if (jet.motion) {
+    out.push({ at: (tau) => motionDir(jet.motion, rot, tau), spread: 0.018 });
+  } else if (kind === "basket") {
     const n = Math.max(2, jet.outlets || 3);
-    for (let i = 0; i < n; i += 1) out.push({ th: 0.32, ph: t * 2.4 + (i * Math.PI * 2) / n, spread: 0.035 });
+    for (let i = 0; i < n; i += 1) out.push({ at: (tau) => ({ th: 0.32, ph: tau * 2.4 + (i * Math.PI * 2) / n, lift: 0 }), spread: 0.035 });
   } else if (kind === "ring") {
     const n = 12;
     for (let i = 0; i < n; i += 1) out.push({ th: 0.42, ph: (i * Math.PI * 2) / n, spread: 0.03 });
@@ -183,9 +224,39 @@ export class EasyScene {
       blending: THREE.AdditiveBlending, sizeAttenuation: true,
     }));
     this.particles.frustumCulled = false;
+    this.particles.renderOrder = 2;
     scene.add(this.particles);
     this.jitter = new Float32Array(MAX_PARTICLES * 3);
     for (let i = 0; i < this.jitter.length; i += 1) this.jitter[i] = Math.random() * 2 - 1;
+
+    // Effects: laser beams (camera-facing ribbons), beam dots, flames and fog.
+    const dyn = (count, itemSize) => new THREE.BufferAttribute(new Float32Array(count * itemSize), itemSize).setUsage(THREE.DynamicDrawUsage);
+    const beamGeo = new THREE.BufferGeometry();
+    beamGeo.setAttribute("position", dyn(MAX_BEAM_VERTS, 3));
+    beamGeo.setAttribute("color", dyn(MAX_BEAM_VERTS, 3));
+    beamGeo.setDrawRange(0, 0);
+    this.beams = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    this.beams.frustumCulled = false;
+    this.beams.renderOrder = 2;
+    scene.add(this.beams);
+    const pointsOf = (count, material) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", dyn(count, 3));
+      g.setAttribute("color", dyn(count, 3));
+      g.setDrawRange(0, 0);
+      const p = new THREE.Points(g, material);
+      p.frustumCulled = false;
+      p.renderOrder = 2;
+      scene.add(p);
+      return p;
+    };
+    this.dots = pointsOf(MAX_DOTS, new THREE.PointsMaterial({ size: 0.35, map: this.sprite, vertexColors: true, transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.flames = pointsOf(MAX_FLAME, new THREE.PointsMaterial({ size: 0.7, map: this.sprite, vertexColors: true, transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.fog = pointsOf(MAX_FOG, new THREE.PointsMaterial({ size: 2.6, map: this.sprite, vertexColors: true, transparent: true,
+      opacity: 0.22, depthWrite: false }));
 
     // Selection ring, drop ghost, drag line.
     this.selRing = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.55, 40),
@@ -268,6 +339,20 @@ export class EasyScene {
         rec.group.position.set(it.x, it.elevation || 0, it.z);
       }
       rec.group.rotation.y = -((Number(it.rotation) || 0) * Math.PI) / 180;
+      // A raised item (laser on a truss, elevated nozzle) stands on a mast down to the ground.
+      const elev = Number(it.elevation) || 0;
+      if (elev > 0.3) {
+        if (!rec.pole) {
+          rec.pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1, 10).translate(0, -0.5, 0),
+            new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.6, roughness: 0.4 }));
+          rec.group.add(rec.pole);
+        }
+        rec.pole.scale.y = elev;
+      } else if (rec.pole) {
+        rec.group.remove(rec.pole);
+        disposeObject(rec.pole);
+        rec.pole = null;
+      }
       rec.base.material.opacity = it.on === false ? 0.18 : 0.55;
       if (rec.lamp) {
         const k = it.on === false ? 0 : Math.max(0, Math.min(1, (it.intensity ?? 100) / 100));
@@ -413,6 +498,9 @@ export class EasyScene {
     water.rotation.x = -Math.PI / 2;
     water.position.y = 0.0;
     water.receiveShadow = true;
+    // Drawn before every particle effect: the particles write no depth, so a later water surface
+    // would paint over the jets, flames and beams standing above it.
+    water.renderOrder = -2;
     this.basin.add(water);
     const pts = shape.getSpacedPoints(160).map((p) => new THREE.Vector3(p.x, 0.06, -p.y));
     const rim = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 220, 0.09, 8, true),
@@ -453,6 +541,7 @@ export class EasyScene {
     this.time += dt;
     this.controls.update();
     this._updateWater(dt);
+    this._updateEffects();
     if (this.selRing.visible) this.selRing.rotation.z += dt * 0.8;
     this.renderer.render(this.scene, this.camera);
   }
@@ -462,7 +551,7 @@ export class EasyScene {
     const pos = this.pPos, col = this.pCol, jit = this.jitter;
     const active = jets.filter((j) => (j.heightM > 0.02) || (this.jetState.get(j.id) || 0) > 0.02);
     const per = active.length ? Math.min(1400, Math.floor(MAX_PARTICLES / active.length)) : 0;
-    let n = 0;
+    let n = 0, q = 0;
     const t = this.time;
     const tmp = new THREE.Color();
     const white = new THREE.Color(0xd8f1ff);
@@ -491,21 +580,33 @@ export class EasyScene {
           if (cyc > 0.7) continue;
         }
         const v0 = Math.sqrt(2 * G * hh);
-        const sTh = Math.sin(out.th), cTh = Math.cos(out.th);
-        const dx = sTh * Math.cos(out.ph), dz = sTh * Math.sin(out.ph), dy = cTh;
-        const vy0 = v0 * dy;
-        const T = Math.max(0.25, (2 * vy0) / G + 0.08);
-        for (let i = 0; i < each && n < MAX_PARTICLES; i += 1, n += 1) {
-          const j = (n * 3) % jit.length;
+        // Flight time of a vertical drop (the longest); tilted drops land earlier and are hidden below the water.
+        const T = Math.max(0.25, (2 * v0) / G + 0.08);
+        let dx = 0, dz = 0, dy = 1, lift = 0;
+        if (!out.at) {
+          const sTh = Math.sin(out.th), cTh = Math.cos(out.th);
+          dx = sTh * Math.cos(out.ph); dz = sTh * Math.sin(out.ph); dy = cTh;
+        }
+        for (let i = 0; i < each && n < MAX_PARTICLES; i += 1) {
+          const j = (q++ * 3) % jit.length;
           const u = (i / each + 0.37 * jit[j + 2] * 0.05 + 1) % 1;
           const age = ((t / T + u) % 1) * T;
+          if (out.at) {
+            // Direction at the moment this drop left the nozzle.
+            const d = out.at(t - age);
+            const sTh = Math.sin(d.th);
+            dx = sTh * Math.cos(d.ph); dz = sTh * Math.sin(d.ph); dy = Math.cos(d.th); lift = d.lift || 0;
+          }
           const s = out.spread * (out.foam ? 1 + age : 1);
           const vx = v0 * (dx + s * jit[j]);
           const vz = v0 * (dz + s * jit[j + 1]);
-          const vy = vy0 * (1 + s * 0.5 * jit[j + 2]);
+          const vy = v0 * dy * (1 + s * 0.5 * jit[j + 2]);
+          const y = oy + lift + vy * age - 0.5 * G * age * age;
+          if (y < 0) continue;                       // already back in the basin
           const k = n * 3;
+          n += 1;
           pos[k] = o.x + vx * age;
-          pos[k + 1] = Math.max(0.01, oy + vy * age - 0.5 * G * age * age);
+          pos[k + 1] = Math.max(0.01, y);
           pos[k + 2] = o.z + vz * age;
           const fade = bright * (1 - 0.55 * (age / T)) * (out.mist ? 0.45 : 1);
           col[k] = tmp.r * fade; col[k + 1] = tmp.g * fade; col[k + 2] = tmp.b * fade;
@@ -516,6 +617,137 @@ export class EasyScene {
     geo.setDrawRange(0, n);
     geo.attributes.position.needsUpdate = true;
     geo.attributes.color.needsUpdate = true;
+  }
+
+  /**
+   * Lasers, flames and fog. data.effects: [{ id, kind: 'laser', state, engineering, mountM }
+   * | { id, kind: 'flame', heightM, intensity, burst } | { id, kind: 'fog', radiusM, density }].
+   * Positions come from the item in the scene, so an effect follows its item while it is dragged.
+   */
+  _updateEffects() {
+    const t = this.time;
+    const effects = this.data.effects || [];
+    const bPos = this.beams.geometry.attributes.position.array, bCol = this.beams.geometry.attributes.color.array;
+    const dPos = this.dots.geometry.attributes.position.array, dCol = this.dots.geometry.attributes.color.array;
+    const fPos = this.flames.geometry.attributes.position.array, fCol = this.flames.geometry.attributes.color.array;
+    const gPos = this.fog.geometry.attributes.position.array, gCol = this.fog.geometry.attributes.color.array;
+    let bv = 0, dn = 0, fn = 0, gn = 0;
+    const cam = this.camera.position;
+
+    const quad = (ax, ay, az, bx, by, bz, width, r, g, b) => {
+      if (bv + 6 > MAX_BEAM_VERTS) return;
+      // Width across the beam, facing the camera.
+      const mx = (ax + bx) / 2 - cam.x, my = (ay + by) / 2 - cam.y, mz = (az + bz) / 2 - cam.z;
+      const dx = bx - ax, dy = by - ay, dz = bz - az;
+      let wx = dy * mz - dz * my, wy = dz * mx - dx * mz, wz = dx * my - dy * mx;
+      const l = Math.hypot(wx, wy, wz) || 1;
+      wx = (wx / l) * width * 0.5; wy = (wy / l) * width * 0.5; wz = (wz / l) * width * 0.5;
+      const v = [ax - wx, ay - wy, az - wz, ax + wx, ay + wy, az + wz, bx + wx, by + wy, bz + wz,
+        ax - wx, ay - wy, az - wz, bx + wx, by + wy, bz + wz, bx - wx, by - wy, bz - wz];
+      for (let i = 0; i < 18; i += 3) {
+        bPos[bv * 3] = v[i]; bPos[bv * 3 + 1] = v[i + 1]; bPos[bv * 3 + 2] = v[i + 2];
+        bCol[bv * 3] = r; bCol[bv * 3 + 1] = g; bCol[bv * 3 + 2] = b;
+        bv += 1;
+      }
+    };
+    const tri = (a, b, c, r, g, bl) => {
+      if (bv + 3 > MAX_BEAM_VERTS) return;
+      for (const p of [a, b, c]) {
+        bPos[bv * 3] = p.x; bPos[bv * 3 + 1] = p.y; bPos[bv * 3 + 2] = p.z;
+        bCol[bv * 3] = r; bCol[bv * 3 + 1] = g; bCol[bv * 3 + 2] = bl;
+        bv += 1;
+      }
+    };
+    const dot = (p, r, g, b) => {
+      if (dn >= MAX_DOTS) return;
+      dPos[dn * 3] = p.x; dPos[dn * 3 + 1] = p.y; dPos[dn * 3 + 2] = p.z;
+      dCol[dn * 3] = r; dCol[dn * 3 + 1] = g; dCol[dn * 3 + 2] = b;
+      dn += 1;
+    };
+
+    for (const fx of effects) {
+      const rec = this.items.get(fx.id);
+      if (!rec) continue;
+      const o = rec.group.position;
+      if (fx.kind === "laser") {
+        if (!(fx.state?.intensity > 0)) continue;
+        const frame = laserFrame({ id: fx.id, x: o.x, z: o.z, y: Math.max(o.y, fx.mountM ?? 0.5), rotation: rec.data.rotation || 0,
+          engineering: fx.engineering || {} }, fx.state, t, { basin: this.data.safetyBasin || null });
+        fx.frame = frame;
+        const k = frame.intensity * (frame.faint ? 0.5 : 1);
+        const { r, g, b } = frame.color;
+        const end = (beam) => {
+          const len = Math.min(beam.length, BEAM_DRAW_M);
+          return { x: frame.origin.x + beam.dir.x * len, y: frame.origin.y + beam.dir.y * len, z: frame.origin.z + beam.dir.z * len };
+        };
+        const ends = frame.beams.map(end);
+        if (frame.sheet && ends.length > 1) {
+          for (let i = 1; i < ends.length; i += 1) tri(frame.origin, ends[i - 1], ends[i], r * k * 0.12, g * k * 0.12, b * k * 0.12);
+        }
+        frame.beams.forEach((beam, i) => {
+          const e = ends[i];
+          const gk = k * (beam.glint ?? 1);
+          const core = frame.heavy ? 0.22 : frame.faint ? 0.02 : 0.045;
+          quad(frame.origin.x, frame.origin.y, frame.origin.z, e.x, e.y, e.z, core, r * gk, g * gk, b * gk);
+          quad(frame.origin.x, frame.origin.y, frame.origin.z, e.x, e.y, e.z, core * 7, r * gk * 0.16, g * gk * 0.16, b * gk * 0.16);
+          if (beam.hit || frame.faint) dot(e, r * gk, g * gk, b * gk);
+        });
+        for (const s of frame.outline || []) quad(s.a.x, s.a.y, s.a.z, s.b.x, s.b.y, s.b.z, 0.08, r * k, g * k, b * k);
+        dot(frame.origin, r * k, g * k, b * k);
+      } else if (fx.kind === "flame") {
+        if (!(fx.intensity > 0)) continue;
+        // Burst mode: 0.8 s puffs every 2.5 s.
+        const env = fx.burst ? Math.max(0, Math.sin(Math.min(1, (t % 2.5) / 0.8) * Math.PI)) * ((t % 2.5) < 0.8 ? 1 : 0) : 1;
+        if (env <= 0.01) continue;
+        const H = fx.heightM * fx.intensity * env;
+        const count = 900;
+        for (let i = 0; i < count && fn < MAX_FLAME; i += 1) {
+          const j = (i * 3) % this.jitter.length;
+          const T = 0.7 + 0.25 * this.jitter[j];
+          const age = ((t / T + i / count) % 1);
+          // Wide at the burner, licking to a point at the top.
+          const rad = 0.42 * Math.sqrt(1 - age) * (0.55 + 0.45 * this.jitter[j + 1]) * Math.max(0.5, fx.intensity);
+          const a = i * 2.39996 + t * 3;
+          fPos[fn * 3] = o.x + rad * Math.cos(a) + 0.06 * Math.sin(t * 11 + i);
+          fPos[fn * 3 + 1] = o.y + 0.25 + age * H * (0.85 + 0.15 * this.jitter[j + 2]);
+          fPos[fn * 3 + 2] = o.z + rad * Math.sin(a) + 0.06 * Math.cos(t * 9 + i);
+          const heat = 1 - age;                     // white-yellow at the base → orange → dark red
+          const fade = Math.min(1, Math.max(0, 1 - age * 1.05) * 1.25);
+          fCol[fn * 3] = fade; fCol[fn * 3 + 1] = (0.22 + 0.7 * heat * heat) * fade; fCol[fn * 3 + 2] = 0.25 * heat * heat * heat * fade;
+          fn += 1;
+        }
+      } else if (fx.kind === "fog") {
+        if (!(fx.density > 0)) continue;
+        const count = Math.round(140 + 180 * fx.density);
+        for (let i = 0; i < count && gn < MAX_FOG; i += 1) {
+          const j = (i * 3) % this.jitter.length;
+          const r0 = fx.radiusM * Math.sqrt(0.5 + 0.5 * this.jitter[j]);
+          const a = i * 2.39996 + t * 0.06 * (0.5 + 0.5 * this.jitter[j + 1]);
+          gPos[gn * 3] = o.x + r0 * Math.cos(a);
+          gPos[gn * 3 + 1] = 0.2 + 0.7 * (0.5 + 0.5 * this.jitter[j + 2]) + 0.12 * Math.sin(t * 0.4 + i);
+          gPos[gn * 3 + 2] = o.z + r0 * Math.sin(a);
+          const c = 0.55 * fx.density;
+          gCol[gn * 3] = c; gCol[gn * 3 + 1] = c * 1.02; gCol[gn * 3 + 2] = c * 1.06;
+          gn += 1;
+        }
+      }
+    }
+    const finish = (obj, count) => {
+      const g = obj.geometry;
+      g.setDrawRange(0, count);
+      g.attributes.position.needsUpdate = true;
+      g.attributes.color.needsUpdate = true;
+    };
+    finish(this.beams, bv);
+    finish(this.dots, dn);
+    finish(this.flames, fn);
+    finish(this.fog, gn);
+  }
+
+  /** The laser frame drawn last for an item (beams, blanked / clamped counts), for the sidebar. */
+  laserStatus(id) {
+    const fx = (this.data.effects || []).find((e) => e.id === id && e.kind === "laser");
+    return fx?.frame ? { beams: fx.frame.beams.length, blanked: fx.frame.blanked, clamped: fx.frame.clamped } : null;
   }
 
   // ─── input ────────────────────────────────────────────────────────────────

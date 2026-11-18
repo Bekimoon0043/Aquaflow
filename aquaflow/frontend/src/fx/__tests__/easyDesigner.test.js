@@ -5,6 +5,8 @@ import {
 } from "../easyDesigner";
 import { readConnections } from "../../engineering/connections";
 import { buildEasyFountain } from "../easyFountain";
+import { axesOf, isMovingNozzle, motionOf, effectOf, laserStateOf, fieldsFor } from "../easyDesigner";
+import { laserFrame } from "../../components/preview/laser/laserRig";
 
 const PUMP = "pump_inline_vfd_pump_4_0kw";
 const NOZZLE = "nozzle_straight_dn25";
@@ -156,5 +158,51 @@ describe("easy fountain designer", () => {
     const mid = lightCoverage(light, { x: 0.6, y: 0 }, 3);
     expect(mid).toBeGreaterThan(0);
     expect(mid).toBeLessThan(1);
+  });
+
+  it("lists 1D, 2D and 3D moving nozzles in their own tab, not under Effects or Nozzles", () => {
+    const moving = assetsFor("moving");
+    for (const n of [1, 2, 3]) expect(assetsFor("moving", "", n).length).toBeGreaterThan(0);
+    expect(moving.some((a) => a.key === "motion_nozzle_2d_pan_tilt_motor")).toBe(true);
+    expect(moving.some((a) => /dancing/.test(a.key))).toBe(true);
+    expect(assetsFor("effects").some(isMovingNozzle)).toBe(false);
+    expect(assetsFor("nozzles").some(isMovingNozzle)).toBe(false);
+    expect(axesOf({ key: "motion_nozzle_3d_robotic_module" })).toBe(3);
+    expect(assetsFor("lasers").length).toBeGreaterThan(10);
+  });
+
+  it("gives a moving nozzle live motion settings that follow its edits", () => {
+    let r = drop([], PUMP, 0, 0);
+    r = drop(r.fixtures, "motion_nozzle_2d_pan_tilt_motor", 2, 0);
+    const id = r.id;
+    const jet = () => liveJets(r.fixtures).jets.find((j) => j.id === id);
+    expect(jet().motion).toMatchObject({ axes: 2, pattern: "circle" });
+    r = { fixtures: setEngineeringField(r.fixtures, id, "motionPattern", "figure8") };
+    r = { fixtures: setEngineeringField(r.fixtures, id, "motionSpeedHz", 0.6) };
+    expect(jet().motion).toMatchObject({ pattern: "figure8", speedHz: 0.6 });
+    const keys = fieldsFor(r.fixtures.find((f) => f.id === id)).map((d) => d.key);
+    expect(keys).toEqual(expect.arrayContaining(["motionPattern", "motionSpeedHz", "panRangeDeg"]));
+    expect(motionOf({ type: NOZZLE, engineering: {} })).toBeNull();
+    // A 1D nozzle cannot run a 2D pattern.
+    const one = drop([], "motion_nozzle_1d_tilt_motor", 0, 0);
+    const f1 = setEngineeringField(one.fixtures, one.id, "motionPattern", "circle").find((f) => f.id === one.id);
+    expect(motionOf(f1).pattern).toBe("sweep");
+  });
+
+  it("drives lasers through the shared laser engine and keeps non-water items dry", () => {
+    const laser = drop([], "laser_rgb_5w", 0, 0).fixtures[0];
+    expect(effectOf(laser)).toBe("laser");
+    expect(effectOf({ type: "effect_flame_single" })).toBe("flame");
+    expect(effectOf({ type: "effect_fog_machine" })).toBe("fog");
+    const state = laserStateOf(laser);
+    expect(state.intensity).toBe(1);
+    const frame = laserFrame({ id: "l", x: 0, z: 0, y: 0.5, rotation: 0, engineering: laser.engineering }, state, 1,
+      { basin: [[-10, -10], [10, -10], [10, 10], [-10, 10]] });
+    expect(frame.beams.length).toBeGreaterThan(0);
+    expect(laserStateOf(laser, false).intensity).toBe(0);
+    let r = drop([], PUMP, 0, 0);
+    r = drop(r.fixtures, "control_plc_main_32io", 1, 0);
+    const dry = liveJets(r.fixtures).jets.find((j) => j.id === r.id);
+    expect(dry?.heightM ?? 0).toBe(0);
   });
 });

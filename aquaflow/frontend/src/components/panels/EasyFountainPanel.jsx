@@ -14,10 +14,12 @@ import { poolCenter, poolBounds, engineeringToWorld, worldToEngineering } from "
 import { readConnections, connectionProblems } from "../../engineering/connections";
 import {
   ASSET_GROUPS, assetsFor, assetSummary, roleOf, modelKindOf, designLinks, LINK_STYLE, canConnect, connectPair,
-  replugLink, disconnectLink, dropAsset, autoConnectAll, removeFixtures, liveJets, ROLE_FIELDS, LINK_FIELDS,
+  replugLink, disconnectLink, dropAsset, autoConnectAll, removeFixtures, liveJets, LINK_FIELDS, fieldsFor, effectOf, laserStateOf,
+  flameOf, fogOf, motionOf, isMovingNozzle, axesOf,
   setEngineeringField, setFixtureFields, lightColorOf, afterMove,
 } from "../../fx/easyDesigner";
 import { EasyScene } from "./easy/EasyScene";
+import { laserFrame, insidePoly } from "../preview/laser/laserRig";
 
 const ROLE_UI = {
   pump: { label: "Pump", color: "#38bdf8", icon: "⊚" },
@@ -25,6 +27,11 @@ const ROLE_UI = {
   nozzle: { label: "Nozzle", color: "#5eead4", icon: "↑" },
   light: { label: "Light", color: "#facc15", icon: "✦" },
   effect: { label: "Effect", color: "#fb923c", icon: "✸" },
+};
+const EFFECT_UI = {
+  laser: { label: "Laser", color: "#4ade80", icon: "◆" },
+  flame: { label: "Flame", color: "#fb923c", icon: "♨" },
+  fog: { label: "Fog", color: "#cbd5e1", icon: "☁" },
 };
 const S = {
   btn: { padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-bright)", background: "var(--bg-raised)", color: "var(--text-button)", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" },
@@ -56,6 +63,9 @@ export default function EasyFountainPanel() {
   const history = useRef([]);
 
   const center = useMemo(() => poolCenter(geometry, params, poolType), [geometry, params, poolType]);
+  const pool = useMemo(() => poolShape(geometry, params, poolType, center), [geometry, params, poolType, center]);
+  // Basin outline [[x, z]] in world space: outside it counts as audience for the laser safety rule.
+  const safetyBasin = useMemo(() => basinPolygon(pool), [pool]);
   const design = useMemo(() => readConnections(fixtures), [fixtures]);
   const links = useMemo(() => designLinks(fixtures, design), [fixtures, design]);
   const water = useMemo(() => liveJets(fixtures, live, design), [fixtures, live, design]);
@@ -88,12 +98,18 @@ export default function EasyFountainPanel() {
   }, [center]);
 
   const addAsset = useCallback((key, worldPoint) => {
-    const r = dropAsset(fixturesRef.current, key, toPlan(worldPoint));
+    let r = dropAsset(fixturesRef.current, key, toPlan(worldPoint));
     const label = r.fixtures.find((f) => f.id === r.id)?.label || key;
-    commit(r.fixtures, r.lines.length ? `Added ${label}. Auto-connected: ${r.lines.join("; ")}.` : `Added ${label}. ${roleHint(roleOf({ type: key }), design)}`);
+    let note = "";
+    if (effectOf({ type: key }) === "laser" && safetyBasin && !insidePoly(worldPoint.x, worldPoint.z, safetyBasin)) {
+      // Outside the basin is audience space: a show laser there must beam from at least 3 m up.
+      r = { ...r, fixtures: setEngineeringField(r.fixtures, r.id, "mountHeightM", 3.5) };
+      note = " It stands outside the basin (audience space), so it is mounted on a 3.5 m truss — beams must stay 3 m above people.";
+    }
+    commit(r.fixtures, (r.lines.length ? `Added ${label}. Auto-connected: ${r.lines.join("; ")}.` : `Added ${label}. ${roleHint(roleOf({ type: key }), design)}`) + note);
     setSelectedId(r.id);
     setSelectedLinkId(null);
-  }, [commit, toPlan, design]);
+  }, [commit, toPlan, design, safetyBasin]);
 
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
@@ -154,7 +170,6 @@ export default function EasyFountainPanel() {
     return () => { scene.dispose(); sceneRef.current = null; };
   }, []);
 
-  const pool = useMemo(() => poolShape(geometry, params, poolType, center), [geometry, params, poolType, center]);
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -162,12 +177,21 @@ export default function EasyFountainPanel() {
       const w = engineeringToWorld(f, center);
       const role = roleOf(f);
       const e = f.engineering || {};
+      const laser = effectOf(f) === "laser";
       return { id: f.id, label: f.label || f.type, role, modelKind: modelKindOf(f), x: w.x, z: w.z,
-        elevation: Number(f.z) || 0, rotation: Number(f.rotation) || 0, on: live[f.id]?.on !== false,
+        elevation: laser ? Math.max(Number(f.z) || 0, Number(e.mountHeightM ?? 0.5)) : Number(f.z) || 0,
+        rotation: Number(f.rotation) || 0, on: live[f.id]?.on !== false,
         color: role === "light" ? lightColorOf(f) : null, intensity: Number(e.intensityPct ?? 100), beamDeg: Number(e.beamAngleDeg) || 40 };
     });
-    scene.setData({ items, links, jets: water.jets, pool, selectedId, selectedLinkId, showLinks, showLabels });
-  }, [fixtures, links, water, pool, center, selectedId, selectedLinkId, showLinks, showLabels, live]);
+    const effects = fixtures.filter((f) => f.visible !== false && effectOf(f)).map((f) => {
+      const on = live[f.id]?.on !== false;
+      const kind = effectOf(f);
+      if (kind === "laser") return { id: f.id, kind, state: laserStateOf(f, on), engineering: f.engineering || {}, mountM: Number(f.engineering?.mountHeightM ?? 0.5) };
+      if (kind === "flame") return { id: f.id, kind, ...flameOf(f, on) };
+      return { id: f.id, kind, ...fogOf(f, on) };
+    });
+    scene.setData({ items, links, jets: water.jets, effects, pool, safetyBasin, selectedId, selectedLinkId, showLinks, showLabels });
+  }, [fixtures, links, water, pool, safetyBasin, center, selectedId, selectedLinkId, showLinks, showLabels, live]);
 
   // Keyboard: Delete, Ctrl+Z, Ctrl+D, Esc — only while this panel is visible and not typing.
   const rootRef = useRef(null);
@@ -260,7 +284,7 @@ export default function EasyFountainPanel() {
             setOn={(v) => setLive((cur) => ({ ...cur, [selected.id]: { ...(cur[selected.id] || {}), on: v } }))}
             commit={commit} fixturesRef={fixturesRef} onSelect={(id) => { setSelectedId(id); setSelectedLinkId(null); }}
             onSelectLink={(id) => { setSelectedLinkId(id); setSelectedId(null); }}
-            onDelete={deleteSelected} onDuplicate={duplicateSelected} />
+            onDelete={deleteSelected} onDuplicate={duplicateSelected} center={center} safetyBasin={safetyBasin} />
         ) : selectedLink ? (
           <LinkProperties link={selectedLink} byId={byId} fixtures={fixtures} commit={commit} fixturesRef={fixturesRef}
             onDone={() => setSelectedLinkId(null)} onSelect={(id) => { setSelectedId(id); setSelectedLinkId(null); }} />
@@ -303,10 +327,27 @@ function poolShape(geometry, params, poolType, center) {
   return { shape: "poly", points: [{ x: -w, z: -l }, { x: w, z: -l }, { x: w, z: l }, { x: -w, z: l }] };
 }
 
+/** World-space basin outline [[x, z], ...] for the laser safety rule. */
+function basinPolygon(pool) {
+  if (!pool) return null;
+  if (pool.shape === "poly") return pool.points.map((p) => [p.x, p.z]);
+  const rx = pool.shape === "circle" ? pool.radius : pool.rx, rz = pool.shape === "circle" ? pool.radius : pool.ry;
+  return Array.from({ length: 48 }, (_, i) => [rx * Math.cos((i / 48) * 2 * Math.PI), rz * Math.sin((i / 48) * 2 * Math.PI)]);
+}
+
 // ─── properties: one item ───────────────────────────────────────────────────
 
 function NumberField({ def, value, onChange }) {
   const v = value ?? def.fallback ?? "";
+  if (def.select) {
+    return (
+      <label style={{ display: "grid", gap: 3, ...S.label }}>{def.label}
+        <select style={S.field} value={v} onChange={(e) => onChange(e.target.value)}>
+          {def.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </label>
+    );
+  }
   return (
     <label style={{ display: "grid", gap: 3, ...S.label }}>
       <span style={{ display: "flex", justifyContent: "space-between" }}><span>{def.label}</span><span style={{ color: "var(--text-primary)" }}>{v === "" ? "—" : `${v} ${def.unit || ""}`}</span></span>
@@ -316,9 +357,11 @@ function NumberField({ def, value, onChange }) {
   );
 }
 
-function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn, commit, fixturesRef, onSelect, onSelectLink, onDelete, onDuplicate }) {
+function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn, commit, fixturesRef, onSelect, onSelectLink, onDelete, onDuplicate, center, safetyBasin }) {
   const role = roleOf(f);
-  const ui = ROLE_UI[role];
+  const fxKind = effectOf(f);
+  const motion = role === "nozzle" ? motionOf(f) : null;
+  const ui = fxKind ? EFFECT_UI[fxKind] : motion ? { ...ROLE_UI.nozzle, label: `Moving nozzle · ${motion.axes}D`, icon: "⤧" } : ROLE_UI[role];
   const entry = getFixtureLibraryEntry(f.type);
   const e = f.engineering || {};
   const setEng = (key, value) => commit(setEngineeringField(fixturesRef.current, f.id, key, value));
@@ -330,7 +373,7 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
   };
   const mine = links.filter((l) => l.from === f.id || l.to === f.id);
   const candidates = fixtures.filter((x) => x.id !== f.id && canConnect(fixtures, f.id, x.id) && !mine.some((l) => l.from === x.id || l.to === x.id));
-  const fields = ROLE_FIELDS[role] || [];
+  const fields = fieldsFor(f);
   const shown = new Set(fields.map((d) => d.key));
   const extra = Object.entries(e).filter(([k, v]) => !shown.has(k) && !LINK_FIELDS.has(k) && (typeof v === "number" || typeof v === "string" || typeof v === "boolean"));
   const jet = water.jets.find((j) => j.id === f.id);
@@ -367,9 +410,11 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
         </div>
       )}
 
-      {role === "light" && (
+      {fxKind === "laser" && <LaserStatus f={f} on={on} center={center} safetyBasin={safetyBasin} setEng={setEng} />}
+
+      {(role === "light" || fxKind === "laser") && (
         <label style={{ display: "flex", alignItems: "center", gap: 8, ...S.label }}>Colour
-          <input type="color" value={lightColorOf(f)} onChange={(ev) => setTop({ color: ev.target.value })} style={{ width: 44, height: 26, border: "none", background: "none", cursor: "pointer" }} />
+          <input type="color" value={fxKind === "laser" ? lightColorOf({ color: f.color || "#3dff4f" }) : lightColorOf(f)} onChange={(ev) => setTop({ color: ev.target.value })} style={{ width: 44, height: 26, border: "none", background: "none", cursor: "pointer" }} />
           <span style={{ display: "flex", gap: 4 }}>{["#ffffff", "#4fc3ff", "#2563eb", "#22c55e", "#facc15", "#f97316", "#ef4444", "#d946ef"].map((c) => (
             <button key={c} onClick={() => setTop({ color: c })} style={{ width: 16, height: 16, borderRadius: 4, border: "1px solid #0006", background: c, cursor: "pointer", padding: 0 }} />))}</span>
         </label>
@@ -432,6 +477,28 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
         <button style={{ ...S.btn, flex: 1, color: "var(--red)" }} onClick={onDelete} title="Delete">Delete</button>
       </div>
       {entry?.generic !== false && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Values are generic estimates — check the supplier datasheet.</div>}
+    </div>
+  );
+}
+
+/** What the laser safety rule does to this projector right now (same rule as the full preview). */
+function LaserStatus({ f, on, center, safetyBasin, setEng }) {
+  const w = engineeringToWorld(f, center);
+  const e = f.engineering || {};
+  const mount = Math.max(Number(f.z) || 0, Number(e.mountHeightM ?? 0.5));
+  const frame = laserFrame({ id: f.id, x: w.x, z: w.z, y: mount, rotation: Number(f.rotation) || 0, engineering: e },
+    laserStateOf(f, true), 0, { basin: safetyBasin });
+  const blanked = frame.blanked > 0 && frame.beams.length === 0;
+  return (
+    <div style={{ background: "var(--bg-surface)", borderRadius: 6, padding: 8, fontSize: 12, lineHeight: 1.45 }}>
+      {!on ? <span style={{ color: "var(--text-muted)" }}>Switched off.</span>
+        : blanked ? (<>
+          <div style={{ color: "var(--red)" }}>Blanked: it stands in audience space below the 3 m minimum beam height, so it may not fire.</div>
+          <button style={{ ...S.btn, marginTop: 6, padding: "3px 8px", fontSize: 11 }} onClick={() => setEng("mountHeightM", 3.5)}>Mount on a 3.5 m truss</button>
+        </>)
+        : <span>{frame.beams.length} beam{frame.beams.length === 1 ? "" : "s"} · {e.laserClass ? `class ${e.laserClass}` : "show laser"}{e.opticalPowerW ? ` · ${e.opticalPowerW} W` : ""}
+          {frame.clamped > 0 && <div style={{ color: "var(--amber)" }}>{frame.clamped} beam{frame.clamped === 1 ? "" : "s"} raised to stay 3 m above the audience.</div>}</span>}
+      <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 4 }}>Preview only — AquaFlow never arms a laser. Class 3B/4 needs a key switch, e-stop and a show permit.</div>
     </div>
   );
 }
@@ -548,7 +615,9 @@ function Overview({ fixtures, design, water, commit, fixturesRef, geometry, para
 // ─── asset tray ─────────────────────────────────────────────────────────────
 
 function AssetTray({ tab, setTab, query, setQuery, onAdd }) {
-  const list = useMemo(() => assetsFor(tab, query), [tab, query]);
+  const [axes, setAxes] = useState(0);
+  const group = ASSET_GROUPS.find((g) => g.id === tab);
+  const list = useMemo(() => assetsFor(tab, query, group?.axes ? axes : 0), [tab, query, axes, group]);
   const counts = useMemo(() => Object.fromEntries(ASSET_GROUPS.map((g) => [g.id, assetsFor(g.id).length])), []);
   return (
     <div style={{ gridRow: 3, gridColumn: 1, borderTop: "1px solid var(--border-mid)", background: "var(--bg-panel)", display: "grid", gridTemplateRows: "auto minmax(0,1fr)", minWidth: 0, minHeight: 0 }}>
@@ -559,13 +628,21 @@ function AssetTray({ tab, setTab, query, setQuery, onAdd }) {
             {g.label} <span style={{ opacity: 0.6 }}>{counts[g.id]}</span>
           </button>
         ))}
+        {group?.axes && (
+          <span style={{ display: "flex", gap: 4, marginLeft: 8 }}>
+            {[[0, "All"], [1, "1D"], [2, "2D"], [3, "3D"]].map(([n, l]) => (
+              <button key={n} onClick={() => setAxes(n)} style={{ ...S.btn, padding: "3px 9px", fontSize: 11, ...(axes === n ? S.btnOn : {}) }}>{l}</button>
+            ))}
+          </span>
+        )}
         <input style={{ ...S.field, width: 200, marginLeft: "auto" }} placeholder="Search assets…" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
       <div style={{ display: "flex", gap: 8, overflowX: "auto", overflowY: "hidden", padding: "4px 10px 10px", alignItems: "stretch" }}>
         {!list.length && <div style={{ fontSize: 12, color: "var(--text-muted)", padding: 10 }}>No assets match.</div>}
         {list.map((a) => {
           const role = roleOf(a);
-          const ui = ROLE_UI[role];
+          const fx = effectOf({ type: a.key });
+          const ui = fx ? EFFECT_UI[fx] : isMovingNozzle(a) ? { ...ROLE_UI.nozzle, label: `Moving ${axesOf(a)}D`, icon: "⤧" } : ROLE_UI[role];
           return (
             <div key={a.key} draggable
               onDragStart={(e) => { e.dataTransfer.setData("application/x-aquaflow-asset", a.key); e.dataTransfer.setData("text/plain", a.label); e.dataTransfer.effectAllowed = "copy"; }}

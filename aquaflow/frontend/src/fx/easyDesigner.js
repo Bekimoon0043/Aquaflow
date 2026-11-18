@@ -33,12 +33,31 @@ const RHO = 1000;
 
 // ─── assets ─────────────────────────────────────────────────────────────────
 
+/** Moving (1D / 2D / 3D) nozzles: motorised swing drives, robotic nozzles and dancing jets. */
+export function isMovingNozzle(f) {
+  const key = String(f?.key || f?.type || "");
+  return /^motion_nozzle_/.test(key) || /dancing/i.test(key)
+    || (f?.category === "Motion Systems" && num(f?.engineering?.axisCount, 0) > 0 && num(f?.engineering?.jetHeightM, 0) > 0);
+}
+
+/** Number of motion axes of a moving nozzle (1 swing · 2 pan + tilt · 3 pan + tilt + lift); 0 = fixed. */
+export function axesOf(f) {
+  const e = f?.engineering || getFixtureLibraryEntry(f?.type || f?.key)?.engineering || {};
+  if (num(e.axisCount, 0) > 0) return Math.min(3, num(e.axisCount));
+  const m = String(f?.key || f?.type || "").match(/_([123])d_/);
+  if (m) return Number(m[1]);
+  return isMovingNozzle(f) ? 1 : 0;
+}
+
+const inCats = (...cats) => (f) => cats.includes(f.category);
 export const ASSET_GROUPS = [
-  { id: "nozzles", label: "Nozzles", categories: ["Nozzles"] },
-  { id: "pumps", label: "Pumps", categories: ["Pumps"] },
-  { id: "valves", label: "Valves", categories: ["Valves"] },
-  { id: "lights", label: "Lights", categories: ["Lights"] },
-  { id: "effects", label: "Effects", categories: ["Laser", "Flame", "Fog", "Effects", "Air Systems", "Motion Systems"] },
+  { id: "nozzles", label: "Nozzles", match: (f) => f.category === "Nozzles" && !isMovingNozzle(f) },
+  { id: "moving", label: "Moving 1D/2D/3D", match: isMovingNozzle, axes: true },
+  { id: "pumps", label: "Pumps", match: inCats("Pumps") },
+  { id: "valves", label: "Valves", match: inCats("Valves") },
+  { id: "lights", label: "Lights", match: inCats("Lights") },
+  { id: "lasers", label: "Lasers", match: inCats("Laser") },
+  { id: "effects", label: "Flame & fog", match: (f) => ["Flame", "Fog", "Effects", "Air Systems"].includes(f.category) },
 ];
 
 const ROLE_CACHE = new Map();
@@ -60,11 +79,11 @@ export function roleOf(item) {
   return ROLE_CACHE.get(key);
 }
 
-/** Library entries for a tray tab, filtered by a search text (label, family, key). */
-export function assetsFor(groupId, query = "") {
+/** Library entries for a tray tab, filtered by a search text (label, family, key) and, for moving nozzles, axes. */
+export function assetsFor(groupId, query = "", axes = 0) {
   const group = ASSET_GROUPS.find((g) => g.id === groupId) || ASSET_GROUPS[0];
   const words = String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
-  return FIXTURE_LIBRARY.filter((f) => group.categories.includes(f.category)).filter((f) => {
+  return FIXTURE_LIBRARY.filter(group.match).filter((f) => !axes || axesOf(f) === axes).filter((f) => {
     if (!words.length) return true;
     const text = `${f.label} ${f.family} ${f.key} ${f.manufacturer || ""}`.toLowerCase();
     return words.every((w) => text.includes(w));
@@ -75,6 +94,10 @@ export function assetsFor(groupId, query = "") {
 export function assetSummary(entry) {
   const e = entry?.engineering || {};
   const bits = [];
+  const axes = isMovingNozzle(entry) ? axesOf(entry) : 0;
+  if (axes) bits.push(`${axes}D`);
+  if (num(e.opticalPowerW) > 0) bits.push(num(e.opticalPowerW) >= 1 ? `${num(e.opticalPowerW)} W` : `${Math.round(num(e.opticalPowerW) * 1000)} mW`);
+  if (e.laserKind) bits.push(e.laserKind);
   if (num(e.jetHeightM) > 0) bits.push(`${num(e.jetHeightM).toFixed(1)} m`);
   if (num(e.powerKw) > 0) bits.push(`${num(e.powerKw)} kW`);
   if (num(e.flowM3Hr) > 0) bits.push(`${num(e.flowM3Hr)} m³/h`);
@@ -299,7 +322,10 @@ export function dropAsset(fixtures = [], key, point = { x: 0, y: 0 }) {
   const entry = getFixtureLibraryEntry(key);
   const fixture = createFixtureEntity({
     type: key, x: round(point.x), y: round(point.y), label: nextLabel(fixtures, entry),
-    extra: { z: 0, visible: true, layer: fixtureLayerKey(key), ...(roleOf(entry || { type: key }) === "light" ? { color: defaultLightColor(entry) } : {}) },
+    extra: { z: 0, visible: true, layer: fixtureLayerKey(key),
+      ...(roleOf(entry || { type: key }) === "light" ? { color: defaultLightColor(entry) } : {}),
+      // A laser's catalogue colour is its beam colour (e.g. #3dff4f for 532 nm green).
+      ...(effectOf({ type: key }) === "laser" && /^#[0-9a-f]{6}$/i.test(String(entry?.color || "")) ? { color: entry.color } : {}) },
   });
   const placed = [...fixtures, fixture];
   const { fixtures: next, lines } = autoConnectItem(placed, fixture.id);
@@ -421,10 +447,15 @@ export function liveJets(fixtures = [], live = {}, design = readConnections(fixt
     .filter(({ l, k }) => k > 0 && isOn(l.id));
   const jets = design.nozzles.map((n) => {
     const e = n.item.engineering || {};
-    const base = num(e.jetHeightM, 0) > 0 ? num(e.jetHeightM) : 2;
+    // Only real water outlets spray: control panels, tanks and actuators the reader files as
+    // "nozzles" (no jet height, not a nozzle type) stay dry.
+    const water = num(e.jetHeightM, 0) > 0 || /^(nozzle_|motion_nozzle_)/.test(String(n.item.type || ""));
+    // Without a datasheet height: 6 m for a moving nozzle (they are show jets), 2 m for others.
+    const base = num(e.jetHeightM, 0) > 0 ? num(e.jetHeightM) : (water ? (isMovingNozzle({ type: n.item.type, key: n.item.type }) ? 6 : 2) : 0);
     let reason = "";
     let scale = 1;
-    if (!isOn(n.id)) { scale = 0; reason = "Switched off"; }
+    if (!water) { scale = 0; reason = "Not a water outlet"; }
+    else if (!isOn(n.id)) { scale = 0; reason = "Switched off"; }
     else if (n.valveId && !isOn(n.valveId)) { scale = 0; reason = "Valve closed"; }
     else if (!n.pumpId) { scale = 0; reason = "No pump connected — no water"; }
     else {
@@ -442,9 +473,88 @@ export function liveJets(fixtures = [], live = {}, design = readConnections(fixt
     const strength = Math.min(1, lights.reduce((s, x) => s + x.k, 0));
     return { id: n.id, kind: n.kind, heightM: base * scale, nominalHeightM: base, flowLpm: jetFlowLpm(n.item) * Math.sqrt(scale),
       color: lights.length ? mixColors(lights) : null, intensity: strength, on: scale > 0, reason,
-      spreadDeg: num(e.sprayAngleDeg, 0), outlets: Math.max(1, Math.round(num(e.outletCount, 0))) };
+      spreadDeg: num(e.sprayAngleDeg, 0), outlets: Math.max(1, Math.round(num(e.outletCount, 0))),
+      motion: motionOf(n.item) };
   });
   return { jets, pumps };
+}
+
+// ─── moving nozzles ─────────────────────────────────────────────────────────
+
+/** Motion patterns a moving nozzle can run (1D nozzles only swing in their plane). */
+export const MOTION_PATTERNS = [
+  { id: "sweep", label: "Sweep (swing side to side)", axes: 1 },
+  { id: "wave", label: "Wave (sweep, offset along the row)", axes: 1 },
+  { id: "circle", label: "Circle (cone)", axes: 2 },
+  { id: "figure8", label: "Figure 8", axes: 2 },
+  { id: "cross", label: "Cross (+)", axes: 2 },
+  { id: "spiral", label: "Spiral + lift", axes: 3 },
+];
+
+/**
+ * How a moving nozzle moves (null for a fixed one). Angles in degrees, speed in cycles per second.
+ *   range   tilt / swing range (full, e.g. 120 = ±60°)
+ *   pan     pan range (2D/3D)
+ *   liftM   lift stroke (3D)
+ */
+export function motionOf(item) {
+  const axes = isMovingNozzle({ type: item?.type, key: item?.type, engineering: item?.engineering, category: getFixtureLibraryEntry(item?.type)?.category })
+    ? axesOf(item) : 0;
+  if (!axes) return null;
+  const e = item.engineering || {};
+  const range = Math.max(0, Math.min(180, num(e.tiltRangeDeg, num(e.swingRangeDeg, num(e.angleRangeDeg, 90)))));
+  const pan = Math.max(0, Math.min(360, num(e.panRangeDeg, axes >= 2 ? 360 : 0)));
+  const degPerSec = num(e.speedDegSec, 90);
+  // Default speed: one full swing over the range at the drive's rated speed, at most 1 Hz.
+  const speedHz = num(e.motionSpeedHz, 0) > 0 ? num(e.motionSpeedHz) : Math.min(1, degPerSec / Math.max(20, 2 * range));
+  const allowed = MOTION_PATTERNS.filter((p) => p.axes <= axes).map((p) => p.id);
+  const pattern = allowed.includes(e.motionPattern) ? e.motionPattern : (axes >= 3 ? "spiral" : axes === 2 ? "circle" : "sweep");
+  return { axes, pattern, range, pan, speedHz: Math.round(speedHz * 100) / 100,
+    liftM: axes >= 3 ? num(e.liftStrokeMm, 300) / 1000 : 0, phase: num(item.x, 0) * 0.35 };
+}
+
+// ─── lasers, flames, fog ────────────────────────────────────────────────────
+
+export const LASER_PATTERN_OPTIONS = ["beam", "fan", "sheet", "cone", "scan", "searchlight", "liquidsky", "firefly", "graphics"];
+
+/** The effect an item shows in 3D (null for equipment that only stands there). */
+export function effectOf(item) {
+  const type = String(item?.type || "");
+  if (type === "laser" || type.startsWith("laser_")) return "laser";
+  if (/^effect_flame|flame_(burner|jet|effect)|^sfx_flame/i.test(type)) return "flame";
+  if (/fog|haze|smoke/i.test(type) && !/^nozzle_/i.test(type)) return "fog";
+  return null;
+}
+
+/** Laser state for the shared laser engine (preview/laser/laserRig.js laserFrame). */
+export function laserStateOf(item, on = true) {
+  const e = item?.engineering || {};
+  // A beam show laser's typical look is a fan of beams; it can be set to a single beam.
+  const kindPattern = { beam: "fan", graphics: "graphics", mapping: "graphics", fan: "fan", liquidsky: "liquidsky", sky: "searchlight", firefly: "firefly", movinghead: "scan" }[e.laserKind] || "fan";
+  const pattern = LASER_PATTERN_OPTIONS.includes(e.laserPattern) ? e.laserPattern : kindPattern;
+  const hex = lightColorOf({ color: item?.color || e.defaultColor || "#3dff4f" });
+  const v = parseInt(hex.slice(1), 16);
+  const panHalf = Math.min(180, num(e.panRangeDeg, 180) / 2), tiltHalf = Math.min(90, num(e.tiltRangeDeg, 180) / 2);
+  return {
+    intensity: on ? Math.max(0, Math.min(100, num(e.intensityPct, 100))) / 100 : 0,
+    color: { r: ((v >> 16) & 255) / 255, g: ((v >> 8) & 255) / 255, b: (v & 255) / 255 },
+    pattern,
+    pan: Math.max(-panHalf, Math.min(panHalf, num(e.laserPanDeg, 0))),
+    tilt: Math.max(-tiltHalf, Math.min(tiltHalf, num(e.laserTiltDeg, pattern === "liquidsky" ? 80 : 0))),
+    size: Math.max(2, Math.min(90, num(e.laserSizeDeg, pattern === "sheet" || pattern === "liquidsky" ? 60 : 30))),
+    speed: Math.max(0, Math.min(2, num(e.laserSpeedHz, 0.25))),
+  };
+}
+
+/** Flame / fog settings for the 3D effect. */
+export function flameOf(item, on = true) {
+  const e = item?.engineering || {};
+  return { heightM: Math.max(0.2, num(e.flameHeightM, num(e.heightM, 2))), intensity: on ? Math.max(0, Math.min(100, num(e.intensityPct, 100))) / 100 : 0,
+    burst: /burst/i.test(String(item?.type || "")) || e.flameMode === "burst" };
+}
+export function fogOf(item, on = true) {
+  const e = item?.engineering || {};
+  return { radiusM: Math.max(0.5, num(e.fogRadiusM, 3)), density: on ? Math.max(0, Math.min(100, num(e.intensityPct, 70))) / 100 : 0 };
 }
 
 const LIGHT_LENS_M = 0.15;   // beam width at the lens: a light right beside a jet still reaches it
@@ -537,6 +647,55 @@ export const ROLE_FIELDS = {
   ],
   effect: [],
 };
+
+/**
+ * The fields shown for one placed item: its role's fields, plus motion controls for a moving
+ * nozzle and effect controls for lasers, flames and fog. Select fields carry `options`.
+ */
+export function fieldsFor(item) {
+  const role = roleOf(item);
+  const e = item?.engineering || {};
+  const motion = role === "nozzle" ? motionOf(item) : null;
+  // Jet height shows the height the 3D view uses when the datasheet gives none.
+  const out = (ROLE_FIELDS[role] || []).map((d) => (d.key === "jetHeightM" ? { ...d, fallback: motion ? 6 : 2 } : d));
+  if (motion) {
+    const rangeKey = ["tiltRangeDeg", "swingRangeDeg", "angleRangeDeg"].find((k) => k in e) || "tiltRangeDeg";
+    out.push(
+      { key: "motionPattern", label: `Motion (${motion.axes}D)`, select: true, fallback: motion.pattern,
+        options: MOTION_PATTERNS.filter((p) => p.axes <= motion.axes).map((p) => ({ value: p.id, label: p.label })) },
+      { key: "motionSpeedHz", label: "Motion speed", unit: "Hz", min: 0.02, max: 2, step: 0.02, slider: true, fallback: motion.speedHz },
+      { key: rangeKey, label: "Swing range", unit: "°", min: 0, max: 180, step: 5, slider: true, fallback: motion.range },
+    );
+    if (motion.axes >= 2) out.push({ key: "panRangeDeg", label: "Pan range", unit: "°", min: 0, max: 360, step: 5, slider: true, fallback: motion.pan });
+    if (motion.axes >= 3) out.push({ key: "liftStrokeMm", label: "Lift stroke", unit: "mm", min: 0, max: 1000, step: 10, slider: true, fallback: motion.liftM * 1000 });
+  }
+  const fx = effectOf(item);
+  if (fx === "laser") {
+    const s = laserStateOf(item);
+    out.push(
+      { key: "laserPattern", label: "Laser look", select: true, fallback: s.pattern, options: LASER_PATTERN_OPTIONS.map((p) => ({ value: p, label: p })) },
+      { key: "intensityPct", label: "Output", unit: "%", min: 0, max: 100, step: 1, slider: true, fallback: 100 },
+      { key: "laserSizeDeg", label: "Fan / cone width", unit: "°", min: 2, max: 90, step: 1, slider: true, fallback: s.size },
+      { key: "laserSpeedHz", label: "Scan speed", unit: "Hz", min: 0, max: 2, step: 0.05, slider: true, fallback: s.speed },
+      { key: "laserTiltDeg", label: "Tilt from vertical", unit: "°", min: -90, max: 90, step: 1, slider: true, fallback: s.tilt },
+      { key: "laserPanDeg", label: "Pan", unit: "°", min: -180, max: 180, step: 1, slider: true, fallback: s.pan },
+      { key: "mountHeightM", label: "Mount height", unit: "m", min: 0, max: 30, step: 0.1, slider: true, sliderMax: 12, fallback: 0.5 },
+    );
+  } else if (fx === "flame") {
+    out.push(
+      { key: "intensityPct", label: "Flame size", unit: "%", min: 0, max: 100, step: 1, slider: true, fallback: 100 },
+      { key: "flameHeightM", label: "Flame height", unit: "m", min: 0.2, max: 12, step: 0.1, slider: true, fallback: flameOf(item).heightM },
+      { key: "flameMode", label: "Mode", select: true, fallback: flameOf(item).burst ? "burst" : "steady",
+        options: [{ value: "steady", label: "Steady flame" }, { value: "burst", label: "Bursts" }] },
+    );
+  } else if (fx === "fog") {
+    out.push(
+      { key: "intensityPct", label: "Fog density", unit: "%", min: 0, max: 100, step: 1, slider: true, fallback: 70 },
+      { key: "fogRadiusM", label: "Fog spread", unit: "m", min: 0.5, max: 15, step: 0.5, slider: true, fallback: 3 },
+    );
+  }
+  return out;
+}
 
 /** Engineering fields that are links, not properties (edited through the connections). */
 export const LINK_FIELDS = new Set(["pumpId", "supplyingPumpId", "solenoidValveId", "linkedValveId", "valveId",
