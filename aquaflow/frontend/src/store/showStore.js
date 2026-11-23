@@ -114,6 +114,7 @@ const TRACK_COLORS = {
   motion_angle: "#0ea5e9",
   motion_pan: "#2563eb",
   motion_tilt: "#1d4ed8",
+  motion_roll: "#7c3aed",
 };
 
 const TRACK_TYPE_ORDER = ["pump", "valve", "lighting", "flame", "fog", "laser", "audio"];

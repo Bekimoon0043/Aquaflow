@@ -80,6 +80,7 @@ export const CHANNEL = Object.freeze({
   PAN:        "pan",        // -1.0 to +1.0 (maps to -180° to +180°)
   TILT:       "tilt",       // 0.0 to 1.0 (maps to 0° to 90°)
   ANGLE:      "angle",      // -1.0 to +1.0 (maps to -180° to +180°)
+  ROLL:       "roll",       // continuous 3D nozzle-head rotation
   SPEED:      "speed",      // motion speed (0.0 = stopped, 1.0 = max speed)
 
   // Pump / VFD
@@ -137,6 +138,11 @@ export const FIXTURE_PROFILES = Object.freeze({
     channel_map:   [CHANNEL.PAN, CHANNEL.TILT, CHANNEL.INTENSITY, CHANNEL.RED,
                     CHANNEL.GREEN, CHANNEL.BLUE, CHANNEL.SPEED, "mode"],
   },
+  motion_3d_9ch: {
+    channel_count: 9,
+    channel_map:   [CHANNEL.PAN, CHANNEL.TILT, CHANNEL.ROLL, CHANNEL.INTENSITY, CHANNEL.RED,
+                    CHANNEL.GREEN, CHANNEL.BLUE, CHANNEL.SPEED, "mode"],
+  },
   vfd_pump_2ch: {
     // Standard VFD pump: speed + direction (no pressure feedback)
     channel_count: 2,
@@ -187,7 +193,7 @@ export const DEVICE_TYPE_PROFILE = Object.freeze({
   // Motion nozzles — controlled via Modbus/CANbus
   motion_1d:    "motion_1d_2ch",    // 1D swing: angle + speed (was vfd_pump_2ch — wrong)
   motion_2d:    "moving_head_8ch",  // pan + tilt + speed
-  motion_3d:    "moving_head_8ch",  // full 3-axis
+  motion_3d:    "motion_3d_9ch",    // pan + tilt + roll; verify the real fixture map during commissioning
 
   // Lighting — DMX
   light_uw_rgb_36w:  "rgb_3ch",

@@ -364,24 +364,124 @@ VOCALS.forEach((phrase, i) => {
 
 // ─── lighting ────────────────────────────────────────────────────────────────
 // Bellagio is lit from under the water: a lamp below each jet, white light only (warm gold on
-// camera). Light shows only where water scatters it, so with every lamp burning, each water
-// pattern is also the light pattern: a travelling wave is a travelling band of light, a shot a
-// column of light. On top of that the house level follows the song — bright through the
-// builds, drops and finale, dimmed for the breakdown and the bass section so the lake breathes —
-// and on the biggest hits every lamp punches to full and settles back (the film's 3:36 flash).
-// (One clip per lamp per section keeps the 1,214-lamp show small enough to open anywhere.)
-const HOUSE = [[6.2, 133.9, 90], [133.9, 149.5, 50], [149.5, 179.9, 95], [179.9, 195.63, 55], [195.63, 293, 100]];
-const LR = HOUSE.map(([s, e, level]) => hold("allLight", `House light ${level} %`, s, e - s, level));
-// The dark lake before the first note: the rings glow faintly from below.
-LR.push(hold("ringLight", "Ring glows in the dark", 0, 6.2, 18), hold("ringMiniLight", "Ring glows in the dark", 0, 6.2, 14),
-  hold("smallMiniLight", "Small ring glows", 0, 6.2, 10));
-// The biggest hits: every lamp punches to full and settles back to its pattern's level within a
-// second (one keyed clip per lamp). Smaller hits are carried by the shooters' own lamps above.
-const flash = (name, s, holdS) => base("allLight", name, s, holdS + 1, { effect: "curve", intensity: 100, sampleRate: 25, ease: 0,
-  envelope: [{ time: 0, value: 1 }, { time: r2(holdS / (holdS + 1)), value: 1 }, { time: 1, value: 0 }] });
-LR.push(flash("Impact flash", 71.9, 0.2), flash("Drop flash", 119.9, 0.2), flash("Big hit flash", 195.63, 0.25),
-  flash("FLASH", 216.24, 0.4), flash("Finale flash", 270.49, 0.25), flash("Last shot flash", 289.18, 0.3));
+// camera). As on the real lake a lamp burns only while its own jet runs (plus the seconds its
+// water is still in the air), so the light draws every water pattern; shooters blast at full;
+// the house level follows the song (dimmed for the breakdown and the bass section). In some
+// passages the light itself dances over the water (chases, beat flicker, breathing, strobes,
+// spinning rings) and in a few the lamps play alone on a still lake. On the biggest hits every
+// lamp punches to full and settles back (the film's 3:36 flash).
 for (let i = R.length - 1; i >= 0; i--) if (R[i] && /Light$/.test(R[i].groupId)) R.splice(i, 1);
+const items = inventory(fixtures);
+const STEP = 0.1, NS = Math.ceil(END / STEP) + 1;
+const waterRecipes = R.filter((r) => r && r.groupId && r.duration > 0 && !/^fog/.test(r.groupId));
+const waterClips = compileStudio({ ...readStudio({}), groups: G, recipes: waterRecipes, tempo: [{ time: 0, bpm: BPM }] }, items).clips;
+const nozzleOf = new Map(fixtures.filter((f) => f.type !== LIGHT).map((f) => [f.id, f]));
+const levelAt = (c, t) => {
+  if (!c.keys) return Number(c.value) || 0;
+  const k = c.keys;
+  if (t <= k[0]) return k[1];
+  for (let i = 2; i < k.length; i += 2) if (t <= k[i]) return k[i - 1] + ((k[i + 1] - k[i - 1]) * (t - k[i - 2])) / Math.max(1e-6, k[i] - k[i - 2]);
+  return k[k.length - 1];
+};
+const waterLevel = new Map();
+for (const c of waterClips) {
+  if (!nozzleOf.has(c.fixtureId) || /motion_(angle|pan|tilt|roll|position)|solenoid|enable/.test(c.type)) continue;
+  const arr = waterLevel.get(c.fixtureId) || waterLevel.set(c.fixtureId, new Float32Array(NS)).get(c.fixtureId);
+  for (let i = Math.max(0, Math.floor(c.startTime / STEP)); i < NS && i * STEP <= c.startTime + c.duration; i++) {
+    const v = levelAt(c, i * STEP - c.startTime) / 100;
+    if (v > arr[i]) arr[i] = v;
+  }
+}
+const HOUSE = [[0, 133.9, 90], [133.9, 149.5, 50], [149.5, 179.9, 95], [179.9, 195.63, 55], [195.63, 300, 100]];
+const houseAt = (t) => HOUSE.find(([s, e]) => t >= s && t < e)?.[2] ?? 90;
+// Light-play windows: the lamps of these groups follow a light pattern instead of their water.
+const lampsOf = (list) => list.map((id) => lampOf.get(id));
+group("lineLightOdd", "Line · oarsman lights odd", lampsOf(oarOdd));
+group("lineLightEven", "Line · oarsman lights even", lampsOf(oarEven));
+const together = (g, name, s, d, period, points, high = 100, low = 0) => base(g, name, s, d, { effect: "field", field: { kind: "custom", shape: "drawn",
+  path: "together", motion: "repeat", period, spread: 0, points, low, high, ease: 0 } });
+const BEAT = 60 / BPM;
+const ALT_A = [{ time: 0, value: 1 }, { time: 0.45, value: 1 }, { time: 0.5, value: 0 }, { time: 0.95, value: 0 }, { time: 1, value: 1 }];
+const ALT_B = [{ time: 0, value: 0 }, { time: 0.45, value: 0 }, { time: 0.5, value: 1 }, { time: 0.95, value: 1 }, { time: 1, value: 0 }];
+const KICK = [{ time: 0, value: 1 }, { time: 0.12, value: 1 }, { time: 0.45, value: 0.25 }, { time: 1, value: 0.25 }];
+const WINDOWS = [
+  [0, 6.2, ["ringMiniLight", "innerMiniLight"], [
+    field("ringMiniLight", "Light only · the ring's lamps circle in the dark", 0, 6.2, travel(1, 2, 3.1, 0, 45)),
+    field("innerMiniLight", "Light only · inner lamps circle the other way", 0, 6.2, travel(-1, 2, 3.1, 0, 35))]],
+  [59.9, 71.9, ["lineMiniLight", "lineLight"], [
+    field("lineMiniLight", "Light dance · bands of light run along the curtain", 59.9, 12, travel(1, 3, 3.75, 12, 100)),
+    field("lineLight", "Light dance · oarsman lights run the other way", 59.9, 12, travel(-1, 2, 3.75, 20, 100))]],
+  [98.35, 119.9, ["lineLightOdd", "lineLightEven", "lineLight"], [
+    together("lineLightOdd", "Light dance · odd oarsmen flash on the beat", 98.35, 21.55, 2 * BEAT, ALT_A),
+    together("lineLightEven", "Light dance · even oarsmen answer", 98.35, 21.55, 2 * BEAT, ALT_B)]],
+  [133.9, 149.5, ["ringLight", "innerMiniLight", "lineLight"], [
+    field("ringLight", "Light dance · the ring breathes", 133.9, 15.6, swell(7.5, 15, 90)),
+    field("innerMiniLight", "Light dance · slow glow round the inner ring", 133.9, 15.6, travel(1, 1, 7.5, 10, 85)),
+    field("lineLight", "Light only · a running light along the still line", 135, 14.5, travel(1, 1, 3.75, 0, 60))]],
+  [179.9, 195.63, ["ringLight", "innerMiniLight", "lineLight", "lineMiniLight"], [
+    together("ringLight", "Light dance · ring lamps kick with the bass", 179.9, 15.73, BEAT, KICK),
+    field("innerMiniLight", "Light dance · inner ring spins", 179.9, 15.73, travel(-1, 2, 3.75, 10, 90)),
+    field("lineLight", "Light dance · slow wave of light on the line", 179.9, 15.73, travel(1, 1.5, 7.5, 10, 80)),
+    field("lineMiniLight", "Light only · light waves over the still curtain row", 179.9, 15.73, travel(1, 1, 7.5, 0, 40))]],
+  [197.8, 216.24, ["lineMiniLight", "lineLight"], [
+    field("lineMiniLight", "Light dance · strobe build to the flash", 197.8, 18.44, finale(3.75, 10, 100)),
+    field("lineLight", "Light dance · oarsman strobe build", 197.8, 18.44, finale(3.75, 15, 100))]],
+  [227.2, 237.1, ["ringMiniLight", "innerMiniLight", "ringLight"], [
+    field("ringMiniLight", "Light dance · outer ring spins", 227.2, 9.9, travel(1, 3, 1.875, 10, 100)),
+    field("innerMiniLight", "Light dance · inner ring spins back", 227.2, 9.9, travel(-1, 3, 1.875, 10, 100)),
+    field("ringLight", "Light dance · crown pulses", 227.2, 9.9, swell(2 * BEAT, 30, 100))]],
+  [250, 270.4, ["lineLight", "lineMiniLight"], [
+    field("lineLight", "Light dance · crossing light", 250, 20.4, crossing(3.75, 10, 100)),
+    field("lineMiniLight", "Light dance · fast chase", 250, 20.4, travel(1, 4, 1.875, 10, 100))]],
+];
+const inWindow = new Map();
+for (const [s, e, groups] of WINDOWS) for (const g of groups) for (const id of G.find((x) => x.id === g).memberFixtureIds)
+  (inWindow.get(id) || inWindow.set(id, []).get(id)).push([s, e]);
+// Each lamp's own timeline: on while its water runs and is still in the air, gaps under 2 s kept.
+const signature = new Map();
+for (const lamp of fixtures.filter((f) => f.type === LIGHT)) {
+  const noz = nozzleOf.get(lamp.engineering.pairedNozzleId);
+  const w = waterLevel.get(noz?.id);
+  if (!w) continue;
+  const H = Number(noz.engineering.jetHeightM) || 20;
+  const tail = Math.round((2 * Math.sqrt((2 * H) / 9.81)) / STEP);
+  const blast = noz.type === SUPER;
+  const lv = new Float32Array(NS);
+  let last = -1e9;
+  for (let i = 0; i < NS; i++) {
+    if (w[i] > 0.03) last = i;
+    if (i - last <= tail) lv[i] = blast ? 100 : houseAt(i * STEP);
+  }
+  for (const [s, e] of inWindow.get(lamp.id) || []) for (let i = Math.floor(s / STEP); i < Math.min(NS, Math.ceil(e / STEP)); i++) lv[i] = 0;
+  const segs = [];
+  for (let i = 0; i < NS;) {
+    let j = i;
+    while (j < NS && lv[j] === lv[i]) j++;
+    if (lv[i] > 0) segs.push([r2(i * STEP), r2(Math.min(END, j * STEP)), lv[i]]);
+    i = j;
+  }
+  // Half-second edges: lamps that behave alike share one editable group.
+  for (const sg of segs) { sg[0] = Math.floor(sg[0] * 2) / 2; sg[1] = Math.min(END, Math.ceil(sg[1] * 2) / 2); }
+  for (let k = segs.length - 1; k > 0; k--) {
+    if (segs[k][0] - segs[k - 1][1] < 2 && segs[k][2] === segs[k - 1][2]) { segs[k - 1][1] = segs[k][1]; segs.splice(k, 1); }
+    else if (segs[k][0] < segs[k - 1][1]) segs[k][0] = segs[k - 1][1];
+  }
+  for (let k = segs.length - 1; k >= 0; k--) if (segs[k][1] - segs[k][0] < 0.05) segs.splice(k, 1);
+  const key = JSON.stringify(segs);
+  (signature.get(key) || signature.set(key, { segs, lamps: [], family: lamp.groupId }).get(key)).lamps.push(lamp.id);
+}
+const LR = [];
+let follow = 0;
+for (const { segs, lamps, family } of signature.values()) {
+  const gid = group(`litWithWater${++follow}`, `Lit with its water · ${String(family).replace(/_lights?$/, "").replace(/_/g, " ")} (${lamps.length})`, lamps);
+  for (const [s, e, level] of segs) LR.push(hold(gid, level === 100 && s > 0 ? "Lamps blast with their water" : `Lamps follow their water · ${level} %`, s, e - s, level));
+}
+for (const [, , , patterns] of WINDOWS) LR.push(...patterns);
+// The biggest hits: every lamp blasts to full for a moment, idle ones too (a flat clip per lamp
+// keeps the show small).
+const flash = (name, s, holdS) => hold("allLight", name, s, holdS + 0.15, 100);
+LR.push(flash("Impact flash", 71.9, 0.2), flash("FLASH", 216.24, 0.4), flash("Finale flash", 270.49, 0.25));
+for (const r of LR) r.color = WARM;
 R.push(...LR);
 const recipes = R.filter((r) => r && r.groupId && r.duration > 0 && !/^fog/.test(r.groupId));
 
@@ -391,7 +491,6 @@ const markers = [[0, "Intro · the lake waits"], [6.24, "Opening columns"], [12.
   .map(([time, name], i) => ({ id: `m${i + 1}`, name, label: name, time, kind: "section", color: "#ffd9a6" }));
 
 // ─── compile + checks ───────────────────────────────────────────────────────
-const items = inventory(fixtures);
 const silent = items.filter((i) => !(i.tracks || []).length);
 if (silent.length) throw new Error(`${silent.length} fixtures have no channels: ${silent.slice(0, 3).map((i) => i.type)}`);
 const prev = proj.programmer?.studio || {};
@@ -446,20 +545,39 @@ proj.project = { ...proj.project, name, modifiedAt: now };
 // Cameras (world: x = plan x, z = plan y − centre; the audience on the Strip is +z). Keys follow the film's angles.
 const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
 const W = (x, y, h) => ({ x, y: h, z: y - cy });
-const key = (t, pos, tgt, fov, ease = "smooth") => ({ id: `cam-${t}`, t, position: pos, target: tgt, fov, roll: 0, ease });
-const RINGC = W(RING.cx, RING.cy, 8), LINEC = W(0, -15, 10), SM = W(SMALL.cx, SMALL.cy, 8);
-// Shot list: close and low like the film's audience and drone shots, chosen per section so each
-// pattern is readable (along the line for crossings and waves, close for ring domes and crowns).
-const ALONG = W(-150, 6, 5), ALONG_T = W(0, -18, 9);
-const cameraKeys = [
-  key(0, W(150, 120, 80), W(0, -10, 0), 45), key(10, W(70, 75, 38), RINGC, 45), key(22, W(32, 52, 9), RINGC, 50),
-  key(34, W(-40, 45, 6), W(-60, -20, 9), 55), key(56, W(30, 55, 6), W(10, -14, 11), 55),
-  key(70, W(0, 115, 6), W(0, -15, 30), 62), key(76, ALONG, ALONG_T, 45), key(98, W(-95, 30, 5), W(-20, -15, 10), 50),
-  key(119, W(0, 105, 5), W(0, -15, 18), 62), key(133, W(30, 60, 12), RINGC, 48), key(149, W(0, 100, 5), W(0, -15, 14), 60),
-  key(172, W(60, 95, 6), W(0, -15, 30), 60), key(180, W(0, -10, 210), W(0, -10.01, 0), 55), key(194, W(0, 100, 5), W(0, -15, 25), 62),
-  key(214, W(150, 4, 5), W(0, -16, 9), 45), key(226, W(-32, 58, 14), RINGC, 48), key(249, W(-70, 70, 6), W(-20, -15, 10), 52),
-  key(269, W(0, 115, 6), W(0, -15, 30), 64), key(END, W(0, 150, 24), W(0, -15, 15), 60),
-];
+const RINGC = W(RING.cx, RING.cy, 8);
+// A film edit: each section is one moving shot (glide, orbit, crane, push-in), cut to the next on
+// the music; every camera stays at least 3 m above the water.
+const cameraKeys = [];
+const camShot = (t0, t1, frames) => frames.forEach(([pos, tgt, fov], i) => {
+  const t = r2(t0 + ((t1 - t0 - 0.04) * i) / Math.max(1, frames.length - 1));
+  cameraKeys.push({ id: `cam-${cameraKeys.length + 1}`, t, position: pos, target: tgt, fov, roll: 0,
+    ease: i === frames.length - 1 && t1 < END ? "cut" : "smooth" });
+});
+const orbit = (c, R, h, a0, a1, n, tgt, fov) => Array.from({ length: n }, (_, i) => {
+  const a = ((a0 + ((a1 - a0) * i) / (n - 1)) * Math.PI) / 180;
+  return [W(c.cx + R * Math.cos(a), c.cy + R * Math.sin(a), h), tgt, fov];
+});
+camShot(0, 6.24, [[W(150, 140, 85), W(0, 5, 0), 45], [W(95, 95, 48), W(0, 8, 0), 45]]);                    // the dark lake, ring lamps circling
+camShot(6.24, 12.96, [[W(10, 75, 3), W(0, 12, 40), 58], [W(0, 64, 14), W(0, 12, 48), 58]]);               // crane up the opening columns
+camShot(12.96, 24.36, orbit(RING, 40, 9, 70, 150, 4, RINGC, 50));                                        // orbit as the ring draws on
+camShot(24.36, 37.1, [[W(-158, 8, 5), W(-40, -14, 10), 48], [W(-78, 16, 7), W(30, -14, 11), 48]]);         // track the line drawing on
+camShot(37.1, 59.9, [[W(-30, 62, 5), W(-60, -15, 9), 55], [W(30, 58, 6), W(10, -14, 11), 55]]);           // low glide past the X lattice
+camShot(59.9, 71.9, [[W(0, 128, 6), W(0, -15, 15), 60], [W(0, 80, 8), W(0, -15, 16), 60]]);               // push in on the curtain
+camShot(71.9, 75.85, [[W(0, 92, 3), W(0, -15, 42), 64], [W(0, 106, 26), W(0, -15, 45), 64]]);             // impact: crane up with the shot
+camShot(75.85, 98.35, [[W(-160, 20, 6), W(-60, -15, 10), 50], [W(-60, 40, 7), W(30, -15, 10), 50]]);       // side tracking with the arcs
+camShot(98.35, 119.9, [[W(-70, 28, 3), W(30, -18, 9), 50], [W(-25, 36, 4), W(60, -20, 10), 50]]);           // close and low for the scissors
+camShot(119.9, 133.9, orbit(RING, 56, 10, 30, 120, 4, W(0, 0, 12), 55));                                  // drop: sweep round the ring
+camShot(133.9, 149.5, [[W(35, 75, 25), RINGC, 48], [W(70, 130, 60), RINGC, 48]]);                          // breakdown: slow drone pull-back
+camShot(149.5, 165, [[W(0, 115, 4), W(0, -15, 20), 60], [W(0, 95, 14), W(0, -15, 22), 60]]);               // walls rise: front crane
+camShot(165, 179.9, [[W(125, 25, 4), W(0, -15, 15), 55], [W(85, 45, 6), W(-20, -15, 18), 55]]);            // tall shooters from the side
+camShot(179.9, 195.63, [[W(0, 12, 170), W(0, -10, 0), 55], [W(25, 2, 140), W(0, -12, 0), 55]]);           // bass: above, turning slowly
+camShot(195.63, 216.24, [[W(0, 88, 3), W(0, -15, 38), 62], [W(35, 80, 9), W(0, -15, 30), 62]]);           // big hit from the water's edge
+camShot(216.24, 227.2, [[W(155, 6, 5), W(0, -16, 10), 45], [W(115, 16, 6), W(-20, -16, 10), 45]]);         // flash, then along the rowing line
+camShot(227.2, 250, orbit(RING, 40, 13, 200, 20, 5, RINGC, 50));                                         // double ring: half orbit
+camShot(250, 270.4, [[W(155, 10, 5), W(60, -15, 10), 50], [W(60, 32, 6), W(-30, -15, 10), 50]]);           // glide from the south end
+camShot(270.4, END, [[W(-85, 110, 6), W(0, -15, 25), 62], [W(0, 124, 9), W(0, -15, 26), 62], [W(85, 110, 7), W(0, -15, 25), 62]]); // finale arc
+if (cameraKeys.some((k) => k.position.y < 3)) throw new Error("camera key below 3 m");
 proj.render = { ...proj.render, environment: "night", cameraMode: "animated", activeCameraView: null, laserHaze: 0.35,
   cameraTrack: { enabled: true, keys: cameraKeys },
   cameraViews: [

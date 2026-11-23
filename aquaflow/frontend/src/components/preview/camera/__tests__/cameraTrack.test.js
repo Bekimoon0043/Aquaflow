@@ -144,3 +144,24 @@ describe("preset moves", () => {
     }
   });
 });
+
+describe("shots separated by cuts", () => {
+  // Shot 1: a top view; shot 2: a low glide. Before, the spline bent shot 2 through the top
+  // view's key and dipped under the water.
+  const shots = { enabled: true, keys: [
+    k("a", 0, v(0, 200, 0)), k("b", 9.98, v(0, 210, 5), "cut"),
+    k("c", 10, v(-50, 5, 80)), k("d", 20, v(50, 5, 80), "cut"),
+    k("e", 20.02, v(0, 30, 60)),
+  ] };
+  it("moves straight within a two-key shot, ignoring keys across the cuts", () => {
+    for (let t = 10; t < 20; t += 0.25) {
+      const p = sampleCameraTrack(shots, t).position;
+      expect(p.y).toBeCloseTo(5, 6);
+      expect(p.z).toBeCloseTo(80, 6);
+    }
+  });
+  it("never goes below the water", () => {
+    const dive = { enabled: true, keys: [k("a", 0, v(0, 210, 0)), k("b", 4, v(0, 5, 100)), k("c", 8, v(100, 5, 0)), k("d", 12, v(0, 200, -100))] };
+    for (let t = 0; t <= 12; t += 0.05) expect(sampleCameraTrack(dive, t).position.y).toBeGreaterThanOrEqual(0.5);
+  });
+});

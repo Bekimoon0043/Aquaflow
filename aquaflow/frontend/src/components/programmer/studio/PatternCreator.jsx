@@ -1,11 +1,15 @@
-// Pattern creator: build your own pattern from the basic pieces of every fountain pattern —
-// how one jet moves (shape), how that spreads across the jets (path), timing, height and
-// lights — with a live preview. Add it to the timeline, save it as your own pattern type,
-// or export / import pattern types.
+// Guided water / 1D / 2D / 3D creator with editable temporal curves, spatial paths,
+// group timing, water and light layers. Assets open as independent remixes; custom types
+// stay in the project and computer library and use the existing portable type format.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ORIGINS, PATHS, SHAPES, fieldLevel, memberGeometry, shapeValue } from './wavePatterns';
 import { EXAMPLES, cleanType, exportTypes, importTypes, loadMyTypes, myTypes, saveMyTypes, saveTypeToProject, upsertType } from './customPatterns';
-import { defaultFieldGroups, fieldUnitRecipes, updateFieldUnit } from './showBlocks';
+import { defaultFieldGroups, fieldUnitRecipes, resizeBlock, updateFieldUnit, updateMotionUnit } from './showBlocks';
+import { MOTION_MODES, cleanMotion, motionAxesOf, motionPatternRecipes } from './motionPatterns';
+import MotionDesigner from './MotionDesigner';
+import CurveGraph from './CurveGraph';
+import { Choice, Slider } from './patternControls';
+import { builderGroups, isLightItem, isWaterItem } from './patternPresets';
 
 const PREVIEW_JETS = 48;
 const DRAW_POINTS = 9;
@@ -27,41 +31,6 @@ function resample(points) {
     const time = i / (DRAW_POINTS - 1);
     return { time, value: Math.round(shapeValue({ shape: 'drawn', points }, time) * 100) / 100 };
   });
-}
-
-function Slider({ label, value, min, max, step = 1, suffix = '', onChange, hint }) {
-  return <label className="pc-field" title={hint}><span>{label}</span>
-    <span className="pc-num"><input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} aria-label={label} />
-      <input type="number" min={min} max={max} step={step} value={value} aria-label={`${label} value`}
-        onChange={e => { const v = Number(e.target.value); if (e.target.value !== '' && v >= min && v <= max) onChange(v); }} />
-      {suffix && <small>{suffix}</small>}</span></label>;
-}
-
-function Choice({ options, value, onChange, label }) {
-  return <div className="pc-choices" role="radiogroup" aria-label={label}>
-    {options.map(([id, title, hint]) => <button key={id} role="radio" aria-checked={value === id} className={value === id ? 'on' : ''}
-      onClick={() => onChange(id)} title={hint}><b>{title}</b><small>{hint}</small></button>)}
-  </div>;
-}
-
-function ShapeGraph({ field, onDraw }) {
-  const W = 260, H = 84, pad = 6;
-  const pts = Array.from({ length: 81 }, (_, i) => { const x = i / 80; return [pad + x * (W - 2 * pad), H - pad - shapeValue(field, x) * (H - 2 * pad)]; });
-  const dragging = useRef(null);
-  const drawn = field.shape === 'drawn' ? field.points : null;
-  const move = e => {
-    if (dragging.current === null || !drawn) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const value = Math.min(1, Math.max(0, 1 - (e.clientY - r.top - pad) / (r.height - 2 * pad)));
-    onDraw(drawn.map((p, i) => i === dragging.current ? { ...p, value: Math.round(value * 100) / 100 } : p));
-  };
-  return <svg className="pc-graph" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Movement of one jet over one cycle"
-    onPointerMove={move} onPointerUp={() => { dragging.current = null; }} onPointerLeave={() => { dragging.current = null; }}>
-    <line x1={pad} x2={W - pad} y1={H - pad} y2={H - pad} className="pc-axis" />
-    <polyline points={pts.map(p => p.join(',')).join(' ')} className="pc-line" />
-    {drawn && drawn.map((p, i) => <circle key={i} cx={pad + p.time * (W - 2 * pad)} cy={H - pad - p.value * (H - 2 * pad)} r={6} className="pc-handle"
-      onPointerDown={e => { e.currentTarget.ownerSVGElement?.setPointerCapture?.(e.pointerId); dragging.current = i; }} />)}
-  </svg>;
 }
 
 function Preview({ field, light }) {
@@ -100,6 +69,8 @@ const EXAMPLE_FOR_KIND = { rolling: 'Rolling wave', travelling: 'Travelling wave
 export function creatorTypeFromBlock(block) {
   const w = block.water.field || {}, lights = block.lights;
   const light = { color: lights?.color || block.water.color, colorMode: lights?.field?.colorMode, colors: lights?.field?.colors, low: lights?.field?.low, high: lights?.field?.high };
+  if (block.motion) return cleanType({ name: block.name, patternKind: 'motion', axes: block.motion.motion?.axes || 1,
+    field: block.motion.field || w, motion: block.motion.motion, light });
   if (w.kind === 'custom') return cleanType({ name: block.name, field: w, light });
   const example = EXAMPLES.find(x => x.name === EXAMPLE_FOR_KIND[w.kind]) || EXAMPLES[1];
   const same = {};
@@ -109,8 +80,26 @@ export function creatorTypeFromBlock(block) {
   return cleanType({ name: block.name, field: { ...example.field, ...same }, light: { ...example.light, ...light } });
 }
 
-export default function PatternCreator({ studio, items, start = 0, editBlock = null, onChange, onClose, onExportFile }) {
-  const initial = editBlock ? creatorTypeFromBlock(editBlock) : cleanType({ name: 'My pattern', field: { shape: 'sine', path: 'around' } });
+/** Open any portable asset as an independent, editable creator template. */
+export function creatorTypeFromAsset(asset) {
+  const recipes = asset.recipes || [];
+  const motion = recipes.find(r => r.effect === 'motion');
+  const water = recipes.find(r => ['water', 'motion-water'].includes(r.role)) || recipes.find(r => r.effect === 'field') || recipes[0];
+  const lights = recipes.find(r => r.role === 'lights');
+  if (motion || water?.attribute === 'motion_angle') {
+    const source = motion || water;
+    return cleanType({ name: asset.name, patternKind: 'motion', axes: source.motion?.axes || 1,
+      field: source.field || { shape: 'drawn', points: source.envelope, path: 'around', period: source.duration / Math.max(1, source.cycles || 1), low: 35, high: 100, ease: 0 },
+      motion: source.motion || { axes: 1, amplitudeDeg: 45, centreDeg: 0 }, light: { color: lights?.color || asset.color } });
+  }
+  if (water?.effect === 'field') return creatorTypeFromBlock({ name: asset.name, water, lights });
+  const points = water?.envelope || [{ time: 0, value: 1 }, { time: 1, value: 1 }];
+  return cleanType({ name: asset.name, field: { shape: 'drawn', points, path: 'together', period: water?.duration || asset.duration,
+    low: 0, high: water?.intensity || 100, ease: 0 }, light: { color: lights?.color || asset.color } });
+}
+
+export default function PatternCreator({ studio, items, start = 0, editBlock = null, asset = null, onChange, onAdded, onClose, onExportFile }) {
+  const initial = editBlock ? creatorTypeFromBlock(editBlock) : asset ? creatorTypeFromAsset(asset) : cleanType({ name: 'My pattern', field: { shape: 'sine', path: 'around' } });
   const [type, setType] = useState(initial);
   const [farEnd, setFarEnd] = useState(initial.field.lowFar !== undefined && (initial.field.lowFar !== initial.field.low || initial.field.highFar !== initial.field.high));
   const [note, setNote] = useState('');
@@ -120,19 +109,61 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
   const set = patch => setType(t => cleanType({ ...t, field: { ...t.field, ...patch } }));
   const setLight = patch => setType(t => cleanType({ ...t, light: { ...t.light, ...patch } }));
   const effective = farEnd ? f : { ...f, lowFar: f.low, highFar: f.high, stairs: 0 };
+  const [groupId, setGroupId] = useState(() => editBlock?.motion?.groupId || editBlock?.water?.groupId || defaultFieldGroups(studio, items).water?.id || '');
+  const [lightGroupId, setLightGroupId] = useState(() => editBlock?.lights?.groupId || defaultFieldGroups(studio, items).lights?.id || '');
+  const [duration, setDuration] = useState(editBlock?.duration || 15);
+  const [includeLights, setIncludeLights] = useState(() => !!editBlock?.lights || !!defaultFieldGroups(studio, items).lights);
+  const allGroups = builderGroups(studio, items), byId = new Map(items.map(i => [i.id, i]));
+  const membersOf = group => (group?.memberFixtureIds || []).map(id => byId.get(id)).filter(Boolean);
+  const waterGroups = allGroups.filter(g => { const m = membersOf(g); return m.length && m.every(isWaterItem); });
+  const lightGroups = allGroups.filter(g => { const m = membersOf(g); return m.length && m.every(isLightItem); });
+  const axes = type.patternKind === 'motion' ? type.motion?.axes || 1 : 0;
+  const motionGroups = waterGroups.filter(g => { const m = membersOf(g); return m.every(item => motionAxesOf(item) >= axes); });
+  const targetGroup = allGroups.find(g => g.id === groupId);
+  const targetMembers = membersOf(targetGroup);
+  const setMode = id => {
+    if (id === 'water') { setType(t => cleanType({ ...t, patternKind: 'water', motion: undefined })); return; }
+    const nextAxes = MOTION_MODES.find(m => m.id === id)?.axes || 1;
+    setType(t => cleanType({ ...t, patternKind: 'motion', motion: cleanMotion({ ...t.motion, axes: nextAxes }, nextAxes) }, nextAxes));
+    if (!motionGroups.some(g => g.id === groupId && membersOf(g).every(item => motionAxesOf(item) >= nextAxes))) {
+      const next = allGroups.find(g => { const m = membersOf(g); return m.length && m.every(item => isWaterItem(item) && motionAxesOf(item) >= nextAxes); });
+      if (next) setGroupId(next.id);
+    }
+  };
 
   const load = example => { setType(cleanType({ ...example, name: example.name })); setFarEnd(example.field.lowFar !== undefined && example.field.lowFar !== example.field.low); setNote(`Loaded “${example.name}” — change any piece to make it yours.`); };
   const add = () => {
-    const groups = defaultFieldGroups(studio, items);
-    if (!groups.water) { setNote('This design has no jets to program.'); return; }
+    const motionMode = type.patternKind === 'motion';
+    const selected = allGroups.find(g => g.id === groupId);
+    if (!selected || !(motionMode ? motionGroups : waterGroups).some(g => g.id === groupId)) {
+      setNote(motionMode ? `Choose a compatible ${axes}D moving-nozzle group.` : 'Choose a water group for this pattern.'); return;
+    }
+    const lightGroup = includeLights ? allGroups.find(g => g.id === lightGroupId) : null;
+    const order = selected.orderMode || 'engineering';
     if (editBlock) {
-      onChange(s => updateFieldUnit(s, editBlock, { kind: 'custom', name: type.name, field: effective, light: { color: L.color, low: L.low, high: L.high, colorMode: L.colorMode, colors: L.colors } }));
+      onChange(s => {
+        const patch = { name: type.name, field: effective, groupId, lightGroupId: lightGroup?.id || null,
+          light: { color: L.color, low: L.low, high: L.high, colorMode: L.colorMode, colors: L.colors } };
+        let updated = editBlock.motion ? updateMotionUnit(s, editBlock, { ...patch, motion: type.motion, order })
+          : updateFieldUnit(s, editBlock, { ...patch, kind: 'custom' });
+        if (lightGroup && !editBlock.lights) {
+          const addedLight = fieldUnitRecipes({ kind: 'custom', start: editBlock.start, duration, name: type.name, waterGroupId: null,
+            lightGroupId: lightGroup.id, field: effective, light: L, order, unitId: editBlock.unitId });
+          updated = { ...updated, recipes: [...updated.recipes, ...addedLight.recipes] };
+        }
+        const missing = [selected, lightGroup].filter(g => g && !s.groups.some(x => x.id === g.id)).map(({ source, quick, ...g }) => g);
+        updated = { ...updated, groups: [...updated.groups, ...missing] };
+        return resizeBlock(updated, editBlock, duration);
+      });
       setNote('Pattern updated'); return;
     }
-    const { recipes } = fieldUnitRecipes({ kind: 'custom', start, duration: 15, name: type.name, field: effective,
-      waterGroupId: groups.water.id, lightGroupId: groups.lights?.id, light: L, order: 'clockwise' });
-    const missing = [groups.water, groups.lights].filter(g => g && !studio.groups.some(x => x.id === g.id)).map(({ source, quick, ...g }) => g);
-    onChange(s => ({ ...s, groups: [...s.groups, ...missing], recipes: [...s.recipes, ...recipes] }));
+    const made = motionMode ? motionPatternRecipes({ start, duration, name: type.name, groupId, lightGroupId: lightGroup?.id,
+      field: effective, motion: type.motion, light: L, order })
+      : fieldUnitRecipes({ kind: 'custom', start, duration, name: type.name, field: effective,
+        waterGroupId: groupId, lightGroupId: lightGroup?.id, light: L, order });
+    const missing = [selected, lightGroup].filter(g => g && !studio.groups.some(x => x.id === g.id)).map(({ source, quick, ...g }) => g);
+    onChange(s => ({ ...s, groups: [...s.groups, ...missing], recipes: [...s.recipes, ...made.recipes] }));
+    onAdded?.(made.unitId);
     setNote(`Added “${type.name}” to the timeline at ${start.toFixed(1)} s`);
   };
   const save = () => {
@@ -161,7 +192,7 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
 
   return <div className="pc" role="dialog" aria-label="Pattern creator">
     <header className="pc-head">
-      <strong>✎ {editBlock ? 'Edit pattern' : 'Create pattern'}</strong>
+      <strong>✎ {editBlock ? 'Edit pattern' : asset ? 'Customize pattern asset' : 'Create pattern'}</strong>
       <label className="pc-name"><span>Name</span><input value={type.name} onChange={e => setType(t => ({ ...t, name: e.target.value }))} aria-label="Pattern name" /></label>
       <label className="pc-name"><span>Start from</span>
         <select aria-label="Start from" value="" onChange={e => { const x = [...EXAMPLES, ...library].find(t => t.id === e.target.value); if (x) load(x); }}>
@@ -174,9 +205,21 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
     </header>
     <div className="pc-body">
       <div className="pc-steps">
+        <section className="pc-pattern-mode"><h4>Pattern type</h4>
+          <Choice label="Pattern type" value={axes ? `${axes}d` : 'water'} onChange={setMode} options={MOTION_MODES.map(m => [m.id, m.label, m.hint])} />
+          <p className="pc-hint">Start with a simple look, then change any curve, path, group or timing value. Nothing is locked after you add it.</p>
+          <div className="pc-targets">
+            <label className="pc-field"><span>{axes ? `${axes}D nozzle group` : 'Water group'}</span><select aria-label="Pattern target group" value={groupId} onChange={e => setGroupId(e.target.value)}>
+              <option value="">Choose a group…</option>{(axes ? motionGroups : waterGroups).map(g => <option key={g.id} value={g.id}>{g.name} · {membersOf(g).length}</option>)}
+            </select></label>
+            <label className="pc-field"><span>Pattern length</span><input type="number" min={1} max={120} step={0.5} value={duration} onChange={e => setDuration(Math.max(1, Math.min(120, Number(e.target.value) || 1)))} aria-label="Pattern length value" /></label>
+          </div>
+        </section>
+        {axes > 0 && <MotionDesigner motion={type.motion} field={f} duration={duration} members={targetMembers} onMotion={motion => setType(t => cleanType({ ...t, motion }))} onField={set} onDuration={setDuration} />}
+        {!axes && <>
         <section><h4>1 · How one jet moves</h4>
           <Choice label="Shape" options={SHAPES} value={f.shape} onChange={shape => set(shape === 'drawn' && !f.points ? { shape, points: resample(undefined) } : { shape })} />
-          <ShapeGraph field={f} onDraw={points => set({ points })} />
+          <CurveGraph field={f} onDraw={points => set({ points })} />
           {f.shape === 'drawn' && <p className="pc-hint">Drag the dots up and down to draw the movement of one jet during one cycle.</p>}
           {['bump', 'pulse', 'triangle'].includes(f.shape) && <Slider label="Crest width" value={f.width} min={0.02} max={0.5} step={0.01} onChange={width => set({ width })}
             hint={f.shape === 'triangle' ? 'Half the base of the pointed crest, as a part of the cycle (0.5 = straight up and down with no flat part)' : 'How long the jet stays up, as a part of the cycle'} />}
@@ -200,7 +243,8 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
           <label className="pc-check"><input type="checkbox" checked={f.bothWays} onChange={e => set({ bothWays: e.target.checked })} /> Both directions at once (crossing)</label>
           <label className="pc-check"><input type="checkbox" checked={f.grow} onChange={e => set({ grow: e.target.checked, accel: e.target.checked && !f.accel ? 0.00375 : f.accel })} /> Build up (grows taller and faster, then settles)</label>
         </section>
-        <section><h4>4 · Water height</h4>
+        </>}
+        <section><h4>{axes ? 'Water layer' : '4 · Water height'}</h4>
           <Slider label="Lowest" value={f.low} min={0} max={100} suffix="%" onChange={low => set({ low })} />
           <Slider label="Highest" value={f.high} min={0} max={100} suffix="%" onChange={high => set({ high })} />
           <label className="pc-check"><input type="checkbox" checked={farEnd} onChange={e => { setFarEnd(e.target.checked); if (e.target.checked && f.lowFar === undefined) set({ lowFar: f.low, highFar: f.high, stairs: 0 }); }} /> Different height at the far end (slope or stairs)</label>
@@ -208,7 +252,11 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
             <Slider label="Highest at far end" value={f.highFar ?? f.high} min={0} max={100} suffix="%" onChange={highFar => set({ highFar })} />
             <Slider label="Stair steps (0 = smooth slope)" value={f.stairs ?? 0} min={0} max={12} onChange={stairs => set({ stairs })} /></>}
         </section>
-        <section><h4>5 · Lights</h4>
+        <section><h4>{axes ? 'Light layer (optional)' : '5 · Lights'}</h4>
+          <label className="pc-check"><input type="checkbox" checked={includeLights} onChange={e => setIncludeLights(e.target.checked)} /> Include a matching light pattern</label>
+          {includeLights && <>
+          <label className="pc-field"><span>Light group</span><select aria-label="Pattern light group" value={lightGroupId} onChange={e => setLightGroupId(e.target.value)}>
+            <option value="">No light group</option>{lightGroups.map(g => <option key={g.id} value={g.id}>{g.name} · {membersOf(g).length}</option>)}</select></label>
           <label className="pc-field"><span>Colour</span><span className="pc-num"><input type="color" aria-label="Light colour" value={L.color} onChange={e => setLight({ color: e.target.value })} />
             <select aria-label="Colour mode" value={L.colorMode} onChange={e => setLight({ colorMode: e.target.value })}><option value="solid">Solid colour</option><option value="rainbow">Moving rainbow</option><option value="sequence">Colour sequence</option></select></span></label>
           {L.colorMode === 'sequence' && <div className="pc-field"><span>Colours in order (the pattern's time is shared equally)</span><span className="pc-num">
@@ -217,6 +265,7 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
             <button onClick={() => setLight({ colors: L.colors.slice(0, -1) })} disabled={L.colors.length <= 2} aria-label="Remove colour">−</button></span></div>}
           <Slider label="Lights lowest" value={L.low} min={0} max={100} suffix="%" onChange={low => setLight({ low })} />
           <Slider label="Lights highest" value={L.high} min={0} max={100} suffix="%" onChange={high => setLight({ high })} />
+          </>}
         </section>
       </div>
       <aside className="pc-side">

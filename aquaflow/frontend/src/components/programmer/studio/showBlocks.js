@@ -1,11 +1,13 @@
 // Show blocks: what the 3D preview timeline shows — one block per pattern as it plays.
 //   field     a wave-field unit (water recipe + optional lights recipe), fully editable
 //   builder   a Pattern builder unit (edit in the builder)
+//   motion    coordinated water + 1D/2D/3D motion + optional lights
 //   recipe    a hand-made Show Programming recipe
 //   recorded  imported/recorded clips grouped by patternBlockId (move or delete only)
 import { newRecipe, uid } from './showModel';
 import { defaultField, fieldKind } from './wavePatterns';
 import { builderGroups, isLightItem, isWaterItem } from './patternPresets';
+import { motionAxesOf } from './motionPatterns';
 
 const r3 = v => Math.round(v * 1000) / 1000;
 const MAX_END = 600;
@@ -26,14 +28,15 @@ export function showBlocks(studio, definitions = []) {
   for (const { key, recipes } of units.values()) {
     const water = recipes.find(r => !['lights', 'accent', 'motion'].includes(r.pattern?.role)) || recipes[0];
     const lights = recipes.find(r => r.pattern?.role === 'lights' && r !== water) || null;
+    const motion = recipes.find(r => r.effect === 'motion') || null;
     const start = Math.min(...recipes.map(r => r.start)), end = Math.max(...recipes.map(r => r.start + r.duration));
-    const type = water.effect === 'field' ? 'field' : water.pattern ? 'builder' : 'recipe';
+    const type = motion ? 'motion' : water.effect === 'field' ? 'field' : water.pattern ? 'builder' : 'recipe';
     // A mirror unit is two half-recipes: show it as one pattern.
     const name = recipes.filter(r => !['lights', 'accent', 'motion'].includes(r.pattern?.role)).length > 1 ? water.name.replace(/ · (left|right|front|back)$/, '') : water.name;
     blocks.push({ id: key, type, name, start, duration: r3(end - start),
       color: (lights || water).color || '#65d9d0', muted: recipes.every(r => r.muted),
-      kindLabel: type === 'field' ? fieldKind(water.field?.kind).label : type === 'builder' ? 'Pattern builder' : water.effect,
-      recipeIds: recipes.map(r => r.id), legacyIds: [], water, lights, unitId: water.pattern?.id || null });
+      kindLabel: type === 'motion' ? `${motion.motion?.axes || 1}D motion` : type === 'field' ? fieldKind(water.field?.kind).label : type === 'builder' ? 'Pattern builder' : water.effect,
+      recipeIds: recipes.map(r => r.id), legacyIds: [], water, lights, motion, unitId: water.pattern?.id || null });
   }
   const recorded = new Map();
   for (const clip of studio.legacyClips) {
@@ -114,14 +117,16 @@ export function defaultFieldGroups(studio, items) {
   const pick = test => groups
     .map(g => ({ g, members: (g.memberFixtureIds || []).map(id => byId.get(id)).filter(Boolean) }))
     .filter(({ members }) => members.length && members.every(test))
-    .sort((a, b) => b.members.length - a.members.length || (a.g.quick ? 1 : 0) - (b.g.quick ? 1 : 0))[0]?.g || null;
+    .sort((a, b) => (a.g.quick ? 2 : a.g.linkedQuery ? 1 : 0) - (b.g.quick ? 2 : b.g.linkedQuery ? 1 : 0) || b.members.length - a.members.length)[0]?.g || null;
   const jet = i => isWaterItem(i) && (i.tracks || []).some(t => t.type === 'device_intensity');
-  return { water: pick(jet) || pick(isWaterItem), lights: pick(isLightItem) };
+  const moving = i => isWaterItem(i) && motionAxesOf(i) > 0;
+  return { water: pick(jet) || pick(isWaterItem), lights: pick(isLightItem), motion: pick(moving),
+    motionByAxes: { 1: pick(i => motionAxesOf(i) >= 1), 2: pick(i => motionAxesOf(i) >= 2), 3: pick(i => motionAxesOf(i) >= 3) } };
 }
 
 /** Recipes for a new wave-field pattern (water + matching lights). */
-export function fieldUnitRecipes({ kind, start, duration, name, waterGroupId, lightGroupId, field = {}, light = {}, order = 'clockwise' }) {
-  const unit = uid('pattern');
+export function fieldUnitRecipes({ kind, start, duration, name, waterGroupId, lightGroupId, field = {}, light = {}, order = 'clockwise', unitId = null }) {
+  const unit = unitId || uid('pattern');
   const f = defaultField(kind, field);
   const base = groupId => ({ ...newRecipe(groupId, r3(start)), effect: 'field', duration: r3(duration), cycles: 1, spread: 1, intensity: 100, order });
   const recipes = [];
@@ -135,17 +140,19 @@ export function fieldUnitRecipes({ kind, start, duration, name, waterGroupId, li
 }
 
 /**
- * Edit a wave-field unit. patch: { name, kind, field: {...}, light: { color, low, high, colorMode } }.
+ * Edit a wave-field unit. patch: { name, groupId, kind, field: {...}, light: { color, low, high, colorMode } }.
  * Changing the kind resets the kind-specific settings to that kind's defaults (heights kept).
  */
 export function updateFieldUnit(studio, block, patch) {
   const r = ids(block.recipeIds);
-  return { ...studio, recipes: studio.recipes.map(x => {
+  return { ...studio, recipes: studio.recipes.filter(x => !(r.has(x.id) && x.pattern?.role === 'lights' && patch.lightGroupId === null)).map(x => {
     if (!r.has(x.id)) return x;
     // Accent lights (a steady colour on another light group) follow the pattern's light colour.
     if (x.pattern?.role === 'accent') return patch.light?.color ? { ...x, color: patch.light.color } : x;
-    if (x.effect !== 'field') return x;
     const lights = x.pattern?.role === 'lights';
+    if (lights && patch.lightGroupId) x = { ...x, groupId: patch.lightGroupId };
+    if (patch.groupId && !lights) x = { ...x, groupId: patch.groupId };
+    if (x.effect !== 'field') return x;
     let field = { ...x.field };
     if (patch.kind && patch.kind !== field.kind) {
       const keep = { low: field.low, high: field.high, lowFar: field.lowFar, highFar: field.highFar, stairs: field.stairs, ease: field.ease, colorMode: field.colorMode, rainbowPeriod: field.rainbowPeriod };
@@ -166,6 +173,47 @@ export function updateFieldUnit(studio, block, patch) {
     if (!lights && patch.light?.color) color = patch.light.color;
     const name = patch.name !== undefined ? (lights ? `${patch.name} · lights` : patch.name) : x.name;
     return { ...x, name, color, field, pattern: { ...x.pattern, kind: field.kind } };
+  }) };
+}
+
+/** Edit a static or keyed-curve pattern, including its destination group and envelope. */
+export function updateRecipeBlock(studio, block, patch) {
+  const selected = ids(block.recipeIds);
+  return { ...studio, recipes: studio.recipes.map(recipe => {
+    if (!selected.has(recipe.id)) return recipe;
+    const next = { ...recipe };
+    for (const key of ['name', 'groupId', 'color', 'order']) if (patch[key] !== undefined) next[key] = patch[key];
+    for (const key of ['intensity', 'cycles', 'spread']) if (Number.isFinite(patch[key])) next[key] = patch[key];
+    if (Array.isArray(patch.envelope)) next.envelope = patch.envelope.map(p => ({ time: Number(p.time), value: Number(p.value) }));
+    return next;
+  }) };
+}
+
+/** Edit the coordinated water, motion and light layers of a moving-nozzle block. */
+export function updateMotionUnit(studio, block, patch) {
+  const selected = ids(block.recipeIds);
+  return { ...studio, recipes: studio.recipes.filter(recipe => !(selected.has(recipe.id) && recipe.pattern?.role === 'lights' && patch.lightGroupId === null)).map(recipe => {
+    if (!selected.has(recipe.id)) return recipe;
+    const role = recipe.pattern?.role;
+    if (role === 'lights') {
+      let field = { ...recipe.field };
+      let color = recipe.color;
+      if (patch.field) field = { ...field, ...patch.field };
+      if (patch.light) {
+        const light = patch.light;
+        if (light.low !== undefined) field = { ...field, low: light.low, lowFar: light.low };
+        if (light.high !== undefined) field = { ...field, high: light.high, highFar: light.high };
+        for (const key of ['colorMode', 'colors', 'rainbowPeriod']) if (light[key] !== undefined) field[key] = light[key];
+        if (light.color) color = light.color;
+      }
+      return { ...recipe, name: patch.name !== undefined ? `${patch.name} · lights` : recipe.name,
+        groupId: patch.lightGroupId || recipe.groupId, color, field };
+    }
+    const next = { ...recipe, name: patch.name ?? recipe.name, groupId: patch.groupId || recipe.groupId,
+      color: patch.light?.color || recipe.color, order: patch.order || recipe.order };
+    if (recipe.effect === 'motion' && patch.motion) next.motion = patch.motion;
+    if (role === 'motion-water' && patch.field) next.field = patch.field;
+    return next;
   }) };
 }
 
@@ -190,9 +238,9 @@ export function exportPatterns(studio, blocks) {
 
 /**
  * Add patterns from a pattern file. Recipe groups are matched by id, then by name, then
- * to this show's main jet / light group (accent lights are dropped when no group fits).
+ * to this show's compatible water / light / moving-nozzle group (unsupported roles are skipped).
  * Recorded cues are kept only for fixtures that exist here. `at` moves the earliest
- * pattern to that time (null = original times). Returns { studio, added, skipped, notes }.
+ * pattern to that time (null = original times). Also returns the newly added recipe / clip ids.
  */
 export function importPatterns(studio, file, items, { at = null } = {}) {
   const data = typeof file === 'string' ? JSON.parse(file) : file;
@@ -204,7 +252,9 @@ export function importPatterns(studio, file, items, { at = null } = {}) {
     if (studio.groups.some(g => g.id === r.groupId)) return r.groupId;
     const byName = studio.groups.find(g => g.name === r.groupName);
     if (byName) return byName.id;
-    const fallback = r.role === 'lights' ? groups.lights : r.role === 'accent' ? null : groups.water;
+    const role = ['motion', 'motion-water'].includes(r.role) || r.attribute === 'motion_angle' ? 'motion' : r.role;
+    const axes = Math.max(1, Math.min(3, Number(r.motion?.axes || r.pattern?.axes) || 1));
+    const fallback = role === 'lights' ? groups.lights : role === 'accent' ? null : role === 'motion' ? groups.motionByAxes[axes] : groups.water;
     if (!fallback) return null;
     if (!studio.groups.some(g => g.id === fallback.id) && !newGroups.some(g => g.id === fallback.id)) {
       const { source, quick, ...plain } = fallback; newGroups.push(plain);
@@ -220,7 +270,10 @@ export function importPatterns(studio, file, items, { at = null } = {}) {
     let used = 0;
     for (const r of p.recipes || []) {
       const groupId = groupFor(r);
-      if (!groupId) { notes.push(`${r.name}: no matching light group, left out.`); continue; }
+      if (!groupId) {
+        const target = r.role === 'motion' || r.attribute === 'motion_angle' ? 'moving-nozzle' : r.role === 'accent' ? 'accent-light' : r.role || 'water';
+        notes.push(`${r.name}: no matching ${target} group, left out.`); continue;
+      }
       const { role, groupName, ...rest } = r;
       const start = r3(Math.max(0, Math.min(MAX_END - rest.duration, rest.start + shift)));
       recipes.push({ ...rest, id: uid('recipe'), groupId, start, locked: false,
@@ -236,5 +289,5 @@ export function importPatterns(studio, file, items, { at = null } = {}) {
     if (used) added++; else { skipped++; notes.push(`${p.name}: its fixtures are not in this design.`); }
   }
   const next = { ...studio, groups: [...studio.groups, ...newGroups], recipes: [...studio.recipes, ...recipes], legacyClips: [...studio.legacyClips, ...clips] };
-  return { studio: next, added, skipped, notes };
+  return { studio: next, added, skipped, notes, addedRecipeIds: recipes.map(r => r.id), addedLegacyIds: clips.map(c => c.id) };
 }

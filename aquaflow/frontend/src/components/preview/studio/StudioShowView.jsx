@@ -63,6 +63,8 @@ export default function StudioShowView({ cameraTrack, followCamera = true, song 
     scene.setShowSource(history);
   }, [fixtures, center, pool, history, render.laserHaze]);
 
+  useEffect(() => { sceneRef.current?.setMist(render.studioMist === true); }, [render.studioMist]);
+
   useEffect(() => { sceneRef.current?.setCameraTrack(cameraTrack, followCamera); }, [cameraTrack, followCamera]);
 
   // Live playback follows the preview clock (else the timeline playhead).

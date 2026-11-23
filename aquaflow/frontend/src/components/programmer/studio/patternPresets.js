@@ -173,7 +173,7 @@ export function builderGroups(studio, items) {
   const own = studio.groups.map(g => ({ ...g, source: 'Show groups' }));
   const known = new Set(own.map(g => g.id));
   const engineering = autoGroups(items.filter(i => i.category !== 'scenery')).filter(g => !known.has(g.id)).map(g => ({ ...g, source: 'Engineering groups' }));
-  const quick = quickGroups(items).filter(g => g.memberFixtureIds.length).map(g => ({ ...g, source: 'Quick groups' }));
+  const quick = quickGroups(items).filter(g => g.memberFixtureIds.length && !known.has(g.id)).map(g => ({ ...g, source: 'Quick groups' }));
   return [...own, ...engineering, ...quick];
 }
 

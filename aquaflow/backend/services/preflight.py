@@ -44,7 +44,7 @@ _SIEMENS_TRACKS = {"pump": {"pump_speed"}, "valve": {"solenoid_open"},
 _DMX_KINDS = {"light", "effect"}
 _ICAN_TRACKS = {"solenoid_open", "pump_speed", "device_intensity", "device_enable",
                 "motion_intensity"}
-_MOTION_POSITION = {"motion_pan", "motion_tilt", "motion_angle"}
+_MOTION_POSITION = {"motion_pan", "motion_tilt", "motion_angle", "motion_roll"}
 
 
 # ─── diagnostics ───────────────────────────────────────────────────────

@@ -7,8 +7,9 @@ import { followHardware } from './hardwareFollow';
 import { applySiteSync, buildSyncModel } from './siteSync';
 import { compileLaserRecipe } from '../../preview/laser/laserLooks';
 import { compilePyroRecipe, isPyroClip, isPyroType, validatePyroCues } from '../../../show/pyro';
+import { compileMotionRecipe } from './motionPatterns';
 
-export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve', 'field', 'laser', 'pyro'];
+export const EFFECTS = ['wave', 'chase', 'ripple', 'pulse', 'static', 'staircase', 'sparkle', 'color', 'curve', 'field', 'motion', 'laser', 'pyro'];
 export const ORDERS = ['engineering', 'left-to-right', 'right-to-left', 'front-to-back', 'clockwise', 'counter-clockwise', 'center-out'];
 export const uid = (prefix = 'show') => `${prefix}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 const num = (x, fallback = 0) => Number.isFinite(Number(x)) ? Number(x) : fallback;
@@ -215,6 +216,12 @@ export function compileStudio(studio, items) {
       const made = compileLaserRecipe(recipe, members, { round });
       if (!made.length) issues.push(`${recipe.name}: the group has no laser projectors.`);
       clips.push(...made);
+      continue;
+    }
+    if (recipe.effect === 'motion') {
+      const made = compileMotionRecipe(recipe, members);
+      issues.push(...made.issues);
+      clips.push(...made.clips);
       continue;
     }
     if (recipe.effect === 'field') {

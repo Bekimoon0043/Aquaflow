@@ -115,6 +115,31 @@ How AquaFlow does it:
   - moonlight-only night lighting, with bloom on the hot cores.
 - **Size:** 2,428 fixtures, 160 patterns and 31,772 clips. The lamps hold one clip per section rather than copying every water pattern; copying put the show over 88 MB and 41,900 clips, and it would not open.
 
+## Light play, no fog, new cameras (fourth pass)
+
+- **No fog anywhere:** there are no fog fixtures. The Studio look's spray-mist clouds are now a Render-tab option ("Spray mist clouds"), off by default, so the air is clear.
+- **Lamps follow their own water:** each lamp burns only while its jet runs, plus the seconds its water is still in the air. AquaFlow compiles the water first, reads each jet's level every 0.1 s, and turns that into the lamp's on/off times, rounded to 0.5 s and grouped so lamps that behave alike share one editable group.
+  - Shooter lamps blast at full.
+  - Oarsmen and mini-shooters follow the section's house level.
+- **Light plays on its own,** as in the film:
+  - Light only, on a still lake:
+    - 0:00–0:06: the ring lamps circle in the dark.
+    - 2:15–2:29: a running light along the still line.
+    - 3:00–3:16: light waves over the still curtain row.
+  - Light dances over the water:
+    - 1:00: bands of light run along the curtain.
+    - 1:38: odd and even oarsmen flash alternately on the beat.
+    - 2:14: the ring breathes.
+    - 3:00: the ring lamps kick with the bass.
+    - 3:18: a strobe builds into the 3:36 flash.
+    - 3:47: the double ring's lamps spin in opposite directions.
+    - 4:10: crossing light.
+  - Every lamp flashes at the three biggest hits: 1:12, 3:36 and 4:30.
+- **Cameras:** a film edit, with one moving shot per section (glides, orbits, crane-ups, push-ins) and cuts on the music. Every key is at least 3 m up.
+  - The old track dipped under the water because the spline overshot between a 210 m top view and a 5 m low shot.
+  - The app now stops a cut from bending the shots on either side of it, and never lets the camera sample below 0.5 m.
+- **Size:** 2,428 fixtures, 1,373 patterns, 33,514 clips, 65.2 MB.
+
 ## Simplifications (not verified against WET's data)
 
 - **Dimensions:** the lake outline, the 300 m line, the 48 m and 22 m rings and the spacings are estimated from the drone footage, not surveyed.

@@ -723,7 +723,7 @@ def validate_show_for_compilation(clips: List[Dict], fixtures: List[Dict], durat
         'fog_density',
         'laser_intensity', 'laser_pattern',
         'device_enable', 'device_intensity',
-        'motion_intensity', 'motion_angle', 'motion_pan', 'motion_tilt',
+        'motion_intensity', 'motion_angle', 'motion_pan', 'motion_tilt', 'motion_roll',
         'ai_generated', 'lighting'
     }
     
@@ -1429,7 +1429,7 @@ async def validate_show_endpoint(request: ValidateProgramRequest):
         'pump_speed', 'pump_pressure', 'solenoid_open', 'solenoid_duration',
         'fire_trigger', 'fire_intensity', 'fog_density', 'laser_intensity',
         'laser_pattern', 'device_enable', 'device_intensity',
-        'motion_intensity', 'motion_angle', 'motion_pan', 'motion_tilt',
+        'motion_intensity', 'motion_angle', 'motion_pan', 'motion_tilt', 'motion_roll',
         'ai_generated', 'lighting'
     }
     

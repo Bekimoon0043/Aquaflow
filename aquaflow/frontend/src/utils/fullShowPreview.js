@@ -4,7 +4,7 @@ import { LASER_TYPES, isLaserFixture } from "../components/preview/laser/laserRi
 
 const WATER_TYPES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity"]);
 const EFFECT_TYPES = new Set(["fire_intensity", "fog_density"]);
-const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
+const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle", "motion_roll"]);
 const LIGHT_TYPES = new Set(["lighting_master", "lighting_red", "lighting_green", "lighting_blue"]);
 const PUMP_TYPES = new Set(["pump_speed"]);
 const hexColor = value => /^#[0-9a-f]{6}$/i.test(value || "") ? value : "#ffffff";

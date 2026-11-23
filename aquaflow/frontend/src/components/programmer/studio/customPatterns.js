@@ -1,7 +1,8 @@
-// "My patterns": pattern types made in the pattern creator. Saved with the project
-// (studio.presets, kind 'field-type') and in this computer's library (localStorage), and
-// exchanged as files ('aquaflow-pattern-types').
+// "My patterns": water and 1D/2D/3D types made in the pattern creator. Saved with the
+// project (legacy storage kind 'field-type') and this computer's library, and exchanged
+// as files ('aquaflow-pattern-types').
 import { CUSTOM_KIND, DEFAULT_DRAWN } from './wavePatterns';
+import { cleanMotion } from './motionPatterns';
 
 export const TYPES_FORMAT = 'aquaflow-pattern-types';
 const LIBRARY_KEY = 'aquaflow.myPatternTypes.v1';
@@ -27,7 +28,8 @@ export function cleanField(raw = {}) {
   if (raw.stairs !== undefined) f.stairs = Math.round(Math.min(12, Math.max(0, num(raw.stairs, 0))));
   if (f.shape === 'drawn') {
     const pts = (Array.isArray(raw.points) ? raw.points : DEFAULT_DRAWN)
-      .map(p => ({ time: Math.min(1, Math.max(0, num(p.time, 0))), value: Math.min(1, Math.max(0, num(p.value, 0))) }))
+      .map(p => ({ time: Math.min(1, Math.max(0, num(p.time, 0))), value: Math.min(1, Math.max(0, num(p.value, 0))),
+        ...(['linear', 'smooth', 'in', 'out', 'hold'].includes(p.ease) ? { ease: p.ease } : {}) }))
       .sort((a, b) => a.time - b.time);
     f.points = pts.length > 1 ? pts : DEFAULT_DRAWN;
   }
@@ -39,7 +41,9 @@ export function cleanType(raw = {}) {
   return {
     id: String(raw.id || `type-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`),
     name: String(raw.name || 'My pattern').slice(0, 60),
+    patternKind: raw.patternKind === 'motion' || raw.motion ? 'motion' : 'water',
     field: cleanField(raw.field),
+    ...(raw.patternKind === 'motion' || raw.motion ? { motion: cleanMotion(raw.motion, num(raw.axes || raw.motion?.axes, 1)) } : {}),
     light: { color: /^#[0-9a-f]{6}$/i.test(light.color || '') ? light.color : '#4f8cff', colorMode: ['rainbow', 'sequence'].includes(light.colorMode) ? light.colorMode : 'solid',
       colors: (Array.isArray(light.colors) ? light.colors : ['#ff0000', '#00ff00', '#0000ff']).filter(c => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 6),
       low: Math.min(100, Math.max(0, num(light.low, 6))), high: Math.min(100, Math.max(0, num(light.high, 20))) },

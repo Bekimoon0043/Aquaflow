@@ -69,7 +69,12 @@ const drawnValue = (points, x) => {
   if (x <= keys[0].time) return keys[0].value;
   for (let i = 1; i < keys.length; i++) if (x <= keys[i].time) {
     const a = keys[i - 1], b = keys[i];
-    return a.value + (b.value - a.value) * (x - a.time) / Math.max(1e-6, b.time - a.time);
+    let u = clamp((x - a.time) / Math.max(1e-6, b.time - a.time), 0, 1);
+    if (b.ease === 'hold') return a.value;
+    if (b.ease === 'smooth') u = smooth(u);
+    if (b.ease === 'in') u = u * u;
+    if (b.ease === 'out') u = 1 - (1 - u) * (1 - u);
+    return a.value + (b.value - a.value) * u;
   }
   return keys.at(-1).value;
 };
@@ -264,10 +269,11 @@ export function musicGain(music, t) {
 }
 
 /** Sample a function over [0, duration] and keep only keys linear interpolation needs. */
-export function sampleKeys(fn, duration, step, tolerance = 0.4) {
+export function sampleKeys(fn, duration, step, tolerance = 0.4, precision = 2) {
+  const round = v => Math.round(v * 10 ** precision) / 10 ** precision;
   const n = Math.max(1, Math.min(2400, Math.round(duration / step)));
   const pts = [];
-  for (let k = 0; k <= n; k++) { const t = Math.min(duration, k * duration / n); pts.push([r2(t), r2(clamp(fn(Math.min(t, duration - 1e-6)), 0, 100))]); }
+  for (let k = 0; k <= n; k++) { const t = Math.min(duration, k * duration / n); pts.push([round(t), round(clamp(fn(Math.min(t, duration - 1e-6)), 0, 100))]); }
   const keep = [pts[0]];
   let anchor = 0;
   for (let k = 1; k < pts.length - 1; k++) {

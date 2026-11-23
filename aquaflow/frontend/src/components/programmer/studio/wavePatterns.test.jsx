@@ -221,4 +221,19 @@ describe('3D show timeline (sequence view)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Show patterns/ }));
     expect(screen.getByRole('button', { name: '+ Add pattern' })).toBeTruthy();
   });
+
+  it('finds and edits a late-show block through the searchable project browser', () => {
+    const early = unit('travelling'), late = unit('stadium', { start: 180, name: 'Late center dance' });
+    useProjectStore.setState({ programmer: { studio: { groups, recipes: [...early.recipes, ...late.recipes] } } });
+    render(<PreviewShowTimeline height={320} />);
+    fireEvent.click(screen.getByRole('button', { name: '▤ Project patterns (2)' }));
+    const dialog = screen.getByRole('dialog', { name: 'Project patterns' });
+    fireEvent.change(within(dialog).getByLabelText('Search project patterns'), { target: { value: 'center' } });
+    expect(within(dialog).getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Edit project pattern Late center dance' }));
+    expect(screen.getByRole('button', { name: 'Late center dance' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.change(screen.getByLabelText('Start value'), { target: { value: '181' } });
+    expect(studio().recipes.every(recipe => recipe.start !== 180)).toBe(true);
+    expect(studio().recipes.filter(recipe => recipe.start === 181)).toHaveLength(2);
+  });
 });

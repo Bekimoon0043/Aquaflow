@@ -60,11 +60,15 @@ export function showJets(fixtures) {
     }
     return best;
   };
-  return fixtures.filter((f) => f.visible !== false && roleOf(f) === "nozzle").map((f) => {
+  // A solenoid nozzle (Vario) is classed as a valve but throws its own jet.
+  const throwsWater = (f) => roleOf(f) === "nozzle" || (roleOf(f) === "valve" && Number(f.engineering?.jetHeightM) > 0);
+  return fixtures.filter((f) => f.visible !== false && throwsWater(f)).map((f) => {
     const e = f.engineering || {};
     const moving = isMovingNozzle({ type: f.type, key: f.type });
     const H = Number(e.jetHeightM) > 0 ? Number(e.jetHeightM) : moving ? 6 : 2;
-    return { id: f.id, kind: nozzleKind(f).id, nominalHeightM: H, swing: !!motionOf(f) || moving,
+    const motion = motionOf(f);
+    return { id: f.id, kind: nozzleKind(f).id, nominalHeightM: H, swing: !!motion || moving,
+      axes: motion?.axes || 0, splayDeg: motion?.splayDeg || 0,
       outlets: Math.max(1, Math.round(Number(e.outletCount) || 1)), lightId: pairedTo.get(f.id) || nearestLight(f) };
   });
 }

@@ -25,3 +25,13 @@ def test_mdd_l_reaches_its_range():
 def test_unknown_range_keeps_45():
     m = evaluate_show_frame_at(_show({}), 1)["fixtures"]["m"]
     assert m["motion"] == {"pan": 45.0, "tilt": -45.0}
+
+
+def test_continuous_3d_roll_uses_exact_degree_mapping():
+    project = {
+        "fixtures": [{"id": "m", "type": "motion_nozzle_3d_robotic_module", "engineering": {"panRangeDeg": 360}}],
+        "clips": [{"id": "r", "fixtureId": "m", "type": "motion_roll", "startTime": 0, "duration": 10,
+                   "value": 0, "keys": [0, 0, 10, 100], "motionOffset": 0, "motionScale": 36}],
+    }
+    assert evaluate_show_frame_at(project, 5)["fixtures"]["m"]["motion"]["roll"] == 1800
+    assert evaluate_show_frame_at(project, 2.5)["fixtures"]["m"]["motion"]["roll"] == 900

@@ -440,7 +440,7 @@ function _extractClipEvents(clip, registry, warnings) {
   channels.forEach(({ channelId, startValue, endValue }, index) => {
     // Binary channels (valves, triggers, shutters) and motion positions never ramp.
     // Fades apply to the primary channel only, as before.
-    const ramps = index === 0 && !/^(solenoid_open|solenoid_duration|device_enable|fire_trigger|laser_intensity|motion_pan|motion_tilt|motion_angle)$/.test(String(trackType).toLowerCase());
+    const ramps = index === 0 && !/^(solenoid_open|solenoid_duration|device_enable|fire_trigger|laser_intensity|motion_pan|motion_tilt|motion_angle|motion_roll)$/.test(String(trackType).toLowerCase());
     const fin = ramps ? fadeIn : 0, fout = ramps ? fadeOut : 0;
     const push = (time, value, eventEasing, edge, flags = SIGNAL_FLAGS.NONE) =>
       events.push({ ...base, time, channelId, value, easing: eventEasing, flags, edge });
@@ -546,6 +546,10 @@ function _getChannelsForTrackType(trackType, clip, clipEasing = EASING.LINEAR) {
     // B3 FIX: was emitting raw string "angle" — CHANNEL.ANGLE now defined in schema.
     // motion_1d_2ch profile maps CHANNEL.ANGLE to ch+0 and CHANNEL.SPEED to ch+1.
     return [{ channelId: CHANNEL.ANGLE, startValue: clampSigned((clip.angle || 0) / 180), endValue: 0, easing: EASING.EASE_BOTH }];
+  }
+
+  if (type === "motion_roll") {
+    return [{ channelId: CHANNEL.ROLL, startValue: clampSigned((clip.roll || 0) / 180), endValue: 0, easing: EASING.EASE_BOTH }];
   }
 
   if (type === "motion_intensity") {

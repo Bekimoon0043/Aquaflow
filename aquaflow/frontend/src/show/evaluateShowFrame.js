@@ -17,8 +17,8 @@
 //     channels: { [trackType]: 0..1 },          // winning value per active channel
 //     color: { hex, srgb:{r,g,b}, linear:{r,g,b}, source } | null,
 //     output: { r, g, b } (lights only),       // sRGB-encoded drive = color.srgb × level
-//     motion: { pan, tilt } (motion fixtures),  // degrees, clamped to the fixture's own
-//                                                 // range (half of pan/swing/tilt range, ≤90), else ±45
+//     motion: { pan, tilt, roll? }               // degrees; pan/tilt clamped to the fixture's own
+//                                                 // range (half published range, ≤90), roll unwrapped
 //     source: { clipId, recipeId, trackId } | null,
 //   } },
 //   pumps:  { [fixtureId]: { speed: 0..1, run: boolean } },
@@ -76,7 +76,7 @@ const CURVE_ALIASES = {
 };
 export const LIGHT_CHANNELS = Object.freeze(["lighting_red", "lighting_green", "lighting_blue"]);
 const MASTER_TYPES = new Set(["lighting_master", "device_intensity"]);
-const MOTION_POSITION = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
+const MOTION_POSITION = new Set(["motion_pan", "motion_tilt", "motion_angle", "motion_roll"]);
 const WATER_MOTION_SOURCES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity", "pump_speed"]);
 const DEFAULT_LIGHT = "#ffffff";
 const BUCKET_SECONDS = 1;
@@ -88,7 +88,7 @@ const finite = (value, fallback = 0) => {
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const clamp01 = value => clamp(value, 0, 1);
 
-/** ± limits (degrees) of a moving nozzle: half its published range, at most 90; ±45 when unknown. */
+/** Pan/tilt use the published half-range. Roll is unwrapped for continuous 3D head rotation. */
 export function motionLimits(fixture) {
   const e = fixture?.engineering || {};
   const half = (...values) => {
@@ -336,6 +336,7 @@ function normalizeClip(raw, index, tempo, diagnostics) {
     start, end, value, keys, fadeIn: Math.max(0, finite(raw.fadeIn)), fadeOut: Math.max(0, finite(raw.fadeOut)),
     curve: curve ?? "linear", color: validHex(raw.color),
     pan: finite(raw.pan), tilt: finite(raw.tilt),
+    motionOffset: finite(raw.motionOffset, -45), motionScale: finite(raw.motionScale, 0.9),
     recipeId: raw.studioRecipeId ?? raw.patternBlockId ?? null, trackId: raw.trackId ?? null,
   };
 }
@@ -495,10 +496,10 @@ export function evaluateShowFrameAt(project, seconds, opts = {}) {
         const lim = prepared.motionRange?.get(clip.fixtureId) || { pan: 45, tilt: 45 };
         if (WATER_MOTION_SOURCES.has(clip.type)) { pose.pan = clamp(clip.pan, -lim.pan, lim.pan); pose.tilt = clamp(clip.tilt, -lim.tilt, lim.tilt); }
         else if (MOTION_POSITION.has(clip.type)) {
-          const axis = clip.type === "motion_tilt" ? "tilt" : "pan";
-          // A keyed motion curve carries levels 0..100 like every keyed clip: 0 = −45°, 100 = +45°.
-          const deg = clip.keys ? -45 + 0.9 * keyedValue(clip.keys, t - clip.start) : clip.value;
-          pose[axis] = clamp(deg, -lim[axis], lim[axis]);
+          const axis = clip.type === "motion_tilt" ? "tilt" : clip.type === "motion_roll" ? "roll" : "pan";
+          // Legacy keyed motion is 0..100 → −45°..+45°. New recipes may declare their exact degree mapping.
+          const deg = clip.keys ? finite(clip.motionOffset, -45) + finite(clip.motionScale, 0.9) * keyedValue(clip.keys, t - clip.start) : clip.value;
+          pose[axis] = axis === "roll" ? deg : clamp(deg, -lim[axis], lim[axis]);
         }
         motion.set(clip.fixtureId, pose);
       }

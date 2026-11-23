@@ -223,7 +223,7 @@ export const TRACK_CAPABILITY_PRESETS = Object.freeze({
   },
   motion_3d: {
     primaryTrackType: "motion_pan",
-    secondaryTrackTypes: ["motion_tilt", "motion_intensity", "motion_angle"],
+    secondaryTrackTypes: ["motion_tilt", "motion_roll", "motion_intensity"],
     hasPan: true, hasTilt: true, hasRoll: true,
     minPan: -180, maxPan: 180, minTilt: 0, maxTilt: 180,
     suggestedEasing: "ease_both",

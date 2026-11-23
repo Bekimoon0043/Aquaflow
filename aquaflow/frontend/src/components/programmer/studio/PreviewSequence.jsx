@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FIELD_CONTROLS, FIELD_KINDS, ORIGINS, fieldKind } from './wavePatterns';
 import { builderGroups } from './patternPresets';
 import PatternCreator from './PatternCreator';
+import { motionAxesOf, motionPatternRecipes } from './motionPatterns';
 import MusicLanes, { MUSIC_LANE_H, useMusicLanes } from './MusicLanes';
 import PlanStrip, { PLAN_STRIP_H } from './PlanStrip';
 import { applyMeter } from './musicMeter';
@@ -18,8 +19,11 @@ export function snapToMusic(t, g) {
   return Math.round((g.beatOrigin + Math.round((t - g.beatOrigin) / g.beatSec) * g.beatSec) * 1000) / 1000;
 }
 import { myTypes } from './customPatterns';
+import PatternAssetBrowser from './PatternAssetBrowser';
+import ProjectPatternBrowser from './ProjectPatternBrowser';
+import { PATTERN_ASSETS, PATTERN_ASSET_DRAG_MIME, patternAssetById, patternAssetFile } from './patternAssets';
 import {
-  defaultFieldGroups, deleteBlock, duplicateBlock, exportPatterns, fieldUnitRecipes, importPatterns, moveBlock, resizeBlock, showBlocks, updateFieldUnit,
+  defaultFieldGroups, deleteBlock, duplicateBlock, exportPatterns, fieldUnitRecipes, importPatterns, moveBlock, resizeBlock, showBlocks, updateFieldUnit, updateMotionUnit, updateRecipeBlock,
 } from './showBlocks';
 
 const fileName = text => `${String(text || 'patterns').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) || 'patterns'}.aqpattern.json`;
@@ -48,9 +52,9 @@ function Num({ label, value, min, max, step = 1, onChange, suffix }) {
     onChange(Math.min(max, Math.max(min, v)), live);
   };
   return <label className="seq-field"><span>{label}</span>
-    <span className="seq-num"><input type="range" min={min} max={max} step={step} value={value ?? min}
+    <span className="seq-num"><input type="range" min={min} max={max} step={step} value={value ?? min} aria-label={label}
       onChange={e => commit(e.target.value, true)} onPointerUp={e => commit(e.target.value, false)} />
-    <input type="number" min={min} max={max} step={step} value={draft ?? value ?? ''}
+    <input type="number" min={min} max={max} step={step} value={draft ?? value ?? ''} aria-label={`${label} value`}
       onChange={e => { setDraft(e.target.value); const v = Number(e.target.value); if (e.target.value !== '' && v >= min && v <= max) commit(e.target.value, false); }}
       onBlur={e => { commit(e.target.value, false); setDraft(null); }}
       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
@@ -115,6 +119,50 @@ function FieldInspector({ block, studio, items, onPatch, onPatchLive }) {
   </>;
 }
 
+function RecipeInspector({ block, onPatch }) {
+  const recipe = block.water;
+  const points = recipe.envelope || [];
+  const setPoint = (index, key, raw) => {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return;
+    const envelope = points.map((p, i) => {
+      if (i !== index) return p;
+      if (key === 'value') return { ...p, value: Math.max(0, Math.min(1, value / 100)) };
+      const low = i === 0 ? 0 : points[i - 1].time + 0.001;
+      const high = i === points.length - 1 ? 1 : points[i + 1].time - 0.001;
+      return { ...p, time: Math.max(low, Math.min(high, value / 100)) };
+    });
+    onPatch({ envelope });
+  };
+  const addPoint = () => {
+    let index = 0;
+    for (let i = 1; i < points.length; i++) if (points[i].time - points[i - 1].time > points[index + 1]?.time - points[index]?.time) index = i - 1;
+    const a = points[index], b = points[index + 1];
+    if (!a || !b) return;
+    const envelope = [...points.slice(0, index + 1), { time: (a.time + b.time) / 2, value: (a.value + b.value) / 2 }, ...points.slice(index + 1)];
+    onPatch({ envelope });
+  };
+  return <>
+    <label className="seq-field"><span>Name</span><input value={block.name} onChange={e => onPatch({ name: e.target.value })} /></label>
+    <p className="seq-hint">{recipe.attribute === 'motion_angle' ? 'Moving-nozzle angle' : recipe.effect === 'static' ? 'Constant water or light level' : 'Keyed curve'} · editable copy</p>
+    <Num label={recipe.attribute === 'motion_angle' ? 'Motion scale' : 'Level'} value={recipe.intensity} min={0} max={100} step={1} suffix="%" onChange={v => onPatch({ intensity: v })} />
+    <label className="seq-field"><span>Colour</span><input type="color" value={recipe.color || '#65d9d0'} onChange={e => onPatch({ color: e.target.value })} /></label>
+    {recipe.effect === 'curve' && <>
+      <Num label="Cycles" value={recipe.cycles} min={1} max={32} step={1} onChange={v => onPatch({ cycles: Math.round(v) })} />
+      <Num label="Phase spread" value={recipe.spread} min={0} max={1} step={0.05} onChange={v => onPatch({ spread: v })} />
+      <label className="seq-field"><span>Fixture order</span><select value={recipe.order || 'engineering'} onChange={e => onPatch({ order: e.target.value })}>
+        {['engineering', 'left-to-right', 'right-to-left', 'front-to-back', 'clockwise', 'counter-clockwise', 'center-out'].map(order => <option key={order} value={order}>{order.replaceAll('-', ' ')}</option>)}
+      </select></label>
+      <div className="seq-section">Curve keys <button onClick={addPoint}>＋ Add key</button></div>
+      {points.map((p, i) => <div className="seq-curve-key" key={i}>
+        <input aria-label={`Key ${i + 1} time`} type="number" min={0} max={100} step={0.1} value={Math.round(p.time * 1000) / 10} disabled={i === 0 || i === points.length - 1} onChange={e => setPoint(i, 'time', e.target.value)} /><span>% time</span>
+        <input aria-label={`Key ${i + 1} level`} type="number" min={0} max={100} step={1} value={Math.round(p.value * 100)} onChange={e => setPoint(i, 'value', e.target.value)} /><span>% level</span>
+        <button aria-label={`Remove key ${i + 1}`} disabled={points.length <= 2 || i === 0 || i === points.length - 1} onClick={() => onPatch({ envelope: points.filter((_, n) => n !== i) })}>✕</button>
+      </div>)}
+    </>}
+  </>;
+}
+
 export default function PreviewSequence({ studio, items, definitions, time, playing, showLength, onSeek, onChange, onChangeLive, onEditInBuilder, onPatternBuilder, onProgrammingView, extras = null, onExportFile = download }) {
   const blocks = useMemo(() => showBlocks(studio, definitions), [studio, definitions]);
   const [selectedId, setSelectedId] = useState(null);
@@ -124,6 +172,8 @@ export default function PreviewSequence({ studio, items, definitions, time, play
   const [context, setContext] = useState(null); // { id, x, y }
   const [note, setNote] = useState('');
   const [creator, setCreator] = useState(null); // null | { block }
+  const [assetsOpen, setAssetsOpen] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
   // Music graph: per-stem frequency bands, bars, beats and sections above the patterns.
   const music = useMusicLanes();
   const stemsApi = useStems();
@@ -136,12 +186,12 @@ export default function PreviewSequence({ studio, items, definitions, time, play
   const importRef = useRef(null);
   // Menus close on any click outside them, or on Escape.
   useEffect(() => {
-    if (!menu && !context) return undefined;
-    const close = e => { if (e.type === 'keydown' ? e.key === 'Escape' : !e.target.closest?.('.seq-add, .seq-context')) { setMenu(false); setContext(null); } };
+    if (!menu && !context && !assetsOpen && !projectOpen) return undefined;
+    const close = e => { if (e.type === 'keydown' ? e.key === 'Escape' : !e.target.closest?.('.seq-add, .seq-context')) { setMenu(false); setContext(null); setAssetsOpen(false); setProjectOpen(false); } };
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', close);
     return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
-  }, [menu, context]);
+  }, [menu, context, assetsOpen, projectOpen]);
   const scroller = useRef(null);
   const [width, setWidth] = useState(800);
   useEffect(() => {
@@ -155,6 +205,15 @@ export default function PreviewSequence({ studio, items, definitions, time, play
   const pps = zoom > 0 ? zoom : Math.max(2, (width - 24) / length);
   const lanes = Math.max(1, ...blocks.map(b => b.lane + 1));
   const selected = blocks.find(b => b.id === selectedId) || null;
+  const projectBlocks = useMemo(() => blocks.filter(b => !b.background), [blocks]);
+  const revealProjectBlock = block => {
+    setSelectedId(block.id);
+    setProjectOpen(false);
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, 12 + block.start * pps - el.clientWidth / 2);
+    el.scrollTop = Math.max(0, block.lane * LANE_H - el.clientHeight / 2);
+  };
   useEffect(() => { if (selectedId && !selected) setSelectedId(null); }, [selectedId, selected]);
   // Keep the playhead in view while playing when zoomed in.
   useEffect(() => {
@@ -202,14 +261,47 @@ export default function PreviewSequence({ studio, items, definitions, time, play
   const add = (kind, type = null) => {
     setMenu(false);
     const groups = defaultFieldGroups(studio, items);
-    if (!groups.water) return;
     const start = nextStart();
+    if (type?.patternKind === 'motion') {
+      const axes = type.motion?.axes || 1, byId = new Map(items.map(i => [i.id, i]));
+      const compatible = g => (g?.memberFixtureIds || []).map(id => byId.get(id)).filter(Boolean).every(item => motionAxesOf(item) >= axes);
+      const water = compatible(groups.motion) && groups.motion.memberFixtureIds.length ? groups.motion
+        : builderGroups(studio, items).find(g => g.memberFixtureIds?.length && compatible(g));
+      if (!water) { setNote(`This design has no compatible ${axes}D moving-nozzle group.`); return; }
+      const made = motionPatternRecipes({ start, duration: 15, name: type.name, groupId: water.id, lightGroupId: groups.lights?.id,
+        field: type.field, motion: type.motion, light: type.light, order: water.orderMode || 'engineering' });
+      const missing = [water, groups.lights].filter(g => g && !studio.groups.some(x => x.id === g.id)).map(({ source, quick, ...g }) => g);
+      onChange(s => ({ ...s, groups: [...s.groups, ...missing], recipes: [...s.recipes, ...made.recipes] }));
+      setSelectedId(`unit:${made.unitId}`); return;
+    }
+    if (!groups.water) return;
     const { recipes, unitId } = fieldUnitRecipes({ kind, start, duration: 15, waterGroupId: groups.water.id, lightGroupId: groups.lights?.id,
       order: groups.water.orderMode === 'counter-clockwise' ? 'counter-clockwise' : 'clockwise',
       ...(type ? { name: type.name, field: type.field, light: type.light } : {}) });
     const missing = [groups.water, groups.lights].filter(g => g && !studio.groups.some(x => x.id === g.id)).map(({ source, quick, ...g }) => g);
     onChange(s => ({ ...s, groups: [...s.groups, ...missing], recipes: [...s.recipes, ...recipes] }));
     setSelectedId(`unit:${unitId}`);
+  };
+  const addAsset = (asset, at = time) => {
+    let result = null;
+    onChange(s => { result = importPatterns(s, patternAssetFile(asset), items, { at }); return result.studio; });
+    setAssetsOpen(false);
+    if (!result?.added) { setNote(result?.notes?.[0] || 'This design has no compatible group for that pattern.'); return; }
+    const recipe = result.studio.recipes.find(r => r.id === result.addedRecipeIds[0]);
+    if (recipe) {
+      const unitId = recipe.pattern?.id || (recipe.effect === 'field' ? recipe.id : null);
+      setSelectedId(unitId ? `unit:${unitId}` : `recipe:${recipe.id}`);
+    }
+    setNote(`Added “${asset.name}” — edit the copy in the inspector.`);
+  };
+  const dropAsset = e => {
+    const id = e.dataTransfer.getData(PATTERN_ASSET_DRAG_MIME);
+    const asset = patternAssetById(id);
+    if (!asset || !scroller.current) return;
+    e.preventDefault();
+    const rect = scroller.current.getBoundingClientRect();
+    const at = Math.max(0, Math.min(length, (e.clientX - rect.left + scroller.current.scrollLeft - 12) / pps));
+    addAsset(asset, snapToMusic(at, beatGrid(music.analysis)));
   };
   const exportBlocks = list => {
     const real = list.filter(b => !b.background);
@@ -252,6 +344,22 @@ export default function PreviewSequence({ studio, items, definitions, time, play
           <button role="menuitem" onClick={() => { setMenu(false); onPatternBuilder(); }}><b>Pattern builder…</b><small>Chase, ripple, sparkle, pulse and music-synced patterns</small></button>
         </div>}
       </div>
+      <div className="seq-add">
+        <button aria-expanded={assetsOpen} onClick={e => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenu(false); setProjectOpen(false);
+          setAssetsOpen(open => open ? false : { left: Math.max(10, Math.min(r.left, window.innerWidth - 450)), bottom: window.innerHeight - r.top + 4, maxHeight: Math.max(220, r.top - 12) });
+        }}>▦ Pattern assets ({PATTERN_ASSETS.length})</button>
+        {assetsOpen && <PatternAssetBrowser style={assetsOpen} onUse={addAsset} onCustomize={asset => { setAssetsOpen(false); setCreator({ asset }); }} />}
+      </div>
+      <div className="seq-add">
+        <button aria-expanded={projectOpen} title="Find and edit any pattern in this show, including blocks in later vertical lanes" onClick={e => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenu(false); setAssetsOpen(false);
+          setProjectOpen(open => open ? false : { left: Math.max(10, Math.min(r.left, window.innerWidth - 450)), bottom: window.innerHeight - r.top + 4, maxHeight: Math.max(260, r.top - 12) });
+        }}>▤ Project patterns ({projectBlocks.length})</button>
+        {projectOpen && <ProjectPatternBrowser style={projectOpen} blocks={projectBlocks} onSelect={revealProjectBlock} />}
+      </div>
       <button onClick={() => setCreator({ block: null })} title="Build your own pattern from its basic pieces">✎ Create pattern</button>
       <button onClick={onPatternBuilder} title="Chase, ripple, sparkle, pulse and music-synced patterns">✦ Pattern builder</button>
       <button onClick={() => exportBlocks(selected ? [selected] : blocks)} title={selected ? 'Save the selected pattern to a file' : 'Save every pattern in the show to a file'}>⤓ Export{selected ? '' : ' all'}</button>
@@ -272,6 +380,7 @@ export default function PreviewSequence({ studio, items, definitions, time, play
     </div>
     <div className="seq-body">
       <div className="seq-scroll" ref={scroller} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onDragOver={e => { if (e.dataTransfer?.types?.includes(PATTERN_ASSET_DRAG_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } }} onDrop={dropAsset}
         onScroll={e => setScrollLeft(e.currentTarget.scrollLeft)}>
         <div className="seq-canvas" style={{ width: length * pps + 24, height: 26 + musicH + lanes * LANE_H + 8 }}>
           <div className="seq-ruler" onPointerDown={seekAt}>
@@ -304,12 +413,23 @@ export default function PreviewSequence({ studio, items, definitions, time, play
             onChange={(v, live) => (live ? onChangeLive : onChange)(s => moveBlock(s, selected, v))} />
           {selected.type !== 'recorded' && <Num label="Length" value={selected.duration} min={1} max={Math.max(1, 600 - selected.start)} step={SNAP} suffix="s"
             onChange={(v, live) => (live ? onChangeLive : onChange)(s => resizeBlock(s, selected, v))} />}
+          {['field', 'recipe', 'motion'].includes(selected.type) && <label className="seq-field"><span>Target group</span>
+            <select value={selected.motion?.groupId || selected.water.groupId} onChange={e => {
+              const groupId = e.target.value;
+              if (selected.type === 'field') patch({ groupId });
+              else if (selected.type === 'motion') onChange(s => updateMotionUnit(s, selected, { groupId }));
+              else onChange(s => updateRecipeBlock(s, selected, { groupId }));
+            }}>{builderGroups(studio, items).map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}
+          {selected.type === 'motion' && <>
+            <button className="seq-creator-btn" onClick={() => setCreator({ block: selected })}>✎ Edit {selected.motion.motion?.axes || 1}D pattern</button>
+            <p className="seq-hint">Coordinated water, {selected.motion.motion?.axes || 1}D motion{selected.lights ? ' and lights' : ''}. Open the creator to change every layer.</p>
+          </>}
           {selected.type === 'field' && <button className="seq-creator-btn" onClick={() => setCreator({ block: selected })}>
             ✎ {selected.water.field?.kind === 'custom' ? 'Edit in pattern creator' : 'See how it is made (pattern creator)'}</button>}
           {selected.type === 'field' && <FieldInspector block={selected} studio={studio} items={items}
             onPatch={p => patch(p)} onPatchLive={p => patch(p, true)} />}
           {selected.type === 'builder' && <button onClick={() => onEditInBuilder(selected.recipeIds[0])}>✦ Edit in builder</button>}
-          {selected.type === 'recipe' && <p className="seq-hint">Hand-made pattern — edit its details in Show Programming.</p>}
+          {selected.type === 'recipe' && <RecipeInspector block={selected} onPatch={p => onChange(s => updateRecipeBlock(s, selected, p))} />}
           {selected.type === 'recorded' && <p className="seq-hint">Recorded pattern ({selected.legacyIds.length} cues). You can move or delete it.
             To change its shape, add a new pattern with “+ Add pattern”.</p>}
           <div className="seq-actions">
@@ -320,8 +440,9 @@ export default function PreviewSequence({ studio, items, definitions, time, play
         </div>
       </aside>}
     </div>
-    {creator && <PatternCreator key={creator.block?.id || 'new'} studio={studio} items={items} start={creator.block ? creator.block.start : nextStart()}
-      editBlock={creator.block} onChange={onChange} onClose={() => setCreator(null)} onExportFile={onExportFile} />}
+    {creator && <PatternCreator key={creator.block?.id || creator.asset?.id || 'new'} studio={studio} items={items} start={creator.block ? creator.block.start : nextStart()}
+      editBlock={creator.block} asset={creator.asset} onChange={onChange} onAdded={unitId => setSelectedId(`unit:${unitId}`)}
+      onClose={() => setCreator(null)} onExportFile={onExportFile} />}
     {context && (() => { const b = blocks.find(x => x.id === context.id); if (!b) return null; const close = () => setContext(null);
       return <div className="seq-context" role="menu" style={{ left: context.x, top: Math.min(context.y, window.innerHeight - 140) }}>
         {b.type === 'builder' && <button role="menuitem" onClick={() => { close(); onEditInBuilder(b.recipeIds[0]); }}>✦ Edit in builder</button>}

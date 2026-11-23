@@ -47,6 +47,31 @@ const BEAM_TAN = 0.4;               // underwater lamp beam: ~45° full angle
 const LAMP_DEPTH = 0.25;            // underwater lamps sit this far below the surface
 const WIND = { x: 0.7, z: 0.25 };   // m/s: drifting spray
 
+/** Visible lamp output with or without water: lens bloom + light pool on the basin surface. */
+export function showLampLevels(lampLevel, waterLevel = 0, heightM = 4) {
+  const k = Math.max(0, Math.min(1, Number(lampLevel) || 0));
+  const water = Math.max(0, Math.min(1, Number(waterLevel) || 0));
+  const H = Math.max(1, Number(heightM) || 4);
+  return { pool: k * (0.8 + 0.012 * H) * (0.35 + 0.65 * water), lens: k * (1.6 + 0.8 * water),
+    radius: 1.8 + 0.05 * H * (0.3 + 0.7 * water), lensSize: 0.65 + 0.04 * H };
+}
+
+/** Keep dense lamp artwork readable by limiting total light per square metre of pool. */
+export function showLightExposure(pool, activeLamps) {
+  const points = pool?.shape === "poly" ? pool.points || [] : [];
+  let area = 0;
+  if (points.length > 2) for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length]; area += a.x * b.z - b.x * a.z;
+  }
+  area = Math.abs(area) / 2;
+  if (pool?.shape === "circle") area = Math.PI * Number(pool.radius || 0) ** 2;
+  if (pool?.shape === "ellipse") area = Math.PI * Number(pool.rx || 0) * Number(pool.ry || 0);
+  if (!(area > 0) || !(activeLamps > 0)) return { area, density: 0, poolScale: 1, lensScale: 1 };
+  const density = activeLamps / area;
+  const poolScale = Math.min(1, 0.25 / density);
+  return { area, density, poolScale, lensScale: Math.max(0.35, Math.sqrt(poolScale)) };
+}
+
 /**
  * Basin water: a planar mirror (Reflector) seen through gentle animated ripples, with a Fresnel
  * blend — mirror-like at grazing angles, the dark water body when looking straight down — as in
@@ -333,10 +358,10 @@ function outletsOf(jet, t, rot) {
 }
 
 /** Aim of a swinging head (pan/tilt in degrees) in world space, for a fixture turned by `rot`. */
-function showPose(pan, tilt, rot) {
+function showPose(pan, tilt, rot, roll = 0) {
   const a = (pan * Math.PI) / 180, b = (tilt * Math.PI) / 180;
   const x0 = Math.sin(a), z0 = Math.sin(b);
-  return { ax: x0 * Math.cos(rot) - z0 * Math.sin(rot), ay: Math.cos(a) * Math.cos(b), az: x0 * Math.sin(rot) + z0 * Math.cos(rot), spin: 0, lift: 0 };
+  return { ax: x0 * Math.cos(rot) - z0 * Math.sin(rot), ay: Math.cos(a) * Math.cos(b), az: x0 * Math.sin(rot) + z0 * Math.cos(rot), spin: (roll * Math.PI) / 180, lift: 0 };
 }
 
 export class EasyScene {
@@ -477,6 +502,17 @@ export class EasyScene {
     // Layer 1: on the surface itself, so the lake's mirror camera (layer 0 only) does not reflect it.
     this.poolGlow.layers.set(1);
     scene.add(this.poolGlow);
+    // The lamp lens remains visible with the water off: a small hot core and soft optical aura.
+    const lampGeo = new THREE.BufferGeometry();
+    lampGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAX_LAMPS * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    lampGeo.setAttribute("tint", new THREE.BufferAttribute(new Float32Array(MAX_LAMPS * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    lampGeo.setAttribute("size", new THREE.BufferAttribute(new Float32Array(MAX_LAMPS), 1).setUsage(THREE.DynamicDrawUsage));
+    lampGeo.setDrawRange(0, 0);
+    this.lampPoints = new THREE.Points(lampGeo, mistMaterial());
+    this.lampPoints.frustumCulled = false;
+    this.lampPoints.renderOrder = 4;
+    this.lampPoints.visible = false;
+    scene.add(this.lampPoints);
     // Exposure streaks: each drop also drawn as the short line it travels during a camera's shutter.
     const streakGeo = new THREE.BufferGeometry();
     streakGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(this.maxParticles * 6), 3).setUsage(THREE.DynamicDrawUsage));
@@ -810,8 +846,9 @@ export class EasyScene {
   // ─── show mode: the Studio renderer of the 3D preview ─────────────────────
 
   /**
-   * Drive the water from a show (studio/showHistory.js): level(id, τ), pan(id, τ), tilt(id, τ),
-   * color(id, τ). Each drop leaves with the level and swing its nozzle had when it was fired.
+   * Drive a show (studio/showHistory.js): level(id, τ), pan/tilt/roll(id, τ), color(id, τ).
+   * Each drop leaves with the level and pose its nozzle had when it was fired. Lamp lenses and
+   * pool glows are driven directly by light levels, including when every water jet is off.
    * data.jets then lists the jets: { id, kind, nominalHeightM, swing, lightId, outlets }.
    */
   setShowSource(source) {
@@ -820,26 +857,38 @@ export class EasyScene {
     // A show site is hundreds of metres across: bigger drops read as continuous streams, as on camera.
     this.particles.material.size = show ? 0.3 : 0.13;
     this._applyShowLook();
-    if (!show) { this.mist.geometry.setDrawRange(0, 0); this.poolGlow.count = 0; this.streaks.geometry.setDrawRange(0, 0); }
-    // Show lamps sit under the water: only their light is seen.
+    if (!show) {
+      this.mist.geometry.setDrawRange(0, 0); this.poolGlow.count = 0; this.streaks.geometry.setDrawRange(0, 0);
+      this.lampPoints.geometry.setDrawRange(0, 0);
+    }
+    // Hide the lamp housing, not its emitted light: the dedicated lens/pool layers stay active.
     for (const rec of this.items.values()) if (rec.role === "light") rec.group.visible = !show;
   }
 
-  /** Night-show look: lit mist, lamp pools, streaked reflections, clear night air, hot cores bloom. */
+  /** Night-show look: lit mist, lamp lenses and pools, streaked reflections, clear night air. */
+  /** Lit spray clouds over the jets (off by default: clear night air). */
+  setMist(on) {
+    this.mistEnabled = !!on;
+    if (!this.mistEnabled) this.mist.geometry.setDrawRange(0, 0);
+    this._applyShowLook();
+  }
+
   _applyShowLook() {
     const show = !!this.showSource && this.realistic;
-    this.mist.visible = show;
+    this.mist.visible = show && !!this.mistEnabled;
     this.poolGlow.visible = show;
+    this.lampPoints.visible = show;
     this.streaks.visible = !!this.showSource;
     // A night show has no work light: moonlight and the city's glow, the lamps do the rest.
     this.hemi.intensity = show ? 0.1 : 0.85;
     this.sun.intensity = show ? 0.06 : 1.4;
     this.ground.material.color.setHex(show ? 0x0c100e : 0x27322b);
+    this.renderer.toneMappingExposure = show ? 0.8 : 1.05;
     if (this.scene.fog) { this.scene.fog.near = show ? 140 : 70; this.scene.fog.far = show ? 800 : 220; }
     if (this.bloom) {
-      this.bloom.strength = show ? 0.5 : 0.42;
-      this.bloom.radius = show ? 0.4 : 0.45;
-      this.bloom.threshold = show ? 0.82 : 0.9;
+      this.bloom.strength = show ? 0.28 : 0.42;
+      this.bloom.radius = show ? 0.32 : 0.45;
+      this.bloom.threshold = show ? 0.95 : 0.9;
     }
   }
 
@@ -881,7 +930,7 @@ export class EasyScene {
     const mg = this.mist.geometry;
     const mp = mg.attributes.position.array, mc = mg.attributes.tint.array, ms = mg.attributes.size.array;
     let m = 0;
-    const budget = lit.length ? Math.max(2, Math.floor(MAX_MIST / lit.length)) : 0;
+    const budget = lit.length && this.mistEnabled ? Math.max(2, Math.floor(MAX_MIST / lit.length)) : 0;
     for (let ji = 0; ji < lit.length; ji += 1) {
       const { jet, rec, H, rot, oyBase, lamp } = lit[ji];
       if (H < 3) continue;
@@ -946,6 +995,10 @@ export class EasyScene {
     }
     const mesh = this.poolGlow, mtx = this._mtx || (this._mtx = new THREE.Matrix4()), c = this._col || (this._col = new THREE.Color());
     const hex = this._hexCol || (this._hexCol = new THREE.Color());
+    const lensGeo = this.lampPoints.geometry, lp = lensGeo.attributes.position.array, lc = lensGeo.attributes.tint.array, ls = lensGeo.attributes.size.array;
+    let activeLamps = 0;
+    for (const id of this._lampIds) if (src.level(id, t) >= 0.01 && this.items.has(id)) activeLamps += 1;
+    const exposure = showLightExposure(this.data.pool, activeLamps);
     const cands = [];
     let g = 0;
     for (const id of this._lampIds) {
@@ -957,22 +1010,32 @@ export class EasyScene {
       const jet = this._lampJets.get(id);
       const H = jet ? Math.max(1, jet.nominalHeightM || 2) : 4;
       const wL = jet ? src.level(jet.id, t) : 0;
-      const power = 0.8 + 0.012 * H;
-      // A lamp under a still surface shows only as a faint spot; the boil of a running jet glows.
-      const e = k * power * (0.05 + 0.95 * wL);
-      const r = 1.6 + 0.05 * H * (0.3 + 0.7 * wL);
+      const visible = showLampLevels(k, wL, H);
       const p = rec.group.position;
-      mtx.makeScale(r, 1, r).setPosition(p.x, 0.03, p.z);
+      // The pool and lens have independent light-driven energy: neither requires running water.
+      // A light with no jet over it is a pixel of floor artwork: a small, sharp glow.
+      const radius = jet ? visible.radius : 0.38;
+      mtx.makeScale(radius, 1, radius).setPosition(p.x, 0.03, p.z);
       mesh.setMatrixAt(g, mtx);
       hex.set(src.color(id, t) || "#fff1dc");
-      c.copy(hex).multiplyScalar(e * POOL_GAIN);
+      const poolEnergy = visible.pool * exposure.poolScale, lensEnergy = visible.lens * exposure.lensScale;
+      c.copy(hex).multiplyScalar(poolEnergy * POOL_GAIN);
       mesh.setColorAt(g, c);
+      const k3 = g * 3;
+      lp[k3] = p.x; lp[k3 + 1] = 0.09; lp[k3 + 2] = p.z;
+      lc[k3] = hex.r * lensEnergy; lc[k3 + 1] = hex.g * lensEnergy; lc[k3 + 2] = hex.b * lensEnergy;
+      ls[g] = visible.lensSize * (0.65 + 0.35 * exposure.lensScale);
       g += 1;
-      if (e > 0.15) cands.push({ x: p.x, z: p.z, e, color: hex.getHex() });
+      if (poolEnergy > 0.15) cands.push({ x: p.x, z: p.z, e: poolEnergy, color: hex.getHex() });
     }
     mesh.count = g;
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    lensGeo.setDrawRange(0, g);
+    lensGeo.attributes.position.needsUpdate = true;
+    lensGeo.attributes.tint.needsUpdate = true;
+    lensGeo.attributes.size.needsUpdate = true;
+    this.lampPoints.material.uniforms.projScale.value = this.mist.material.uniforms.projScale.value;
     cands.sort((a, b) => b.e - a.e);
     const picked = [];
     for (const cd of cands) {
@@ -1033,9 +1096,18 @@ export class EasyScene {
     const per = active.length ? Math.min(2600, Math.floor(max / active.length)) : 0;
     let n = 0, q = 0, ns = 0;
     const sGeo = this.streaks.geometry, sp6 = sGeo.attributes.position.array, sc6 = sGeo.attributes.color.array;
-    const pose = (pan, tilt, rot) => showPose(pan, tilt, rot);
+    const pose = (pan, tilt, rot, roll = 0) => showPose(pan, tilt, rot, roll);
     const [ar, ag, ab] = AMBIENT;
     const lit = this.showLit = [];
+    // A compact, dense fountain (hundreds of jets in a pool) overlaps far more water per pixel
+    // than a lake show: scale each drop's light by the jet density so the jets stay readable.
+    if (this._siteScaleFor !== jets) {
+      this._siteScaleFor = jets;
+      const area = showLightExposure(this.data.pool, 1).area;
+      const perM2 = area > 0 ? jets.length / area : 0;
+      this._siteScale = perM2 > 0 ? Math.max(0.35, Math.min(1, Math.sqrt(0.04 / perM2))) : 1;
+    }
+    const siteScale = this._siteScale;
     for (const jet of active) {
       const rec = this.items.get(jet.id);
       if (!rec) continue;
@@ -1044,7 +1116,7 @@ export class EasyScene {
       const oyBase = o.y + (rec.outletY ?? 0.15);
       const vmax = Math.sqrt(2 * G * H);
       const T = (vmax + Math.sqrt(vmax * vmax + 2 * G * oyBase)) / G + SPLASH_S;
-      if (jet.swing) this._aimHead(rec, pose(src.pan(jet.id, t), src.tilt(jet.id, t), rot));
+      if (jet.swing) this._aimHead(rec, pose(src.pan(jet.id, t), src.tilt(jet.id, t), rot, src.roll?.(jet.id, t)));
       // Light is instantaneous: every drop in the air now is lit by its lamp's level now. A jet
       // without a lamp keeps a neutral work light so designs without lights stay visible.
       const lamp = this._showLamp(jet, rec, H);
@@ -1052,9 +1124,11 @@ export class EasyScene {
       const hotR = 1.2 + 0.04 * H;
       // Fewer drops per jet (a crowded show) → each drop carries more of the jet's light.
       const density = Math.min(1.6, Math.max(0.7, Math.sqrt(1300 / Math.max(200, per))));
-      const gain = WATER_GAIN * density, sGain = STREAK_GAIN * density;
+      const gain = WATER_GAIN * density * siteScale, sGain = STREAK_GAIN * density * siteScale;
       lit.push({ jet, rec, H, rot, oyBase, lamp });
-      const outlets = jet.swing ? [{ swing: true, spread: 0.02 }] : outletsOf({ ...jet, motion: null }, t, rot);
+      const outletCount = jet.axes >= 3 ? Math.max(1, jet.outlets || 1) : 1;
+      const outlets = jet.swing ? Array.from({ length: outletCount }, (_, k) => ({ swing: true, k, n: outletCount,
+        splay: (jet.splayDeg * Math.PI) / 180, spread: 0.02 })) : outletsOf({ ...jet, motion: null }, t, rot);
       const each = Math.max(8, Math.floor(per / outlets.length));
       for (const out of outlets) {
         let sdx = 0, sdy = 1, sdz = 0;
@@ -1073,8 +1147,11 @@ export class EasyScene {
           let dx = sdx, dy = sdy, dz = sdz, ox = o.x, oz = o.z, y0 = oyBase;
           if (out.swing) {
             // Direction and outlet at the moment this drop left the swinging head.
-            const st = pose(src.pan(jet.id, tau), src.tilt(jet.id, tau), rot);
-            dx = st.ax; dy = st.ay; dz = st.az;
+            const st = pose(src.pan(jet.id, tau), src.tilt(jet.id, tau), rot, src.roll?.(jet.id, tau));
+            if (out.n > 1) {
+              const dir = outletDir(st, out.k, out.n, out.splay, [0, 1, 0]);
+              dx = dir[0]; dy = dir[1]; dz = dir[2];
+            } else { dx = st.ax; dy = st.ay; dz = st.az; }
             const tip = this._headOutlet(rec, st);
             ox = o.x + tip.x; oz = o.z + tip.z; y0 = o.y + tip.y;
           }

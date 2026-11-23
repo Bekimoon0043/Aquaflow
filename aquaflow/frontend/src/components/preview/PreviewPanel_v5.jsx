@@ -1083,6 +1083,12 @@ if (sitePreview.active && sitePreview.plan) {
                 <input type="checkbox" checked={renderSettings.studioLook !== false} onChange={(e) => updateRender({ studioLook: e.target.checked })} />
                 Studio look (Easy Fountain Design renderer)
               </label>
+              <label title="Lit spray clouds drifting over the jets (Studio look). Off: clear night air, no haze or fog."
+                style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#cde", margin:"0 0 6px 18px", opacity: renderSettings.studioLook !== false ? 1 : 0.5 }}>
+                <input type="checkbox" checked={renderSettings.studioMist === true} disabled={renderSettings.studioLook === false}
+                  onChange={(e) => updateRender({ studioMist: e.target.checked })} />
+                Spray mist clouds
+              </label>
               <RealismReport fixtures={engineeringFixtures} realWorld={realWorld} onToggle={setRealWorld} />
             </Section>
             <Section title="View" defaultOpen>

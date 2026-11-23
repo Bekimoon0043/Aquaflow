@@ -606,7 +606,7 @@ export default function ShowProgrammerPanel() {
           { id: `${fxId}-intensity`, fixtureId: fxId, label: `${fxLabel} / Intensity`, type: "motion_intensity" },
           { id: `${fxId}-pan`,       fixtureId: fxId, label: `${fxLabel} / Pan`,       type: "motion_pan" },
           { id: `${fxId}-tilt`,      fixtureId: fxId, label: `${fxLabel} / Tilt`,      type: "motion_tilt" },
-          { id: `${fxId}-angle`,     fixtureId: fxId, label: `${fxLabel} / Angle`,     type: "motion_angle" }
+          { id: `${fxId}-roll`,      fixtureId: fxId, label: `${fxLabel} / Head rotation`, type: "motion_roll" }
         );
       } else if (category === "solenoid") {
         tracks.push(

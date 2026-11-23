@@ -68,6 +68,7 @@ export const TRACK_TYPE_COLORS = Object.freeze({
   motion_angle:      "#0ea5e9",
   motion_pan:        "#2563eb",
   motion_tilt:       "#1d4ed8",
+  motion_roll:       "#7c3aed",
 });
 
 // ─── Folder (Group) Labels ────────────────────────────────────────────────────
@@ -181,7 +182,7 @@ const CATEGORY_CHANNELS = Object.freeze({
     { suffix: "intensity", type: "motion_intensity", label: "Intensity" },
     { suffix: "pan",       type: "motion_pan",       label: "Pan" },
     { suffix: "tilt",      type: "motion_tilt",      label: "Tilt" },
-    { suffix: "angle",     type: "motion_angle",     label: "Angle" },
+    { suffix: "roll",      type: "motion_roll",      label: "Head rotation" },
   ],
   solenoid: [
     { suffix: "open",     type: "solenoid_open",     label: "Open" },

@@ -34,7 +34,7 @@ const TYPE_CHANNEL = {
   laser_intensity: CHANNEL.LASER_BEAM, laser_pattern: CHANNEL.LASER_PATTERN,
 };
 const BINARY = new Set(["solenoid_open", "solenoid_duration", "device_enable", "fire_trigger", "laser_intensity"]);
-const NOT_LEVEL = new Set(["motion_pan", "motion_tilt", "motion_angle"]);
+const NOT_LEVEL = new Set(["motion_pan", "motion_tilt", "motion_angle", "motion_roll"]);
 
 function canonicalChannels(project, playhead) {
   const frame = evaluateShowFrameAt(project, playhead);

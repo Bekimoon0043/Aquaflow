@@ -1,5 +1,120 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-23: AquaFlow Studio 1.2.88 - Bellagio light play and film cameras, no fog; new Odaa · 3Obsa water, light and air dance**
+
+- **Bellagio (user request: no fog, light-only patterns, a camera that went under the water, better shots):**
+  - There are no fog fixtures. The Studio look's spray-mist clouds are now a Render-tab option ("Spray mist clouds"), off by default.
+  - **Lamps follow their own water:** the water is compiled first and each jet is read every 0.1 s. Shooter lamps blast; the others follow the house level.
+  - **Light-only moments and light dances:**
+    - the ring lamps circle in the dark at the opening;
+    - a running light along the still line;
+    - light waves over the still curtain row;
+    - curtain light bands;
+    - odd and even oarsmen flashing on the beat;
+    - a ring that breathes, and ring lamps that kick with the bass;
+    - a strobe build into the 3:36 flash;
+    - double rings spinning in opposite directions;
+    - crossing light;
+    - flashes at 1:12, 3:36 and 4:30.
+  - **Cameras:** a film edit of moving shots cut on the music, every key at least 3 m up. The size is 33,514 clips, 65.2 MB.
+  - **Video:** `Desktop/Bellagio_Tiesto_LightPlay_1080p.mp4` (1920 × 1080, 30 fps, 293.2 s, with music).
+- **Camera fix (app):** a cut or hold in a camera track now breaks the spline, so the keys across a cut no longer bend a shot. Sampled cameras never go below 0.5 m (or below their own keys). The old Bellagio track overshot from a 210 m top view to under the water. New tests cover both.
+- **Studio renderer:**
+  - Vario solenoid nozzles (classed as valves) now throw their water.
+  - Light-only floor artwork (lights with no jet) gets small, sharp glows, so the Odaa portrait stays readable.
+  - Water brightness scales with jet density (a compact 1,400 m² pool versus a lake), so dense fountains don't wash out. Lake shows are unchanged.
+- **Odaa · 3Obsa (new show):** `Desktop/Odaa_3Obsa_Dance_Show.aquapkg`, built by `frontend/scripts/build-odaa-3obsa.mjs`.
+  - Only the fountain design (1,816 fixtures) and the song were taken from `Desktop/Odaa_3Obsa_Show.aquapkg` as it was at 10:15 on 2026-11-23. The other agent has since rewritten that file with more cannons; this show keeps the 1,816-fixture design.
+  - **Music map** (`scripts/data/odaa-3obsa-music.json`, measured from the audio): about 75 BPM, 174 hits, 547 kicks, 40 sung phrases; music runs 7.59–320.3 s.
+  - **Show:** 19 sections with ∞ 1D dances:
+    - X lattice, weave, travelling cross, rowing gallop, fans, sweeping comet loops;
+    - the portrait circle's dome and crown;
+    - Vario pops, sunbursts and sword chases;
+    - 64 air blasts within the refill rules: 20 m cannons at least 6 s apart, 50 m at least 25 s.
+  - **Light:**
+    - lamps follow their own water in each section's colour;
+    - light-only opening, breaks and strobe;
+    - colour-band chases round the ∞;
+    - the green portrait follows the voice and fades after the hard stop.
+  - **Size:** 736 patterns, 34,103 clips, 66.1 MB. The fastest swing is 75°/s, under the 88°/s drives. Notes are in `reports/Odaa 3Obsa dance show.md`.
+  - **Video:** `Desktop/Odaa_3Obsa_Dance_1080p.mp4`.
+- **Verified:**
+  - Headless GPU frames of both shows were reviewed and tuned.
+  - Full frontend tests passed: 2,069 of 2,069, plus 792 of 792 in the panel and preview subsets after the last renderer change.
+  - In browser dev mode, autosave reports the 65 MB+ projects as too large for IndexedDB (133 MB limit). The desktop app writes its snapshots to files, so it is not affected.
+
+**2026-11-23: Cinematic 3Obsa show with expanded blasts, 1D dances and Vario blooms**
+
+- **Music and timing:** Yosan Getahun – 3Obsa, **328.144 seconds**, measured **77.1 BPM**. The extracted audio is embedded and verified in the package. Twelve editable sections cover the intro, horn stabs, portrait verse, Vario build, call/response, central 50 m crown, guitar weave, Vario blooms, gallop, Geerarsa, Obsa canopy, and finale/hard freeze.
+- **Editable show:** **422 source patterns and 48,920 resolved clips** across **1,846 fixtures / 1,140 DMX lights / 706 nozzles**. All three air-blast circles now contain ten cannons each: **20 × 20 m + 10 × 50 m**, with 2.4 s and 3.8 s full-height pulses. Infinity 1D nozzles perform repeated inward/outward dances; six rainbows sequence sides → center → sides. VarioDrop pump curves open to **9 m** and partially close to **2–3 m** in traveling blooms. The finale retains its 0.12 s white strobe and warm mist. All refill gaps pass; maximum 1D speed is **88.571°/s**.
+- **Cinematic camera:** **38 music-timed keys** adapt the Bellagio package's low audience views, side tracking, orbital moves, drone portraits and accent cuts to the 70 m Odaa site. Framing was checked and adjusted so the basin and full-height crowns remain visible.
+- **Files:** `Desktop/Odaa_3Obsa_Show.aquapkg` is the direct musical show. The same upgraded show is also written to `Desktop/Odaa_Elder_Infinity_Design.aquapkg`. `Desktop/Odaa_3Obsa_Preview.png` contains twelve verified cinematic frames. Audio SHA-256 `9b7e39d7e1915364588e77e27d43745b8ae1016f53916f7b3fc80e9a3c0178e9`.
+- **Verified:** real package import and compilation passed with no issues; embedded audio reports `ok` via package. Render checks cover the 1D arcs, Vario blooms, 20 m and 50 m blasts, portrait, canopy, finale and mist. Rainbow levels confirm outer-side activation followed by the center pair; Vario levels confirm full opening and partial closing. Existing installed product **1.2.87.0** opens the show; no application rebuild was needed. Programming script: `frontend/scripts/program-odaa-music.mjs`.
+
+**2026-11-20: DWG-corrected design-only Odaa / Elder infinity fountain**
+
+- **Authoritative layout:** `Downloads/F1 dry fountain (2).dwg` was converted and inspected directly, not inferred from screenshot scaling. The E33 pool is **70.118 × 23.422 m** with exact bulge arcs; FC6 supplies an exact **240-point infinity path**. Named `yiweipentou` blocks supply **22 1D nozzles on the 5.5 m guide**, and the Vario annotation plus 10.3 m guide supplies **22 VarioDrop positions**.
+- **Equipment:** 130 central straight adjustable nozzles, 123 straight-nozzle positions per pillar, and **three circular air-blast arrays**: 5 × 20 m left, 5 × 20 m right and 5 × 50 m center, all using the 3.3659 m DWG circle radius. Total **1,816 fixtures**, including **1,125 DMX lights**. Every array has individually addressable nozzles and paired lights.
+- **Diagonal Rainbow and DMX:** exactly one new Diagonal Rainbow nozzle and one paired DMX light is placed at each of the **six blue-box centers**, replacing the nearest-nozzle placeholders. The portrait remains **434 light-only fixtures** (227 face, 184 hair and 23 star), centered at the DWG center with a uniform 0.55 scale and rotated **180°** to match the supplied reference orientation. No other fixture moved.
+- **Design only:** `Desktop/Odaa_Elder_Infinity_Design.aquapkg` now contains the corrected geometry and an intentionally empty pattern timeline, ready for choreography after approval. `Desktop/Odaa_Elder_Infinity_CAD_Portrait_Rotated.png` is the regenerated full-site preview with exact diagonal, circular air-blast and portrait placements. The previous 4-minute video remains a record of the older concept, not this DWG layout.
+- **Verified:** the package passes real AquaFlow deserialization and compilation with **zero issues and zero timeline clips**. Existing installed product **1.2.87.0** opens the design; no application rebuild was required. Build scripts: `frontend/scripts/extract-odaa-dwg.py`, `build-odaa-dwg.mjs` and `render-odaa-dwg-cad.py`.
+
+**2026-11-20: AquaFlow Studio 1.2.87 - every project pattern is searchable and editable**
+
+- **Import finding:** the exact `Desktop/Odaa_Elder_Infinity_Design.aquapkg` was never missing show data. Real deserialization and project loading returned **240 seconds, 111 recipes, 103 editable timeline blocks and 28,348 clips with zero issues**. The later blocks were hard to discover because Fit only adjusts time; the lanes also require vertical scrolling.
+- **Project-pattern browser:** the 3D show timeline now has **Project patterns (103)** beside the reusable asset library. Search by name or filter by moving nozzles, waves, curves/static cues or recorded cues. Choosing a result reveals its timeline block and opens the existing editor, including Start, Length, target group and pattern-specific controls.
+- **Verified end to end:** the exact package was loaded through the real project importer; the browser found `Outer 14 · high arcs flow to the center` and opened its editor. A late-block search/edit regression test was added. Full frontend **2,065 passed (212 files)**, production build and packaged-engine simulated safe start/stop passed. Evidence: `Desktop/Odaa_Elder_Infinity_Edit_Patterns.png`.
+- **Installed:** product **1.2.87.0**, with the new browser confirmed in the installed frontend bundle. Installer `aquaflow/desktop/dist/AquaFlowSetup-1.2.87.exe` (179,950,578 bytes; SHA-256 `710439e23879cbaff3891cb7c2159288b84b6dcfd8b59cfce2eb0119296ec8fc`). The 240-second project and existing 4-minute MP4 are unchanged.
+
+**2026-11-20: AquaFlow Studio 1.2.86 - four-minute Odaa / Elder show, readable high-swing dances and full-scene MP4**
+
+- **Slower, clearer choreography:** the 15-second portrait opening is retained; all later acts run three times longer. Infinity traveling, stadium, pyramid and double-pyramid waves use 3.6-4.8 second periods plus explicit 44-52 degree 1D swing layers. Actual Bellagio curve envelopes drive X-lattice crosses, high scissors, traveling crosses, fans, rowing and finale sweeps with slower retiming and readable gain.
+- **High outer-circle dances:** exactly 14 radial 1D nozzles with 9 m nominal jets perform two 9-second inward/outward cycles, a high alternating weave, center-converging golden arcs, traveling inward swings and a final crown. Verified ranges include ±50 degrees for the high outer swings and −57.85 to −2.15 degrees for center convergence. All compiled motion remains within the concept drive limits; measured maximum is 89.997 degrees/second.
+- **Editable show:** **240 seconds, 2,792 fixtures, 111 source patterns, 28,348 resolved clips and 31 reusable 1D assets**. Updated files: `Desktop/Odaa_Elder_Infinity_Design.aquapkg`, `Desktop/Odaa_Elder_Infinity_CAD.png`, `Desktop/Odaa_Elder_Infinity_Patterns.png`, `Desktop/Odaa_Elder_Infinity_1D_Dance.png` and `outputs/Odaa_1D_Crossing_Assets.aqpattern.json`.
+- **Full-scene video:** `Desktop/Odaa_Elder_Infinity_4min_720p.mp4` — H.264, 1280 x 720, 24 fps, exactly 240.000 seconds and 5,760 frames, 157,546,555 bytes. Full decode passed and wave/cross/center-swing/finale frames were visually reviewed. SHA-256 `8b85ec17def93d7519552590ecff3626415043e4d85efec23bac7a3ecddb07d7`.
+- **Verified and installed:** full frontend **2,064 passed (212 files)**, production build green, packaged-engine simulated start and safe stop passed. Installed product **1.2.86.0**. Installer `aquaflow/desktop/dist/AquaFlowSetup-1.2.86.exe` (179,949,419 bytes; SHA-256 `9ed3843b31da49fcb3c9baf91aab4bab7e56dd8f0f9aee5fbc05222bab50e8d4`). Simulation remains uncommissioned; no hardware outputs were used.
+
+**2026-11-19: AquaFlow Studio 1.2.84 - corrected Odaa / Elder lighting, enclosed side pillars and reference-informed show**
+
+- **Lighting corrected:** dense-site pool illumination is limited by lamps per square metre, show exposure is 0.8, bloom strength 0.28 and bloom threshold 0.95. Individual streams and colours remain readable instead of forming a white-green cloud. Independent lamp lenses and auras still render with water stopped; focused tests cover water-free lights, full water, dense-site suppression and sparse-site passthrough.
+- **Layout corrected:** both straight-nozzle pillar assemblies and their inner lights are exact mirrors, compressed 15% in height and moved 1 m toward the audience. Generator boundary checks reject fixtures outside the D-shaped pool. Current design: **2,792 fixtures, 62 editable source patterns and 19,251 resolved clips**, including 190 infinity-path 1D nozzles, 28 portrait-circle 1D nozzles, 14 VarioDrop nozzles and nine 50 m compressor sprays.
+- **Reference-informed choreography:** the supplied video was reviewed from 11 seconds onward, including crossing/dome arcs, red/green crossings, blue/green walls, blue/yellow columns, multicolor straight jets and the quiet interval. Formation-specific white, red/green, blue/green, yellow/blue and pink/green cues were applied while retaining editable stream detail. The infinity choreography is original AquaFlow work, not presented as a pattern visible in the video. Notes: `reports/Odda reference video analysis.md`; contact sheet: `Desktop/Odaa_reference_contact_sheet.png`.
+- **Deliverables:** `Desktop/Odaa_Elder_Infinity_Design.aquapkg`, `Desktop/Odaa_Elder_Infinity_CAD.png`, `Desktop/Odaa_Elder_Infinity_Studio_Corrected.png` and `Desktop/Odaa_Elder_Infinity_Light_Only.png`. Reusable 14-block 1D crossing pack: `outputs/Odaa_1D_Crossing_Assets.aqpattern.json`.
+- **Verified and installed:** full frontend **2,064 passed (212 files)**, production Vite build green, packaged-engine health and simulated safe start/stop green. Corrected 00:18 water frame and 00:01 light-only frame visually reviewed. Installed product version **1.2.84.0**, with no test windows left running. Installer: `aquaflow/desktop/dist/AquaFlowSetup-1.2.84.exe` (179,949,803 bytes; SHA-256 `3fcab479f6acd0f7e894d6fdb797ed90b92d1b2ec571f9e586a69d1e21c3b8c8`). Simulation remains uncommissioned and hardware outputs were not used.
+
+**2026-11-19: AquaFlow Studio 1.2.83 - standalone 3D lights and expanded 1D crossing choreography**
+
+- **Standalone-light root cause:** EasyScene hid lamp housings and reduced pool glow to 5% with no running jet; there was no separate lens layer. New `showLampLevels()` drives emissive lens/aura points, surface pools and indirect light directly from each light's level and colour. Water-off lights remain visible; running water strengthens the effect.
+- **Mirrored side shapes:** the design generator now applies x/y/z/rotation overrides to actual fixture coordinates, not only Engineering metadata. The right pillar and inner-light shape are exact mirrors of the left instead of being stacked on it; generator invariants enforce this.
+- **Expanded editable 1D choreography:** cross opening, scissors, opening/closing fan, rowing, traveling cross and crown run on both the portrait circle and infinity path. Fourteen motion blocks are exported to `outputs/Odaa_1D_Crossing_Assets.aqpattern.json` for reuse in compatible groups.
+- **Updated design:** 2,806 fixtures, 62 source patterns, 12,294 resolved clips, 45 s. CAD plan regenerated with both side shapes visible. Full frontend **2,062 passed (212 files)**; production build green.
+
+**2026-11-19 design deliverable: corrected Odaa / Elder infinity fountain**
+
+- **User-corrected layer model:** D-shaped pool; red infinity line = 190 tangent-aligned 1D nozzles; all nine blue dots = 50 m compressor sprays; Old Man + Oddaa portrait = green light only; portrait circle = 28 1D nozzles; sun = straight nozzles; separate outer circle = 14 VarioDrop nozzles; side pillar outlines = straight nozzles with inner integrated lights.
+- **Files:** `Desktop/Odaa_Elder_Infinity_Design.aquapkg` and `Desktop/Odaa_Elder_Infinity_CAD.png`. Rebuild with `frontend/scripts/build-odaa-infinity.mjs` and `render-odaa-cad.py`.
+- **Design:** 2,806 fixtures, 30 editable source patterns, 9,404 resolved clips, 45 s presentation. Installed AquaFlow 1.2.82 opened the corrected package and all expected groups/cues passed. CAD image visually reviewed. Concept dimensions and equipment are explicitly not commissioned or construction-ready.
+
+**2026-11-19: AquaFlow Studio 1.2.82 - guided Water / 1D / 2D / 3D pattern designer and asset remixing**
+
+- **Research:** `reports/Pattern design workspace.md` draws on Depence, Adobe After Effects, Apple Motion and OASE motion-drive documentation. The design separates temporal curves from spatial paths, keeps guided templates, and retains real range/speed limits.
+- **Four modes:** Water, 1D Swing, 2D Aim and 3D Head. Users explicitly choose the target group and duration. Moving-nozzle blocks coordinate water, motion and optional lights instead of leaving water off while motion runs.
+- **Creative tools:** per-key linear / smooth / ease-in / ease-out / hold curves; key add/remove; parametric circle, figure-8, cross, spiral and free-dance paths; a draggable custom 2D/3D path; amplitude, centre, offset, direction, grouping, opposite phase and third-axis hold / spin / oscillation controls.
+- **Live and hardware-aware:** schematic water/motion previews, peak-speed estimate, and coherent group slowdown to the slowest rated drive. Actual 3D preview and commissioning remain separate checks.
+- **Real third axis:** `motion_roll` now flows through track generation, motion recipes, exact degree-mapped keyed clips, JS/Python show frames, Studio history and EasyScene's multi-outlet head renderer. Existing ±45° legacy clips remain compatible.
+- **Assets:** every Bellagio asset has **Customize** as well as Add / drag-and-drop. A customization is an independent editable copy. New motion types can be saved in My patterns and exported with the existing type format.
+- **Verified:** focused 1D/2D/3D creation, editing, compilation, continuous roll, speed limiting, asset remix and cross-site retargeting tests; full frontend **2,058 passed (211 files)**, full backend pytest green, production Vite build green.
+- **Installed on this PC:** `aquaflow/desktop/dist/AquaFlowSetup-1.2.82.exe` (179,950,051 bytes; SHA-256 `617d69f6b08509cea7505887b4c5c96b33086436d3c16222032d9542ab2046cc`), built with a fresh Python 3.12 engine. Packaged engine health + simulated safe start/stop PASS. Installed product version **1.2.82.0**; isolated installed-UI smoke PASS for all four modes, 160 assets and Customize. No save, hardware arm or hardware output. The installer is intentionally unsigned (checksum-only); no update feed was published.
+
+**2026-11-19: AquaFlow Studio 1.2.81 - all 160 Bellagio patterns packaged as reusable, editable assets**
+
+- **Complete asset pack:** every editable recipe in `Desktop/Bellagio_Tiesto_Real_Layout.aquapkg` is preserved: 100 wave-field, 41 keyed-curve and 19 static patterns (117 water, 14 lighting and 29 moving-nozzle assets). The original show is unchanged.
+- **Pattern assets browser:** the 3D show timeline has a searchable, category-filtered **Pattern assets (160)** catalogue. Drag an asset to any timeline position, or double-click / press ＋ to add it at the playhead.
+- **Other designs and sites:** water, light and motion recipes retarget to compatible destination groups, preferring existing show groups over generated quick groups. Motion assets report when a site has no moving-nozzle group instead of silently targeting ordinary jets.
+- **Editable copies:** source assets stay unchanged. Placed copies can be moved, resized, duplicated, deleted and assigned to another group. Wave fields open in the existing field editor / pattern creator; static and curve assets now have direct level, colour, cycle, spread, order and curve-key editing.
+- **Portable package:** `outputs/Bellagio_Tiesto_160_Pattern_Assets.aqpattern.json` (249,341 bytes) uses the existing `aquaflow-show-patterns` format and can be imported through the timeline. Rebuild the pack with `frontend/scripts/extract-bellagio-pattern-assets.mjs`.
+- **Verified:** all 160 assets imported and compiled against a separate test site; search, double-click, drag-and-drop and curve editing tested. Full frontend suite **2,050 passed (210 files)**; production Vite build green. Desktop installer not rebuilt.
+
 **2026-11-19: AquaFlow Studio 1.2.80 - Real-world fountain lighting in the 3D Preview Studio look; Bellagio lit like the film**
 
 - **Request:** after the water patterns were approved, make the lighting look like the original video, based on how light really behaves on water.

@@ -1,4 +1,4 @@
-// Show history for the Studio renderer: every fixture's level, swing pose and light colour,
+// Show history for the Studio renderer: every fixture's level, pan/tilt/roll pose and light colour,
 // sampled from the show frame (evaluateShowFrameAt) at a fixed rate and cached in a sliding
 // window. The Studio renderer launches each water drop with the level and swing the nozzle had
 // at the moment the drop left it, so it needs the recent past, not just "now".
@@ -27,12 +27,14 @@ export function createShowHistory(project, { rate = 20, keepS = 12 } = {}) {
     if (s) return s;
     const frame = evaluateShowFrameAt(project, k / rate);
     evaluations++;
-    s = { level: new Float32Array(n), pan: new Float32Array(n), tilt: new Float32Array(n), color: new Array(n).fill(null) };
+    s = { level: new Float32Array(n), pan: new Float32Array(n), tilt: new Float32Array(n), roll: new Float32Array(n), color: new Array(n).fill(null) };
     for (const [id, rec] of Object.entries(frame.fixtures || {})) {
       const i = index.get(id);
       if (i === undefined) continue;
       s.level[i] = clamp01(rec.level);
-      if (rec.motion) { s.pan[i] = Number(rec.motion.pan) || 0; s.tilt[i] = Number(rec.motion.tilt) || 0; }
+      if (rec.motion) {
+        s.pan[i] = Number(rec.motion.pan) || 0; s.tilt[i] = Number(rec.motion.tilt) || 0; s.roll[i] = Number(rec.motion.roll) || 0;
+      }
       if (rec.color?.hex) s.color[i] = rec.color.hex;
     }
     samples.set(k, s);
@@ -53,6 +55,7 @@ export function createShowHistory(project, { rate = 20, keepS = 12 } = {}) {
     /** Swing pose (degrees) of a moving nozzle at τ. */
     pan: lerpOf("pan"),
     tilt: lerpOf("tilt"),
+    roll: lerpOf("roll"),
     /** Light colour (hex) at τ, or null. */
     color(id, tau) {
       const i = index.get(id);

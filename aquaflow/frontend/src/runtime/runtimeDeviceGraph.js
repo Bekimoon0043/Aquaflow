@@ -181,7 +181,7 @@ function buildTrackCapabilities(runtimeType, fixture) {
     equipment: { primary: "device_intensity", secondary: ["device_enable"], hasIntensity: true, suggestedEasing: "linear" },
     motion_1d: { primary: "motion_angle", secondary: ["motion_intensity"], hasAngle: true, suggestedEasing: "ease_both" },
     motion_2d: { primary: "motion_pan", secondary: ["motion_tilt", "motion_intensity"], hasPan: true, hasTilt: true, suggestedEasing: "ease_both" },
-    motion_3d: { primary: "motion_pan", secondary: ["motion_tilt", "motion_intensity"], hasPan: true, hasTilt: true, hasRoll: true, suggestedEasing: "ease_both" },
+    motion_3d: { primary: "motion_pan", secondary: ["motion_tilt", "motion_roll", "motion_intensity"], hasPan: true, hasTilt: true, hasRoll: true, suggestedEasing: "ease_both" },
   };
   
   const base = trackTypeMap[runtimeType] || trackTypeMap.equipment;

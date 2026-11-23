@@ -42,7 +42,7 @@ _CURVE_ALIASES = {
 }
 LIGHT_CHANNELS = ("lighting_red", "lighting_green", "lighting_blue")
 _MASTER_TYPES = ("lighting_master", "device_intensity")
-_MOTION_POSITION = {"motion_pan", "motion_tilt", "motion_angle"}
+_MOTION_POSITION = {"motion_pan", "motion_tilt", "motion_angle", "motion_roll"}
 _WATER_MOTION_SOURCES = {"device_intensity", "device_enable", "solenoid_open", "motion_intensity", "pump_speed"}
 _KINDS = {"water", "light", "pump", "valve", "effect", "equipment"}
 _DEFAULT_LIGHT = "#ffffff"
@@ -304,6 +304,7 @@ def _normalize_clip(raw, index, tempo, diagnostics):
         "fadeIn": max(0.0, _finite(raw.get("fadeIn"))), "fadeOut": max(0.0, _finite(raw.get("fadeOut"))),
         "curve": curve or "linear", "color": valid_hex(raw.get("color")),
         "pan": _finite(raw.get("pan")), "tilt": _finite(raw.get("tilt")),
+        "motionOffset": _finite(raw.get("motionOffset"), -45.0), "motionScale": _finite(raw.get("motionScale"), 0.9),
         "recipeId": raw.get("studioRecipeId", raw.get("patternBlockId")), "trackId": raw.get("trackId"),
     }
 
@@ -462,10 +463,11 @@ def evaluate_show_frame_at(project, seconds, opts=None, prepared=None):
                     pose["pan"] = _clamp(clip["pan"], -lim["pan"], lim["pan"])
                     pose["tilt"] = _clamp(clip["tilt"], -lim["tilt"], lim["tilt"])
                 elif clip["type"] in _MOTION_POSITION:
-                    axis = "tilt" if clip["type"] == "motion_tilt" else "pan"
-                    # A keyed motion curve carries levels 0..100 like every keyed clip: 0 = -45 deg, 100 = +45 deg.
-                    deg = -45 + 0.9 * key_value(clip["keys"], t - clip["start"]) if clip.get("keys") else clip["value"]
-                    pose[axis] = _clamp(deg, -lim[axis], lim[axis])
+                    axis = "tilt" if clip["type"] == "motion_tilt" else "roll" if clip["type"] == "motion_roll" else "pan"
+                    # Legacy keyed motion is 0..100 → −45°..+45°; new recipes can declare exact degrees.
+                    deg = (_finite(clip.get("motionOffset"), -45.0) + _finite(clip.get("motionScale"), 0.9)
+                           * key_value(clip["keys"], t - clip["start"])) if clip.get("keys") else clip["value"]
+                    pose[axis] = deg if axis == "roll" else _clamp(deg, -lim[axis], lim[axis])
         diagnostics.extend(dict(o) for o in prepared["overlaps"] if o["start"] <= t < o["end"])
     else:
         diagnostics.append({"code": state, "severity": "info", "message": f"{state}: every output is off."})

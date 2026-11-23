@@ -111,13 +111,19 @@ function catmullRom(p0, p1, p2, p3, u) {
 
 const reflect = (a, b) => ({ x: 2 * a.x - b.x, y: 2 * a.y - b.y, z: 2 * a.z - b.z });
 
-function splineAt(points, i, u) {
+// A cut (or hold) ends a shot: keys across it must not bend the next or previous move.
+const breaksAt = (keys, i) => keys[i] && (keys[i].ease === "cut" || keys[i].ease === "hold");
+
+function splineAt(points, i, u, keys = null) {
   const p1 = points[i], p2 = points[i + 1];
   if (dist(p1, p2) < 1e-9) return { ...p1 };
-  const p0 = i > 0 ? points[i - 1] : reflect(p1, p2);
-  const p3 = i + 2 < points.length ? points[i + 2] : reflect(p2, p1);
+  const p0 = i > 0 && !(keys && breaksAt(keys, i - 1)) ? points[i - 1] : reflect(p1, p2);
+  const p3 = i + 2 < points.length && !(keys && breaksAt(keys, i + 1)) ? points[i + 2] : reflect(p2, p1);
   return catmullRom(p0, p1, p2, p3, u);
 }
+
+/** The camera never dips under the water surface (spline overshoot between a high and a low key). */
+export const CAMERA_FLOOR_M = 0.5;
 
 const smoothstep = (u) => u * u * (3 - 2 * u);
 const easeInQ = (u) => u * u;
@@ -158,9 +164,12 @@ export function sampleCameraTrack(track, t) {
   const u = span > 0 ? Math.min(1, Math.max(0, (time - a.t) / span)) : 1;
   const e = easedU(keys, i, u);
   const positions = keys.map((k) => k.position), targets = keys.map((k) => k.target);
+  const position = splineAt(positions, i, e, keys);
+  const floor = Math.min(CAMERA_FLOOR_M, a.position.y, b.position.y);
+  if (position.y < floor) position.y = floor;
   return {
-    position: splineAt(positions, i, e),
-    target: splineAt(targets, i, e),
+    position,
+    target: splineAt(targets, i, e, keys),
     fov: lerp(a.fov, b.fov, e),
     roll: lerp(a.roll, b.roll, e),
     keyIndex: i,
