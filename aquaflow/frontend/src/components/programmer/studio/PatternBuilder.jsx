@@ -27,7 +27,6 @@ import { writeCache } from './musicSync';
 import { DEFAULT_METER, METER_CHOICES, tapTempo } from './musicMeter';
 import { buildSiteModel } from './siteCapability';
 import { groupConflicts } from './groupAdvisor';
-import CalibrationDialog from './CalibrationDialog';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -120,8 +119,6 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     if (bpm) setMeter({ bpm });
   };
   const site = studio.site || {};
-  const [calibrating, setCalibrating] = useState(false);
-  const nozzleTypes = [...new Map(design.nozzles.map(n => [n.item.type, { id: n.item.type, label: `${n.kindLabel} · ${n.item.type}` }])).values()];
   const setSite = patch => onChange({ ...studio, site: { ...site, ...patch } });
   const [stemRows, setStemRows] = useState(null);   // null = follow the suggestion
 
@@ -360,7 +357,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
         <button onClick={tap} title="Tap along with the beat (4+ taps) to set the tempo">Tap{meter.bpm ? ` · ${Math.round(meter.bpm)}` : ''}</button>
       </div>}
       {analysis?.sections?.length > 0 && <div className="pb-sections" aria-label="Song sections">
-        {analysis.sections.map((s, i) => <span key={i} style={{ flexGrow: Math.max(.1, s.end - s.start), background: SECTION_COLORS[s.label] || '#35d0c0', opacity: .35 + .65 * (s.energy || 0) }}
+        {analysis.sections.map((s, i) => <span key={i} style={{ flexGrow: Math.max(.1, s.end - s.start), background: SECTION_COLORS[s.label] || "var(--info)", opacity: .35 + .65 * (s.energy || 0) }}
           title={`${s.label} · ${mmss(s.start)}–${mmss(s.end)}`} />)}
       </div>}
       <div className="pb-row">
@@ -419,7 +416,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
           <div className="pb-row">
             <small>{Object.keys(site.calibration || {}).length ? `${Object.keys(site.calibration).length} nozzle type(s) calibrated from video` : 'Timing from physics (not measured yet)'}</small>
             <span className="sp-grow" />
-            <button onClick={() => setCalibrating(true)} title="Film a jet side-on and mark its tip: AquaFlow measures its delay and rise so the show fires it exactly early enough">Calibrate from video…</button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('aquaflow:open-panel', { detail: { panel: 'calibration' } }))} title="Nozzle timing is measured in Commission → Calibration (film a jet, mark its tip)">Calibrate in Commission…</button>
           </div>
           <div className="pb-row" title="Optional: Claude (Anthropic) directs the show's arc. The key is kept by the AquaFlow engine on this computer.">
             <small>AI director key is set in File → Preferences</small>
@@ -472,8 +469,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
       </Advanced>}
   </div></>;
 
-  return <>{calibrating && <CalibrationDialog types={nozzleTypes} calibration={site.calibration || {}} onClose={() => setCalibrating(false)}
-    onSave={(type, cal) => { setSite({ calibration: { ...(site.calibration || {}), [type]: cal } }); setCalibrating(false); setNote(`Calibrated ${type}: delay ${cal.delayS} s, apex ${cal.apexM} m`); }} />}
+  return <>
   <div className="pattern-builder" role="dialog" aria-label="Pattern builder">
     <div className="pb-head"><strong>Pattern builder</strong>{editing && <span className="pb-tag" title="Update replaces this pattern in place">editing</span>}<span className="sp-grow" />
       <button onClick={onClose} aria-label="Close pattern builder" title="Close">✕</button></div>

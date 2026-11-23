@@ -36,19 +36,19 @@ export default function AiDesignReview({ post, onSelect = selectInDesign }) {
   const { review, design } = state;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid="ai-design-review">
-      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
         Claude reads a text summary of this design ({fixtures.length} fixtures: areas, valves, pumps, lights, groups, basin and flow budget —
         no drawings or files) and explains weak spots and upgrades. Advice only: nothing in the design is changed.
       </div>
       <div>
         <button type="button" onClick={run} disabled={state.loading}
-          title="Optional: Claude reviews the fountain design in plain words. Uses your Anthropic key (Your fountain → AI director)."
-          style={{ background: "var(--accent)", color: "#04140a", border: "none", borderRadius: 6, padding: "6px 14px",
+          title="Optional: Claude reviews the fountain design in plain words. Uses your Anthropic key (File → Preferences → AI director)."
+          style={{ background: "var(--accent)", color: "var(--text-on-accent)", border: "none", borderRadius: 6, padding: "6px 14px",
             fontSize: 11, fontWeight: 700, cursor: state.loading ? "wait" : "pointer" }}>
           {state.loading ? "Reviewing…" : "✦ AI design review"}
         </button>
       </div>
-      {state.error && <div role="alert" style={{ color: "#ef4444", fontSize: 11, padding: 8, ...box }}>⛔ {state.error}</div>}
+      {state.error && <div role="alert" style={{ color: "var(--error)", fontSize: 11, padding: 8, ...box }}>⛔ {state.error}</div>}
       {review && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {review.summary && <div style={{ ...box, padding: 8, fontSize: 11, color: "var(--text-primary)" }}>{review.summary}</div>}
         {!review.findings?.length && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>No weak spots found.</div>}
@@ -59,25 +59,25 @@ export default function AiDesignReview({ post, onSelect = selectInDesign }) {
           return (
             <div key={i} data-testid="ai-finding" data-severity={f.severity} style={{ ...box, padding: 8, borderColor: `${sev.color}55`, fontSize: 11, color: "var(--text-primary)" }}>
               <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
-                <span style={{ color: sev.color, fontSize: 9, fontWeight: 700, textTransform: "uppercase" }}>{sev.label}</span>
+                <span style={{ color: sev.color, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>{sev.label}</span>
                 <strong>{f.title}</strong>
               </div>
-              {areaNames.length > 0 && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{areaNames.join(" · ")}</div>}
+              {areaNames.length > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{areaNames.join(" · ")}</div>}
               {f.detail && <div style={{ marginTop: 4 }}>{f.detail}</div>}
               {f.recommendation && <div style={{ marginTop: 4 }}><b>Recommendation:</b> {f.recommendation}</div>}
               {f.estimatedImpact && <div style={{ marginTop: 2, color: "var(--text-muted)" }}><b>Impact:</b> {f.estimatedImpact}</div>}
               {ids.length > 0 && <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 9, color: "var(--text-muted)" }}>Select in design:</span>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Select in design:</span>
                 {ids.slice(0, 12).map((id) => (
                   <button key={id} type="button" onClick={() => onSelect(id)} title="Select this part in the Engineering Designer"
-                    style={{ ...box, padding: "1px 6px", fontSize: 9, color: "var(--text-accent)", cursor: "pointer" }}>{id}</button>
+                    style={{ ...box, padding: "1px 6px", fontSize: 11, color: "var(--text-accent)", cursor: "pointer" }}>{id}</button>
                 ))}
-                {ids.length > 12 && <span style={{ fontSize: 9, color: "var(--text-muted)" }}>+{ids.length - 12} more</span>}
+                {ids.length > 12 && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>+{ids.length - 12} more</span>}
               </div>}
             </div>
           );
         })}
-        <div style={{ fontSize: 9, color: "var(--text-muted)" }}>Advice from {review.model || "Claude"} — check it against the datasheets before changing equipment.</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Advice from {review.model || "Claude"} — check it against the datasheets before changing equipment.</div>
       </div>}
     </div>
   );

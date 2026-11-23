@@ -50,7 +50,7 @@ export default function DocumentationPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Documentation Center
         </span>
-        <span style={{ marginLeft: "auto", fontSize: 9, color: OFFLINE_AVAILABLE ? "#22c55e" : "var(--text-muted)" }}>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: OFFLINE_AVAILABLE ? "var(--ok)" : "var(--text-muted)" }}>
           ● Offline ready · {ARTICLES.length} articles
         </span>
       </div>
@@ -66,15 +66,15 @@ export default function DocumentationPanel() {
         <div style={{ width: 230, borderRight: "1px solid var(--border)", overflow: "auto", flexShrink: 0, padding: 8 }}>
           {query.trim() ? (
             <>
-              <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
                 {results.length} result{results.length === 1 ? "" : "s"}</div>
               {results.length === 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>No matches.</div>}
               {results.map((r) => (
                 <div key={r.id} onClick={() => open(r.id)} style={{ ...box, padding: 8, marginBottom: 5,
                   cursor: "pointer", borderColor: selectedId === r.id ? "var(--accent)" : "var(--border)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)" }}>{r.title}</div>
-                  <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{r.category}</div>
-                  <div style={{ fontSize: 9.5, color: "var(--text-secondary)", marginTop: 3 }}>{r.snippet}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{r.category}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>{r.snippet}</div>
                 </div>
               ))}
             </>
@@ -82,7 +82,7 @@ export default function DocumentationPanel() {
             <>
               {ctxHelp.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 9, color: "var(--accent)", marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, color: "var(--accent)", marginBottom: 4 }}>
                     HELP FOR {CONTEXT_LABEL[ctx]?.toUpperCase() || ctx.toUpperCase()}
                   </div>
                   {ctxHelp.map((h) => (
@@ -94,17 +94,17 @@ export default function DocumentationPanel() {
                 </div>
               )}
               <select value={ctx || ""} onChange={(e) => setCtx(e.target.value)}
-                style={{ ...box, width: "100%", padding: 5, fontSize: 10, color: "var(--text-primary)", marginBottom: 8 }}>
+                style={{ ...box, width: "100%", padding: 5, fontSize: 11, color: "var(--text-primary)", marginBottom: 8 }}>
                 <option value="">Context help for…</option>
                 {contexts.map((c) => <option key={c} value={c}>{CONTEXT_LABEL[c] || c}</option>)}
               </select>
 
-              <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>BROWSE</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>BROWSE</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
-                <span onClick={() => setCategory(null)} style={{ fontSize: 9, cursor: "pointer",
+                <span onClick={() => setCategory(null)} style={{ fontSize: 11, cursor: "pointer",
                   color: !category ? "var(--accent)" : "var(--text-muted)" }}>All</span>
                 {CATEGORIES.map((c) => (
-                  <span key={c} onClick={() => setCategory(c)} style={{ fontSize: 9, cursor: "pointer",
+                  <span key={c} onClick={() => setCategory(c)} style={{ fontSize: 11, cursor: "pointer",
                     color: category === c ? "var(--accent)" : "var(--text-muted)" }}>· {c}</span>
                 ))}
               </div>
@@ -128,13 +128,13 @@ export default function DocumentationPanel() {
             </div>
           ) : (
             <div>
-              <div style={{ fontSize: 9, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              <div style={{ fontSize: 11, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                 {article.category}</div>
               <h2 style={{ fontSize: 18, margin: "4px 0 10px", color: "var(--text-primary)" }}>{article.title}</h2>
               <p style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-secondary)" }}>{article.body}</p>
               <div style={{ marginTop: 14, display: "flex", gap: 5, flexWrap: "wrap" }}>
                 {article.tags.map((t) => (
-                  <span key={t} style={{ ...box, padding: "2px 7px", fontSize: 9, color: "var(--text-muted)" }}>{t}</span>
+                  <span key={t} style={{ ...box, padding: "2px 7px", fontSize: 11, color: "var(--text-muted)" }}>{t}</span>
                 ))}
               </div>
             </div>

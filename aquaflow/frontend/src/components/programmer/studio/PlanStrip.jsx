@@ -109,7 +109,7 @@ export default function PlanStrip({ studio, items, analysis, pps, onChange, onNo
       onChange((s) => createShow(s, { ...context(s, { items, analysis, stems, basin }), seed: s.plan?.seed ?? 0, variant: 0, direction, locks: s.plan?.locks || {} }).studio);
       note(`AI director · ${direction.summary || 'plan applied'} — the phrases and every physical limit are still AquaFlow's`);
     } catch (error) {
-      note(`${/HTTP 404|fetch|Failed/i.test(error.message) ? 'The AI director needs the AquaFlow engine and an API key (Your fountain → AI director)' : error.message} — kept the rule plan`);
+      note(`${/HTTP 404|fetch|Failed/i.test(error.message) ? 'The AI director needs the AquaFlow engine and an API key (File → Preferences → AI director)' : error.message} — kept the rule plan`);
     } finally { setBusy(''); }
   };
   // ✦ AI critic: measure the compiled show, send it as text, list the findings with their fixes.
@@ -125,7 +125,7 @@ export default function PlanStrip({ studio, items, analysis, pps, onChange, onNo
       setReview({ ...answer, planId: plan.id, applied: [], seconds: Math.round((Date.now() - t0) / 1000), score: measured.score });
       note(`AI critic · ${answer.findings.length} finding${answer.findings.length === 1 ? '' : 's'}`);
     } catch (error) {
-      note(/HTTP 404|Failed to fetch|NetworkError/i.test(error.message) ? 'The AI critic needs the AquaFlow engine and an API key (Your fountain → AI director)' : error.message.replace(/^HTTP \d+ — /, ''));
+      note(/HTTP 404|Failed to fetch|NetworkError/i.test(error.message) ? 'The AI critic needs the AquaFlow engine and an API key (File → Preferences → AI director)' : error.message.replace(/^HTTP \d+ — /, ''));
     } finally { setBusy(''); }
   };
   const applyFinding = (f) => {
@@ -165,7 +165,7 @@ export default function PlanStrip({ studio, items, analysis, pps, onChange, onNo
       <button onClick={best} disabled={!!busy} title="Try four shows, check every hard limit and keep the one that scores best with your taste">Best of 4</button>
       <button onClick={prefer} disabled={!!busy} title="Tell AquaFlow you prefer this variant over the other two: it learns what you value">👍 Prefer this</button>
       <button onClick={askDirector} disabled={!!busy} aria-pressed={plan.provenance?.planner === 'llm'}
-        title="Optional: Claude reads the song's structure and your fountain's areas (text only — no audio) and directs the arc; AquaFlow still picks the phrases and keeps every physical limit. Needs an Anthropic API key (Your fountain → AI director).">✦ AI director</button>
+        title="Optional: Claude reads the song's structure and your fountain's areas (text only — no audio) and directs the arc; AquaFlow still picks the phrases and keeps every physical limit. Needs an Anthropic API key (File → Preferences → AI director).">✦ AI director</button>
       <button onClick={askCritic} disabled={!!busy} aria-pressed={!!review}
         title="Optional: Claude reviews this show (its measured quality, plan and looks — text only, no audio) and suggests fixes you can apply. Uses your Anthropic key; takes about half a minute.">✦ AI critic</button>
       {review && <div className="plan-critic" role="dialog" aria-label="AI critic">

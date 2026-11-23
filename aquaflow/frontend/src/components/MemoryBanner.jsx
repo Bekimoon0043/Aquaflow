@@ -54,7 +54,7 @@ export default function MemoryBanner({ getStatus = defaultGetStatus }) {
   return (
     <div style={bar} role="alert" aria-label="Memory warning">
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-        <strong style={{ color: "var(--amber, #f0b429)", whiteSpace: "nowrap" }}>Memory</strong>
+        <strong style={{ color: "var(--amber, var(--warn))", whiteSpace: "nowrap" }}>Memory</strong>
         <div style={{ flex: 1 }}>
           <div>{memoryBannerText(status)}</div>
           {steps && (

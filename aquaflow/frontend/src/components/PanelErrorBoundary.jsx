@@ -18,9 +18,9 @@ export default class PanelErrorBoundary extends Component {
     const { error, attempt } = this.state;
     if (!error) return <div key={attempt} style={{ display: "contents" }}>{this.props.children}</div>;
     return (
-      <div role="alert" style={{ padding: 32, color: "var(--text-primary, #e6eef3)", maxWidth: 640 }}>
+      <div role="alert" style={{ padding: 32, color: "var(--text-primary, var(--text-primary))", maxWidth: 640 }}>
         <h2 style={{ marginTop: 0 }}>{this.props.name || "This workspace"} hit an error</h2>
-        <p style={{ color: "var(--text-muted, #8aa0ad)" }}>
+        <p style={{ color: "var(--text-muted, var(--text-secondary))" }}>
           The rest of AquaFlow is still running. Your show is kept in memory; reload the workspace to continue.
         </p>
         <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, opacity: 0.8 }}>{String(error?.message || error)}</pre>

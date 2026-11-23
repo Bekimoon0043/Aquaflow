@@ -27,8 +27,8 @@ export default function SiemensFixtureLink({ fixtureId }) {
   const rows = direct.length ? direct : viaValve;
   if (!rows.length) return <div style={box}>Siemens wiring: this item is not driven by the selected PLC site.</div>;
   return <div style={box}>
-    <div style={{ color: "#7ab", marginBottom: 2 }}>Siemens wiring{viaValve.length ? ` (via ${viaValve[0].device_name})` : ""}</div>
-    {rows.map(p => <div key={`${p.device_id}-${p.role}`} style={{ fontFamily: "monospace", color: p.address ? "#ffcc00" : "#ff8a8a" }}>
+    <div style={{ color: "var(--info)", marginBottom: 2 }}>Siemens wiring{viaValve.length ? ` (via ${viaValve[0].device_name})` : ""}</div>
+    {rows.map(p => <div key={`${p.device_id}-${p.role}`} style={{ fontFamily: "monospace", color: p.address ? "var(--accent)" : "var(--error)" }}>
       {p.plc_tag} · {p.address || "not wired"}{p.module ? ` · ${p.module}` : ""}
     </div>)}
   </div>;

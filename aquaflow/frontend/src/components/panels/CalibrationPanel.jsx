@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { API_BASE_URL } from "../../config";
 import useEngineeringStore from "../../store/engineeringStore";
 import { FIXTURE_LIBRARY } from "../../data/fixtureLibrary";
+import NozzleVideoCalibration from "./NozzleVideoCalibration";
 
 const API = API_BASE_URL;
 
@@ -97,26 +98,28 @@ export default function CalibrationPanel() {
   const selectedNozzle = nozzles.find(n => n.id === selected);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"var(--font-body)", fontSize:"12px" }}>
 
       {/* Header */}
-      <div style={{ padding:"8px 12px", borderBottom:"1px solid #0a2030", background:"#030608", display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-        <span style={{ color:"#00ccaa", fontWeight:"bold", fontSize:12 }}>⚙ CALIBRATION</span>
+      <div style={{ padding:"8px 12px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+        <span style={{ color:"var(--info)", fontWeight:"bold", fontSize:12 }}>⚙ CALIBRATION</span>
         <div style={{ flex:1 }}/>
-        {saved && <span style={{ color:"#00ff88", fontSize:10 }}>✓ Saved</span>}
-        <button onClick={saveCalibration} style={{ padding:"3px 10px", background:"#003520", color:"#00ff88", border:"1px solid #00aa4444", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10 }}>
+        {saved && <span style={{ color:"var(--ok)", fontSize:11 }}>✓ Saved</span>}
+        <button onClick={saveCalibration} style={{ padding:"3px 10px", background:"var(--bg-panel)", color:"var(--ok)", border:"1px solid color-mix(in srgb, var(--ok) 27%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11 }}>
           RECORD IN LOG
         </button>
       </div>
 
+      <NozzleVideoCalibration />
+
       {/* Tabs */}
-      <div style={{ display:"flex", borderBottom:"1px solid #0a2030", background:"#030608", flexShrink:0 }}>
+      <div style={{ display:"flex", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", flexShrink:0 }}>
         {[["nozzles","Nozzles"],["venue","Venue Profile"],["simulation","Sim Feedback"]].map(([key,label]) => (
           <button key={key} onClick={()=>setTab(key)} style={{
             flex:1, padding:"6px 0", background:"transparent", border:"none",
-            borderBottom: tab===key ? "2px solid #00ccaa" : "2px solid transparent",
-            color: tab===key ? "#00ccaa" : "#334455",
-            fontFamily:"monospace", fontSize:10, cursor:"pointer",
+            borderBottom: tab===key ? "2px solid var(--info)" : "2px solid transparent",
+            color: tab===key ? "var(--info)" : "var(--info)",
+            fontFamily:"monospace", fontSize:11, cursor:"pointer",
           }}>{label}</button>
         ))}
       </div>
@@ -128,17 +131,17 @@ export default function CalibrationPanel() {
           <div style={{ display:"flex", gap:10, height:"100%" }}>
             {/* Nozzle list */}
             <div style={{ width:180, flexShrink:0 }}>
-              <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>SELECT NOZZLE</div>
-              {usingSamples && <div style={{ color:"#c9a227", fontSize:9, marginBottom:6 }}>No design open — showing sample nozzles. Open your fountain in Engineering to calibrate its real nozzles.</div>}
+              <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>SELECT NOZZLE</div>
+              {usingSamples && <div style={{ color:"var(--accent)", fontSize:11, marginBottom:6 }}>No design open — showing sample nozzles. Open your fountain in Engineering to calibrate its real nozzles.</div>}
               {nozzles.map(n => (
                 <div key={n.id} onClick={()=>setSelected(n.id)} style={{
-                  padding:"6px 8px", marginBottom:3, background:"#050d18",
+                  padding:"6px 8px", marginBottom:3, background:"var(--bg-void)",
                   border:`1px solid ${selected===n.id ? "#00ccaa44":"#0a2030"}`,
                   borderRadius:4, cursor:"pointer",
-                  color: selected===n.id ? "#00ccaa" : "#7ab",
+                  color: selected===n.id ? "var(--info)" : "var(--info)",
                 }}>
                   <div style={{ fontSize:11 }}>{n.label}</div>
-                  <div style={{ fontSize:9, color:"#334455" }}>{n.type} · {n.pressure_kpa} kPa</div>
+                  <div style={{ fontSize:11, color:"var(--info)" }}>{n.type} · {n.pressure_kpa} kPa</div>
                 </div>
               ))}
             </div>
@@ -146,7 +149,7 @@ export default function CalibrationPanel() {
             {/* Nozzle editor */}
             {selectedNozzle ? (
               <div style={{ flex:1 }}>
-                <div style={{ color:"#00ccaa", fontWeight:"bold", marginBottom:10, fontSize:12 }}>
+                <div style={{ color:"var(--info)", fontWeight:"bold", marginBottom:10, fontSize:12 }}>
                   {selectedNozzle.label}
                 </div>
                 {[
@@ -157,8 +160,8 @@ export default function CalibrationPanel() {
                 ].map(field => (
                   <div key={field.key} style={{ marginBottom:10 }}>
                     <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                      <span style={{ color:"#7ab", fontSize:10 }}>{field.label}</span>
-                      <span style={{ color:"#00ccaa", fontSize:10, fontFamily:"monospace" }}>
+                      <span style={{ color:"var(--info)", fontSize:11 }}>{field.label}</span>
+                      <span style={{ color:"var(--info)", fontSize:11, fontFamily:"monospace" }}>
                         {Number(selectedNozzle[field.key]).toFixed(field.step < 1 ? 2 : 0)}
                       </span>
                     </div>
@@ -168,15 +171,15 @@ export default function CalibrationPanel() {
                       onChange={e=>updateNozzle(selectedNozzle.id, field.key, parseFloat(e.target.value))}
                       style={{ width:"100%" }}
                     />
-                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:8, color:"#334455" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"var(--info)" }}>
                       <span>{field.min}</span><span>{field.max}</span>
                     </div>
                   </div>
                 ))}
 
                 {/* Estimated performance */}
-                <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:5, padding:8, marginTop:6 }}>
-                  <div style={{ color:"#556677", fontSize:9, marginBottom:5 }}>ESTIMATED PERFORMANCE</div>
+                <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:5, padding:8, marginTop:6 }}>
+                  <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:5 }}>ESTIMATED PERFORMANCE</div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
                     {[
                       ["Jet height", `${(selectedNozzle.height_mult * selectedNozzle.pressure_kpa / 30).toFixed(1)} m`],
@@ -184,16 +187,16 @@ export default function CalibrationPanel() {
                       ["Throw dist", `${(selectedNozzle.pressure_kpa / 25 * 0.8).toFixed(1)} m`],
                       ["Wind drift", `${(venue.wind_speed_ms * 0.3).toFixed(1)} m`],
                     ].map(([k,v]) => (
-                      <div key={k} style={{ padding:"4px 6px", background:"#0a1520", borderRadius:3 }}>
-                        <div style={{ fontSize:8, color:"#334455" }}>{k}</div>
-                        <div style={{ fontSize:12, color:"#00ccaa", fontWeight:"bold" }}>{v}</div>
+                      <div key={k} style={{ padding:"4px 6px", background:"var(--bg-base)", borderRadius:3 }}>
+                        <div style={{ fontSize:11, color:"var(--info)" }}>{k}</div>
+                        <div style={{ fontSize:12, color:"var(--info)", fontWeight:"bold" }}>{v}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
             ) : (
-              <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#223344" }}>
+              <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--info)" }}>
                 Select a nozzle to calibrate
               </div>
             )}
@@ -203,7 +206,7 @@ export default function CalibrationPanel() {
         {/* ── VENUE PROFILE ── */}
         {tab === "venue" && (
           <div>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:8 }}>VENUE PROFILE</div>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:8 }}>VENUE PROFILE</div>
             {[
               { key:"name",              label:"Venue name",         type:"text" },
               { key:"elevation_m",       label:"Elevation (m)",      type:"number", min:0,    max:5000 },
@@ -213,21 +216,21 @@ export default function CalibrationPanel() {
               { key:"ambient_temp_c",    label:"Ambient temp (°C)",  type:"number", min:-20,  max:50 },
             ].map(field => (
               <div key={field.key} style={{ marginBottom:8 }}>
-                <div style={{ color:"#7ab", fontSize:9, marginBottom:3 }}>{field.label}</div>
+                <div style={{ color:"var(--info)", fontSize:11, marginBottom:3 }}>{field.label}</div>
                 <input
                   type={field.type}
                   value={venue[field.key]}
                   min={field.min} max={field.max}
                   onChange={e=>setVenue(v=>({ ...v, [field.key]: field.type==="number" ? parseFloat(e.target.value)||0 : e.target.value }))}
-                  style={{ width:"100%", padding:"4px 8px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }}
+                  style={{ width:"100%", padding:"4px 8px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }}
                 />
               </div>
             ))}
 
             {/* Wind compensation preview */}
-            <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:5, padding:8, marginTop:8 }}>
-              <div style={{ color:"#556677", fontSize:9, marginBottom:5 }}>WIND COMPENSATION</div>
-              <div style={{ color:"#7ab", fontSize:10 }}>
+            <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:5, padding:8, marginTop:8 }}>
+              <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:5 }}>WIND COMPENSATION</div>
+              <div style={{ color:"var(--info)", fontSize:11 }}>
                 {venue.wind_speed_ms < 2 ? "No compensation needed" :
                  venue.wind_speed_ms < 5 ? `Mild compensation: ${(venue.wind_speed_ms * 0.3).toFixed(1)}m drift expected` :
                  `Strong wind: ${(venue.wind_speed_ms * 0.3).toFixed(1)}m drift — reduce jet height`}
@@ -240,17 +243,17 @@ export default function CalibrationPanel() {
         {tab === "simulation" && (
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
-              <div style={{ color:"#556677", fontSize:9 }}>SIMULATED SENSOR FEEDBACK</div>
+              <div style={{ color:"var(--text-muted)", fontSize:11 }}>SIMULATED SENSOR FEEDBACK</div>
               <div style={{ flex:1 }}/>
               <button onClick={()=>setSimActive(!simActive)} style={{
-                padding:"4px 12px", background: simActive?"#003520":"#0a1825",
-                color: simActive?"#00ff88":"#556677",
+                padding:"4px 12px", background: simActive?"var(--bg-panel)":"var(--bg-base)",
+                color: simActive?"var(--ok)":"var(--text-muted)",
                 border:`1px solid ${simActive?"#00aa4444":"#0a2030"}`,
-                borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10,
+                borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
               }}>{simActive ? "⬤ SIM ACTIVE" : "○ START SIM"}</button>
             </div>
 
-            <div style={{ fontSize:10, color:"#556677", marginBottom:10, lineHeight:1.6 }}>
+            <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:10, lineHeight:1.6 }}>
               Simulation shows made-up sensor readings on this screen only. It never changes the safety system.
               Fault injection below forces a real safety input to FAULT (safe direction) to rehearse the recovery workflow on a bench. Never use it on a live fountain.
             </div>
@@ -263,13 +266,13 @@ export default function CalibrationPanel() {
                 ["Water temperature", `${simValues.temp?.toFixed(1)||"—"} °C`,        "#ffcc00"],
                 ["Water level",       `${simValues.water_level ? Math.round(simValues.water_level*100)+"%" : "—"}`, "#aa88ff"],
               ].map(([label, value, color]) => (
-                <div key={label} style={{ padding:"8px 10px", background:"#050d18", border:`1px solid ${simActive?"#0a3020":"#0a2030"}`, borderRadius:4 }}>
-                  <div style={{ fontSize:9, color:"#334455", marginBottom:2 }}>{label}</div>
-                  <div style={{ fontSize:14, color: simActive ? color : "#334455", fontWeight:"bold", fontFamily:"monospace" }}>
+                <div key={label} style={{ padding:"8px 10px", background:"var(--bg-void)", border:`1px solid ${simActive?"#0a3020":"#0a2030"}`, borderRadius:4 }}>
+                  <div style={{ fontSize:11, color:"var(--info)", marginBottom:2 }}>{label}</div>
+                  <div style={{ fontSize:14, color: simActive ? color : "var(--info)", fontWeight:"bold", fontFamily:"monospace" }}>
                     {simActive ? value : "—"}
                   </div>
                   {simActive && (
-                    <div style={{ height:2, background:"#0a1825", borderRadius:1, marginTop:4, overflow:"hidden" }}>
+                    <div style={{ height:2, background:"var(--bg-base)", borderRadius:1, marginTop:4, overflow:"hidden" }}>
                       <div style={{ width:"70%", height:"100%", background:color, borderRadius:1, animation:"pulse 1s ease-in-out infinite alternate" }}/>
                     </div>
                   )}
@@ -278,7 +281,7 @@ export default function CalibrationPanel() {
             </div>
 
             {/* Fault injection */}
-            <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>FAULT INJECTION (for testing)</div>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>FAULT INJECTION (for testing)</div>
             <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
               {[
                 { label:"Low water",    body:{ water_level_ok:false } },
@@ -292,8 +295,8 @@ export default function CalibrationPanel() {
                     body:JSON.stringify(fault.body)
                   }).then(() => setInjected(prev => new Set([...prev, ...Object.keys(fault.body)]))).catch(() => {});
                 }} style={{
-                  padding:"4px 8px", background:"#1a0808", color:"#ff8866",
-                  border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:9,
+                  padding:"4px 8px", background:"var(--bg-base)", color:"var(--error)",
+                  border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
                 }}>{fault.label}</button>
               ))}
               <button disabled={!injected.size} title={injected.size ? `Restore only: ${[...injected].join(", ")}` : "No test faults injected from this screen"} onClick={async ()=>{
@@ -307,8 +310,8 @@ Only these inputs are restored. Real sensors keep reporting their real state, an
                 await fetch(`${API}/safety/reset`, { method:"POST", headers:{"Content-Type":"application/json"}, body:"{}" }).catch(() => {});
                 setInjected(new Set());
               }} style={{
-                padding:"4px 8px", background:"#003520", color:"#00ff88",
-                border:"1px solid #00aa4444", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:9,
+                padding:"4px 8px", background:"var(--bg-panel)", color:"var(--ok)",
+                border:"1px solid color-mix(in srgb, var(--ok) 27%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
               }}>↩ UNDO TEST FAULTS{injected.size ? ` (${injected.size})` : ""}</button>
             </div>
           </div>

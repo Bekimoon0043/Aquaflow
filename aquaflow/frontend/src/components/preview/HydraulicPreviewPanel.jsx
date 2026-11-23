@@ -171,7 +171,7 @@ export default function HydraulicPreviewPanel(props) {
     <section aria-label="Engineering preview" style={box} data-testid="hydraulic-preview-panel">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <span style={head}>WATER RESPONSE</span>
-        <span style={{ ...small, fontSize: 8, color: "#55707e" }} title="Simulated — not field calibrated">SIM</span>
+        <span style={{ ...small, fontSize: 11, color: "var(--info)" }} title="Simulated — not field calibrated">SIM</span>
       </div>
       <div role="radiogroup" aria-label="Preview response mode" style={{ display: "flex", gap: 4 }}>
         <button role="radio" aria-checked={!engineering} style={btn(!engineering)} onClick={() => setMode(PREVIEW_MODES.CREATIVE)}
@@ -184,7 +184,7 @@ export default function HydraulicPreviewPanel(props) {
         </button>
       </div>
 
-      <div style={{ marginTop: 7, paddingTop: 6, borderTop: "1px solid #12303a" }} data-testid="live-particle-analysis">
+      <div style={{ marginTop: 7, paddingTop: 6, borderTop: "1px solid var(--border)" }} data-testid="live-particle-analysis">
         <div style={{ ...head, marginBottom: 4 }}>LIVE PARTICLES · {physics?.particles?.backend || "CPU"}</div>
         <label style={{ ...head, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
           <input type="checkbox" checked={heatmapOn} onChange={event => setHeatmapOn(event.target.checked)} aria-label="Show particle splash heatmap" />
@@ -209,11 +209,11 @@ export default function HydraulicPreviewPanel(props) {
 
       {engineering && (
         <div style={{ marginTop: 6 }}>
-          {!show && <div style={{ ...small, color: "#ffcc55" }}>Play a show to evaluate hydraulics.</div>}
+          {!show && <div style={{ ...small, color: "var(--warn)" }}>Play a show to evaluate hydraulics.</div>}
           {status?.state === "loading" && <div style={small}>Solving…</div>}
-          {status?.state === "error" && <div style={{ ...small, color: "#ff6b6b" }} title={status.message}>Hydraulics unavailable</div>}
+          {status?.state === "error" && <div style={{ ...small, color: "var(--error)" }} title={status.message}>Hydraulics unavailable</div>}
           {timeline && (
-            <div style={{ ...small, color: timeline.converged ? "#3ddc84" : "#ff6b6b" }} title={basis} data-testid="physics-basis">
+            <div style={{ ...small, color: timeline.converged ? "var(--ok)" : "var(--error)" }} title={basis} data-testid="physics-basis">
               {timeline.converged ? "● Solved" : "● Not converged"}
               {pumps ? ` · ${Object.keys(pumps).length} pump${Object.keys(pumps).length === 1 ? "" : "s"}` : ""}
             </div>
@@ -226,7 +226,7 @@ export default function HydraulicPreviewPanel(props) {
           <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 0" }} data-testid="hydraulic-diagnostics">
             {diagnostics.slice(0, 3).map((d, i) => (
               <li key={`${d.code}-${d.fixtureId}-${i}`} title={d.message}
-                style={{ ...small, color: sevColor[d.severity] || "#ccc", margin: "2px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                style={{ ...small, color: sevColor[d.severity] || "var(--text-secondary)", margin: "2px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 ▲ {d.code} · {fmtTime(d.timeMs)}{d.endMs != null ? `–${fmtTime(d.endMs)}` : ""}
               </li>
             ))}
@@ -242,17 +242,17 @@ export default function HydraulicPreviewPanel(props) {
       </label>
       {splashOn && (
         <div style={{ marginTop: 3 }}>
-          <div style={{ ...small, color: offending.length ? "#ff6b6b" : "#3ddc84" }}>
+          <div style={{ ...small, color: offending.length ? "var(--error)" : "var(--ok)" }}>
             {offending.length ? `${offending.length} jet(s) land outside the basin` : "All jets land in the water"}
           </div>
           {offending.slice(0, 3).map(r => (
-            <div key={r.id} style={{ ...small, color: "#ff9b9b" }} title={`${r.clipId ? `Clip ${r.clipId} · ` : ""}${r.heightM.toFixed(2)} m ${r.basis}`}>
+            <div key={r.id} style={{ ...small, color: "var(--error)" }} title={`${r.clipId ? `Clip ${r.clipId} · ` : ""}${r.heightM.toFixed(2)} m ${r.basis}`}>
               {r.id}: {r.distanceOutsideM.toFixed(2)} m out
             </div>
           ))}
           <details style={{ marginTop: 4 }}>
             <summary style={{ ...small, cursor: "pointer" }}>Assumptions</summary>
-            <div style={{ ...small, color: "#ffcc55", margin: "3px 0" }} data-testid="splash-advisory">{ADVISORY_LABEL}</div>
+            <div style={{ ...small, color: "var(--warn)", margin: "3px 0" }} data-testid="splash-advisory">{ADVISORY_LABEL}</div>
             <div style={{ display: "flex", gap: 6, ...small }}>
               <label>Gust ×<input type="number" min="1" max="3" step="0.1" value={gustFactor} aria-label="Gust factor"
                 onChange={e => setGustFactor(Math.max(1, Number(e.target.value) || 1))} style={{ width: 42, marginLeft: 3 }} /></label>

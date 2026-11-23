@@ -137,15 +137,15 @@ export default function StudioShowView({ cameraTrack, followCamera = true, song 
   };
 
   return (
-    <div style={{ position: "absolute", inset: 0, zIndex: 5, background: "#050b16" }}>
+    <div style={{ position: "absolute", inset: 0, zIndex: 5, background: "var(--bg-void)" }}>
       <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />
       <div style={{ position: "absolute", left: 12, bottom: 12, display: "flex", gap: 6, alignItems: "center", zIndex: 6 }}>
-        <span style={{ fontSize: 11, color: "#9fd8ff", background: "rgba(11,18,32,0.85)", padding: "4px 8px", borderRadius: 5 }}>Studio look</span>
+        <span style={{ fontSize: 11, color: "var(--info)", background: "rgba(11,18,32,0.85)", padding: "4px 8px", borderRadius: 5 }}>Studio look</span>
         {!job && <button style={btn} onClick={renderVideo} title="Frame-exact video of the show in the Studio look, with the song (resolution, fps and range from Video export)">Render studio video</button>}
-        {job && <><span style={{ fontSize: 11, color: "#cde" }}>Rendering {job.frame} / {job.frames}</span>
+        {job && <><span style={{ fontSize: 11, color: "var(--text-primary)" }}>Rendering {job.frame} / {job.frames}</span>
           <button style={btn} onClick={() => { job.abort.aborted = true; }}>Cancel</button></>}
         {onClose && !job && <button style={btn} onClick={onClose} title="Back to the classic renderer">Classic view</button>}
-        {msg && <span data-testid="studio-msg" style={{ fontSize: 11, color: "#cde", background: "rgba(11,18,32,0.85)", padding: "4px 8px", borderRadius: 5 }}>{msg}</span>}
+        {msg && <span data-testid="studio-msg" style={{ fontSize: 11, color: "var(--text-primary)", background: "rgba(11,18,32,0.85)", padding: "4px 8px", borderRadius: 5 }}>{msg}</span>}
       </div>
     </div>
   );

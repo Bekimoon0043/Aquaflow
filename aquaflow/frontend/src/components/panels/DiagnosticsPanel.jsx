@@ -64,11 +64,11 @@ export default function DiagnosticsPanel() {
   };
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"monospace", fontSize:"11px" }}>
 
       {/* Header */}
-      <div style={{ padding:"8px 12px", borderBottom:"1px solid #0a2030", background:"#030608", display:"flex", alignItems:"center", gap:10, flexShrink:0, flexWrap:"wrap" }}>
-        <span style={{ color:"#00aaff", fontSize:13, fontWeight:"bold" }}>DIAGNOSTICS</span>
+      <div style={{ padding:"8px 12px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", display:"flex", alignItems:"center", gap:10, flexShrink:0, flexWrap:"wrap" }}>
+        <span style={{ color:"var(--info)", fontSize:13, fontWeight:"bold" }}>DIAGNOSTICS</span>
         <div style={{ flex:1 }}/>
         <button onClick={load} style={smallBtn("#00aaff")}>↺ REFRESH</button>
         <button onClick={exportCSV} style={smallBtn("#00ccaa")}>↓ CSV</button>
@@ -77,15 +77,15 @@ export default function DiagnosticsPanel() {
 
       {/* Summary cards */}
       {summary && (
-        <div style={{ display:"flex", gap:6, padding:"8px 10px", borderBottom:"1px solid #0a2030", flexShrink:0, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:6, padding:"8px 10px", borderBottom:"1px solid var(--border)", flexShrink:0, flexWrap:"wrap" }}>
           {[
             ["Total events",    summary.total_events,        "#7ab"],
             ["Last hour",       summary.last_hour,           "#00aaff"],
             ["Errors (1hr)",    summary.errors_last_hour,    summary.errors_last_hour > 0 ? "#ff4444" : "#00ff88"],
             ["Warnings (1hr)",  summary.warnings_last_hour,  summary.warnings_last_hour > 0 ? "#ffcc00" : "#00ff88"],
           ].map(([label, val, color]) => (
-            <div key={label} style={{ flex:"1 1 80px", padding:"5px 8px", background:"#050d18", border:"1px solid #0a2030", borderRadius:4 }}>
-              <div style={{ color:"#334455", fontSize:8 }}>{label}</div>
+            <div key={label} style={{ flex:"1 1 80px", padding:"5px 8px", background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:4 }}>
+              <div style={{ color:"var(--info)", fontSize:11 }}>{label}</div>
               <div style={{ color, fontSize:16, fontWeight:"bold" }}>{val}</div>
             </div>
           ))}
@@ -93,15 +93,15 @@ export default function DiagnosticsPanel() {
       )}
 
       {/* Filters */}
-      <div style={{ display:"flex", gap:6, padding:"6px 10px", borderBottom:"1px solid #0a2030", flexShrink:0, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", gap:6, padding:"6px 10px", borderBottom:"1px solid var(--border)", flexShrink:0, flexWrap:"wrap" }}>
         <input
           placeholder="Search messages..."
           value={filter.search}
           onChange={e => setFilter(f => ({...f, search:e.target.value}))}
-          style={{ flex:"2 1 120px", padding:"3px 8px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }}
+          style={{ flex:"2 1 120px", padding:"3px 8px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }}
         />
         <select value={filter.level} onChange={e => setFilter(f => ({...f, level:e.target.value}))}
-          style={{ flex:"1 1 80px", padding:"3px 6px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }}>
+          style={{ flex:"1 1 80px", padding:"3px 6px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }}>
           <option value="">All levels</option>
           <option value="info">Info</option>
           <option value="warning">Warning</option>
@@ -109,7 +109,7 @@ export default function DiagnosticsPanel() {
           <option value="critical">Critical</option>
         </select>
         <select value={filter.category} onChange={e => setFilter(f => ({...f, category:e.target.value}))}
-          style={{ flex:"1 1 100px", padding:"3px 6px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }}>
+          style={{ flex:"1 1 100px", padding:"3px 6px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }}>
           <option value="">All categories</option>
           <option value="safety">Safety</option>
           <option value="transport">Transport</option>
@@ -118,40 +118,40 @@ export default function DiagnosticsPanel() {
           <option value="compiler">Compiler</option>
           <option value="system">System</option>
         </select>
-        <span style={{ color:"#334455", fontSize:9, alignSelf:"center" }}>{filtered.length} events</span>
+        <span style={{ color:"var(--info)", fontSize:11, alignSelf:"center" }}>{filtered.length} events</span>
       </div>
 
       {/* Event list */}
       <div style={{ flex:1, overflowY:"auto", padding:"6px 10px" }}>
         {loading && filtered.length === 0 && (
-          <div style={{ color:"#334455", fontSize:10, textAlign:"center", padding:"20px 0" }}>Loading...</div>
+          <div style={{ color:"var(--info)", fontSize:11, textAlign:"center", padding:"20px 0" }}>Loading...</div>
         )}
         {!loading && filtered.length === 0 && (
-          <div style={{ color:"#334455", fontSize:10, textAlign:"center", padding:"20px 0" }}>No events match the current filters</div>
+          <div style={{ color:"var(--info)", fontSize:11, textAlign:"center", padding:"20px 0" }}>No events match the current filters</div>
         )}
         {filtered.map((ev, i) => (
           <div key={ev.id || i} style={{
             display:"flex", gap:8, padding:"5px 8px", marginBottom:2,
-            background:"#050d18", borderRadius:3,
+            background:"var(--bg-void)", borderRadius:3,
             borderLeft:`2px solid ${LEVEL_COLORS[ev.level]||"#334455"}`,
           }}>
-            <span style={{ color:"#334455", fontSize:9, whiteSpace:"nowrap", flexShrink:0 }}>
+            <span style={{ color:"var(--info)", fontSize:11, whiteSpace:"nowrap", flexShrink:0 }}>
               {new Date((ev.timestamp||0)*1000).toLocaleTimeString()}
             </span>
             <span style={{
-              fontSize:9, padding:"0 5px", borderRadius:2,
+              fontSize:11, padding:"0 5px", borderRadius:2,
               background:`${LEVEL_COLORS[ev.level]||"#334455"}22`,
-              color: LEVEL_COLORS[ev.level]||"#334455",
+              color: LEVEL_COLORS[ev.level]||"var(--info)",
               flexShrink:0, alignSelf:"center",
             }}>{ev.level}</span>
             <span style={{
-              fontSize:9, padding:"0 5px", borderRadius:2,
+              fontSize:11, padding:"0 5px", borderRadius:2,
               background:`${CATEGORY_COLORS[ev.category]||"#334455"}22`,
-              color: CATEGORY_COLORS[ev.category]||"#334455",
+              color: CATEGORY_COLORS[ev.category]||"var(--info)",
               flexShrink:0, alignSelf:"center",
             }}>{ev.category}</span>
-            <span style={{ color:"#556677", fontSize:9, flexShrink:0 }}>{ev.source}</span>
-            <span style={{ color:"#cce8ff", fontSize:10, flex:1 }}>{ev.message}</span>
+            <span style={{ color:"var(--text-muted)", fontSize:11, flexShrink:0 }}>{ev.source}</span>
+            <span style={{ color:"var(--text-primary)", fontSize:11, flex:1 }}>{ev.message}</span>
           </div>
         ))}
       </div>

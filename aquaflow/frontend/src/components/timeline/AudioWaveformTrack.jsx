@@ -171,22 +171,22 @@ export default function AudioWaveformTrack({
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 5, justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ fontSize: 9, color: "#10b981" }}>♪</span>
-            <span style={{ fontSize: 9, fontFamily: "monospace", color: "#10b981", fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>
+            <span style={{ fontSize: 11, color: "var(--ok)" }}>♪</span>
+            <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--ok)", fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>
               {filename || "Audio"}
             </span>
           </div>
           {onRemove && (
             <button onClick={onRemove} title="Remove audio" style={{
-              background: "none", border: "none", color: "#556677", cursor: "pointer",
-              fontSize: 9, padding: "0 2px", lineHeight: 1, flexShrink: 0,
+              background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer",
+              fontSize: 11, padding: "0 2px", lineHeight: 1, flexShrink: 0,
             }}>✕</button>
           )}
         </div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          {bpm && <span style={{ fontSize: 8, color: "#334455", fontFamily: "monospace" }}>{Math.round(bpm)} BPM</span>}
-          {duration > 0 && <span style={{ fontSize: 8, color: "#334455", fontFamily: "monospace" }}>{mins}:{secs}</span>}
-          {key && <span style={{ fontSize: 8, color: "#334455", fontFamily: "monospace" }}>{key}</span>}
+          {bpm && <span style={{ fontSize: 11, color: "var(--info)", fontFamily: "monospace" }}>{Math.round(bpm)} BPM</span>}
+          {duration > 0 && <span style={{ fontSize: 11, color: "var(--info)", fontFamily: "monospace" }}>{mins}:{secs}</span>}
+          {key && <span style={{ fontSize: 11, color: "var(--info)", fontFamily: "monospace" }}>{key}</span>}
         </div>
       </div>
 

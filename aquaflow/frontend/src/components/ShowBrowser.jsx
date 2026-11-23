@@ -300,7 +300,7 @@ export default function ShowBrowser({ mode, onClose }) {
           <div style={{ flex: 1 }} />
           <span
             style={{
-              fontSize: 10,
+              fontSize: 11,
               color: backendAvailable ? "var(--green)" : "var(--text-muted)",
               fontFamily: "var(--font-mono)",
               textTransform: "uppercase",
@@ -387,7 +387,7 @@ export default function ShowBrowser({ mode, onClose }) {
                         <span style={{ fontSize: 16 }}>⟳</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 12, color: "var(--text-primary)" }}>{snap.name || "Untitled Show"}</div>
-                          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {new Date(snap.savedAt).toLocaleString()}{snap.originalPath ? ` · ${snap.originalPath}` : ""}
                           </div>
                         </div>
@@ -419,7 +419,7 @@ export default function ShowBrowser({ mode, onClose }) {
                       <div style={{ fontSize: 12, color: "var(--text-primary)" }}>
                         {legacyAutoSave.state?.currentShow?.name || "Auto-saved Show"}
                       </div>
-                      <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                         Saved: {legacyAutoSave.savedAt ? new Date(legacyAutoSave.savedAt).toLocaleString() : "Unknown"}
                       </div>
                     </div>
@@ -448,7 +448,7 @@ export default function ShowBrowser({ mode, onClose }) {
                   <SectionLabel>Backend Storage</SectionLabel>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Saved shows on the AquaFlow backend</span>
-                    <button className="btn" onClick={refreshBackendShows} style={{ fontSize: 10, padding: "4px 8px" }}>
+                    <button className="btn" onClick={refreshBackendShows} style={{ fontSize: 11, padding: "4px 8px" }}>
                       ⟳ Refresh
                     </button>
                   </div>
@@ -511,13 +511,13 @@ export default function ShowBrowser({ mode, onClose }) {
                         <span style={{ fontSize: 14, opacity: 0.6 }}>🌊</span>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 12, color: "var(--text-primary)" }}>{show.name}</div>
-                          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                             {show.openedAt ? new Date(show.openedAt).toLocaleString() : ""}
                             {show.bpm ? ` · ${show.bpm} BPM` : ""}
                             {show.show_id ? ` · id:${show.show_id}` : ""}
                           </div>
                         </div>
-                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>.aqua</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>.aqua</span>
                       </div>
                     ))}
                   </div>
@@ -580,7 +580,7 @@ export default function ShowBrowser({ mode, onClose }) {
               >
                 <div
                   style={{
-                    fontSize: 10,
+                    fontSize: 11,
                     color: "var(--text-muted)",
                     fontFamily: "var(--font-mono)",
                     marginBottom: 6,
@@ -603,7 +603,7 @@ export default function ShowBrowser({ mode, onClose }) {
                     <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-accent)" }}>{count}</span>
                   </div>
                 ))}
-                <div style={{ marginTop: 6, fontSize: 10, color: backendAvailable ? "var(--green)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                <div style={{ marginTop: 6, fontSize: 11, color: backendAvailable ? "var(--green)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                   → {backendAvailable ? "Saving to backend storage" : `Downloading ${(showName || "show").replace(/\s+/g, "_")}.aqua`}
                 </div>
               </div>
@@ -682,7 +682,7 @@ export default function ShowBrowser({ mode, onClose }) {
                   >
                     <span style={{ fontSize: 18 }}>{t.icon}</span>
                     <span style={{ fontSize: 11, fontWeight: 500 }}>{t.name}</span>
-                    <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{t.desc}</span>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{t.desc}</span>
                   </button>
                 ))}
               </div>
@@ -757,16 +757,16 @@ function BackendShowRow({ show, onOpen, onDelete }) {
         <div style={{ fontSize: 12, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {show.name || show.id}
         </div>
-        <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {show.savedAt ? new Date(show.savedAt).toLocaleString() : "Unknown save time"}
           {show.bpm ? ` · ${show.bpm} BPM` : ""}
           {show.duration ? ` · ${show.duration}s` : ""}
         </div>
       </div>
-      <button className="btn" onClick={onOpen} style={{ fontSize: 10, padding: "4px 8px" }}>
+      <button className="btn" onClick={onOpen} style={{ fontSize: 11, padding: "4px 8px" }}>
         Open
       </button>
-      <button className="btn danger" onClick={onDelete} style={{ fontSize: 10, padding: "4px 8px" }}>
+      <button className="btn danger" onClick={onDelete} style={{ fontSize: 11, padding: "4px 8px" }}>
         Delete
       </button>
     </div>
@@ -777,7 +777,7 @@ function SectionLabel({ children }) {
   return (
     <div
       style={{
-        fontSize: 9,
+        fontSize: 11,
         fontWeight: 600,
         fontFamily: "var(--font-mono)",
         color: "var(--text-muted)",

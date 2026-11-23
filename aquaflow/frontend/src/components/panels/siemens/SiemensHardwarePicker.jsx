@@ -138,7 +138,7 @@ export default function SiemensHardwarePicker({ site, onSaved }) {
     </div>
     {preview && <div className={`s7-card ${preview.assignment.complete ? "s7-card--ok" : "s7-card--warn"}`}>
       <b>{preview.assignment.complete ? "Everything fits." : "Not everything fits on this hardware."}</b>
-      {preview.assignment.program_changed && <p style={{ color: "#f6d795" }}>{preview.site?.revision === site.revision && !message.startsWith("Saved") ? "If you save this, the PLC program changes: export the TIA package again and download it to the PLC." : "The PLC program changed: export the TIA package again and download it to the PLC."}</p>}
+      {preview.assignment.program_changed && <p style={{ color: "var(--brand-gold-pale)" }}>{preview.site?.revision === site.revision && !message.startsWith("Saved") ? "If you save this, the PLC program changes: export the TIA package again and download it to the PLC." : "The PLC program changed: export the TIA package again and download it to the PLC."}</p>}
       {Object.entries(preview.assignment.missing || {}).map(([kind, count]) => <div key={kind}>Missing {count} {kind === "AQ" ? "analog output(s)" : kind === "DQ" ? "digital output(s)" : "digital input(s)"}.</div>)}
       {preview.assignment.skipped_optional?.length > 0 && <div>Optional, not wired (no free input): {preview.assignment.skipped_optional.join(", ")}.</div>}
       {preview.assignment.suggestions?.filter(s => s.add).length > 1 && <div className="s7-row" style={{ marginTop: 6 }}><button className="btn primary" disabled={busy} onClick={() => applySuggestions(preview.assignment.suggestions.filter(s => s.add))}>Add all suggested parts</button></div>}

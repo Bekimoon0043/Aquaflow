@@ -107,54 +107,54 @@ export default function PresetBrowser() {
   const cat = PRESET_CATEGORIES.find(c => c.key === category);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"monospace", fontSize:"11px" }}>
 
       {/* Header */}
-      <div style={{ padding:"8px 12px", borderBottom:"1px solid #0a2030", background:"#030608", flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
-        <span style={{ color:"#aa88ff", fontWeight:"bold", fontSize:12 }}>★ PRESET BROWSER</span>
+      <div style={{ padding:"8px 12px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", flexShrink:0, display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ color:"var(--info)", fontWeight:"bold", fontSize:12 }}>★ PRESET BROWSER</span>
         <div style={{ flex:1 }}/>
         {notification && (
-          <span style={{ fontSize:10, color: notification.type==="ok" ? "#00ff88" : "#ffcc00", padding:"2px 8px", background:"#0a1520", borderRadius:3 }}>
+          <span style={{ fontSize:11, color: notification.type==="ok" ? "var(--ok)" : "var(--accent)", padding:"2px 8px", background:"var(--bg-base)", borderRadius:3 }}>
             {notification.msg}
           </span>
         )}
         <button onClick={()=>setSaving(!saving)} style={{
-          padding:"3px 8px", background:"#0a1520", color:"#aa88ff",
-          border:"1px solid #aa88ff44", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10,
+          padding:"3px 8px", background:"var(--bg-base)", color:"var(--info)",
+          border:"1px solid color-mix(in srgb, var(--info) 27%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
         }}>+ SAVE CURRENT</button>
       </div>
 
       {/* Save form */}
       {saving && (
-        <div style={{ padding:"8px 12px", borderBottom:"1px solid #0a2030", background:"#050d18", display:"flex", gap:6, flexShrink:0 }}>
+        <div style={{ padding:"8px 12px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", display:"flex", gap:6, flexShrink:0 }}>
           <input value={saveName} onChange={e=>setSaveName(e.target.value)}
             placeholder={`Name this ${category} preset...`}
-            style={{ flex:1, padding:"4px 8px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }}
+            style={{ flex:1, padding:"4px 8px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }}
             onKeyDown={e=>{ if(e.key==="Enter") saveCurrentAsPreset(); }}
           />
-          <button onClick={saveCurrentAsPreset} style={{ padding:"4px 10px", background:"#003520", color:"#00ff88", border:"1px solid #00aa4444", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10 }}>SAVE</button>
-          <button onClick={()=>setSaving(false)} style={{ padding:"4px 8px", background:"#1a0808", color:"#ff4444", border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10 }}>✕</button>
+          <button onClick={saveCurrentAsPreset} style={{ padding:"4px 10px", background:"var(--bg-panel)", color:"var(--ok)", border:"1px solid color-mix(in srgb, var(--ok) 27%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11 }}>SAVE</button>
+          <button onClick={()=>setSaving(false)} style={{ padding:"4px 8px", background:"var(--bg-base)", color:"var(--error)", border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11 }}>✕</button>
         </div>
       )}
 
       {/* Category tabs */}
-      <div style={{ display:"flex", borderBottom:"1px solid #0a2030", background:"#030608", flexShrink:0 }}>
+      <div style={{ display:"flex", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", flexShrink:0 }}>
         {PRESET_CATEGORIES.map(c => (
           <button key={c.key} onClick={()=>setCategory(c.key)} style={{
             flex:1, padding:"6px 0", background:"transparent", border:"none",
             borderBottom: category===c.key ? `2px solid ${c.color}` : "2px solid transparent",
-            color: category===c.key ? c.color : "#334455",
-            fontFamily:"monospace", fontSize:9, cursor:"pointer",
+            color: category===c.key ? c.color : "var(--info)",
+            fontFamily:"monospace", fontSize:11, cursor:"pointer",
             textTransform:"uppercase", letterSpacing:"0.05em",
           }}>{c.icon} {c.label.split(" ")[0]}</button>
         ))}
       </div>
 
       {/* Search */}
-      <div style={{ padding:"6px 10px", borderBottom:"1px solid #0a2030", flexShrink:0 }}>
+      <div style={{ padding:"6px 10px", borderBottom:"1px solid var(--border)", flexShrink:0 }}>
         <input value={search} onChange={e=>setSearch(e.target.value)}
           placeholder={`Search ${category} presets...`}
-          style={{ width:"100%", padding:"4px 8px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }}
+          style={{ width:"100%", padding:"4px 8px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }}
         />
       </div>
 
@@ -163,7 +163,7 @@ export default function PresetBrowser() {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
           {filtered.map(preset => (
             <div key={preset.id} onClick={()=>applyPreset(preset)} style={{
-              padding:"8px 10px", background:"#050d18",
+              padding:"8px 10px", background:"var(--bg-void)",
               border:`1px solid ${selectedPreset===preset.id ? `${cat.color}88` : "#0a2030"}`,
               borderRadius:5, cursor:"pointer",
               transition:"border-color 0.1s",
@@ -172,27 +172,27 @@ export default function PresetBrowser() {
               onMouseLeave={e=>e.currentTarget.style.borderColor=selectedPreset===preset.id ? `${cat.color}88` : "#0a2030"}
             >
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
-                <span style={{ color: selectedPreset===preset.id ? cat.color : "#cce8ff", fontSize:11, fontWeight:"bold" }}>
-                  {preset.user && <span style={{ color:"#aa88ff", marginRight:4 }}>★</span>}
+                <span style={{ color: selectedPreset===preset.id ? cat.color : "var(--text-primary)", fontSize:11, fontWeight:"bold" }}>
+                  {preset.user && <span style={{ color:"var(--info)", marginRight:4 }}>★</span>}
                   {preset.name}
                 </span>
                 {preset.user && (
                   <button onClick={e=>{ e.stopPropagation(); deleteUserPreset(preset.id); }} style={{
-                    background:"none", border:"none", color:"#334455", cursor:"pointer", fontSize:10, padding:0,
+                    background:"none", border:"none", color:"var(--info)", cursor:"pointer", fontSize:11, padding:0,
                   }}>✕</button>
                 )}
               </div>
               <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
                 {(preset.tags||[]).map(tag => (
-                  <span key={tag} style={{ fontSize:8, padding:"1px 5px", background:`${cat.color}11`, color:cat.color, borderRadius:2, border:`0.5px solid ${cat.color}33` }}>{tag}</span>
+                  <span key={tag} style={{ fontSize:11, padding:"1px 5px", background:`${cat.color}11`, color:cat.color, borderRadius:2, border:`0.5px solid ${cat.color}33` }}>{tag}</span>
                 ))}
               </div>
               {preset.values && (
                 <div style={{ display:"flex", gap:3, marginTop:5 }}>
                   {Object.entries(preset.values).slice(0,4).map(([k,v]) => (
                     <div key={k} style={{ flex:1 }}>
-                      <div style={{ fontSize:8, color:"#334455", marginBottom:1 }}>{k.slice(0,3)}</div>
-                      <div style={{ height:2, background:"#0a1825", borderRadius:1, overflow:"hidden" }}>
+                      <div style={{ fontSize:11, color:"var(--info)", marginBottom:1 }}>{k.slice(0,3)}</div>
+                      <div style={{ height:2, background:"var(--bg-base)", borderRadius:1, overflow:"hidden" }}>
                         <div style={{ width:`${Math.round(v*100)}%`, height:"100%", background:cat.color, opacity:0.7 }}/>
                       </div>
                     </div>
@@ -200,7 +200,7 @@ export default function PresetBrowser() {
                 </div>
               )}
               {preset.duration && (
-                <div style={{ fontSize:9, color:"#334455", marginTop:4 }}>
+                <div style={{ fontSize:11, color:"var(--info)", marginTop:4 }}>
                   {Math.floor(preset.duration/60000)}:{String(Math.floor((preset.duration%60000)/1000)).padStart(2,"0")} duration
                 </div>
               )}
@@ -208,14 +208,14 @@ export default function PresetBrowser() {
           ))}
         </div>
         {filtered.length === 0 && (
-          <div style={{ color:"#223344", fontSize:10, textAlign:"center", padding:"20px 0" }}>
+          <div style={{ color:"var(--info)", fontSize:11, textAlign:"center", padding:"20px 0" }}>
             No presets match "{search}"
           </div>
         )}
       </div>
 
       {/* Footer count */}
-      <div style={{ padding:"4px 10px", borderTop:"1px solid #0a2030", fontSize:9, color:"#334455", flexShrink:0 }}>
+      <div style={{ padding:"4px 10px", borderTop:"1px solid var(--border)", fontSize:11, color:"var(--info)", flexShrink:0 }}>
         {filtered.length} presets · {(userPresets[category]||[]).length} user saved
       </div>
     </div>

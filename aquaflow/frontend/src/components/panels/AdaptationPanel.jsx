@@ -33,11 +33,11 @@ export default function AdaptationPanel() {
 
   const bar = (label, value, max = 1.5) => (
     <div style={{ ...box, padding: 8, flex: 1, minWidth: 100 }}>
-      <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 800, color: "var(--accent)" }}>×{value}</div>
       <div style={{ height: 4, background: "var(--bg-panel)", borderRadius: 2, marginTop: 3 }}>
         <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: "100%",
-          background: value < 1 ? "#f59e0b" : "#22c55e", borderRadius: 2 }} />
+          background: value < 1 ? "var(--warn)" : "var(--ok)", borderRadius: 2 }} />
       </div>
     </div>
   );
@@ -53,30 +53,30 @@ export default function AdaptationPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Autonomous Adaptation
         </span>
-        {plan && <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 600, padding: "2px 8px",
+        {plan && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, padding: "2px 8px",
           borderRadius: 10, background: plan.safe ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-          color: plan.safe ? "#22c55e" : "#ef4444" }}>{plan.safe ? "Safe" : "Unsafe weather"}</span>}
+          color: plan.safe ? "var(--ok)" : "var(--error)" }}>{plan.safe ? "Safe" : "Unsafe weather"}</span>}
       </div>
 
       {/* live context controls */}
       <div style={{ display: "flex", gap: 10, padding: "10px 12px", flexWrap: "wrap",
         borderBottom: "1px solid var(--border)" }}>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", flex: 1, minWidth: 130, display: "flex", flexDirection: "column" }}>
+        <label style={{ fontSize: 11, color: "var(--text-muted)", flex: 1, minWidth: 130, display: "flex", flexDirection: "column" }}>
           Wind: <b style={{ color: "var(--text-primary)" }}>{wind} m/s</b>
           <input type="range" min="0" max="25" step="1" value={wind} onChange={(e) => setWind(Number(e.target.value))} />
         </label>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", flex: 1, minWidth: 130, display: "flex", flexDirection: "column" }}>
+        <label style={{ fontSize: 11, color: "var(--text-muted)", flex: 1, minWidth: 130, display: "flex", flexDirection: "column" }}>
           Crowd: <b style={{ color: "var(--text-primary)" }}>{Math.round(crowd * 100)}%</b>
           <input type="range" min="0" max="1" step="0.05" value={crowd} onChange={(e) => setCrowd(Number(e.target.value))} />
         </label>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 2 }}>
+        <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 2 }}>
           Condition
           <select value={condition} onChange={(e) => setCondition(e.target.value)}
             style={{ ...box, padding: 5, fontSize: 11, color: "var(--text-primary)" }}>
             {CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
-        <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 2 }}>
+        <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 2 }}>
           Event
           <select value={event} onChange={(e) => setEvent(e.target.value)}
             style={{ ...box, padding: 5, fontSize: 11, color: "var(--text-primary)" }}>
@@ -86,7 +86,7 @@ export default function AdaptationPanel() {
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
-        {error && <div style={{ ...box, padding: 8, color: "#ef4444", fontSize: 11 }}>⛔ {error}</div>}
+        {error && <div style={{ ...box, padding: 8, color: "var(--error)", fontSize: 11 }}>⛔ {error}</div>}
         {m && (
           <>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
@@ -96,23 +96,23 @@ export default function AdaptationPanel() {
             </div>
             {(m.disabled_effects.length > 0 || m.enabled_effects.length > 0) && (
               <div style={{ fontSize: 11, marginBottom: 10 }}>
-                {m.disabled_effects.length > 0 && <span style={{ color: "#ef4444" }}>
+                {m.disabled_effects.length > 0 && <span style={{ color: "var(--error)" }}>
                   ⊘ disabled: {m.disabled_effects.join(", ")} </span>}
-                {m.enabled_effects.length > 0 && <span style={{ color: "#22c55e" }}>
+                {m.enabled_effects.length > 0 && <span style={{ color: "var(--ok)" }}>
                   ✓ enabled: {m.enabled_effects.join(", ")}</span>}
               </div>
             )}
-            <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>ADAPTATION TRIGGERS</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>ADAPTATION TRIGGERS</div>
             {plan.triggers.length === 0 ? (
               <div style={{ fontSize: 11, color: "var(--text-muted)" }}>No adaptations — running as designed.</div>
             ) : plan.triggers.map((t, i) => (
               <div key={i} style={{ ...box, padding: "6px 8px", marginBottom: 4,
                 borderLeft: `3px solid ${SRC_COLOR[t.source] || "#888"}` }}>
-                <span style={{ color: SRC_COLOR[t.source], fontSize: 10, textTransform: "uppercase" }}>{t.source}</span>
+                <span style={{ color: SRC_COLOR[t.source], fontSize: 11, textTransform: "uppercase" }}>{t.source}</span>
                 <span style={{ fontSize: 11, color: "var(--text-primary)" }}> — {t.reason}</span>
               </div>
             ))}
-            <div style={{ ...box, padding: 8, marginTop: 10, fontSize: 10, color: "var(--text-muted)" }}>{plan.summary}</div>
+            <div style={{ ...box, padding: 8, marginTop: 10, fontSize: 11, color: "var(--text-muted)" }}>{plan.summary}</div>
           </>
         )}
       </div>

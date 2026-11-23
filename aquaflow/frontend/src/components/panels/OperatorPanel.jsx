@@ -120,13 +120,13 @@ export default function OperatorPanel() {
   const hasConflicts = (status?.hardware_conflicts || []).length > 0;
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px", overflow:"auto" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"monospace", fontSize:"11px", overflow:"auto" }}>
 
       {/* Header */}
-      <div style={{ padding:"8px 12px", borderBottom:"1px solid #0a2030", background:"#030608", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-        <span style={{ color:"#00aaff", fontSize:13, fontWeight:"bold" }}>OPERATOR PANEL</span>
+      <div style={{ padding:"8px 12px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+        <span style={{ color:"var(--info)", fontSize:13, fontWeight:"bold" }}>OPERATOR PANEL</span>
         <div style={{ flex:1 }}/>
-        <span style={{ color: isLive ? "#00ff88" : "#556677", fontSize:10 }}>
+        <span style={{ color: isLive ? "var(--ok)" : "var(--text-muted)", fontSize:11 }}>
           {isLive ? "● LIVE" : "○ STANDBY"}
         </span>
       </div>
@@ -134,17 +134,17 @@ export default function OperatorPanel() {
       {/* Hardware conflict banner — duplicate/overflowing addresses block the show (AQ-S1-003) */}
       {(status?.hardware_conflicts || []).length > 0 && (
         <div style={{
-          flexShrink:0, background:"#2a0000", borderBottom:"2px solid #ff3300",
-          padding:"8px 12px", color:"#ff9977",
+          flexShrink:0, background:"var(--bg-base)", borderBottom:"2px solid var(--error)",
+          padding:"8px 12px", color:"var(--error)",
         }}>
-          <div style={{ color:"#ff4422", fontWeight:"bold", fontSize:12, marginBottom:4 }}>
+          <div style={{ color:"var(--error)", fontWeight:"bold", fontSize:12, marginBottom:4 }}>
             ⛔ HARDWARE ADDRESS CONFLICT — SHOW BLOCKED
           </div>
-          <div style={{ color:"#ffbb99", fontSize:10, marginBottom:4 }}>
+          <div style={{ color:"var(--brand-gold-pale)", fontSize:11, marginBottom:4 }}>
             Resolve these duplicate addresses before the show can run:
           </div>
           {status.hardware_conflicts.map((c, i) => (
-            <div key={i} style={{ color:"#ff7755", fontSize:10, padding:"1px 0" }}>• {c}</div>
+            <div key={i} style={{ color:"var(--error)", fontSize:11, padding:"1px 0" }}>• {c}</div>
           ))}
         </div>
       )}
@@ -152,13 +152,13 @@ export default function OperatorPanel() {
       <div style={{ display:"flex", gap:8, padding:8, flex:1, minHeight:0, overflow:"auto", flexWrap:"wrap" }}>
 
         {/* Safety state card */}
-        <div style={{ flex:"1 1 180px", background:"#050d18", border:`1px solid ${sc}44`, borderRadius:6, padding:12 }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>SAFETY STATE</div>
+        <div style={{ flex:"1 1 180px", background:"var(--bg-void)", border:`1px solid ${sc}44`, borderRadius:6, padding:12 }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>SAFETY STATE</div>
           <div style={{ color:sc, fontSize:20, fontWeight:"bold", marginBottom:8 }}>{safety.state || "—"}</div>
           {(safety.active_faults||[]).length > 0 && (
             <div style={{ marginBottom:8 }}>
               {safety.active_faults.map(f => (
-                <div key={f} style={{ color:"#ff4444", fontSize:9, padding:"1px 0" }}>⚠ {f.replace(/_/g," ")}</div>
+                <div key={f} style={{ color:"var(--error)", fontSize:11, padding:"1px 0" }}>⚠ {f.replace(/_/g," ")}</div>
               ))}
             </div>
           )}
@@ -170,29 +170,29 @@ export default function OperatorPanel() {
           </div>
           <button onClick={()=>act("/safety/estop","E-STOP")} style={{
             width:"100%", marginTop:8, padding:"10px 0",
-            background:"#2a0000", color:"#ff0000",
-            border:"2px solid #ff0000", borderRadius:4,
+            background:"var(--bg-base)", color:"var(--error)",
+            border:"2px solid var(--error)", borderRadius:4,
             cursor:"pointer", fontFamily:"monospace", fontSize:13, fontWeight:"bold",
           }}>⛔ E-STOP</button>
         </div>
 
         {/* Transport card */}
-        <div style={{ flex:"1 1 180px", background:"#050d18", border:`1px solid ${tc}44`, borderRadius:6, padding:12 }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>TRANSPORT</div>
+        <div style={{ flex:"1 1 180px", background:"var(--bg-void)", border:`1px solid ${tc}44`, borderRadius:6, padding:12 }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>TRANSPORT</div>
           <div style={{ color:tc, fontSize:18, fontWeight:"bold", marginBottom:4 }}>{transport.state || "—"}</div>
-          <div style={{ color:"#7ab", fontSize:12, marginBottom:10 }}>
+          <div style={{ color:"var(--info)", fontSize:12, marginBottom:10 }}>
             {fmt(transport.position_ms)} / {fmt(transport.duration_ms)}
           </div>
           {/* Progress bar */}
-          <div style={{ height:4, background:"#0a1825", borderRadius:2, marginBottom:10, overflow:"hidden" }}>
+          <div style={{ height:4, background:"var(--bg-base)", borderRadius:2, marginBottom:10, overflow:"hidden" }}>
             <div style={{ width:`${transport.duration_ms > 0 ? (transport.position_ms/transport.duration_ms*100) : 0}%`, height:"100%", background:tc, borderRadius:2, transition:"width 0.5s" }} />
           </div>
           <button onClick={loadLatestBundle} style={{
             width:"100%", marginBottom:6, padding:"5px 0",
-            background: transport.state==="IDLE" ? "#001a10" : "#0a1825",
-            color: transport.state==="IDLE" ? "#00ff44" : "#334455",
+            background: transport.state==="IDLE" ? "var(--bg-void)" : "var(--bg-base)",
+            color: transport.state==="IDLE" ? "var(--ok)" : "var(--info)",
             border:`1px solid ${transport.state==="IDLE" ? "#00ff4444" : "#0a2030"}`,
-            borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10,
+            borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
           }}>
             {transport.state === "IDLE" ? "↓ LOAD SHOW FIRST" : `✓ LOADED: ${transport.show_id || "—"}`}
           </button>
@@ -207,14 +207,14 @@ export default function OperatorPanel() {
             <button onClick={()=>act("/transport/stop","STOP")}  style={btnStyle("#ff6644")}>⏹ STOP</button>
             <button onClick={()=>act("/transport/recover","RECOVER")} style={btnStyle("#00aaff")}>↩ RECOVER</button>
           </div>
-          <div style={{ marginTop:6, fontSize:9, color:"#334455" }}>
+          <div style={{ marginTop:6, fontSize:11, color:"var(--info)" }}>
             Snapshots: {transport.snapshot_count || 0} · Ticks: {transport.tick_count || 0}
           </div>
         </div>
 
         {/* Signal levels */}
-        <div style={{ flex:"1 1 180px", background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:12 }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:8 }}>SIGNAL LEVELS</div>
+        <div style={{ flex:"1 1 180px", background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:12 }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:8 }}>SIGNAL LEVELS</div>
           {[
             ["PUMP",    engine.pump    || 0, "#00aaff"],
             ["VALVE",   engine.valve   || 0, "#00ccaa"],
@@ -225,22 +225,22 @@ export default function OperatorPanel() {
           ].map(([label, val, color]) => (
             <div key={label} style={{ marginBottom:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
-                <span style={{ color:"#556677", fontSize:9 }}>{label}</span>
-                <span style={{ color, fontSize:9, fontFamily:"monospace" }}>{Math.round((val||0)*100)}%</span>
+                <span style={{ color:"var(--text-muted)", fontSize:11 }}>{label}</span>
+                <span style={{ color, fontSize:11, fontFamily:"monospace" }}>{Math.round((val||0)*100)}%</span>
               </div>
-              <div style={{ height:3, background:"#0a1825", borderRadius:2, overflow:"hidden" }}>
+              <div style={{ height:3, background:"var(--bg-base)", borderRadius:2, overflow:"hidden" }}>
                 <div style={{ width:`${Math.round((val||0)*100)}%`, height:"100%", background:color, borderRadius:2, transition:"width 0.1s" }} />
               </div>
             </div>
           ))}
-          <div style={{ marginTop:8, fontSize:9, color:"#334455" }}>
+          <div style={{ marginTop:8, fontSize:11, color:"var(--info)" }}>
             BPM: {engine.bpm || "—"} · {engine.state === "playing" ? "▶ PLAYING" : "■ STOPPED"}
           </div>
         </div>
 
         {/* Device health */}
-        <div style={{ flex:"1 1 180px", background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:12 }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:8 }}>DEVICE HEALTH</div>
+        <div style={{ flex:"1 1 180px", background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:12 }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:8 }}>DEVICE HEALTH</div>
           {status?.devices ? (
             <div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, marginBottom:8 }}>
@@ -250,19 +250,19 @@ export default function OperatorPanel() {
                   ["Warning", status.devices.warning || 0, "#ffcc00"],
                   ["Total",   status.devices.total   || 0, "#7ab"],
                 ].map(([label, val, color]) => (
-                  <div key={label} style={{ padding:"4px 6px", background:"#0a1520", borderRadius:3 }}>
-                    <div style={{ color:"#334455", fontSize:8 }}>{label}</div>
+                  <div key={label} style={{ padding:"4px 6px", background:"var(--bg-base)", borderRadius:3 }}>
+                    <div style={{ color:"var(--info)", fontSize:11 }}>{label}</div>
                     <div style={{ color, fontSize:14, fontWeight:"bold" }}>{val}</div>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div style={{ color:"#334455", fontSize:10 }}>Loading...</div>
+            <div style={{ color:"var(--info)", fontSize:11 }}>Loading...</div>
           )}
 
           {/* Safety permits */}
-          <div style={{ color:"#556677", fontSize:9, marginBottom:5, marginTop:4 }}>PERMITS</div>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:5, marginTop:4 }}>PERMITS</div>
           {[
             ["Master permit", safety.permit],
             ["Pump enable",   safety.pump_enable],
@@ -270,36 +270,36 @@ export default function OperatorPanel() {
             ["Fog enable",    safety.fog_enable],
             ["Light enable",  safety.lighting_enable],
           ].map(([label, val]) => (
-            <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"2px 0", borderBottom:"1px solid #0a1520" }}>
-              <span style={{ color:"#7ab", fontSize:9 }}>{label}</span>
-              <span style={{ color: val ? "#00ff88" : "#ff4444", fontSize:9 }}>{val ? "YES" : "NO"}</span>
+            <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"2px 0", borderBottom:"1px solid var(--border)" }}>
+              <span style={{ color:"var(--info)", fontSize:11 }}>{label}</span>
+              <span style={{ color: val ? "var(--ok)" : "var(--error)", fontSize:11 }}>{val ? "YES" : "NO"}</span>
             </div>
           ))}
         </div>
 
         {/* Recent faults + event log */}
-        <div style={{ flex:"2 1 360px", background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:12 }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>RECENT FAULTS</div>
+        <div style={{ flex:"2 1 360px", background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:12 }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>RECENT FAULTS</div>
           {(status?.recent_faults||[]).length === 0 ? (
-            <div style={{ color:"#223344", fontSize:9, marginBottom:10 }}>No recent faults</div>
+            <div style={{ color:"var(--info)", fontSize:11, marginBottom:10 }}>No recent faults</div>
           ) : (
             (status.recent_faults||[]).slice(0,3).map((ev,i) => (
-              <div key={i} style={{ padding:"3px 6px", background:"#1a0808", borderRadius:3, marginBottom:3, fontSize:9, color:"#ff8866" }}>
-                <span style={{ color:"#556677", marginRight:6 }}>{new Date((ev.timestamp||0)*1000).toLocaleTimeString()}</span>
+              <div key={i} style={{ padding:"3px 6px", background:"var(--bg-base)", borderRadius:3, marginBottom:3, fontSize:11, color:"var(--error)" }}>
+                <span style={{ color:"var(--text-muted)", marginRight:6 }}>{new Date((ev.timestamp||0)*1000).toLocaleTimeString()}</span>
                 {ev.message}
               </div>
             ))
           )}
 
-          <div style={{ color:"#556677", fontSize:9, marginBottom:6, marginTop:8, display:"flex", justifyContent:"space-between" }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6, marginTop:8, display:"flex", justifyContent:"space-between" }}>
             <span>OPERATOR LOG</span>
-            <button onClick={()=>setLog([])} style={{ background:"none", border:"none", color:"#334455", cursor:"pointer", fontSize:9 }}>CLEAR</button>
+            <button onClick={()=>setLog([])} style={{ background:"none", border:"none", color:"var(--info)", cursor:"pointer", fontSize:11 }}>CLEAR</button>
           </div>
           <div style={{ overflowY:"auto", maxHeight:120 }}>
-            {log.length === 0 && <div style={{ color:"#223344", fontSize:9 }}>No actions yet</div>}
+            {log.length === 0 && <div style={{ color:"var(--info)", fontSize:11 }}>No actions yet</div>}
             {[...log].reverse().map((e,i) => (
-              <div key={i} style={{ padding:"2px 0", fontSize:9, color: e.err ? "#ff6644" : "#7ab", borderBottom:"1px solid #0a1520" }}>
-                <span style={{ color:"#334455", marginRight:6 }}>{e.time}</span>{e.msg}
+              <div key={i} style={{ padding:"2px 0", fontSize:11, color: e.err ? "var(--error)" : "var(--info)", borderBottom:"1px solid var(--border)" }}>
+                <span style={{ color:"var(--info)", marginRight:6 }}>{e.time}</span>{e.msg}
               </div>
             ))}
           </div>

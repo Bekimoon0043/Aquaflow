@@ -39,7 +39,7 @@ export default function FleetPanel() {
 
   const stat = (label, value, color) => (
     <div style={{ ...box, padding: 8, minWidth: 80, flex: 1 }}>
-      <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 800, color: color || "var(--text-primary)" }}>{value}</div>
     </div>
   );
@@ -55,7 +55,7 @@ export default function FleetPanel() {
         </span>
         <button onClick={refresh} style={{ marginLeft: "auto", background: "transparent",
           border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)",
-          fontSize: 10, padding: "3px 8px", cursor: "pointer" }}>↻ Refresh</button>
+          fontSize: 11, padding: "3px 8px", cursor: "pointer" }}>↻ Refresh</button>
       </div>
 
       {dash && (
@@ -71,17 +71,17 @@ export default function FleetPanel() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* sites */}
         <div style={{ flex: 1, overflow: "auto", padding: 10, borderRight: "1px solid var(--border)" }}>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>SITES</div>
-          {error && <div style={{ ...box, padding: 8, color: "#ef4444", fontSize: 10, marginBottom: 6 }}>⛔ {error}</div>}
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>SITES</div>
+          {error && <div style={{ ...box, padding: 8, color: "var(--error)", fontSize: 11, marginBottom: 6 }}>⛔ {error}</div>}
           {(dash?.sites || []).map((s) => (
             <div key={s.id} style={{ ...box, padding: "8px 10px", marginBottom: 5,
               borderLeft: `3px solid ${HEALTH[s.health] || "#888"}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH[s.health] }} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{s.name}</span>
-                <span style={{ fontSize: 9, color: HEALTH[s.health], textTransform: "uppercase" }}>{s.health}</span>
+                <span style={{ fontSize: 11, color: HEALTH[s.health], textTransform: "uppercase" }}>{s.health}</span>
               </div>
-              <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
                 {s.location || "—"}{s.playing ? " · ▶ playing" : ""}{s.alert_count ? ` · ${s.alert_count} alerts` : ""}
                 {!s.online ? " · offline" : ""}
               </div>
@@ -91,23 +91,23 @@ export default function FleetPanel() {
 
         {/* centralised alerts */}
         <div style={{ width: 300, overflow: "auto", padding: 10, flexShrink: 0 }}>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>CENTRALISED ALERTS ({alerts.length})</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>CENTRALISED ALERTS ({alerts.length})</div>
           {alerts.length === 0 ? (
-            <div style={{ fontSize: 11, color: "#22c55e" }}>✓ No active fleet alerts.</div>
+            <div style={{ fontSize: 11, color: "var(--ok)" }}>✓ No active fleet alerts.</div>
           ) : alerts.map((a, i) => (
             <div key={i} style={{ ...box, padding: "6px 8px", marginBottom: 4,
               borderLeft: `3px solid ${SEV[a.severity] || "#888"}`, opacity: a.acknowledged ? 0.6 : 1 }}>
               <div style={{ display: "flex", gap: 6 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, color: SEV[a.severity], fontWeight: 600 }}>{a.site_name}</div>
-                  <div style={{ fontSize: 10.5, color: "var(--text-primary)" }}>{a.message}</div>
-                  <div style={{ fontSize: 8.5, color: "var(--text-muted)" }}>{a.severity} · {a.code}
+                  <div style={{ fontSize: 11, color: SEV[a.severity], fontWeight: 600 }}>{a.site_name}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-primary)" }}>{a.message}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.severity} · {a.code}
                     {a.acknowledged ? " · acknowledged" : ""}</div>
                 </div>
                 {!a.acknowledged && a.code !== "SITE_OFFLINE" && (
                   <button onClick={() => ack(a.site_id, a.code)} style={{ background: "transparent",
                     border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)",
-                    fontSize: 9, padding: "2px 6px", cursor: "pointer", alignSelf: "flex-start" }}>Ack</button>
+                    fontSize: 11, padding: "2px 6px", cursor: "pointer", alignSelf: "flex-start" }}>Ack</button>
                 )}
               </div>
             </div>

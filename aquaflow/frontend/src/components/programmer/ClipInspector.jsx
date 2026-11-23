@@ -80,7 +80,7 @@ export default function ClipInspector({
       <div style={styles.header}>
         <div style={styles.clipInfo}>
           <div 
-            style={{ ...styles.colorDot, backgroundColor: clip.color || '#4a9eff' }} 
+            style={{ ...styles.colorDot, backgroundColor: clip.color || "var(--info)" }} 
           />
           <span style={styles.clipName}>{clip.name || 'Untitled Clip'}</span>
           <span style={styles.clipType}>{clip.type}</span>
@@ -171,7 +171,7 @@ export default function ClipInspector({
                   style={{
                     ...styles.colorOption,
                     backgroundColor: c,
-                    border: clip.color === c ? '2px solid #fff' : '2px solid transparent',
+                    border: clip.color === c ? "2px solid var(--border-bright)" : '2px solid transparent',
                   }}
                   onClick={() => onClipUpdate?.(clip.id, { color: c })}
                 />
@@ -220,7 +220,7 @@ export default function ClipInspector({
                           </select>
                         ) : schema?.type === 'boolean' ? (
                           <button
-                            style={{ ...styles.toggleBtn, backgroundColor: value ? '#51cf66' : '#333' }}
+                            style={{ ...styles.toggleBtn, backgroundColor: value ? "var(--ok)" : "var(--bg-raised)" }}
                             onClick={() => handleEffectParamChange(index, key, !value)}
                           >
                             {value ? 'ON' : 'OFF'}

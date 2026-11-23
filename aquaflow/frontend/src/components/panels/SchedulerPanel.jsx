@@ -32,7 +32,7 @@ export default function SchedulerPanel() {
           Operating Hours
         </span>
         {status && (
-          <span style={{ marginLeft:"auto", fontSize:9, fontFamily:"var(--font-mono)", color: status.active_slot ? "var(--green)" : "var(--text-muted)" }}>
+          <span style={{ marginLeft:"auto", fontSize:11, fontFamily:"var(--font-mono)", color: status.active_slot ? "var(--green)" : "var(--text-muted)" }}>
             {status.active_slot ? "● RUNNING" : "○ IDLE"} · {status.today_slots} slots today
           </span>
         )}
@@ -45,7 +45,7 @@ export default function SchedulerPanel() {
             flex:1, padding:"7px 0", background:"transparent", border:"none",
             borderBottom: tab===key ? "2px solid var(--accent)" : "2px solid transparent",
             color: tab===key ? "var(--text-accent)" : "var(--text-muted)",
-            fontFamily:"var(--font-body)", fontSize:9, fontWeight: tab===key ? 600 : 400,
+            fontFamily:"var(--font-body)", fontSize:11, fontWeight: tab===key ? 600 : 400,
             textTransform:"uppercase", letterSpacing:"0.05em", cursor:"pointer",
           }}>{label}</button>
         ))}
@@ -147,19 +147,19 @@ function SlotsTab({ currentShow, addServerLog }) {
       {sunTimes && (
         <div style={{ display:"flex", gap:16, padding:"7px 12px", background:"rgba(201,162,39,0.06)", border:"1px solid var(--border-accent)", borderRadius:"var(--radius-md)", marginBottom:10 }}>
           <div>
-            <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNRISE TODAY</div>
+            <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNRISE TODAY</div>
             <div style={{ fontSize:15, fontFamily:"var(--font-mono)", color:"var(--accent)", fontWeight:700 }}>{sunTimes.sunrise}</div>
           </div>
           <div>
-            <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNSET TODAY</div>
+            <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNSET TODAY</div>
             <div style={{ fontSize:15, fontFamily:"var(--font-mono)", color:"var(--accent)", fontWeight:700 }}>{sunTimes.sunset}</div>
           </div>
-          <div style={{ marginLeft:"auto", fontSize:9, color:"var(--text-muted)", alignSelf:"center" }}>Addis Ababa</div>
+          <div style={{ marginLeft:"auto", fontSize:11, color:"var(--text-muted)", alignSelf:"center" }}>Addis Ababa</div>
         </div>
       )}
 
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-        <span style={{ fontSize:10, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{slots.length} TIME SLOTS</span>
+        <span style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{slots.length} TIME SLOTS</span>
         <button className="btn primary" onClick={() => setShowForm(!showForm)} style={{ fontSize:11, padding:"4px 12px" }}>
           {showForm ? "✕ Cancel" : "+ Add Slot"}
         </button>
@@ -173,7 +173,7 @@ function SlotsTab({ currentShow, addServerLog }) {
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, marginBottom:12 }}>
             {PRESETS.map((p,i) => (
               <button key={i} className="btn" onClick={() => setForm(f=>({...f,...p}))}
-                style={{ fontSize:10, padding:"4px 8px", justifyContent:"flex-start", gap:6 }}>
+                style={{ fontSize:11, padding:"4px 8px", justifyContent:"flex-start", gap:6 }}>
                 <div style={{ width:6, height:6, borderRadius:"50%", background:p.color, flexShrink:0 }} />
                 {p.name}
               </button>
@@ -189,12 +189,12 @@ function SlotsTab({ currentShow, addServerLog }) {
           <SectionLabel>Time</SectionLabel>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:10 }}>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:9, color:"var(--text-muted)", marginBottom:3 }}>START</div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:3 }}>START</div>
               <input className="input" type="time" value={form.start_time} onChange={e=>setForm(f=>({...f,start_time:e.target.value}))} style={{ fontSize:13, fontFamily:"var(--font-mono)" }} />
             </div>
             <div style={{ fontSize:16, color:"var(--text-muted)", marginTop:14 }}>→</div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:9, color:"var(--text-muted)", marginBottom:3 }}>STOP</div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:3 }}>STOP</div>
               <input className="input" type="time" value={form.stop_time} onChange={e=>setForm(f=>({...f,stop_time:e.target.value}))} style={{ fontSize:13, fontFamily:"var(--font-mono)" }} />
             </div>
           </div>
@@ -203,7 +203,7 @@ function SlotsTab({ currentShow, addServerLog }) {
           <div style={{ display:"flex", gap:6, marginBottom:10 }}>
             {[["","Fixed time"],["sunrise","Relative to Sunrise"],["sunset","Relative to Sunset"]].map(([val,label]) => (
               <button key={val} onClick={() => setForm(f=>({...f,relative_to:val}))} style={{
-                flex:1, padding:"4px 6px", borderRadius:"var(--radius-sm)", cursor:"pointer", fontSize:9,
+                flex:1, padding:"4px 6px", borderRadius:"var(--radius-sm)", cursor:"pointer", fontSize:11,
                 background: form.relative_to===val ? "rgba(201,162,39,0.12)" : "var(--bg-raised)",
                 border:`1px solid ${form.relative_to===val ? "var(--accent)" : "var(--border)"}`,
                 color: form.relative_to===val ? "var(--accent)" : "var(--text-muted)",
@@ -212,11 +212,11 @@ function SlotsTab({ currentShow, addServerLog }) {
           </div>
           {form.relative_to && (
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-              <span style={{ fontSize:10, color:"var(--text-muted)" }}>Offset (min)</span>
+              <span style={{ fontSize:11, color:"var(--text-muted)" }}>Offset (min)</span>
               <input className="input" type="number" value={form.relative_offset_min}
                 onChange={e=>setForm(f=>({...f,relative_offset_min:parseInt(e.target.value)}))}
                 style={{ width:70, fontSize:11, fontFamily:"var(--font-mono)" }} />
-              <span style={{ fontSize:10, color:"var(--text-muted)" }}>(negative = before)</span>
+              <span style={{ fontSize:11, color:"var(--text-muted)" }}>(negative = before)</span>
             </div>
           )}
 
@@ -224,14 +224,14 @@ function SlotsTab({ currentShow, addServerLog }) {
           <div style={{ display:"flex", gap:4, marginBottom:4 }}>
             {DAY_NAMES.map((d,i) => (
               <button key={i} onClick={() => toggleDay(i)} style={{
-                flex:1, padding:"6px 4px", borderRadius:"var(--radius-sm)", cursor:"pointer", fontSize:10,
+                flex:1, padding:"6px 4px", borderRadius:"var(--radius-sm)", cursor:"pointer", fontSize:11,
                 background: form.days.includes(i) ? "rgba(201,162,39,0.15)" : "var(--bg-raised)",
                 border:`1px solid ${form.days.includes(i) ? "var(--accent)" : "var(--border)"}`,
                 color: form.days.includes(i) ? "var(--accent)" : "var(--text-muted)",
               }}>{d}</button>
             ))}
           </div>
-          <div style={{ fontSize:9, color:"var(--text-muted)", marginBottom:10 }}>
+          <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:10 }}>
             {form.days.length === 0 ? "Every day (no days selected = runs daily)" : `${form.days.length} day(s) selected`}
           </div>
 
@@ -241,11 +241,11 @@ function SlotsTab({ currentShow, addServerLog }) {
 
           <div style={{ display:"flex", gap:8, marginBottom:12 }}>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:9, color:"var(--text-muted)", marginBottom:3 }}>FADE IN (sec)</div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:3 }}>FADE IN (sec)</div>
               <input className="input" type="number" value={form.fade_in} onChange={e=>setForm(f=>({...f,fade_in:parseFloat(e.target.value)}))} style={{ fontSize:11, fontFamily:"var(--font-mono)" }} />
             </div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:9, color:"var(--text-muted)", marginBottom:3 }}>FADE OUT (sec)</div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:3 }}>FADE OUT (sec)</div>
               <input className="input" type="number" value={form.fade_out} onChange={e=>setForm(f=>({...f,fade_out:parseFloat(e.target.value)}))} style={{ fontSize:11, fontFamily:"var(--font-mono)" }} />
             </div>
           </div>
@@ -286,7 +286,7 @@ function SlotCard({ slot, onToggle, onDelete }) {
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
         <div style={{ width:6, height:6, borderRadius:"50%", background: slot.active ? "var(--green)" : "var(--text-muted)", boxShadow: slot.active ? "0 0 5px var(--green)" : "none" }} />
         <span style={{ fontSize:12, fontWeight:600, color:"var(--text-primary)", flex:1 }}>{slot.name}</span>
-        <span style={{ fontSize:10, color:"var(--text-muted)" }}>{slot.show_name}</span>
+        <span style={{ fontSize:11, color:"var(--text-muted)" }}>{slot.show_name}</span>
       </div>
 
       {/* Time bar */}
@@ -309,26 +309,26 @@ function SlotCard({ slot, onToggle, onDelete }) {
       {/* Days */}
       <div style={{ display:"flex", gap:3, marginBottom:6 }}>
         {DAY_SHORT.map((d,i) => (
-          <span key={i} style={{ width:20, height:18, display:"flex", alignItems:"center", justifyContent:"center", borderRadius:3, fontSize:9, fontFamily:"var(--font-mono)",
+          <span key={i} style={{ width:20, height:18, display:"flex", alignItems:"center", justifyContent:"center", borderRadius:3, fontSize:11, fontFamily:"var(--font-mono)",
             background: (slot.days?.length===0 || slot.days?.includes(i)) ? `${slot.color||"#c9a227"}22` : "var(--bg-raised)",
             color: (slot.days?.length===0 || slot.days?.includes(i)) ? (slot.color||"var(--accent)") : "var(--text-muted)",
             border: `1px solid ${(slot.days?.length===0 || slot.days?.includes(i)) ? `${slot.color||"#c9a227"}44` : "var(--border)"}`,
           }}>{d}</span>
         ))}
         {slot.relative_to && (
-          <span style={{ fontSize:9, color:"var(--text-muted)", marginLeft:4, alignSelf:"center" }}>
+          <span style={{ fontSize:11, color:"var(--text-muted)", marginLeft:4, alignSelf:"center" }}>
             {slot.relative_to === "sunrise" ? "☀" : "◐"} {slot.relative_offset_min > 0 ? "+" : ""}{slot.relative_offset_min}min
           </span>
         )}
-        {slot.loop && <span style={{ fontSize:9, color:"var(--text-muted)", marginLeft:"auto" }}>⟳ loop</span>}
-        {slot.run_count > 0 && <span style={{ fontSize:9, color:"var(--text-muted)" }}>×{slot.run_count}</span>}
+        {slot.loop && <span style={{ fontSize:11, color:"var(--text-muted)", marginLeft:"auto" }}>⟳ loop</span>}
+        {slot.run_count > 0 && <span style={{ fontSize:11, color:"var(--text-muted)" }}>×{slot.run_count}</span>}
       </div>
 
       <div style={{ display:"flex", gap:5 }}>
-        <button className="btn" onClick={onToggle} style={{ fontSize:9, padding:"2px 10px" }}>
+        <button className="btn" onClick={onToggle} style={{ fontSize:11, padding:"2px 10px" }}>
           {slot.active ? "⏸ Pause" : "▶ Enable"}
         </button>
-        <button className="btn danger" onClick={onDelete} style={{ fontSize:9, padding:"2px 8px", marginLeft:"auto" }}>✕</button>
+        <button className="btn danger" onClick={onDelete} style={{ fontSize:11, padding:"2px 8px", marginLeft:"auto" }}>✕</button>
       </div>
     </div>
   );
@@ -363,7 +363,7 @@ function TodayTab() {
             🚫 BLACKOUT — {schedule.special}
           </div>
         ) : schedule.special ? (
-          <div style={{ marginLeft:"auto", padding:"4px 10px", background:"rgba(139,92,246,0.1)", border:"1px solid rgba(139,92,246,0.3)", borderRadius:"var(--radius-sm)", color:"#8b5cf6", fontSize:11 }}>
+          <div style={{ marginLeft:"auto", padding:"4px 10px", background:"rgba(139,92,246,0.1)", border:"1px solid rgba(139,92,246,0.3)", borderRadius:"var(--radius-sm)", color:"var(--info)", fontSize:11 }}>
             ✦ {schedule.special}
           </div>
         ) : null}
@@ -381,7 +381,7 @@ function TodayTab() {
             {/* Hour marks */}
             {[6,9,12,15,18,21].map(h => (
               <div key={h} style={{ position:"absolute", left:`${(h/24)*100}%`, top:0, bottom:0, width:1, background:"var(--border)" }}>
-                <span style={{ position:"absolute", bottom:2, left:2, fontSize:8, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{h}h</span>
+                <span style={{ position:"absolute", bottom:2, left:2, fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{h}h</span>
               </div>
             ))}
             {/* Slot bars */}
@@ -392,7 +392,7 @@ function TodayTab() {
               const endPct   = ((eh*60+em)/1440)*100;
               return (
                 <div key={i} style={{ position:"absolute", left:`${startPct}%`, width:`${Math.max(2, endPct-startPct)}%`, top:8, height:28, background:(slot.color||"#c9a227")+"44", border:`1px solid ${slot.color||"#c9a227"}`, borderRadius:3, overflow:"hidden" }}>
-                  <span style={{ fontSize:8, fontFamily:"var(--font-mono)", color:slot.color||"var(--accent)", padding:"2px 3px", whiteSpace:"nowrap" }}>{slot.name}</span>
+                  <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:slot.color||"var(--accent)", padding:"2px 3px", whiteSpace:"nowrap" }}>{slot.name}</span>
                 </div>
               );
             })}
@@ -411,16 +411,16 @@ function TodayTab() {
               <div key={i} style={{ display:"flex", gap:12, padding:"8px 12px", marginBottom:6, background: isActive ? "rgba(201,162,39,0.06)" : "var(--bg-surface)", border:`1px solid ${isActive ? "var(--border-accent)" : "var(--border)"}`, borderRadius:"var(--radius-md)", opacity: isPast ? 0.5 : 1, borderLeft:`3px solid ${slot.color||"var(--accent)"}` }}>
                 <div style={{ textAlign:"center", minWidth:50 }}>
                   <div style={{ fontSize:14, fontFamily:"var(--font-mono)", fontWeight:700, color: slot.color||"var(--accent)" }}>{slot.start_time}</div>
-                  <div style={{ fontSize:9, color:"var(--text-muted)" }}>to {slot.stop_time}</div>
+                  <div style={{ fontSize:11, color:"var(--text-muted)" }}>to {slot.stop_time}</div>
                 </div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:"var(--text-primary)" }}>{slot.name}</div>
-                  <div style={{ fontSize:10, color:"var(--text-muted)" }}>{slot.show_name}</div>
+                  <div style={{ fontSize:11, color:"var(--text-muted)" }}>{slot.show_name}</div>
                 </div>
-                {isActive && <div style={{ alignSelf:"center", fontSize:10, color:"var(--green)", fontFamily:"var(--font-mono)" }}>● ACTIVE</div>}
-                {isPast   && <div style={{ alignSelf:"center", fontSize:10, color:"var(--text-muted)" }}>✓ Done</div>}
+                {isActive && <div style={{ alignSelf:"center", fontSize:11, color:"var(--green)", fontFamily:"var(--font-mono)" }}>● ACTIVE</div>}
+                {isPast   && <div style={{ alignSelf:"center", fontSize:11, color:"var(--text-muted)" }}>✓ Done</div>}
                 {!isActive && !isPast && (
-                  <div style={{ alignSelf:"center", fontSize:10, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
+                  <div style={{ alignSelf:"center", fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
                     in {startMins-nowMins}m
                   </div>
                 )}
@@ -459,10 +459,10 @@ function WeekTab() {
             {/* Day header */}
             <div style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 12px", background: isToday ? "rgba(201,162,39,0.06)" : "transparent", borderBottom: day.slots.length > 0 ? "1px solid var(--border)" : "none" }}>
               <span style={{ fontSize:12, fontWeight:600, color: isToday ? "var(--accent)" : "var(--text-primary)", minWidth:32 }}>{day.weekday}</span>
-              <span style={{ fontSize:10, color:"var(--text-muted)" }}>{d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
-              {isToday && <span style={{ fontSize:9, color:"var(--accent)", fontFamily:"var(--font-mono)" }}>TODAY</span>}
-              {day.blackout && <span style={{ marginLeft:"auto", fontSize:9, color:"var(--red)" }}>🚫 {day.special}</span>}
-              {!day.blackout && <span style={{ marginLeft:"auto", fontSize:10, color:"var(--text-muted)" }}>{day.slots.length} session{day.slots.length!==1?"s":""}</span>}
+              <span style={{ fontSize:11, color:"var(--text-muted)" }}>{d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
+              {isToday && <span style={{ fontSize:11, color:"var(--accent)", fontFamily:"var(--font-mono)" }}>TODAY</span>}
+              {day.blackout && <span style={{ marginLeft:"auto", fontSize:11, color:"var(--red)" }}>🚫 {day.special}</span>}
+              {!day.blackout && <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text-muted)" }}>{day.slots.length} session{day.slots.length!==1?"s":""}</span>}
             </div>
             {/* Slots */}
             {!day.blackout && day.slots.map((slot,j) => (
@@ -473,7 +473,7 @@ function WeekTab() {
               </div>
             ))}
             {!day.blackout && day.slots.length === 0 && (
-              <div style={{ padding:"5px 12px", fontSize:10, color:"var(--text-muted)" }}>No sessions</div>
+              <div style={{ padding:"5px 12px", fontSize:11, color:"var(--text-muted)" }}>No sessions</div>
             )}
           </div>
         );
@@ -553,7 +553,7 @@ function CalendarTab({ addServerLog }) {
       {/* Day headers */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
         {["Mo","Tu","We","Th","Fr","Sa","Su"].map(d => (
-          <div key={d} style={{ textAlign:"center", fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", padding:"2px 0" }}>{d}</div>
+          <div key={d} style={{ textAlign:"center", fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", padding:"2px 0" }}>{d}</div>
         ))}
       </div>
 
@@ -592,14 +592,14 @@ function CalendarTab({ addServerLog }) {
               <div style={{ fontSize:11, color:"var(--text-secondary)", marginBottom:8 }}>
                 Marked as: <strong style={{ color: getCalDay(selected).color }}>{getCalDay(selected).type}</strong> — {getCalDay(selected).label}
               </div>
-              <button className="btn danger" onClick={() => deleteCalDay(selected)} style={{ fontSize:10 }}>Remove Override</button>
+              <button className="btn danger" onClick={() => deleteCalDay(selected)} style={{ fontSize:11 }}>Remove Override</button>
             </div>
           ) : (
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5 }}>
                 {CAL_TYPES.map(t => (
                   <button key={t.id} onClick={() => setForm(f=>({...f,type:t.id,color:t.color}))} style={{
-                    padding:"5px 8px", borderRadius:"var(--radius-sm)", cursor:"pointer", fontSize:10,
+                    padding:"5px 8px", borderRadius:"var(--radius-sm)", cursor:"pointer", fontSize:11,
                     background: form.type===t.id ? `${t.color}15` : "var(--bg-raised)",
                     border:`1px solid ${form.type===t.id ? t.color : "var(--border)"}`,
                     color: form.type===t.id ? t.color : "var(--text-muted)", textAlign:"left",
@@ -622,7 +622,7 @@ function CalendarTab({ addServerLog }) {
         {CAL_TYPES.map(t => (
           <div key={t.id} style={{ display:"flex", alignItems:"center", gap:4 }}>
             <div style={{ width:8, height:8, borderRadius:"50%", background:t.color }} />
-            <span style={{ fontSize:9, color:"var(--text-muted)" }}>{t.label}</span>
+            <span style={{ fontSize:11, color:"var(--text-muted)" }}>{t.label}</span>
           </div>
         ))}
       </div>
@@ -659,15 +659,15 @@ function SettingsTab({ addServerLog }) {
       <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
         <FieldRow label="Latitude"><input className="input" value={lat} onChange={e=>setLat(e.target.value)} style={{ fontSize:11, fontFamily:"var(--font-mono)" }} /></FieldRow>
         <FieldRow label="Longitude"><input className="input" value={lon} onChange={e=>setLon(e.target.value)} style={{ fontSize:11, fontFamily:"var(--font-mono)" }} /></FieldRow>
-        <div style={{ fontSize:9, color:"var(--text-muted)", paddingLeft:70 }}>Addis Ababa: 9.0°N, 38.7°E</div>
+        <div style={{ fontSize:11, color:"var(--text-muted)", paddingLeft:70 }}>Addis Ababa: 9.0°N, 38.7°E</div>
       </div>
       <button className="btn primary" onClick={updateLocation} style={{ width:"100%", justifyContent:"center", fontSize:11, marginBottom:12 }}>
         ☀ Update Location & Sun Times
       </button>
       {sunTimes && (
         <div style={{ display:"flex", gap:16, padding:"10px 14px", background:"rgba(201,162,39,0.06)", border:"1px solid var(--border-accent)", borderRadius:"var(--radius-md)" }}>
-          <div><div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNRISE</div><div style={{ fontSize:18, fontFamily:"var(--font-mono)", color:"var(--accent)", fontWeight:700 }}>{sunTimes.sunrise}</div></div>
-          <div><div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNSET</div><div style={{ fontSize:18, fontFamily:"var(--font-mono)", color:"var(--accent)", fontWeight:700 }}>{sunTimes.sunset}</div></div>
+          <div><div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNRISE</div><div style={{ fontSize:18, fontFamily:"var(--font-mono)", color:"var(--accent)", fontWeight:700 }}>{sunTimes.sunrise}</div></div>
+          <div><div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>SUNSET</div><div style={{ fontSize:18, fontFamily:"var(--font-mono)", color:"var(--accent)", fontWeight:700 }}>{sunTimes.sunset}</div></div>
         </div>
       )}
 
@@ -680,7 +680,7 @@ function SettingsTab({ addServerLog }) {
         "The engine checks every 20 seconds and starts/stops shows automatically",
         "Shows fade in and fade out smoothly at the configured durations",
       ].map((s,i) => (
-        <div key={i} style={{ display:"flex", gap:8, padding:"4px 0", fontSize:10, color:"var(--text-secondary)" }}>
+        <div key={i} style={{ display:"flex", gap:8, padding:"4px 0", fontSize:11, color:"var(--text-secondary)" }}>
           <span style={{ color:"var(--accent)" }}>{i+1}.</span> {s}
         </div>
       ))}
@@ -689,11 +689,11 @@ function SettingsTab({ addServerLog }) {
 }
 
 function SectionLabel({ children }) {
-  return <div style={{ fontSize:9, fontWeight:600, fontFamily:"var(--font-mono)", color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:7, marginTop:12, borderBottom:"1px solid var(--border)", paddingBottom:3 }}>{children}</div>;
+  return <div style={{ fontSize:11, fontWeight:600, fontFamily:"var(--font-mono)", color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:7, marginTop:12, borderBottom:"1px solid var(--border)", paddingBottom:3 }}>{children}</div>;
 }
 function FieldRow({ label, children }) {
-  return <div style={{ display:"flex", alignItems:"center", gap:8 }}><span style={{ fontSize:10, color:"var(--text-muted)", width:65, flexShrink:0, textAlign:"right", fontFamily:"var(--font-mono)" }}>{label}</span><div style={{ flex:1 }}>{children}</div></div>;
+  return <div style={{ display:"flex", alignItems:"center", gap:8 }}><span style={{ fontSize:11, color:"var(--text-muted)", width:65, flexShrink:0, textAlign:"right", fontFamily:"var(--font-mono)" }}>{label}</span><div style={{ flex:1 }}>{children}</div></div>;
 }
 function Toggle({ label, value, onChange }) {
-  return <div style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }} onClick={() => onChange(!value)}><div style={{ width:30, height:15, borderRadius:8, background: value ? "rgba(201,162,39,0.2)" : "var(--bg-raised)", border:`1px solid ${value ? "var(--accent)" : "var(--border)"}`, position:"relative", transition:"all 0.15s", flexShrink:0 }}><div style={{ width:9, height:9, borderRadius:"50%", background: value ? "var(--accent)" : "var(--text-muted)", position:"absolute", top:2, left: value ? 17 : 2, transition:"left 0.15s" }} /></div><span style={{ fontSize:10, color: value ? "var(--text-primary)" : "var(--text-muted)" }}>{label}</span></div>;
+  return <div style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }} onClick={() => onChange(!value)}><div style={{ width:30, height:15, borderRadius:8, background: value ? "rgba(201,162,39,0.2)" : "var(--bg-raised)", border:`1px solid ${value ? "var(--accent)" : "var(--border)"}`, position:"relative", transition:"all 0.15s", flexShrink:0 }}><div style={{ width:9, height:9, borderRadius:"50%", background: value ? "var(--accent)" : "var(--text-muted)", position:"absolute", top:2, left: value ? 17 : 2, transition:"left 0.15s" }} /></div><span style={{ fontSize:11, color: value ? "var(--text-primary)" : "var(--text-muted)" }}>{label}</span></div>;
 }

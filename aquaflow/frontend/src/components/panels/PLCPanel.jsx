@@ -66,7 +66,7 @@ export default function PLCPanel() {
             flex: 1, padding: "7px 0", background: "transparent", border: "none",
             borderBottom: tab === key ? "2px solid var(--accent)" : "2px solid transparent",
             color: tab === key ? "var(--text-accent)" : "var(--text-muted)",
-            fontFamily: "var(--font-body)", fontSize: 10, fontWeight: tab === key ? 600 : 400,
+            fontFamily: "var(--font-body)", fontSize: 11, fontWeight: tab === key ? 600 : 400,
             textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer",
           }}>
             {label}
@@ -142,13 +142,13 @@ function FieldIOTab() {
   return (
     <div style={{ padding: 10 }}>
       <SectionLabel>Field points — live quality</SectionLabel>
-      {error && <div style={{ fontSize: 10, color: "var(--red)" }}>{error}</div>}
+      {error && <div style={{ fontSize: 11, color: "var(--red)" }}>{error}</div>}
       {data.points.length === 0 ? (
-        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
           No field points declared — see docs/S7_DB_CONTRACT.md for the site config
         </div>
       ) : data.points.map(p => (
-        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 10 }}>
+        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 11 }}>
           <div title={p.quality} style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: fieldIoQualityColor(p.quality) }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ color: "var(--text-primary)" }}>
@@ -169,9 +169,9 @@ function FieldIOTab() {
 
       <SectionLabel>Sources — last raw exchange</SectionLabel>
       {Object.keys(data.sources || {}).length === 0 ? (
-        <div style={{ fontSize: 10, color: "var(--text-muted)" }}>no transports active</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>no transports active</div>
       ) : Object.entries(data.sources).map(([src, s]) => (
-        <div key={src} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 9, ...mono }}>
+        <div key={src} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 11, ...mono }}>
           <div style={{ display: "flex", gap: 8 }}>
             <div style={{ width: 5, height: 5, borderRadius: "50%", marginTop: 2, background: s.connected ? "var(--green)" : "var(--red)" }} />
             <span style={{ color: "var(--text-primary)", flex: 1 }}>{src}</span>
@@ -182,7 +182,7 @@ function FieldIOTab() {
         </div>
       ))}
       {data.heartbeat_alive !== null && (
-        <div style={{ fontSize: 10, marginTop: 6, color: data.heartbeat_alive ? "var(--green)" : "var(--red)", ...mono }}>
+        <div style={{ fontSize: 11, marginTop: 6, color: data.heartbeat_alive ? "var(--green)" : "var(--red)", ...mono }}>
           PLC heartbeat: {data.heartbeat_alive ? "ALIVE (counter moving)" : "DEAD (counter frozen — halted CPU?)"}
         </div>
       )}
@@ -313,12 +313,12 @@ function ConnectTab({ addServerLog }) {
               background: form.plc_type === t.id ? `${t.color}15` : "var(--bg-surface)",
               border: `1px solid ${form.plc_type === t.id ? t.color : "var(--border)"}`,
               color: form.plc_type === t.id ? t.color : "var(--text-muted)",
-              fontSize: 10, textAlign: "left", fontWeight: form.plc_type === t.id ? 600 : 400,
+              fontSize: 11, textAlign: "left", fontWeight: form.plc_type === t.id ? 600 : 400,
               opacity: plcConnectable(t) ? 1 : 0.55,
             }}>
             {t.label}
             {plcTypeSubLabel(t) && (
-              <span style={{ display: "block", fontSize: 8, fontFamily: "var(--font-mono)", color: plcConnectable(t) ? "var(--text-muted)" : "var(--red)" }}>
+              <span style={{ display: "block", fontSize: 11, fontFamily: "var(--font-mono)", color: plcConnectable(t) ? "var(--text-muted)" : "var(--red)" }}>
                 {plcTypeSubLabel(t)}
               </span>
             )}
@@ -326,17 +326,17 @@ function ConnectTab({ addServerLog }) {
         ))}
       </div>
       {selectedType && !plcConnectable(selectedType) && (
-        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: "1px solid var(--red)", color: "var(--red)" }}>
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11, background: "var(--bg-surface)", border: "1px solid var(--red)", color: "var(--red)" }}>
           {selectedType.reason}
         </div>
       )}
       {selectedType?.connectAs && (
-        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11, background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
           This family connects through its <b>Modbus TCP</b> interface (port 502) — make sure Modbus TCP is enabled on the unit.
         </div>
       )}
       {form.prefilled_from && (
-        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "rgba(0,212,255,0.05)", border: "1px solid var(--border-accent)", color: "var(--text-secondary)" }}>
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11, background: "rgba(0,212,255,0.05)", border: "1px solid var(--border-accent)", color: "var(--text-secondary)" }}>
           Pre-filled from discovery {form.prefill_vendor && <b>{form.prefill_vendor} {form.prefill_model}</b>} — not connected, not saved. Review the settings, then Connect.
         </div>
       )}
@@ -367,14 +367,14 @@ function ConnectTab({ addServerLog }) {
               </select>
             </FieldRow>
             {profile && (
-              <div style={{ marginLeft: 78, padding: "6px 10px", borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: `1px solid ${profileConfirmed ? "var(--green)" : "#f59e0b"}` }}>
+              <div style={{ marginLeft: 78, padding: "6px 10px", borderRadius: "var(--radius-sm)", fontSize: 11, background: "var(--bg-surface)", border: `1px solid ${profileConfirmed ? "var(--green)" : "#f59e0b"}` }}>
                 <div style={{ color: "var(--text-secondary)", marginBottom: 4 }}>
                   {profile.cpu} · rack {profile.rack} slot {profile.slot} · {profile.field_count} fields · contract {profile.contract}
                 </div>
-                <ul style={{ margin: "0 0 4px 14px", padding: 0, color: "var(--text-muted)", fontSize: 9 }}>
+                <ul style={{ margin: "0 0 4px 14px", padding: 0, color: "var(--text-muted)", fontSize: 11 }}>
                   {(profile.requirements || []).map((r, i) => <li key={i}>{r}</li>)}
                 </ul>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, color: profileConfirmed ? "var(--green)" : "#f59e0b", cursor: "pointer" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, color: profileConfirmed ? "var(--green)" : "var(--warn)", cursor: "pointer" }}>
                   <input type="checkbox" checked={profileConfirmed} onChange={e => setProfileConfirmed(e.target.checked)} />
                   I confirm this PLC runs the {profile.label.split(" — ")[0]} program (DB1 as in {profile.contract})
                 </label>
@@ -429,26 +429,26 @@ function ConnectTab({ addServerLog }) {
       {verifyResult && (() => {
         const st = verifyOutcomeStyle(verifyResult.outcome);
         return (
-          <div style={{ padding: "8px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: `1px solid ${st.color}` }}>
+          <div style={{ padding: "8px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11, background: "var(--bg-surface)", border: `1px solid ${st.color}` }}>
             <div style={{ color: st.color, fontWeight: 600, marginBottom: 3 }}>{st.label}</div>
             <div style={{ color: "var(--text-secondary)", marginBottom: 4 }}>{verifyResult.message}</div>
-            <div style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 9 }}>{verifySummary(verifyResult)}</div>
+            <div style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{verifySummary(verifyResult)}</div>
             {(verifyResult.fields || []).length > 0 && (
-              <div style={{ marginTop: 5, display: "grid", gridTemplateColumns: "1fr auto auto", gap: "2px 10px", fontFamily: "var(--font-mono)", fontSize: 9 }}>
+              <div style={{ marginTop: 5, display: "grid", gridTemplateColumns: "1fr auto auto", gap: "2px 10px", fontFamily: "var(--font-mono)", fontSize: 11 }}>
                 {verifyResult.fields.map((f) => (
                   <FieldStatusRow key={f.id} f={f} />
                 ))}
               </div>
             )}
-            {(verifyResult.warnings || []).map((w, i) => <div key={i} style={{ color: "#f59e0b", fontSize: 9, marginTop: 3 }}>⚠ {w}</div>)}
-            <div style={{ color: "var(--text-muted)", fontSize: 9, marginTop: 4 }}>writes performed: {verifyResult.writes_performed ?? 0} · read-only verification</div>
+            {(verifyResult.warnings || []).map((w, i) => <div key={i} style={{ color: "var(--warn)", fontSize: 11, marginTop: 3 }}>⚠ {w}</div>)}
+            <div style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 4 }}>writes performed: {verifyResult.writes_performed ?? 0} · read-only verification</div>
           </div>
         );
       })()}
 
       <SectionLabel>Connected PLCs ({plcs.length})</SectionLabel>
       {plcs.length === 0 ? (
-        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>
           No PLCs connected yet
         </div>
       ) : plcs.map((p) => {
@@ -458,11 +458,11 @@ function ConnectTab({ addServerLog }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: p.connected ? "var(--green)" : "var(--red)", boxShadow: p.connected ? "0 0 4px var(--green)" : "none" }} />
               <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)", flex: 1 }}>{p.name}</span>
-              <span style={{ fontSize: 9, color: typeInfo.color || "var(--text-muted)", fontFamily: "var(--font-mono)", background: `${typeInfo.color || "#888"}15`, padding: "1px 6px", borderRadius: 3, border: `1px solid ${typeInfo.color || "#888"}33` }}>
+              <span style={{ fontSize: 11, color: typeInfo.color || "var(--text-muted)", fontFamily: "var(--font-mono)", background: `${typeInfo.color || "#888"}15`, padding: "1px 6px", borderRadius: 3, border: `1px solid ${typeInfo.color || "#888"}33` }}>
                 {p.type?.replace("_", " ").toUpperCase()}
               </span>
             </div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", display: "flex", gap: 12 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", display: "flex", gap: 12 }}>
               <span>{p.ip}</span>
               <span>{p.tag_count} tags</span>
               {p.last_error && <span style={{ color: "var(--red)" }}>{p.last_error}</span>}
@@ -479,9 +479,9 @@ function ConnectTab({ addServerLog }) {
         { label: "Allen Bradley", lib: "pycomm3 (EtherNet/IP + CIP Read/Write Tag)", note: "Tag address: Logix tag name (Pump1_Speed, Speeds[2], Program:Main.Valve1). Types from the controller's tag list, else from your declared type." },
       ].map((lib) => (
         <div key={lib.label} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
-          <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 2 }}>{lib.label} <span style={{ color: "var(--green)" }}>● bundled</span></div>
-          <code style={{ fontSize: 10, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>{lib.lib}</code>
-          {lib.note && <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2 }}>{lib.note}</div>}
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>{lib.label} <span style={{ color: "var(--green)" }}>● bundled</span></div>
+          <code style={{ fontSize: 11, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>{lib.lib}</code>
+          {lib.note && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{lib.note}</div>}
         </div>
       ))}
     </div>
@@ -612,13 +612,13 @@ function TagBrowserTab({ addServerLog }) {
       </select>
 
       {loadError && (
-        <div style={{ padding: "7px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, border: "1px solid rgba(239,68,68,0.3)", color: "var(--red)" }}>
+        <div style={{ padding: "7px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11, border: "1px solid rgba(239,68,68,0.3)", color: "var(--red)" }}>
           ✕ {loadError}
         </div>
       )}
 
       {isDemo && (
-        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10, background: "var(--bg-surface)", border: "1px solid #f59e0b", color: "#f59e0b" }}>
+        <div style={{ padding: "6px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11, background: "var(--bg-surface)", border: "1px solid var(--warn)", color: "var(--warn)" }}>
           DEMO — example Modbus TCP tag layout only. Not a real PLC: no values, writes disabled.
         </div>
       )}
@@ -631,7 +631,7 @@ function TagBrowserTab({ addServerLog }) {
       )}
 
       {writeMsg && (
-        <div style={{ padding: "7px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 10,
+        <div style={{ padding: "7px 10px", marginBottom: 10, borderRadius: "var(--radius-sm)", fontSize: 11,
           border: `1px solid ${writeMsg.ok ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
           color: writeMsg.ok ? "var(--green)" : "var(--red)" }}>
           {writeMsg.ok ? "✓" : "✕"} {writeMsg.msg}
@@ -640,28 +640,28 @@ function TagBrowserTab({ addServerLog }) {
 
       {writeTag && (
         <div style={{ padding: "10px 12px", background: "rgba(0,212,255,0.05)", border: "1px solid var(--border-accent)", borderRadius: "var(--radius-md)", marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
             Write to: <strong style={{ color: "var(--text-primary)" }}>{writeTag.name}</strong>
             <span style={{ fontFamily: "var(--font-mono)", marginLeft: 6 }}>{writeTag.address}</span>
           </div>
           {confirmPending ? (
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn primary" onClick={doWrite} disabled={writing}
-                style={{ flex: 1, justifyContent: "center", fontSize: 10, borderColor: "#f59e0b" }}>
+                style={{ flex: 1, justifyContent: "center", fontSize: 11, borderColor: "var(--warn)" }}>
                 {writing ? "Writing..." : `Confirm write ${writeValue} to ${writeTag.name} at ${writeTag.address}`}
               </button>
-              <button className="btn" onClick={() => setConfirmPending(false)} disabled={writing} style={{ fontSize: 10 }}>Cancel</button>
+              <button className="btn" onClick={() => setConfirmPending(false)} disabled={writing} style={{ fontSize: 11 }}>Cancel</button>
             </div>
           ) : (
             <div style={{ display: "flex", gap: 6 }}>
               <input className="input" type="number" value={writeValue} onChange={e => setWriteValue(e.target.value)}
                 placeholder={`${writeTag.min_value} - ${writeTag.max_value}`} style={{ flex: 1, fontSize: 11 }} />
               <button className="btn primary" onClick={() => { setWriteMsg(null); setConfirmPending(true); }}
-                disabled={writeValue === "" || isDemo} style={{ fontSize: 10 }}>Write…</button>
-              <button className="btn" onClick={closeWrite} style={{ fontSize: 10 }}>✕</button>
+                disabled={writeValue === "" || isDemo} style={{ fontSize: 11 }}>Write…</button>
+              <button className="btn" onClick={closeWrite} style={{ fontSize: 11 }}>✕</button>
             </div>
           )}
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 5 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>
             Non-zero writes need the safety permit; writing 0 is always allowed.
           </div>
         </div>
@@ -678,11 +678,11 @@ function TagBrowserTab({ addServerLog }) {
                 title={ro ? "Read-only PLC field — never written" : isDemo ? "Demo tag — not a real PLC" : "Click to write"}
                 onClick={() => { if (writable) { setWriteTag(tag); setWriteValue(""); setConfirmPending(false); setWriteMsg(null); } }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, fontFamily: "var(--font-mono)", background: `${TYPE_COLORS[tag.tag_type] || "#888"}15`, color: TYPE_COLORS[tag.tag_type] || "#888", border: `1px solid ${TYPE_COLORS[tag.tag_type] || "#888"}33` }}>
+                  <span style={{ fontSize: 11, padding: "1px 5px", borderRadius: 3, fontFamily: "var(--font-mono)", background: `${TYPE_COLORS[tag.tag_type] || "#888"}15`, color: TYPE_COLORS[tag.tag_type] || "var(--text-muted)", border: `1px solid ${TYPE_COLORS[tag.tag_type] || "#888"}33` }}>
                     {tag.tag_type?.toUpperCase()}
                   </span>
                   <span style={{ fontSize: 11, color: "var(--text-primary)", flex: 1 }}>{tag.name}</span>
-                  {ro && <span style={{ fontSize: 8, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>READ-ONLY</span>}
+                  {ro && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>READ-ONLY</span>}
                   {tag.current_value !== null && tag.current_value !== undefined && (
                     <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-accent)" }}>
                       {typeof tag.current_value === "boolean" ? (tag.current_value ? "ON" : "OFF") : Number(tag.current_value).toFixed(1)}
@@ -690,7 +690,7 @@ function TagBrowserTab({ addServerLog }) {
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
                   {tag.address} {tag.mapped_device ? `→ ${tag.mapped_device}` : ""}
                 </div>
               </div>
@@ -757,19 +757,19 @@ function MonitorTab() {
           style={live
             ? { width: 6, height: 6, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 6px var(--green)", animation: "pulse-glow 1s infinite" }
             : { width: 6, height: 6, borderRadius: "50%", background: "var(--text-muted)", opacity: 0.6 }} />
-        <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: live ? "var(--green)" : "var(--text-muted)" }}>
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: live ? "var(--green)" : "var(--text-muted)" }}>
           {live ? "LIVE" : "NO DATA"}
         </span>
       </div>
 
       <SectionLabel>Live Tag Values</SectionLabel>
       {entries.length === 0 ? (
-        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
           No live PLC values — connect a PLC first
         </div>
       ) : entries.map(([key, val]) => (
         <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", opacity: live ? 1 : 0.5 }}>
-          <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flex: 1 }}>{key}</span>
+          <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flex: 1 }}>{key}</span>
           <div style={{ width: 60, height: 3, background: "var(--border)", borderRadius: 2 }}>
             <div style={{ width: `${Math.min(100, (parseFloat(val) / 1000) * 100)}%`, height: "100%", background: "var(--accent)", borderRadius: 2 }} />
           </div>
@@ -781,11 +781,11 @@ function MonitorTab() {
 
       <SectionLabel>PLC Status</SectionLabel>
       {plcs.length === 0 ? (
-        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
           Connect a PLC in the Connect tab to see live values
         </div>
       ) : plcs.map(p => (
-        <div key={p.id} style={{ display: "flex", gap: 8, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 10 }}>
+        <div key={p.id} style={{ display: "flex", gap: 8, padding: "6px 10px", marginBottom: 4, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 11 }}>
           <div style={{ width: 5, height: 5, borderRadius: "50%", marginTop: 2, background: p.connected ? "var(--green)" : "var(--red)" }} />
           <span style={{ color: "var(--text-primary)", flex: 1 }}>{p.name}</span>
           <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{p.ip}</span>
@@ -797,7 +797,7 @@ function MonitorTab() {
 
 function SectionLabel({ children }) {
   return (
-    <div style={{ fontSize: 9, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7, marginTop: 12, borderBottom: "1px solid var(--border)", paddingBottom: 3 }}>
+    <div style={{ fontSize: 11, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7, marginTop: 12, borderBottom: "1px solid var(--border)", paddingBottom: 3 }}>
       {children}
     </div>
   );
@@ -806,7 +806,7 @@ function SectionLabel({ children }) {
 function FieldRow({ label, children }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ fontSize: 10, color: "var(--text-muted)", width: 70, flexShrink: 0, textAlign: "right", fontFamily: "var(--font-mono)" }}>{label}</span>
+      <span style={{ fontSize: 11, color: "var(--text-muted)", width: 70, flexShrink: 0, textAlign: "right", fontFamily: "var(--font-mono)" }}>{label}</span>
       <div style={{ flex: 1 }}>{children}</div>
     </div>
   );

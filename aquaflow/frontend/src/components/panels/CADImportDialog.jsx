@@ -35,10 +35,10 @@ const PREVIEW_W = 560, PREVIEW_H = 300;
 
 function Section({ title, children, defaultOpen = true, badge }) {
   const [open, setOpen] = useState(defaultOpen);
-  return <div style={{ border: "1px solid #244255", borderRadius: 5, marginBottom: 10 }}>
+  return <div style={{ border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 5, marginBottom: 10 }}>
     <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
-      style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0b1d2b", color: "#bfe6f7", border: "none", padding: "8px 10px", cursor: "pointer", font: "inherit", fontWeight: 600, borderRadius: 5 }}>
-      <span>{open ? "▾" : "▸"} {title}</span>{badge != null && <span style={{ color: "#91adc0", fontWeight: 400 }}>{badge}</span>}
+      style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-panel)", color: "var(--text-primary)", border: "none", padding: "8px 10px", cursor: "pointer", font: "inherit", fontWeight: 600, borderRadius: 5 }}>
+      <span>{open ? "▾" : "▸"} {title}</span>{badge != null && <span style={{ color: "var(--info)", fontWeight: 400 }}>{badge}</span>}
     </button>
     {open && <div style={{ padding: 10 }}>{children}</div>}
   </div>;
@@ -111,29 +111,29 @@ function ReviewCanvas({ preview, pickMode, onPick }) {
     }
   };
   return <canvas ref={ref} onClick={onClick} role="img" aria-label="CAD import layout preview"
-    style={{ width: "100%", maxWidth: PREVIEW_W, aspectRatio: `${PREVIEW_W}/${PREVIEW_H}`, borderRadius: 5, display: "block", cursor: pickMode ? "crosshair" : "default", outline: pickMode ? "2px solid #ff5c8a" : "none" }} />;
+    style={{ width: "100%", maxWidth: PREVIEW_W, aspectRatio: `${PREVIEW_W}/${PREVIEW_H}`, borderRadius: 5, display: "block", cursor: pickMode ? "crosshair" : "default", outline: pickMode ? "2px solid var(--violet)" : "none" }} />;
 }
 
 /** AF-CAD-015 review step: proposed pump → valve → nozzle groups (confirm each), dangling ends. */
 function HydraulicNetworkStep({ topology, groups, status, pipeCount, candidates, onFind, onToggle }) {
   const label = id => { const c = (candidates || []).find(x => x.id === id); return c ? (c.tag || `${typeLabel[c.effectiveType] || c.type} ${c.source_handle}`) : id; };
-  if (!pipeCount) return <p style={{ color: "#91adc0", fontSize: 12, margin: 0 }}>No pipes were recognised in this drawing.</p>;
+  if (!pipeCount) return <p style={{ color: "var(--info)", fontSize: 12, margin: 0 }}>No pipes were recognised in this drawing.</p>;
   return <div style={{ fontSize: 12 }}>
-    <p style={{ color: "#91adc0", margin: "0 0 6px" }}>AquaFlow can trace the drawn pipes to propose which pump feeds which valves and nozzles. Proposals are stored only for the groups you confirm; nothing is sent to hardware.</p>
+    <p style={{ color: "var(--info)", margin: "0 0 6px" }}>AquaFlow can trace the drawn pipes to propose which pump feeds which valves and nozzles. Proposals are stored only for the groups you confirm; nothing is sent to hardware.</p>
     <button type="button" style={small} onClick={onFind}>{topology ? "Trace again" : "Find pipe network"}</button>
     {status && <p role="status" style={{ margin: "6px 0 0" }}>{status}</p>}
     {topology && <>
       <p style={{ margin: "6px 0" }}>{topology.stats?.nodes ?? 0} nodes · {topology.stats?.links ?? 0} pipe runs · {(topology.dangling || []).length} dangling ends · {(topology.unattached || []).length} components not on a pipe</p>
-      {!groups.length && <p style={{ color: "#ffd58b", margin: "4px 0" }}>No pump was found on the pipe network, so no groups are proposed.</p>}
-      {groups.map((g, i) => <label key={`${g.pump}-${i}`} style={{ display: "block", background: "#0b1d2b", padding: 6, borderRadius: 4, marginBottom: 4 }}>
+      {!groups.length && <p style={{ color: "var(--brand-gold-pale)", margin: "4px 0" }}>No pump was found on the pipe network, so no groups are proposed.</p>}
+      {groups.map((g, i) => <label key={`${g.pump}-${i}`} style={{ display: "block", background: "var(--bg-panel)", padding: 6, borderRadius: 4, marginBottom: 4 }}>
         <input type="checkbox" aria-label={`Confirm pump group ${label(g.pump)}`} checked={!!g.confirmed} onChange={e => onToggle(i, e.target.checked)} />
         {" "}<strong>{label(g.pump)}</strong> → {(g.valves || []).length} valve{(g.valves || []).length === 1 ? "" : "s"} → {(g.nozzles || []).length} nozzle{(g.nozzles || []).length === 1 ? "" : "s"}
-        {(g.valves || []).map(v => <div key={v} style={{ color: "#bcd", paddingLeft: 18 }}>{label(v)}: {(g.valve_nozzles?.[v] || []).map(label).join(", ") || "no nozzles"}</div>)}
-        {(g.direct_nozzles || []).length > 0 && <div style={{ color: "#bcd", paddingLeft: 18 }}>direct from pump: {g.direct_nozzles.map(label).join(", ")}</div>}
+        {(g.valves || []).map(v => <div key={v} style={{ color: "var(--info)", paddingLeft: 18 }}>{label(v)}: {(g.valve_nozzles?.[v] || []).map(label).join(", ") || "no nozzles"}</div>)}
+        {(g.direct_nozzles || []).length > 0 && <div style={{ color: "var(--info)", paddingLeft: 18 }}>direct from pump: {g.direct_nozzles.map(label).join(", ")}</div>}
       </label>)}
       {(topology.dangling || []).length > 0 && <details><summary style={{ cursor: "pointer" }}>Dangling pipe ends ({topology.dangling.length})</summary>
         <ul style={{ margin: "4px 0", paddingLeft: 18 }}>{topology.dangling.slice(0, 50).map((d, i) => <li key={i}>{Number(d[0]).toFixed(2)}, {Number(d[1]).toFixed(2)} (CAD m)</li>)}</ul></details>}
-      {(topology.warnings || []).map(w => <p key={w} style={{ color: "#ffd58b", margin: "4px 0" }}>{w}</p>)}
+      {(topology.warnings || []).map(w => <p key={w} style={{ color: "var(--brand-gold-pale)", margin: "4px 0" }}>{w}</p>)}
     </>}
   </div>;
 }
@@ -389,20 +389,20 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
   const usedCategories = [...new Set((preview?.reviewCandidates || []).filter(c => !c.excluded).map(c => c.effectiveType))];
   const odaActive = cadCaps?.engineKind === "oda" || /ODA/i.test(cadCaps?.engine || "");
 
-  return <div style={{ position: "fixed", inset: 0, zIndex: 5000, background: "#000b", display: "grid", placeItems: "center", padding: 20 }}
+  return <div style={{ position: "fixed", inset: 0, zIndex: 5000, background: "color-mix(in srgb, var(--bg-void) 73%, transparent)", display: "grid", placeItems: "center", padding: 20 }}
     onKeyDown={e => { e.stopPropagation(); if (e.key === "Escape") onClose(); }}>
-    <section role="dialog" aria-modal="true" aria-labelledby="cad-import-title" style={{ width: "min(1040px,100%)", maxHeight: "94vh", overflow: "auto", background: "#081420", border: "1px solid #31536a", borderRadius: 9, padding: 22, fontFamily: "sans-serif", fontSize: 13, color: "#d9edf7" }}>
+    <section role="dialog" aria-modal="true" aria-labelledby="cad-import-title" style={{ width: "min(1040px,100%)", maxHeight: "94vh", overflow: "auto", background: "var(--bg-base)", border: "1px solid var(--info)", borderRadius: 9, padding: 22, fontFamily: "sans-serif", fontSize: 13, color: "var(--text-primary)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <h2 id="cad-import-title" style={{ margin: 0, fontSize: 21, color: "#65d8ff" }}>Import AutoCAD drawing</h2>
+        <h2 id="cad-import-title" style={{ margin: 0, fontSize: 21, color: "var(--info)" }}>Import AutoCAD drawing</h2>
         <button style={button} onClick={onClose} aria-label="Close CAD import">Close</button>
       </div>
-      <p style={{ color: "#a9c2d3", lineHeight: 1.5 }}>Choose a DWG, a DXF (ASCII or binary, up to 100 MB) or an AquaFlow AutoLISP export (.json). AquaFlow reads the whole drawing as a locked reference and recognises fountain components for you to review.</p>
+      <p style={{ color: "var(--info)", lineHeight: 1.5 }}>Choose a DWG, a DXF (ASCII or binary, up to 100 MB) or an AquaFlow AutoLISP export (.json). AquaFlow reads the whole drawing as a locked reference and recognises fountain components for you to review.</p>
       <label style={{ display: "block", marginBottom: 12 }}>Drawing file
         <input autoFocus type="file" accept=".dxf,.dwg,.json" onChange={e => importFile(e.target.files?.[0])} aria-label="AutoCAD drawing file" style={{ display: "block", marginTop: 7 }} />
       </label>
-      {odaActive && <p style={{ fontSize: 12, color: "#ffd58b", background: "#352e18", padding: 10, borderRadius: 4, lineHeight: 1.5 }}>
+      {odaActive && <p style={{ fontSize: 12, color: "var(--brand-gold-pale)", background: "var(--bg-surface)", padding: 10, borderRadius: 4, lineHeight: 1.5 }}>
         {cadCaps?.odaNotice || "ODA File Converter is free for non-commercial use only."} AutoCAD (accoreconsole) is used first when it is installed.</p>}
-      {odaPrompt && <div role="alertdialog" aria-label="ODA licence notice" style={{ background: "#352e18", color: "#ffe2a8", padding: 12, borderRadius: 5, marginBottom: 12, lineHeight: 1.5 }}>
+      {odaPrompt && <div role="alertdialog" aria-label="ODA licence notice" style={{ background: "var(--bg-surface)", color: "var(--text-primary)", padding: 12, borderRadius: 5, marginBottom: 12, lineHeight: 1.5 }}>
         <strong>ODA File Converter licence</strong>
         <p style={{ margin: "6px 0" }}>{odaPrompt.notice}</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -412,11 +412,11 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
         <p style={{ fontSize: 12, margin: "6px 0 0" }}>Alternatives with no ODA licence: save as DXF in AutoCAD, or run the AquaFlow AutoLISP export (tools/autocad/aquaflow_export.lsp).</p>
       </div>}
       {loading && <p role="status">{loading}</p>}
-      {notice && <p style={{ color: "#a8d8ff", background: "#0d2638", padding: 10, borderRadius: 4, fontSize: 12, lineHeight: 1.5 }}>{notice}</p>}
-      {(fileError || result.error) && <p role="alert" style={{ color: "#ffb39d", background: "#3b211b", padding: 12, borderRadius: 4 }}>{fileError || result.error}</p>}
+      {notice && <p style={{ color: "var(--text-primary)", background: "var(--bg-panel)", padding: 10, borderRadius: 4, fontSize: 12, lineHeight: 1.5 }}>{notice}</p>}
+      {(fileError || result.error) && <p role="alert" style={{ color: "var(--error)", background: "color-mix(in srgb, var(--error) 18%, var(--bg-panel))", padding: 12, borderRadius: 4 }}>{fileError || result.error}</p>}
 
       {(response || parsed) && <>
-        {needsUnits && <div style={{ background: "#352e18", padding: 12, borderRadius: 5, marginBottom: 12, color: "#ffe2a8" }}>
+        {needsUnits && <div style={{ background: "var(--bg-surface)", padding: 12, borderRadius: 5, marginBottom: 12, color: "var(--text-primary)" }}>
           <strong>This drawing does not say which units it uses.</strong> {source === "backend" && preview?.units ? `It is previewed in ${(CAD_UNITS[preview.units]?.label || preview.units).toLowerCase()}, guessed from its size. ` : ""}Confirm or choose the units before importing (a 36,000 mm basin must preview as 36 m).
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
             {preview?.suggestedUnits && <button style={button} onClick={() => chooseUnits(preview.suggestedUnits)}>Use suggested: {CAD_UNITS[preview.suggestedUnits]?.label}</button>}
@@ -430,38 +430,38 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
         <div style={{ display: "grid", gridTemplateColumns: "minmax(300px,1.15fr) minmax(280px,1fr)", gap: 18 }}>
           <div style={{ minWidth: 0 }}>
             <ReviewCanvas preview={preview} pickMode={pickMode} onPick={onPick} />
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0", fontSize: 12, color: "#91adc0" }}>
-              <span><span style={{ color: "#38bdff" }}>■</span> basin</span><span><span style={{ color: "#ffa94d" }}>■</span> island</span>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0", fontSize: 12, color: "var(--info)" }}>
+              <span><span style={{ color: "var(--info)" }}>■</span> basin</span><span><span style={{ color: "var(--warn)" }}>■</span> island</span>
               {source === "backend" && <><span><span style={{ color: confidenceColor(1) }}>●</span> high confidence</span><span><span style={{ color: confidenceColor(.6) }}>●</span> medium</span><span><span style={{ color: confidenceColor(.2) }}>●</span> low</span></>}
-              <span><span style={{ color: "#ff5c8a" }}>+</span> origin</span>
+              <span><span style={{ color: "var(--violet)" }}>+</span> origin</span>
             </div>
             {counts && <p style={{ margin: "4px 0" }}>{counts.fixtures} fixtures · {counts.pipes} pipes · {counts.islands} islands · {counts.land} land areas · {counts.layers} reference layers</p>}
-            {preview?.boundary && <p style={{ color: "#78dbfa", margin: "4px 0" }}>Pool span: {(Math.max(...preview.boundary.points.map(p => p.x)) - Math.min(...preview.boundary.points.map(p => p.x))).toFixed(3)} × {(Math.max(...preview.boundary.points.map(p => p.y)) - Math.min(...preview.boundary.points.map(p => p.y))).toFixed(3)} meters</p>}
-            {mode === "update" && preview && <p style={{ color: "#8bdfc3", margin: "4px 0" }}>{matched} existing fixture IDs matched (control settings kept). {preview.fixtures.length - matched} new fixtures need commissioning. Omitted current fixtures are retained.</p>}
-            {diff && <div aria-label="Re-import differences" style={{ background: "#0b1d2b", borderRadius: 5, padding: 10, margin: "8px 0" }}>
-              <strong>Changes since the current design</strong>{diff.source === "local" && <span style={{ color: "#91adc0" }}> (checked locally)</span>}
+            {preview?.boundary && <p style={{ color: "var(--info)", margin: "4px 0" }}>Pool span: {(Math.max(...preview.boundary.points.map(p => p.x)) - Math.min(...preview.boundary.points.map(p => p.x))).toFixed(3)} × {(Math.max(...preview.boundary.points.map(p => p.y)) - Math.min(...preview.boundary.points.map(p => p.y))).toFixed(3)} meters</p>}
+            {mode === "update" && preview && <p style={{ color: "var(--ok)", margin: "4px 0" }}>{matched} existing fixture IDs matched (control settings kept). {preview.fixtures.length - matched} new fixtures need commissioning. Omitted current fixtures are retained.</p>}
+            {diff && <div aria-label="Re-import differences" style={{ background: "var(--bg-panel)", borderRadius: 5, padding: 10, margin: "8px 0" }}>
+              <strong>Changes since the current design</strong>{diff.source === "local" && <span style={{ color: "var(--info)" }}> (checked locally)</span>}
               <div style={{ display: "flex", gap: 14, marginTop: 4 }}>
-                <span style={{ color: "#36e3a0" }}>+{diff.added.length} added</span>
-                <span style={{ color: "#ffca57" }}>{diff.moved.length} moved</span>
-                <span style={{ color: "#ff7a6b" }}>{diff.removed.length} not in drawing</span>
-                <span style={{ color: "#91adc0" }}>{diff.unchanged.length} unchanged</span>
+                <span style={{ color: "var(--ok)" }}>+{diff.added.length} added</span>
+                <span style={{ color: "var(--warn)" }}>{diff.moved.length} moved</span>
+                <span style={{ color: "var(--error)" }}>{diff.removed.length} not in drawing</span>
+                <span style={{ color: "var(--info)" }}>{diff.unchanged.length} unchanged</span>
               </div>
-              {diff.warnings?.map(w => <p key={w} style={{ color: "#ffd58b", fontSize: 12, margin: "4px 0 0" }}>{w}</p>)}
+              {diff.warnings?.map(w => <p key={w} style={{ color: "var(--brand-gold-pale)", fontSize: 12, margin: "4px 0 0" }}>{w}</p>)}
               {(diff.moved.length > 0 || diff.removed.length > 0) && <details style={{ marginTop: 6 }}><summary style={{ cursor: "pointer" }}>Details</summary>
                 <ul style={{ margin: "6px 0", paddingLeft: 18, maxHeight: 140, overflow: "auto", fontSize: 12 }}>
                   {diff.moved.slice(0, 200).map(m => <li key={`m-${m.id}`}>{m.id} moved {Number(m.distance_m).toFixed(3)} m{m.match && m.match !== "aquaflow_id" ? ` (matched by ${m.match === "source_handle" ? "CAD handle" : "position"})` : ""}{m.type_changed ? ` — now ${m.type_changed.to}` : ""}</li>)}
                   {diff.removed.slice(0, 200).map(r => <li key={`r-${r.id}`}>{r.id} is not in the drawing (kept in the design)</li>)}
                 </ul></details>}
             </div>}
-            {preview?.warnings.map(w => <p key={w} style={{ color: "#ffd58b", fontSize: 12, lineHeight: 1.45, margin: "4px 0" }}>{w}</p>)}
+            {preview?.warnings.map(w => <p key={w} style={{ color: "var(--brand-gold-pale)", fontSize: 12, lineHeight: 1.45, margin: "4px 0" }}>{w}</p>)}
           </div>
 
           <div style={{ minWidth: 0 }}>
             {source === "backend" && preview && <>
               <Section title="Basin and islands" badge={`${preview.basins?.length || 0} basin${preview.basins?.length === 1 ? "" : "s"} · ${outlineList.length} closed outlines`}>
-                {!outlineList.length && <p style={{ color: "#ffb39d" }}>No closed outline found. Close the basin boundary in AutoCAD and import again.</p>}
+                {!outlineList.length && <p style={{ color: "var(--error)" }}>No closed outline found. Close the basin boundary in AutoCAD and import again.</p>}
                 {outlineList.map(o => <div key={o.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6, alignItems: "center", padding: "3px 0" }}>
-                  <span title={(o.excluded ? [o.excluded] : o.reasons || []).join("; ")} style={{ fontSize: 12, wordBreak: "break-word", color: o.excluded ? "#91adc0" : undefined }}>{o.layer || "0"} · {Number(o.area).toFixed(1)} m²{o.excluded
+                  <span title={(o.excluded ? [o.excluded] : o.reasons || []).join("; ")} style={{ fontSize: 12, wordBreak: "break-word", color: o.excluded ? "var(--info)" : undefined }}>{o.layer || "0"} · {Number(o.area).toFixed(1)} m²{o.excluded
                     ? <span> · reference only ({o.excluded})</span>
                     : o.confidence != null && <span style={{ color: confidenceColor(o.confidence) }}> · {confidenceText(o.confidence)}</span>}</span>
                   {o.excluded
@@ -474,14 +474,14 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
               </Section>
 
               <Section title="Recognised fountain components" badge={`${preview.reviewCandidates.length} found`}>
-                {!preview.reviewCandidates.length && <p style={{ color: "#91adc0" }}>No components recognised. Map blocks or layers with a template, or place fixtures in the designer.</p>}
+                {!preview.reviewCandidates.length && <p style={{ color: "var(--info)" }}>No components recognised. Map blocks or layers with a template, or place fixtures in the designer.</p>}
                 {preview.groups.map(g => {
                   const items = groupedCandidates.get(g.key) || [];
                   const groupValue = groupTypes[g.key] || (g.type === "mixed" ? "" : g.type);
-                  return <div key={g.key} style={{ borderTop: "1px solid #18344a", padding: "6px 0" }}>
+                  return <div key={g.key} style={{ borderTop: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", padding: "6px 0" }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6, alignItems: "center" }}>
-                      <button type="button" onClick={() => setExpandedGroup(x => (x === g.key ? null : g.key))} style={{ background: "none", border: "none", color: "#d9edf7", textAlign: "left", cursor: "pointer", font: "inherit", padding: 0, wordBreak: "break-word" }}>
-                        {expandedGroup === g.key ? "▾" : "▸"} {g.key.replace(/^block:/, "Block ").replace(/^layer:/, "Layer ")} <span style={{ color: "#91adc0" }}>×{g.count}</span> <span style={{ color: confidenceColor(g.meanConfidence) }}>● {confidenceText(g.meanConfidence)}</span>
+                      <button type="button" onClick={() => setExpandedGroup(x => (x === g.key ? null : g.key))} style={{ background: "none", border: "none", color: "var(--text-primary)", textAlign: "left", cursor: "pointer", font: "inherit", padding: 0, wordBreak: "break-word" }}>
+                        {expandedGroup === g.key ? "▾" : "▸"} {g.key.replace(/^block:/, "Block ").replace(/^layer:/, "Layer ")} <span style={{ color: "var(--info)" }}>×{g.count}</span> <span style={{ color: confidenceColor(g.meanConfidence) }}>● {confidenceText(g.meanConfidence)}</span>
                       </button>
                       <select aria-label={`Type for all instances of ${g.key}`} title="Apply to all instances" value={groupValue} onChange={e => setGroupTypes(t => ({ ...t, [g.key]: e.target.value }))} style={small}>
                         {g.type === "mixed" && !groupTypes[g.key] && <option value="">Mixed</option>}
@@ -489,24 +489,24 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
                       </select>
                     </div>
                     {expandedGroup === g.key && <ul style={{ listStyle: "none", margin: "6px 0 0", padding: 0, maxHeight: 220, overflow: "auto" }}>
-                      {items.slice(0, 300).map(c => <li key={c.id} style={{ padding: "5px 6px", background: "#0b1d2b", borderLeft: `3px solid ${confidenceColor(c.confidence)}`, marginBottom: 4, fontSize: 12 }}>
+                      {items.slice(0, 300).map(c => <li key={c.id} style={{ padding: "5px 6px", background: "var(--bg-panel)", borderLeft: `3px solid ${confidenceColor(c.confidence)}`, marginBottom: 4, fontSize: 12 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
-                          <span>{c.tag || c.source_handle} · {Math.round((Number(c.confidence) || 0) * 100)}%{c.matchedId && <span style={{ color: "#8bdfc3" }}> · keeps {c.matchedId}</span>}</span>
+                          <span>{c.tag || c.source_handle} · {Math.round((Number(c.confidence) || 0) * 100)}%{c.matchedId && <span style={{ color: "var(--ok)" }}> · keeps {c.matchedId}</span>}</span>
                           <select aria-label={`Type for ${c.tag || c.id}`} value={candidateTypes[c.id] || c.effectiveType} onChange={e => setCandidateTypes(t => ({ ...t, [c.id]: e.target.value }))} style={{ ...small, fontSize: 11 }}>
                             {[...CAD_CANDIDATE_TYPES, "ignore"].map(t => <option key={t} value={t}>{typeLabel[t]}</option>)}
                           </select>
                         </div>
-                        {c.reasons?.length > 0 && <div style={{ color: "#91adc0" }}>Why: {c.reasons.join("; ")}</div>}
-                        {Object.entries(c.fields || {}).filter(([, v]) => v !== null && v !== undefined && v !== "").map(([k, v]) => <div key={k} style={{ color: "#bcd" }}>
-                          {k}: <strong>{String(v)}</strong>{c.field_provenance?.[k] && <span style={{ color: "#91adc0" }}> — from {c.field_provenance[k]}</span>}
-                          {/^(dmx_address|pump_id)$/.test(k) && <span style={{ color: "#ffd58b" }}> (shown for reference; addresses are never assigned by import)</span>}
+                        {c.reasons?.length > 0 && <div style={{ color: "var(--info)" }}>Why: {c.reasons.join("; ")}</div>}
+                        {Object.entries(c.fields || {}).filter(([, v]) => v !== null && v !== undefined && v !== "").map(([k, v]) => <div key={k} style={{ color: "var(--info)" }}>
+                          {k}: <strong>{String(v)}</strong>{c.field_provenance?.[k] && <span style={{ color: "var(--info)" }}> — from {c.field_provenance[k]}</span>}
+                          {/^(dmx_address|pump_id)$/.test(k) && <span style={{ color: "var(--brand-gold-pale)" }}> (shown for reference; addresses are never assigned by import)</span>}
                         </div>)}
                       </li>)}
                     </ul>}
                   </div>;
                 })}
                 {usedCategories.length > 0 && <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 12, color: "#91adc0", marginBottom: 4 }}>AquaFlow fixture used for new items</div>
+                  <div style={{ fontSize: 12, color: "var(--info)", marginBottom: 4 }}>AquaFlow fixture used for new items</div>
                   {usedCategories.map(cat => <label key={cat} style={{ display: "grid", gridTemplateColumns: "90px 1fr", gap: 6, alignItems: "center", fontSize: 12, marginBottom: 4 }}>{typeLabel[cat]}
                     <select aria-label={`AquaFlow fixture for ${cat}`} value={fixtureTypes[cat] || CAD_CANDIDATE_DEFAULT_FIXTURE[cat]} onChange={e => setFixtureTypes(t => ({ ...t, [cat]: e.target.value }))} style={small}>
                       {fixtureChoices(cat).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
@@ -517,9 +517,9 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
               <Section title="Walls, floor and land" defaultOpen={false} badge={preview.levels ? `wall ${preview.levels.wallHeight.toFixed(2)} m` : ""}>
                 {preview.levels && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <label style={{ fontSize: 12 }}>Wall height (m)<input aria-label="Wall height" type="number" step="0.05" value={wallHeight} placeholder={preview.levels.wallHeight.toFixed(2)} onChange={e => setWallHeight(e.target.value)} style={{ ...field, width: "100%", boxSizing: "border-box", marginTop: 4 }} />
-                    <span style={{ color: "#91adc0" }}>from {preview.levels.provenance.wallHeight}</span></label>
+                    <span style={{ color: "var(--info)" }}>from {preview.levels.provenance.wallHeight}</span></label>
                   <label style={{ fontSize: 12 }}>Floor level (m)<input aria-label="Floor level" type="number" step="0.05" value={floorLevel} placeholder={preview.levels.floorLevel.toFixed(2)} onChange={e => setFloorLevel(e.target.value)} style={{ ...field, width: "100%", boxSizing: "border-box", marginTop: 4 }} />
-                    <span style={{ color: "#91adc0" }}>from {preview.levels.provenance.floorLevel}</span></label>
+                    <span style={{ color: "var(--info)" }}>from {preview.levels.provenance.floorLevel}</span></label>
                 </div>}
                 <label style={{ display: "block", marginTop: 8 }}><input type="checkbox" checked={includeLand} onChange={e => setIncludeLand(e.target.checked)} /> Create land surfaces from hatches ({preview.landSurfaces?.length || 0}: {[...new Set((preview.landSurfaces || []).map(s => s.type))].join(", ") || "none"})</label>
               </Section>
@@ -538,7 +538,7 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
                     const role = roles[layer];
                     const fallback = role === "nozzle" ? "nozzle_geyser" : role === "light" ? "light_rgb" : "pump";
                     const choices = fixtureChoices(role === "nozzle" ? "nozzle" : role === "light" ? "light" : "equipment");
-                    return <tr key={layer} style={{ borderTop: "1px solid #244255" }}>
+                    return <tr key={layer} style={{ borderTop: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))" }}>
                       <td style={{ padding: 6, wordBreak: "break-word", maxWidth: 140 }}>{layer}</td>
                       <td style={{ padding: 6 }}><select aria-label={`Role for ${layer}`} value={role} onChange={e => { setRoles(r => ({ ...r, [layer]: e.target.value })); setBoundaryId(""); }} style={{ ...small, width: "100%" }}>
                         {CAD_ROLES.map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
@@ -559,11 +559,11 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
 
             <Section title="Advanced options" defaultOpen={false} badge="origin, units, templates">
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                <button type="button" style={{ ...small, borderColor: pickMode === "origin" ? "#ff5c8a" : "#31536a" }} onClick={() => setPickMode(m => (m === "origin" ? null : "origin"))}>{pickMode === "origin" ? "Click a point in the preview…" : "Pick origin"}</button>
-                <button type="button" style={{ ...small, borderColor: pickMode === "edge" ? "#ff5c8a" : "#31536a" }} onClick={() => setPickMode(m => (m === "edge" ? null : "edge"))}>{pickMode === "edge" ? "Click an edge to align…" : "Align to edge"}</button>
+                <button type="button" style={{ ...small, borderColor: pickMode === "origin" ? "var(--violet)" : "var(--info)" }} onClick={() => setPickMode(m => (m === "origin" ? null : "origin"))}>{pickMode === "origin" ? "Click a point in the preview…" : "Pick origin"}</button>
+                <button type="button" style={{ ...small, borderColor: pickMode === "edge" ? "var(--violet)" : "var(--info)" }} onClick={() => setPickMode(m => (m === "edge" ? null : "edge"))}>{pickMode === "edge" ? "Click an edge to align…" : "Align to edge"}</button>
                 <button type="button" style={small} onClick={() => setFrame(f => ({ ...cadFrame(CAD_FRAME_DEFAULTS), flipY: f.flipY }))}>Reset placement</button>
               </div>
-              <p style={{ fontSize: 12, color: "#91adc0", margin: "0 0 8px" }}>Origin (CAD) {frame.origin.x.toFixed(3)}, {frame.origin.y.toFixed(3)} · rotation {frame.rotationDeg.toFixed(2)}°</p>
+              <p style={{ fontSize: 12, color: "var(--info)", margin: "0 0 8px" }}>Origin (CAD) {frame.origin.x.toFixed(3)}, {frame.origin.y.toFixed(3)} · rotation {frame.rotationDeg.toFixed(2)}°</p>
               <label style={{ display: "block", marginBottom: 8 }}><input type="checkbox" checked={frame.flipY} onChange={e => setFrame(f => ({ ...f, flipY: e.target.checked }))} /> CAD north (+Y) at the top of the AquaFlow plan (recommended; keep on for AquaFlow exports)</label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <label style={{ fontSize: 12 }}>Drawing units<select aria-label="CAD drawing units override" value={units} onChange={e => (source === "backend" ? chooseUnits(e.target.value) : setUnits(e.target.value))} style={{ ...small, display: "block", width: "100%", marginTop: 4 }}>
@@ -578,7 +578,7 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
                 <label style={{ fontSize: 12 }}>Design name<input aria-label="Imported design name" value={name} onChange={e => setName(e.target.value)} style={{ ...small, display: "block", width: "100%", boxSizing: "border-box", marginTop: 4 }} /></label>
               </div>
               {source === "backend" && <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 12, color: "#91adc0", marginBottom: 4 }}>Mapping template (per client CAD standard)</div>
+                <div style={{ fontSize: 12, color: "var(--info)", marginBottom: 4 }}>Mapping template (per client CAD standard)</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <select aria-label="Load mapping template" value="" onChange={e => loadTemplate(e.target.value)} style={small}>
                     <option value="">{templates.length ? "Load template…" : "No saved templates"}</option>
@@ -587,16 +587,16 @@ export default function CADImportDialog({ currentProject, onApply, onClose, init
                   <input aria-label="Template name" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name" style={{ ...small, flex: "1 1 120px" }} />
                   <button type="button" style={small} disabled={!templateName.trim() || !Object.keys(groupTypes).length} onClick={storeTemplate}>Save template</button>
                 </div>
-                {templateStatus && <p style={{ fontSize: 12, color: "#8bdfc3", margin: "4px 0 0" }}>{templateStatus}</p>}
+                {templateStatus && <p style={{ fontSize: 12, color: "var(--ok)", margin: "4px 0 0" }}>{templateStatus}</p>}
               </div>}
             </Section>
           </div>
         </div>
-        <p style={{ lineHeight: 1.5, color: "#ffd58b", background: "#352e18", padding: 10, borderRadius: 4, fontSize: 12 }}>CAD import updates design data only and sends nothing to the fountain hardware. Matching fixture IDs keep their AquaFlow control settings; new fixtures get no PLC/I-CAN/DMX address. Pipes, depth zones and measurements come from the drawing, and hydraulics must be recalculated.</p>
+        <p style={{ lineHeight: 1.5, color: "var(--brand-gold-pale)", background: "var(--bg-surface)", padding: 10, borderRadius: 4, fontSize: 12 }}>CAD import updates design data only and sends nothing to the fountain hardware. Matching fixture IDs keep their AquaFlow control settings; new fixtures get no PLC/I-CAN/DMX address. Pipes, depth zones and measurements come from the drawing, and hydraulics must be recalculated.</p>
       </>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
         <button style={button} onClick={onClose}>Cancel</button>
-        <button disabled={!canApply} onClick={apply} style={{ ...button, background: canApply ? "#07533d" : "#172b38", color: canApply ? "#b8ffe4" : "#8396a2", cursor: canApply ? "pointer" : "default", fontWeight: 700 }}>Import</button>
+        <button disabled={!canApply} onClick={apply} style={{ ...button, background: canApply ? "color-mix(in srgb, var(--ok) 18%, var(--bg-panel))" : "var(--bg-surface)", color: canApply ? "var(--text-primary)" : "var(--text-muted)", cursor: canApply ? "pointer" : "default", fontWeight: 700 }}>Import</button>
       </div>
     </section>
   </div>;

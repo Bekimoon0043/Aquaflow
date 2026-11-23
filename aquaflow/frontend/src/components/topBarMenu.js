@@ -211,9 +211,10 @@ export function createMenuActionHandlers(deps) {
     },
     "Toggle Grid": () => d.toggleShowGrid(),
     "Toggle Snap": () => d.toggleSnapToGrid(),
+    // Resets the layout of whatever workspace is open (docks, side panels, Studio panels,
+    // node-editor view) without navigating away from it.
     "Reset Layout": () => {
       d.emit("aquaflow:reset-layout");
-      d.setActivePanel("nodes");
       d.emit("aquaflow:reset-node-editor");
     },
     "Scan Network": () => {

@@ -22,6 +22,10 @@ import {
 import { EasyScene } from "./easy/EasyScene";
 import { poolShape, basinPolygon } from "./easy/sceneData";
 import { laserFrame, insidePoly } from "../preview/laser/laserRig";
+import { usePanelLayout, shownSize } from "../../ui/dock/panelLayout";
+import { IconButton, Splitter } from "../../ui";
+
+const EASY_PANELS = { panels: { properties: { size: 320, min: 240, max: 560 }, tray: { size: 172, min: 110, max: 420 } } };
 
 const ROLE_UI = {
   pump: { label: "Pump", color: "#38bdf8", icon: "⊚" },
@@ -47,6 +51,10 @@ const r3 = (v) => Math.round(Number(v) * 1000) / 1000;
 const isTyping = (el) => el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
 
 export default function EasyFountainPanel() {
+  // Dockable properties column and asset tray: resize, collapse, swap side; View → Reset layout restores them.
+  const panelLayout = usePanelLayout("easybuilder", EASY_PANELS);
+  const props = panelLayout.layout.panels.properties, tray = panelLayout.layout.panels.tray, swapped = panelLayout.layout.swapped;
+  const viewCol = swapped ? 2 : 1, propsCol = swapped ? 1 : 2;
   const fixtures = useEngineeringStore((s) => s.fixtures);
   const geometry = useEngineeringStore((s) => s.geometry);
   const params = useEngineeringStore((s) => s.params);
@@ -245,7 +253,7 @@ export default function EasyFountainPanel() {
   const loose = water.jets.filter((j) => /No pump/.test(j.reason)).length;
 
   return (
-    <div ref={rootRef} style={{ position: "absolute", inset: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) 172px", gridTemplateColumns: "minmax(0,1fr) 320px", background: "var(--bg-void)", color: "var(--text-primary)", fontFamily: "var(--font-body)" }}>
+    <div ref={rootRef} style={{ position: "absolute", inset: 0, display: "grid", gridTemplateRows: `auto minmax(0,1fr) ${tray.collapsed ? "auto" : `${tray.size}px`}`, gridTemplateColumns: swapped ? `${shownSize(props)}px minmax(0,1fr)` : `minmax(0,1fr) ${shownSize(props)}px`, background: "var(--bg-void)", color: "var(--text-primary)", fontFamily: "var(--font-body)" }}>
       {/* toolbar */}
       <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border-mid)", background: "var(--bg-panel)", flexWrap: "wrap" }}>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, marginRight: 8 }}>Easy Fountain Design</div>
@@ -267,15 +275,15 @@ export default function EasyFountainPanel() {
         <button style={S.btn} onClick={undo} title="Ctrl+Z">↶ Undo</button>
         <button style={S.btn} onClick={() => setConfirm("starter")}>Starter fountain</button>
         <button style={S.btn} onClick={() => setConfirm("clear")}>Clear all</button>
-        <button style={{ ...S.btn, background: "var(--accent)", color: "#111", border: "1px solid var(--accent)" }} onClick={() => window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "preview" } }))}>Full 3D preview</button>
+        <button style={{ ...S.btn, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)" }} onClick={() => window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "preview" } }))}>Full 3D preview</button>
       </div>
 
       {/* 3D space */}
-      <div style={{ gridRow: 2, gridColumn: 1, position: "relative", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
+      <div style={{ gridRow: 2, gridColumn: viewCol, position: "relative", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
         <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />
         <div style={{ position: "absolute", left: 10, bottom: 10, right: 10, pointerEvents: "none", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-end" }}>
           <div style={{ fontSize: 12, background: "rgba(5,10,16,0.78)", border: "1px solid var(--border-mid)", padding: "7px 10px", borderRadius: 6, maxWidth: 640, lineHeight: 1.4 }}>{status}</div>
-          <div style={{ fontSize: 10.5, color: "var(--text-muted)", background: "rgba(5,10,16,0.7)", padding: "6px 9px", borderRadius: 6, lineHeight: 1.5, textAlign: "right" }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", background: "rgba(5,10,16,0.7)", padding: "6px 9px", borderRadius: 6, lineHeight: 1.5, textAlign: "right" }}>
             {Object.entries(LINK_STYLE).map(([k, v]) => <span key={k} style={{ marginLeft: 10 }}><span style={{ color: v.color }}>━</span> {v.label}</span>)}<br />
             Drag items to move · drag a white plug to re-plug · right-drag to pan · wheel to zoom
           </div>
@@ -295,7 +303,16 @@ export default function EasyFountainPanel() {
       </div>
 
       {/* properties */}
-      <div style={{ gridRow: "2 / 4", gridColumn: 2, borderLeft: "1px solid var(--border-mid)", background: "var(--bg-panel)", overflow: "auto", padding: 12, minHeight: 0 }}>
+      <div className="ws-side-panel easy-props" style={{ gridRow: "2 / 4", gridColumn: propsCol, position: "relative" }}>
+        <div className="easy-props-splitter" style={{ [swapped ? "right" : "left"]: -2 }}>
+          <Splitter label="Resize properties" onResize={(dx) => panelLayout.resize("properties", swapped ? dx : -dx)} />
+        </div>
+        <div className="ws-side-panel-bar">
+          {!props.collapsed && <span>Properties</span>}
+          {!props.collapsed && <IconButton icon="move" label="Move properties to the other side" onClick={panelLayout.swap} />}
+          <IconButton icon="chevron" label={props.collapsed ? "Expand properties" : "Collapse properties"} onClick={() => panelLayout.toggle("properties")} />
+        </div>
+        <div className="ws-side-panel-body easy-props-body" hidden={props.collapsed}>
         {selected ? (
           <FixtureProperties f={selected} design={design} links={links} water={water} byId={byId} fixtures={fixtures}
             on={live[selected.id]?.on !== false}
@@ -310,10 +327,12 @@ export default function EasyFountainPanel() {
           <Overview fixtures={fixtures} design={design} water={water} commit={commit} fixturesRef={fixturesRef}
             geometry={geometry} params={params} poolType={poolType} updateEngineering={updateEngineering} onSelect={setSelectedId} />
         )}
+        </div>
       </div>
 
       {/* asset tray */}
-      <AssetTray tab={tab} setTab={setTab} query={query} setQuery={setQuery}
+      <AssetTray tab={tab} setTab={setTab} query={query} setQuery={setQuery} column={viewCol}
+        collapsed={tray.collapsed} onToggle={() => panelLayout.toggle("tray")} onResize={(dy) => panelLayout.resize("tray", -dy)}
         onAdd={(key) => addAsset(key, sceneRef.current?.viewCenter() || { x: 0, z: 0 })} />
     </div>
   );
@@ -382,7 +401,7 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 30, height: 30, borderRadius: 8, display: "grid", placeItems: "center", background: `${ui.color}22`, color: ui.color, fontSize: 16 }}>{ui.icon}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 10, color: ui.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{ui.label}</div>
+          <div style={{ fontSize: 11, color: ui.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{ui.label}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={entry?.label || f.type}>{entry?.label || f.type}</div>
         </div>
         <button style={{ ...S.btn, ...(on ? S.btnOn : {}), padding: "4px 9px" }} onClick={() => setOn(!on)} title="Preview switch (not saved)">{role === "valve" ? (on ? "Open" : "Closed") : (on ? "On" : "Off")}</button>
@@ -418,7 +437,7 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
         <label style={{ display: "flex", alignItems: "center", gap: 8, ...S.label }}>Colour
           <input type="color" value={fxKind === "laser" ? lightColorOf({ color: f.color || "#3dff4f" }) : lightColorOf(f)} onChange={(ev) => setTop({ color: ev.target.value })} style={{ width: 44, height: 26, border: "none", background: "none", cursor: "pointer" }} />
           <span style={{ display: "flex", gap: 4 }}>{["#ffffff", "#4fc3ff", "#2563eb", "#22c55e", "#facc15", "#f97316", "#ef4444", "#d946ef"].map((c) => (
-            <button key={c} onClick={() => setTop({ color: c })} style={{ width: 16, height: 16, borderRadius: 4, border: "1px solid #0006", background: c, cursor: "pointer", padding: 0 }} />))}</span>
+            <button key={c} onClick={() => setTop({ color: c })} style={{ width: 16, height: 16, borderRadius: 4, border: "1px solid color-mix(in srgb, var(--border) 40%, transparent)", background: c, cursor: "pointer", padding: 0 }} />))}</span>
         </label>
       )}
       {fields.map((def) => <NumberField key={def.key} def={def} value={e[def.key]} onChange={(v) => setEng(def.key, v)} />)}
@@ -478,7 +497,7 @@ function FixtureProperties({ f, design, links, water, byId, fixtures, on, setOn,
         <button style={{ ...S.btn, flex: 1 }} onClick={onDuplicate} title="Ctrl+D">Duplicate</button>
         <button style={{ ...S.btn, flex: 1, color: "var(--red)" }} onClick={onDelete} title="Delete">Delete</button>
       </div>
-      {entry?.generic !== false && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Values are generic estimates — check the supplier datasheet.</div>}
+      {entry?.generic !== false && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Values are generic estimates — check the supplier datasheet.</div>}
     </div>
   );
 }
@@ -500,7 +519,7 @@ function LaserStatus({ f, on, center, safetyBasin, setEng }) {
         </>)
         : <span>{frame.beams.length} beam{frame.beams.length === 1 ? "" : "s"} · {e.laserClass ? `class ${e.laserClass}` : "show laser"}{e.opticalPowerW ? ` · ${e.opticalPowerW} W` : ""}
           {frame.clamped > 0 && <div style={{ color: "var(--amber)" }}>{frame.clamped} beam{frame.clamped === 1 ? "" : "s"} raised to stay 3 m above the audience.</div>}</span>}
-      <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 4 }}>Preview only — AquaFlow never arms a laser. Class 3B/4 needs a key switch, e-stop and a show permit.</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Preview only — AquaFlow never arms a laser. Class 3B/4 needs a key switch, e-stop and a show permit.</div>
     </div>
   );
 }
@@ -518,7 +537,7 @@ function LinkProperties({ link, byId, fixtures, commit, fixturesRef, onDone, onS
   };
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <div style={{ fontSize: 10, color: style.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{style.label}</div>
+      <div style={{ fontSize: 11, color: style.color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{style.label}</div>
       <div style={{ fontSize: 14, fontWeight: 600 }}>
         <span style={{ cursor: "pointer" }} onClick={() => onSelect(from?.id)}>{from?.label}</span>
         <span style={{ color: style.color }}> ━▶ </span>
@@ -607,7 +626,7 @@ function Overview({ fixtures, design, water, commit, fixturesRef, geometry, para
           </div>
         )}
       </div>
-      <div style={{ fontSize: 10.5, color: "var(--text-muted)", lineHeight: 1.6, ...S.section }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6, ...S.section }}>
         Delete removes the selected item · Ctrl+Z undo · Ctrl+D duplicate · Esc deselect. Everything here is the Engineering project, so Site Design, Show Programming and the full 3D preview see the same fountain.
       </div>
     </div>
@@ -616,14 +635,16 @@ function Overview({ fixtures, design, water, commit, fixturesRef, geometry, para
 
 // ─── asset tray ─────────────────────────────────────────────────────────────
 
-function AssetTray({ tab, setTab, query, setQuery, onAdd }) {
+function AssetTray({ tab, setTab, query, setQuery, onAdd, column = 1, collapsed = false, onToggle, onResize }) {
   const [axes, setAxes] = useState(0);
   const group = ASSET_GROUPS.find((g) => g.id === tab);
   const list = useMemo(() => assetsFor(tab, query, group?.axes ? axes : 0), [tab, query, axes, group]);
   const counts = useMemo(() => Object.fromEntries(ASSET_GROUPS.map((g) => [g.id, assetsFor(g.id).length])), []);
   return (
-    <div style={{ gridRow: 3, gridColumn: 1, borderTop: "1px solid var(--border-mid)", background: "var(--bg-panel)", display: "grid", gridTemplateRows: "auto minmax(0,1fr)", minWidth: 0, minHeight: 0 }}>
+    <div style={{ gridRow: 3, gridColumn: column, position: "relative", borderTop: "1px solid var(--border-mid)", background: "var(--bg-panel)", display: "grid", gridTemplateRows: "auto minmax(0,1fr)", minWidth: 0, minHeight: 0 }}>
+      {onResize && !collapsed && <div className="easy-tray-splitter"><Splitter vertical label="Resize asset tray" onResize={onResize} /></div>}
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", flexWrap: "wrap" }}>
+        {onToggle && <IconButton icon="chevron" label={collapsed ? "Expand asset tray" : "Collapse asset tray"} onClick={onToggle} />}
         <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, marginRight: 4 }}>Assets</span>
         {ASSET_GROUPS.map((g) => (
           <button key={g.id} onClick={() => setTab(g.id)} style={{ ...S.btn, padding: "4px 10px", ...(tab === g.id ? S.btnOn : {}) }}>
@@ -639,7 +660,7 @@ function AssetTray({ tab, setTab, query, setQuery, onAdd }) {
         )}
         <input style={{ ...S.field, width: 200, marginLeft: "auto" }} placeholder="Search assets…" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", overflowY: "hidden", padding: "4px 10px 10px", alignItems: "stretch" }}>
+      <div hidden={collapsed} style={{ display: collapsed ? "none" : "flex", gap: 8, overflowX: "auto", overflowY: "hidden", padding: "4px 10px 10px", alignItems: "stretch" }}>
         {!list.length && <div style={{ fontSize: 12, color: "var(--text-muted)", padding: 10 }}>No assets match.</div>}
         {list.map((a) => {
           const role = roleOf(a);
@@ -653,10 +674,10 @@ function AssetTray({ tab, setTab, query, setQuery, onAdd }) {
               style={{ flex: "0 0 132px", background: "var(--bg-surface)", border: "1px solid var(--border-mid)", borderRadius: 8, padding: 8, cursor: "grab", display: "grid", gridTemplateRows: "auto auto 1fr", gap: 4, userSelect: "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 26, height: 26, borderRadius: 6, display: "grid", placeItems: "center", background: `${a.color || ui.color}33`, color: a.color || ui.color, fontSize: 14 }}>{a.icon || ui.icon}</span>
-                <span style={{ fontSize: 9.5, color: ui.color, fontWeight: 700, textTransform: "uppercase" }}>{ui.label}</span>
+                <span style={{ fontSize: 11, color: ui.color, fontWeight: 700, textTransform: "uppercase" }}>{ui.label}</span>
               </div>
               <div style={{ fontSize: 11.5, lineHeight: 1.25, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{a.label}</div>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", alignSelf: "end" }}>{assetSummary(a)}</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", alignSelf: "end" }}>{assetSummary(a)}</div>
             </div>
           );
         })}

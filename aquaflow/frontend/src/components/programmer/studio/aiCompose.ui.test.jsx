@@ -62,9 +62,9 @@ describe('AI compose in Show Studio', () => {
   });
 
   it('falls back to the rule-based composer message when the AI fails', async () => {
-    vi.mocked(apiPost).mockRejectedValue(new Error('HTTP 502 — AI compose needs an Anthropic API key (Your fountain → AI director)'));
+    vi.mocked(apiPost).mockRejectedValue(new Error('HTTP 502 — AI compose needs an Anthropic API key (File → Preferences → AI director)'));
     openAi();
     fireEvent.click(screen.getByRole('button', { name: '✦ Compose with AI' }));
-    await screen.findByText(/AI compose needs an Anthropic API key \(Your fountain → AI director\)\. Select a group to use the rule-based composer instead\./);
+    await screen.findByText(/AI compose needs an Anthropic API key \(File → Preferences → AI director\)\. Select a group to use the rule-based composer instead\./);
   });
 });

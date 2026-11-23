@@ -50,3 +50,25 @@
 .pro-pref-row.is-toggle{cursor:pointer}
 .pro-pref-hint{font-size:11px;color:var(--text-muted)}
 .pro-pref-value{width:24px;text-align:right;font:11px var(--font-mono)}
+.nozzle-video-calibration{display:grid;gap:4px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg-surface);font:12px var(--font-body);color:var(--text-primary)}
+.nozzle-video-calibration-head{display:flex;align-items:center;gap:10px}.nozzle-video-calibration-head span{flex:1;color:var(--text-secondary)}
+.nozzle-video-calibration small{color:var(--text-muted)}
+/* Dockable side panels of the full-screen workspaces (Engineering, Easy Design) */
+.ws-side-panel{flex-shrink:0;display:flex;flex-direction:column;min-height:0;overflow:hidden;background:var(--bg-panel);border-right:1px solid var(--border)}
+.ws-side-panel-bar{display:flex;align-items:center;gap:2px;height:28px;flex:0 0 28px;padding:0 2px 0 8px;border-bottom:1px solid var(--border);background:var(--bg-surface);font:600 11px var(--font-body);color:var(--text-secondary)}
+.ws-side-panel-bar>span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-side-panel-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
+.ws-side-panel-body[hidden]{display:none}
+.easy-props{border-left:1px solid var(--border-mid);border-right:0}
+.easy-props-body{padding:12px}
+.easy-props-splitter{position:absolute;top:0;bottom:0;width:4px;z-index:5;display:flex}
+.easy-props-splitter .ui-splitter{flex:1}
+.easy-tray-splitter{position:absolute;left:0;right:0;top:-2px;height:4px;z-index:5;display:flex}
+.easy-tray-splitter .ui-splitter{flex:1}
+/* Timeline track header: Mute / Solo always visible, the rest on hover or keyboard focus */
+.tl-track-extra{display:none;gap:3px}
+.tl-track-header:hover .tl-track-extra,.tl-track-header:focus-within .tl-track-extra{display:flex}
+/* Dock: move panels by dragging tabs or right-clicking a tab */
+.dock-tab-menu{position:fixed;z-index:1300;display:flex;flex-direction:column;min-width:150px;padding:4px;background:var(--bg-raised);border:1px solid var(--border-mid);border-radius:3px;box-shadow:var(--shadow-panel)}
+.dock-tab-menu button{text-align:left;padding:5px 8px;border:0;background:none;color:var(--text-primary);font:12px var(--font-body);cursor:pointer;border-radius:2px;text-transform:capitalize}
+.dock-tab-menu button:hover,.dock-tab-menu button:focus-visible{background:var(--bg-active)}

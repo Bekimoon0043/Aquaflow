@@ -1866,17 +1866,17 @@ const importFromEngineering = () => {
 };
 
   return (
-    <div style={{ width: "100%", height: "100%", minHeight: 0, overflow: "hidden", background: "#0b0f14", color: "#d7e3f4", display: "flex", flexDirection: "column" }}>
+    <div style={{ width: "100%", height: "100%", minHeight: 0, overflow: "hidden", background: "var(--bg-base)", color: "var(--text-primary)", display: "flex", flexDirection: "column" }}>
 
       {/* ── HEADER (Team B — unchanged, TEAM C: added timecode) ─────── */}
-      <div style={{ height: 48, borderBottom: "1px solid #1d2733", display: "flex", alignItems: "center", padding: "0 16px", background: "#111827", flexShrink: 0 }}>
+      <div style={{ height: 48, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", padding: "0 16px", background: "var(--bg-panel)", flexShrink: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>AquaFlow Professional Show Programmer</div>
         <div style={{ marginLeft: 18, opacity: 0.7, fontSize: 12 }}>Manual Timeline + AI Assisted Choreography</div>
         {/* ─── TEAM C: timecode display */}
-        <div style={{ marginLeft: "auto", fontFamily: "monospace", fontSize: 18, fontWeight: "bold", color: audioElementRef.current && !audioElementRef.current.paused ? "#00ff88" : "#e8f4ff", letterSpacing: "0.05em" }}>
+        <div style={{ marginLeft: "auto", fontFamily: "monospace", fontSize: 18, fontWeight: "bold", color: audioElementRef.current && !audioElementRef.current.paused ? "var(--ok)" : "var(--text-primary)", letterSpacing: "0.05em" }}>
           {fmtTC(currentTime)}
         </div>
-        <div style={{ marginLeft: 12, fontSize: 10, color: "#556677", fontFamily: "monospace" }}>{bpmFromStore} BPM</div>
+        <div style={{ marginLeft: 12, fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>{bpmFromStore} BPM</div>
         {/* KEYBOARD SHORTCUTS HELP */}
         <button
           onClick={() => setShowShortcuts(true)}
@@ -1885,9 +1885,9 @@ const importFromEngineering = () => {
             width: 28,
             height: 28,
             borderRadius: 14,
-            border: "1px solid #4b5563",
-            background: "#1f2937",
-            color: "#9ca3af",
+            border: "1px solid var(--border-mid)",
+            background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+            color: "var(--text-secondary)",
             fontSize: 14,
             fontWeight: 700,
             cursor: "pointer",
@@ -1905,12 +1905,12 @@ const importFromEngineering = () => {
           style={{
             marginLeft: 12,
             padding: "4px 10px",
-            fontSize: 10,
+            fontSize: 11,
             borderRadius: 4,
             cursor: "pointer",
             border: `1px solid ${followPlayhead ? "#00b7ff" : "#4b5563"}`,
-            background: followPlayhead ? "rgba(0,183,255,0.15)" : "#1f2937",
-            color: followPlayhead ? "#00b7ff" : "#9ca3af",
+            background: followPlayhead ? "rgba(0,183,255,0.15)" : "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+            color: followPlayhead ? "var(--info)" : "var(--text-secondary)",
           }}
         >
           {followPlayhead ? "◉ Follow" : "◎ Follow"}
@@ -1918,8 +1918,8 @@ const importFromEngineering = () => {
       </div>
 
       {/* ── PROFESSIONAL TOOLBAR — TEAM E VISUAL PASS ONLY ───────────── */}
-      <div aria-label="Show programming tools" style={{ display: "flex", gap: 5, flexWrap: "wrap", padding: "8px 10px", flexShrink: 0, borderBottom: "1px solid #27394d" }}>
-        <input aria-label="Music for show" type="file" accept="audio/*" onChange={handleAudioUpload} style={{ width: 160, alignSelf: "center", fontSize: 10 }} />
+      <div aria-label="Show programming tools" style={{ display: "flex", gap: 5, flexWrap: "wrap", padding: "8px 10px", flexShrink: 0, borderBottom: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))" }}>
+        <input aria-label="Music for show" type="file" accept="audio/*" onChange={handleAudioUpload} style={{ width: 160, alignSelf: "center", fontSize: 11 }} />
         <button style={TOOLBAR_BUTTON_STYLE} onClick={togglePlayback}>Play / Pause</button>
         <button style={TOOLBAR_BUTTON_STYLE} onClick={undoProgramEdit}>↶ Undo</button>
         <button style={TOOLBAR_BUTTON_STYLE} onClick={redoProgramEdit}>↷ Redo</button>
@@ -1928,11 +1928,11 @@ const importFromEngineering = () => {
         <button style={TOOLBAR_BUTTON_STYLE} onClick={exportProgramJson}>Export</button>
         <label style={TOOLBAR_BUTTON_STYLE}>Import<input type="file" accept="application/json" onChange={importProgramJson} style={{ display: "none" }} /></label>
         <button style={TOOLBAR_BUTTON_STYLE} onClick={clearLocalProgram}>Clear</button>
-        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "#6de2ff" }} onClick={() => { setTimelineView("blocks"); setRightTab("blocks"); }}>Pattern Blocks</button>
+        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "var(--info)" }} onClick={() => { setTimelineView("blocks"); setRightTab("blocks"); }}>Pattern Blocks</button>
         <button style={TOOLBAR_BUTTON_STYLE} onClick={showBlockDetails}>Detailed clips</button>
-        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "#91efe4" }} onClick={() => { setTimelineView("blocks"); setEditingBlock(null); setRightTab("sections"); }}>Show Sections</button>
+        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "var(--info)" }} onClick={() => { setTimelineView("blocks"); setEditingBlock(null); setRightTab("sections"); }}>Show Sections</button>
         <button style={TOOLBAR_BUTTON_STYLE} onClick={fitPatternShow}>Fit show</button>
-        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "#c4b5fd" }} onClick={() => { setEditingBlock(null); setRightTab("patterns"); }}>Array Patterns</button>
+        <button style={{ ...TOOLBAR_BUTTON_STYLE, color: "var(--text-primary)" }} onClick={() => { setEditingBlock(null); setRightTab("patterns"); }}>Array Patterns</button>
         <button style={TOOLBAR_BUTTON_STYLE} aria-expanded={showAdvancedTools} onClick={() => setShowAdvancedTools(!showAdvancedTools)}>{showAdvancedTools ? "Fewer tools" : "More tools"}</button>
       </div>
       {showAdvancedTools && <div
@@ -1940,7 +1940,7 @@ const importFromEngineering = () => {
           maxHeight: 160,
           overflowY: "auto",
           borderBottom: "1px solid rgba(148,163,184,0.16)",
-          background: "linear-gradient(180deg,#0d1520 0%,#080e18 100%)",
+          background: "linear-gradient(180deg,var(--bg-base) 0%,var(--bg-base) 100%)",
           display: "flex",
           alignItems: "center",
           gap: 10,
@@ -1956,15 +1956,15 @@ const importFromEngineering = () => {
             type="file"
             accept="audio/*"
             onChange={handleAudioUpload}
-            style={{ color: "#d7e3f4", fontSize: 12, maxWidth: 170 }}
+            style={{ color: "var(--text-primary)", fontSize: 12, maxWidth: 170 }}
           />
           <button
             onClick={togglePlayback}
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#38bdf8,#0284c7)",
-              color: "#041018",
-              border: "1px solid #7dd3fc",
+              background: "linear-gradient(135deg,var(--info),var(--info))",
+              color: "var(--text-on-accent)",
+              border: "1px solid var(--info)",
               fontWeight: 800,
               boxShadow: "0 0 16px rgba(56,189,248,0.22)",
             }}
@@ -1977,7 +1977,7 @@ const importFromEngineering = () => {
           <div style={{ fontSize: 11, opacity: 0.58, fontFamily: "monospace" }}>
             / {audioDuration.toFixed(2)}s
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8" }}>Zoom</div>
+          <div style={{ fontSize: 11, color: "var(--info)" }}>Zoom</div>
           <input
             type="range"
             min="40"
@@ -2013,9 +2013,9 @@ const importFromEngineering = () => {
             title="Save show to browser local storage (Ctrl+S)"
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#14532d,#166534)",
-              color: "#d1fae5",
-              border: "1px solid #22c55e",
+              background: "linear-gradient(135deg,color-mix(in srgb, var(--ok) 18%, var(--bg-panel)),color-mix(in srgb, var(--ok) 18%, var(--bg-panel)))",
+              color: "var(--text-primary)",
+              border: "1px solid var(--ok)",
             }}
           >
             Save
@@ -2025,9 +2025,9 @@ const importFromEngineering = () => {
             title="Load show from browser local storage"
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#1e3a8a,#1d4ed8)",
-              color: "#dbeafe",
-              border: "1px solid #3b82f6",
+              background: "linear-gradient(135deg,var(--info),var(--info))",
+              color: "var(--text-primary)",
+              border: "1px solid var(--info)",
             }}
           >
             Load
@@ -2037,9 +2037,9 @@ const importFromEngineering = () => {
             title="Export show as JSON file"
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#312e81,#4338ca)",
-              color: "#e0e7ff",
-              border: "1px solid #6366f1",
+              background: "linear-gradient(135deg,var(--info),var(--info))",
+              color: "var(--text-primary)",
+              border: "1px solid var(--info)",
             }}
           >
             Export
@@ -2048,9 +2048,9 @@ const importFromEngineering = () => {
             title="Import a JSON show file from your computer"
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#713f12,#92400e)",
-              color: "#fef3c7",
-              border: "1px solid #f59e0b",
+              background: "linear-gradient(135deg,var(--warn),var(--warn))",
+              color: "var(--text-primary)",
+              border: "1px solid var(--warn)",
             }}
           >
             Import
@@ -2066,9 +2066,9 @@ const importFromEngineering = () => {
             title="Clear all clips, cues and beat markers"
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#7f1d1d,#991b1b)",
-              color: "#fee2e2",
-              border: "1px solid #ef4444",
+              background: "linear-gradient(135deg,var(--error),var(--error))",
+              color: "var(--text-primary)",
+              border: "1px solid var(--error)",
             }}
           >
             Clear
@@ -2093,9 +2093,9 @@ const importFromEngineering = () => {
             onClick={validateImportedData}
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#1e3a8a,#2563eb)",
-              border: "1px solid #3b82f6",
-              color: "#dbeafe",
+              background: "linear-gradient(135deg,var(--info),var(--info))",
+              border: "1px solid var(--info)",
+              color: "var(--text-primary)",
             }}
             title="Validate imported fixtures, tracks, and clips"
           >
@@ -2105,9 +2105,9 @@ const importFromEngineering = () => {
             onClick={() => setRightTab("patterns")}
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#4c1d95,#6d28d9)",
-              border: "1px solid #8b5cf6",
-              color: "#ede9fe",
+              background: "linear-gradient(135deg,var(--violet),var(--violet))",
+              border: "1px solid var(--info)",
+              color: "var(--text-primary)",
             }}
             title="Open the array pattern builder for large nozzle groups"
           >
@@ -2123,9 +2123,9 @@ const importFromEngineering = () => {
             }
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "#374151",
-              color: "#d1d5db",
-              border: "1px solid #6b7280",
+              background: "var(--info)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-bright)",
             }}
             title="Backend Save is paused during Phase 1 stabilization."
           >
@@ -2133,10 +2133,10 @@ const importFromEngineering = () => {
           </button>
           <div
             style={{
-              fontSize: 10,
-              color: "#9ca3af",
-              background: "#111827",
-              border: "1px solid #374151",
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              background: "var(--bg-panel)",
+              border: "1px solid var(--info)",
               borderRadius: 8,
               padding: "7px 9px",
               whiteSpace: "nowrap",
@@ -2149,9 +2149,9 @@ const importFromEngineering = () => {
             onClick={runValidation}
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#374151,#111827)",
-              color: "#d1d5db",
-              border: "1px solid #6b7280",
+              background: "linear-gradient(135deg,var(--info),var(--bg-panel))",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-bright)",
             }}
             title="Run validation check"
           >
@@ -2163,7 +2163,7 @@ const importFromEngineering = () => {
           <span style={PROFESSIONAL_TOOLBAR_LABEL_STYLE}>Preview</span>
           <button
             onClick={loadAuroraDemo}
-            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#412059", color: "#f4d8ff", border: "1px solid #9b55cf" }}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "color-mix(in srgb, var(--violet) 18%, var(--bg-panel))", color: "var(--text-primary)", border: "1px solid var(--violet)" }}
             title="Load a separate fountain design with jets, arches, moving nozzles and RGB lights, then play its show in 3D."
           >
             Aurora Demo → 3D
@@ -2171,14 +2171,14 @@ const importFromEngineering = () => {
           <button
             onClick={() => previewFullTimeline()}
             disabled={timelineClips.length === 0}
-            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#18413d", color: "#b8ffdd", border: "1px solid #30a081", opacity: timelineClips.length ? 1 : 0.5 }}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))", color: "var(--text-primary)", border: "1px solid var(--ok)", opacity: timelineClips.length ? 1 : 0.5 }}
             title="Play the current water, RGB light and moving-nozzle clips in the 3D design simulation."
           >
             Play Full Show in 3D
           </button>
           <button
             onClick={loadFourKiloDemo}
-            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#14384a", color: "#a9edff", border: "1px solid #2383a3" }}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))", color: "var(--text-primary)", border: "1px solid var(--info)" }}
             title="Load a 4KILO water dance into the timeline and play it in the 3D design simulation. No hardware output."
           >
             4KILO Example → 3D
@@ -2186,7 +2186,7 @@ const importFromEngineering = () => {
           <button
             onClick={() => previewWaterTimeline()}
             disabled={timelineClips.length === 0}
-            style={{ ...TOOLBAR_BUTTON_STYLE, background: "#103d32", color: "#adf0ce", border: "1px solid #278957", opacity: timelineClips.length ? 1 : 0.5 }}
+            style={{ ...TOOLBAR_BUTTON_STYLE, background: "var(--bg-surface)", color: "var(--ok)", border: "1px solid var(--ok)", opacity: timelineClips.length ? 1 : 0.5 }}
             title="Play current water outlet clips on the engineering layout in 3D. Design simulation only."
           >
             Play Water Show in 3D
@@ -2197,12 +2197,12 @@ const importFromEngineering = () => {
             style={{
               ...TOOLBAR_BUTTON_STYLE,
               background: dryRunPreviewActive
-                ? "linear-gradient(135deg,#7f1d1d,#991b1b)"
-                : "linear-gradient(135deg,#1e3a8a,#2563eb)",
-              color: dryRunPreviewActive ? "#fee2e2" : "#dbeafe",
+                ? "linear-gradient(135deg,var(--error),var(--error))"
+                : "linear-gradient(135deg,var(--info),var(--info))",
+              color: dryRunPreviewActive ? "var(--text-primary)" : "var(--text-primary)",
               border: dryRunPreviewActive
-                ? "1px solid #ef4444"
-                : "1px solid #3b82f6",
+                ? "1px solid var(--error)"
+                : "1px solid var(--info)",
               cursor:
                 isBackendAction || timelineClips.length === 0
                   ? "not-allowed"
@@ -2223,9 +2223,9 @@ const importFromEngineering = () => {
             disabled={isBackendAction || !backendAvailable}
             style={{
               ...TOOLBAR_BUTTON_STYLE,
-              background: "linear-gradient(135deg,#1e40af,#2563eb)",
-              color: "#dbeafe",
-              border: "1px solid #3b82f6",
+              background: "linear-gradient(135deg,var(--info),var(--info))",
+              color: "var(--text-primary)",
+              border: "1px solid var(--info)",
               cursor:
                 isBackendAction || !backendAvailable
                   ? "not-allowed"
@@ -2243,9 +2243,9 @@ const importFromEngineering = () => {
                 width: 9,
                 height: 9,
                 borderRadius: "50%",
-                background: backendAvailable ? "#22c55e" : "#ef4444",
+                background: backendAvailable ? "var(--ok)" : "var(--error)",
                 boxShadow: backendAvailable
-                  ? "0 0 8px #22c55e"
+                  ? "0 0 8px var(--ok)"
                   : "0 0 8px rgba(239,68,68,0.55)",
               }}
             />
@@ -2268,8 +2268,8 @@ const importFromEngineering = () => {
           justifyContent: 'center',
         }} onClick={() => setShowProgramList(false)}>
           <div style={{
-            background: '#0f1722',
-            border: '1px solid #1d2733',
+            background: "var(--bg-base)",
+            border: "1px solid var(--border)",
             borderRadius: 8,
             width: 500,
             maxWidth: '90%',
@@ -2280,24 +2280,24 @@ const importFromEngineering = () => {
           }} onClick={(e) => e.stopPropagation()}>
             <div style={{
               padding: '12px 16px',
-              borderBottom: '1px solid #1d2733',
-              background: '#111827',
+              borderBottom: "1px solid var(--border)",
+              background: "var(--bg-panel)",
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span style={{ fontWeight: 700, color: '#e8f4ff' }}>Saved Programs (Backend)</span>
+              <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>Saved Programs (Backend)</span>
               <button onClick={() => setShowProgramList(false)} style={{
                 background: 'none',
                 border: 'none',
-                color: '#556677',
+                color: "var(--text-muted)",
                 fontSize: 18,
                 cursor: 'pointer',
               }}>✕</button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
               {savedPrograms.length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#334455' }}>
+                <div style={{ padding: '40px', textAlign: 'center', color: "var(--info)" }}>
                   No saved programs found.
                   <br />
                   <span style={{ fontSize: 11 }}>Click "Backend Save" to create one.</span>
@@ -2307,21 +2307,21 @@ const importFromEngineering = () => {
                   <div key={program.program_id} style={{
                     padding: '12px',
                     marginBottom: '8px',
-                    background: '#0a1628',
-                    border: '1px solid #1a2a3a',
+                    background: "var(--bg-base)",
+                    border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                     borderRadius: 6,
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                   }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, color: '#e8f4ff', marginBottom: 4 }}>
+                      <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
                         {program.name}
                       </div>
-                      <div style={{ fontSize: 10, color: '#556677', fontFamily: 'monospace' }}>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: 'monospace' }}>
                         ID: {program.program_id} · {program.clipCount} clips · {program.cueCount} cues
                       </div>
-                      <div style={{ fontSize: 9, color: '#334455' }}>
+                      <div style={{ fontSize: 11, color: "var(--info)" }}>
                         {program.updatedAt ? new Date(program.updatedAt).toLocaleString() : 'Unknown date'}
                       </div>
                     </div>
@@ -2330,10 +2330,10 @@ const importFromEngineering = () => {
                         onClick={() => handleBackendLoad(program.program_id, program.name)}
                         style={{
                           padding: '4px 10px',
-                          background: '#1e40af',
-                          border: '1px solid #3b82f6',
+                          background: "var(--info)",
+                          border: "1px solid var(--info)",
                           borderRadius: 4,
-                          color: '#dbeafe',
+                          color: "var(--text-primary)",
                           fontSize: 11,
                           cursor: 'pointer',
                         }}
@@ -2344,10 +2344,10 @@ const importFromEngineering = () => {
                         onClick={() => handleBackendDelete(program.program_id, program.name)}
                         style={{
                           padding: '4px 10px',
-                          background: '#7f1d1d',
-                          border: '1px solid #ef4444',
+                          background: "var(--error)",
+                          border: "1px solid var(--error)",
                           borderRadius: 4,
-                          color: '#fee2e2',
+                          color: "var(--text-primary)",
                           fontSize: 11,
                           cursor: 'pointer',
                         }}
@@ -2361,10 +2361,10 @@ const importFromEngineering = () => {
             </div>
             <div style={{
               padding: '8px 12px',
-              borderTop: '1px solid #1d2733',
-              background: '#080e1e',
-              fontSize: 10,
-              color: '#556677',
+              borderTop: "1px solid var(--border)",
+              background: "var(--bg-base)",
+              fontSize: 11,
+              color: "var(--text-muted)",
               textAlign: 'center',
             }}>
               {backendAvailable ? '🟢 Backend Connected - Server save/load available' : '🔴 Backend Unavailable - Using Local Storage only'}
@@ -2388,8 +2388,8 @@ const importFromEngineering = () => {
           justifyContent: 'center',
         }} onClick={() => setShowShortcuts(false)}>
           <div style={{
-            background: '#0f1722',
-            border: '1px solid #1d2733',
+            background: "var(--bg-base)",
+            border: "1px solid var(--border)",
             borderRadius: 8,
             width: 420,
             maxWidth: '90%',
@@ -2400,17 +2400,17 @@ const importFromEngineering = () => {
           }} onClick={(e) => e.stopPropagation()}>
             <div style={{
               padding: '12px 16px',
-              borderBottom: '1px solid #1d2733',
-              background: '#111827',
+              borderBottom: "1px solid var(--border)",
+              background: "var(--bg-panel)",
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span style={{ fontWeight: 700, color: '#e8f4ff', fontSize: 14 }}>⌨️ Keyboard Shortcuts</span>
+              <span style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 14 }}>⌨️ Keyboard Shortcuts</span>
               <button onClick={() => setShowShortcuts(false)} style={{
                 background: 'none',
                 border: 'none',
-                color: '#556677',
+                color: "var(--text-muted)",
                 fontSize: 18,
                 cursor: 'pointer',
               }}>✕</button>
@@ -2434,35 +2434,35 @@ const importFromEngineering = () => {
                   alignItems: 'center',
                   gap: 12,
                   padding: '8px 0',
-                  borderBottom: i < 10 ? '1px solid #1a2a3a' : 'none',
+                  borderBottom: i < 10 ? "1px solid color-mix(in srgb, var(--info) 40%, var(--border))" : 'none',
                 }}>
                   <code style={{
-                    background: '#1a2a3a',
-                    border: '1px solid #2d3a4a',
+                    background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+                    border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                     borderRadius: 4,
                     padding: '3px 8px',
                     fontFamily: 'monospace',
                     fontSize: 11,
-                    color: '#00b7ff',
+                    color: "var(--info)",
                     minWidth: 110,
                     textAlign: 'center',
                     whiteSpace: 'nowrap',
                   }}>
                     {item.key}
                   </code>
-                  <span style={{ fontSize: 12, color: '#8899aa' }}>{item.desc}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{item.desc}</span>
                 </div>
               ))}
             </div>
             <div style={{
               padding: '10px 16px',
-              borderTop: '1px solid #1d2733',
-              background: '#080e1e',
-              fontSize: 10,
-              color: '#556677',
+              borderTop: "1px solid var(--border)",
+              background: "var(--bg-base)",
+              fontSize: 11,
+              color: "var(--text-muted)",
               textAlign: 'center',
             }}>
-              Press <code style={{ color: '#00b7ff' }}>?</code> anytime to toggle this panel
+              Press <code style={{ color: "var(--info)" }}>?</code> anytime to toggle this panel
             </div>
           </div>
         </div>
@@ -2476,12 +2476,12 @@ const importFromEngineering = () => {
         {timelineView === "blocks" && <PatternBlockList blocks={patternBlocks} selectedId={selectedBlock?.id} onSelect={selectPatternBlock}
           checkedIds={sectionBlockIds} onToggle={toggleSectionBlock}
           onCreate={() => { setEditingBlock(null); setRightTab("patterns"); }} onDetails={showBlockDetails} />}
-        <div style={{ width: 320, borderRight: "1px solid #1d2733", overflowY: "auto", background: "#0f1722", display: timelineView === "clips" ? "flex" : "none", flexDirection: "column" }}>
+        <div style={{ width: 320, borderRight: "1px solid var(--border)", overflowY: "auto", background: "var(--bg-base)", display: timelineView === "clips" ? "flex" : "none", flexDirection: "column" }}>
           {/* Header with search + filter + dense toggle */}
-          <div style={{ padding: "10px 14px", borderBottom: "1px solid #1d2733", position: "sticky", top: 0, background: "#111827", zIndex: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#8fa3bf" }}>
+          <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--bg-panel)", zIndex: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--info)" }}>
               PROGRAMMABLE DEVICES
-              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: "#556677" }}>({filteredTracks.length}/{programmableTracks.length})</span>
+              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>({filteredTracks.length}/{programmableTracks.length})</span>
             </div>
             {/* Search */}
             <input
@@ -2492,10 +2492,10 @@ const importFromEngineering = () => {
               style={{
                 width: "100%",
                 padding: "6px 10px",
-                background: "#0a1628",
-                border: "1px solid #1a2a3a",
+                background: "var(--bg-base)",
+                border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                 borderRadius: 4,
-                color: "#e8f4ff",
+                color: "var(--text-primary)",
                 fontSize: 12,
               }}
             />
@@ -2505,12 +2505,12 @@ const importFromEngineering = () => {
                 onClick={expandAllCategories}
                 style={{
                   padding: "3px 8px",
-                  fontSize: 10,
+                  fontSize: 11,
                   borderRadius: 4,
                   cursor: "pointer",
-                  border: "1px solid #4b5563",
-                  background: "#1f2937",
-                  color: "#9ca3af",
+                  border: "1px solid var(--border-mid)",
+                  background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+                  color: "var(--text-secondary)",
                 }}
                 title="Expand all categories"
               >
@@ -2520,12 +2520,12 @@ const importFromEngineering = () => {
                 onClick={collapseAllCategories}
                 style={{
                   padding: "3px 8px",
-                  fontSize: 10,
+                  fontSize: 11,
                   borderRadius: 4,
                   cursor: "pointer",
-                  border: "1px solid #4b5563",
-                  background: "#1f2937",
-                  color: "#9ca3af",
+                  border: "1px solid var(--border-mid)",
+                  background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+                  color: "var(--text-secondary)",
                 }}
                 title="Collapse all categories"
               >
@@ -2540,10 +2540,10 @@ const importFromEngineering = () => {
                 style={{
                   flex: 1,
                   padding: "4px 8px",
-                  background: "#0a1628",
-                  border: "1px solid #1a2a3a",
+                  background: "var(--bg-base)",
+                  border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                   borderRadius: 4,
-                  color: "#e8f4ff",
+                  color: "var(--text-primary)",
                   fontSize: 11,
                 }}
               >
@@ -2564,12 +2564,12 @@ const importFromEngineering = () => {
                 onClick={() => setDenseMode(!denseMode)}
                 style={{
                   padding: "4px 8px",
-                  fontSize: 10,
+                  fontSize: 11,
                   borderRadius: 4,
                   cursor: "pointer",
                   border: `1px solid ${denseMode ? "#00b7ff" : "#4b5563"}`,
-                  background: denseMode ? "rgba(0,183,255,0.15)" : "#1f2937",
-                  color: denseMode ? "#00b7ff" : "#9ca3af",
+                  background: denseMode ? "rgba(0,183,255,0.15)" : "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+                  color: denseMode ? "var(--info)" : "var(--text-secondary)",
                 }}
                 title={denseMode ? "Compact mode" : "Comfortable mode"}
               >
@@ -2580,11 +2580,11 @@ const importFromEngineering = () => {
                     {/* Category-grouped track list with collapsible headers */}
           <div style={{ flex: 1, overflowY: "auto" }}>
             {filteredTracks.length === 0 && (
-              <div style={{ padding: 24, textAlign: "center", color: "#556677", fontSize: 11 }}>
+              <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 11 }}>
                 <div style={{ fontSize: 20, opacity: 0.3, marginBottom: 6 }}>🔍</div>
                 No tracks found.
                 <br />
-                <span style={{ fontSize: 10, opacity: 0.6 }}>Try adjusting your search or filter.</span>
+                <span style={{ fontSize: 11, opacity: 0.6 }}>Try adjusting your search or filter.</span>
               </div>
             )}
             {categoryOrder.map((category) => {
@@ -2598,9 +2598,9 @@ const importFromEngineering = () => {
                     onClick={() => toggleCategory(category)}
                     style={{
                       padding: denseMode ? "6px 14px" : "8px 14px",
-                      background: "#0d1520",
-                      borderBottom: "1px solid #1a2a3a",
-                      borderTop: "1px solid #1a2a3a",
+                      background: "var(--bg-base)",
+                      borderBottom: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
+                      borderTop: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
@@ -2609,16 +2609,16 @@ const importFromEngineering = () => {
                       position: "sticky",
                       top: 0,
                       zIndex: 5,
-                      backgroundColor: "#0d1520",
+                      backgroundColor: "var(--bg-base)",
                     }}
                   >
-                    <span style={{ fontSize: 11, color: "#556677", fontWeight: 600 }}>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>
                       {isCollapsed ? "▶" : "▼"}
                     </span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#8fa3bf", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--info)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                       {category}
                     </span>
-                    <span style={{ marginLeft: "auto", fontSize: 10, color: "#556677", fontFamily: "monospace", background: "#0a1628", padding: "2px 8px", borderRadius: 12 }}>
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace", background: "var(--bg-base)", padding: "2px 8px", borderRadius: 12 }}>
                       {tracks.length}
                     </span>
                   </div>
@@ -2637,7 +2637,7 @@ const importFromEngineering = () => {
                       }}
                       style={{
                         height: denseMode ? 26 : 42,
-                        borderBottom: "1px solid #18202c",
+                        borderBottom: "1px solid var(--border)",
                         position: "relative",
                         cursor: "crosshair",
                   background:
@@ -2659,9 +2659,9 @@ const importFromEngineering = () => {
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", overflow: "hidden" }}>
-                        <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, display: "inline-block", background: TRACK_TYPE_COLORS[track.type] || resolveTrackVisualColor(track) || "#94a3b8" }} />
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, display: "inline-block", background: TRACK_TYPE_COLORS[track.type] || resolveTrackVisualColor(track) || "var(--info)" }} />
                         <span style={{ fontSize: denseMode ? 10 : 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: denseMode ? 400 : 500 }}>{track.label}</span>
-                        <span style={{ marginLeft: "auto", fontSize: 9, opacity: 0.45, fontFamily: "monospace", flexShrink: 0 }}>
+                        <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.45, fontFamily: "monospace", flexShrink: 0 }}>
                           {track.type.replace(/_/g, " ")}
                         </span>
                       </div>
@@ -2676,8 +2676,8 @@ const importFromEngineering = () => {
                   onClick={() => toggleCategory("Other")}
                   style={{
                     padding: denseMode ? "6px 14px" : "8px 14px",
-                    background: "#0d1520",
-                    borderBottom: "1px solid #1a2a3a",
+                    background: "var(--bg-base)",
+                    borderBottom: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
@@ -2685,13 +2685,13 @@ const importFromEngineering = () => {
                     userSelect: "none",
                   }}
                 >
-                  <span style={{ fontSize: 11, color: "#556677", fontWeight: 600 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>
                     {collapsedCategories.has("Other") ? "▶" : "▼"}
                   </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#8fa3bf", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--info)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     Other
                   </span>
-                  <span style={{ marginLeft: "auto", fontSize: 10, color: "#556677" }}>{groupedTracks["Other"].length}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>{groupedTracks["Other"].length}</span>
                 </div>
                 {!collapsedCategories.has("Other") && groupedTracks["Other"].map((track) => (
                   <div
@@ -2706,7 +2706,7 @@ const importFromEngineering = () => {
                     }}
                     style={{
                       height: denseMode ? 26 : 42,
-                      borderBottom: "1px solid #18202c",
+                      borderBottom: "1px solid var(--border)",
                       position: "relative",
                       cursor: "crosshair",
                       background: filteredTracks.indexOf(track) % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
@@ -2725,7 +2725,7 @@ const importFromEngineering = () => {
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", overflow: "hidden" }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, display: "inline-block", background: TRACK_TYPE_COLORS[track.type] || resolveTrackVisualColor(track) || "#94a3b8" }} />
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, display: "inline-block", background: TRACK_TYPE_COLORS[track.type] || resolveTrackVisualColor(track) || "var(--info)" }} />
                       <span style={{ fontSize: denseMode ? 10 : 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.label}</span>
                     </div>
                   </div>
@@ -2892,7 +2892,7 @@ const importFromEngineering = () => {
               borderBottom: "1px solid rgba(148,163,184,0.22)",
               position: "sticky",
               top: 0,
-              background: "linear-gradient(180deg,#111827 0%,#0b1220 100%)",
+              background: "linear-gradient(180deg,var(--bg-panel) 0%,var(--bg-base) 100%)",
               display: "flex",
               alignItems: "center",
               zIndex: 20,
@@ -2934,7 +2934,7 @@ const importFromEngineering = () => {
                       data-time={i}
                       style={{
                         fontSize: 11,
-                        color: "#cbd5e1",
+                        color: "var(--text-primary)",
                         marginLeft: 5,
                         marginTop: 1,
                         fontFamily: "monospace",
@@ -2953,7 +2953,7 @@ const importFromEngineering = () => {
           <div style={{
             position: "absolute",
             top: 0, width: 2, height: "100%",
-            background: "#00ff88",
+            background: "var(--ok)",
             zIndex: 30, pointerEvents: "none",
             transform: `translateX(${currentTime * zoom}px)`,
             willChange: "transform",
@@ -2982,7 +2982,7 @@ const importFromEngineering = () => {
             }}>
               <div style={{
                 position: "absolute", top: 2, left: 4,
-                fontSize: 10, color: "#8899aa",
+                fontSize: 11, color: "var(--text-muted)",
                 fontFamily: "monospace",
                 background: "rgba(0,0,0,0.6)",
                 padding: "1px 4px", borderRadius: 3,
@@ -3101,7 +3101,7 @@ const importFromEngineering = () => {
                       ),
                       borderRadius: 12,
                       display: "flex", alignItems: "center", paddingLeft: 10,
-                      fontSize: denseMode ? 11 : 12, fontWeight: 600, color: "#041018",
+                      fontSize: denseMode ? 11 : 12, fontWeight: 600, color: "var(--text-on-accent)",
                       boxShadow:
                         clip.id === selectedClipId
                           ? "0 0 0 2px rgba(255,255,255,0.95), 0 0 24px rgba(56,189,248,0.36), 0 12px 24px rgba(0,0,0,0.38)"
@@ -3148,16 +3148,16 @@ const importFromEngineering = () => {
         </div>
 
         {/* ─── TEAM C: tabbed right panel ─────────────────────────────── */}
-        <div style={{ width: 320, flexShrink: 0, minHeight: 0, borderLeft: "1px solid #1d2733", background: "#0f1722", display: "flex", flexDirection: "column" }}>
+        <div style={{ width: 320, flexShrink: 0, minHeight: 0, borderLeft: "1px solid var(--border)", background: "var(--bg-base)", display: "flex", flexDirection: "column" }}>
 
           {/* Tab bar */}
-          <div style={{ display: "flex", borderBottom: "1px solid #1d2733", background: "#111827", flexShrink: 0 }}>
+          <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--bg-panel)", flexShrink: 0 }}>
             {RIGHT_TABS.map((t) => (
               <button key={t.key} onClick={() => setRightTab(t.key)} style={{
-                flex: 1, padding: "8px 2px", fontSize: 10, cursor: "pointer", border: "none",
+                flex: 1, padding: "8px 2px", fontSize: 11, cursor: "pointer", border: "none",
                 borderBottom: `2px solid ${rightTab === t.key ? "#00b7ff" : "transparent"}`,
                 background: "transparent",
-                color: rightTab === t.key ? "#00b7ff" : "#556677",
+                color: rightTab === t.key ? "var(--info)" : "var(--text-muted)",
                 letterSpacing: "0.05em",
               }}>
                 {t.icon} {t.label}
@@ -3168,7 +3168,7 @@ const importFromEngineering = () => {
           {/* ── Clip tab: enhanced inspector ─────────────────────────── */}
           {rightTab === "blocks" && <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             <details open={!selectedBlock}>
-              <summary style={{ padding: 12, cursor: "pointer", color: "#9ce7fc", fontSize: 12 }}>3D preview / site controls</summary>
+              <summary style={{ padding: 12, cursor: "pointer", color: "var(--info)", fontSize: 12 }}>3D preview / site controls</summary>
               <SiteShowActions clips={timelineClips} fixtures={fixtures} audioFile={audioFile} />
             </details>
             <PatternBlockInspector block={selectedBlock} currentTime={currentTime} bpm={bpmFromStore} onChange={changePatternBlock}
@@ -3179,7 +3179,7 @@ const importFromEngineering = () => {
           </div>}
           {rightTab === "sections" && <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             <details>
-              <summary style={{ padding: 12, cursor: "pointer", color: "#9ce7fc", fontSize: 12 }}>3D preview / site controls</summary>
+              <summary style={{ padding: 12, cursor: "pointer", color: "var(--info)", fontSize: 12 }}>3D preview / site controls</summary>
               <SiteShowActions clips={timelineClips} fixtures={fixtures} audioFile={audioFile} />
             </details>
             <ShowSectionEditor clips={timelineClips} blocks={patternBlocks} selectedIds={sectionBlockIds}
@@ -3193,35 +3193,35 @@ const importFromEngineering = () => {
                 <>
                   {/* track color badge */}
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: TRACK_TYPE_COLORS[selectedClip.type] || "#94a3b8", flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#e8f4ff" }}>{selectedClip.name}</span>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: TRACK_TYPE_COLORS[selectedClip.type] || "var(--info)", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)" }}>{selectedClip.name}</span>
                   </div>
-                  <div style={{ fontSize: 10, color: "#556677", fontFamily: "monospace", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace", marginBottom: 12 }}>
                     {selectedClip.type} · id: {selectedClip.id.slice(-6)}
                   </div>
 
-                  <label style={{ fontSize: 11, color: "#8fa3bf", display: "block", marginBottom: 3 }}>Start Time (s)</label>
+                  <label style={{ fontSize: 11, color: "var(--info)", display: "block", marginBottom: 3 }}>Start Time (s)</label>
                   <input type="number" value={selectedClip.startTime} step="0.1"
                     onChange={(e) => updateSelectedClip({ startTime: Number(e.target.value) })}
-                    style={{ width: "100%", marginBottom: 10, background: "#0a1628", border: "1px solid #1a2a3a", color: "#e8f4ff", padding: "5px 8px", borderRadius: 4, fontSize: 12, fontFamily: "monospace" }}
+                    style={{ width: "100%", marginBottom: 10, background: "var(--bg-base)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", color: "var(--text-primary)", padding: "5px 8px", borderRadius: 4, fontSize: 12, fontFamily: "monospace" }}
                   />
 
-                  <label style={{ fontSize: 11, color: "#8fa3bf", display: "block", marginBottom: 3 }}>Duration (s)</label>
+                  <label style={{ fontSize: 11, color: "var(--info)", display: "block", marginBottom: 3 }}>Duration (s)</label>
                   <input type="number" value={selectedClip.duration} step="0.1" min="0.1"
                     onChange={(e) => updateSelectedClip({ duration: Number(e.target.value) })}
-                    style={{ width: "100%", marginBottom: 10, background: "#0a1628", border: "1px solid #1a2a3a", color: "#e8f4ff", padding: "5px 8px", borderRadius: 4, fontSize: 12, fontFamily: "monospace" }}
+                    style={{ width: "100%", marginBottom: 10, background: "var(--bg-base)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", color: "var(--text-primary)", padding: "5px 8px", borderRadius: 4, fontSize: 12, fontFamily: "monospace" }}
                   />
 
-                  <label style={{ fontSize: 11, color: "#8fa3bf", display: "block", marginBottom: 3 }}>Value / Intensity (%)</label>
+                  <label style={{ fontSize: 11, color: "var(--info)", display: "block", marginBottom: 3 }}>Value / Intensity (%)</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
                     <input type="range" min="0" max="100" value={selectedClip.value}
                       onChange={(e) => updateSelectedClip({ value: Number(e.target.value) })}
-                      style={{ flex: 1, accentColor: "#00b7ff" }}
+                      style={{ flex: 1, accentColor: "var(--info)" }}
                     />
-                    <span style={{ fontFamily: "monospace", fontSize: 12, width: 34, color: "#00b7ff" }}>{selectedClip.value}%</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, width: 34, color: "var(--info)" }}>{selectedClip.value}%</span>
                   </div>
 
-                  <label style={{ fontSize: 11, color: "#8fa3bf", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--info)", display: "block", marginBottom: 3 }}>
                     Curve Type
                   </label>
 
@@ -3231,9 +3231,9 @@ const importFromEngineering = () => {
                     style={{
                       width: "100%",
                       marginBottom: 10,
-                      background: "#0a1628",
-                      border: "1px solid #1a2a3a",
-                      color: "#e8f4ff",
+                      background: "var(--bg-base)",
+                      border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
+                      color: "var(--text-primary)",
                       padding: "6px 8px",
                       borderRadius: 4,
                       fontSize: 12,
@@ -3247,7 +3247,7 @@ const importFromEngineering = () => {
                     <option value="wave">Wave</option>
                   </select>
 
-                  <label style={{ fontSize: 11, color: "#8fa3bf", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--info)", display: "block", marginBottom: 3 }}>
                     Fade In (s)
                   </label>
 
@@ -3260,16 +3260,16 @@ const importFromEngineering = () => {
                     style={{
                       width: "100%",
                       marginBottom: 10,
-                      background: "#0a1628",
-                      border: "1px solid #1a2a3a",
-                      color: "#e8f4ff",
+                      background: "var(--bg-base)",
+                      border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
+                      color: "var(--text-primary)",
                       padding: "5px 8px",
                       borderRadius: 4,
                       fontSize: 12,
                     }}
                   />
 
-                  <label style={{ fontSize: 11, color: "#8fa3bf", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--info)", display: "block", marginBottom: 3 }}>
                     Fade Out (s)
                   </label>
 
@@ -3282,9 +3282,9 @@ const importFromEngineering = () => {
                     style={{
                       width: "100%",
                       marginBottom: 10,
-                      background: "#0a1628",
-                      border: "1px solid #1a2a3a",
-                      color: "#e8f4ff",
+                      background: "var(--bg-base)",
+                      border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
+                      color: "var(--text-primary)",
                       padding: "5px 8px",
                       borderRadius: 4,
                       fontSize: 12,
@@ -3296,13 +3296,13 @@ const importFromEngineering = () => {
                       marginTop: 14,
                       marginBottom: 14,
                       padding: 10,
-                      border: "1px solid #1a2a3a",
+                      border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                       borderRadius: 6,
-                      background: "#080e1e",
+                      background: "var(--bg-base)",
                     }}>
                       <div style={{
-                        fontSize: 10,
-                        color: "#556677",
+                        fontSize: 11,
+                        color: "var(--text-muted)",
                         marginBottom: 10,
                         textTransform: "uppercase",
                         letterSpacing: "0.08em",
@@ -3310,7 +3310,7 @@ const importFromEngineering = () => {
                         RGB Lighting Controls
                       </div>
 
-                      <label style={{ fontSize: 11, color: "#8fa3bf" }}>
+                      <label style={{ fontSize: 11, color: "var(--info)" }}>
                         Red
                       </label>
                       <input
@@ -3322,7 +3322,7 @@ const importFromEngineering = () => {
                         style={{ width: "100%", marginBottom: 8 }}
                       />
 
-                      <label style={{ fontSize: 11, color: "#8fa3bf" }}>
+                      <label style={{ fontSize: 11, color: "var(--info)" }}>
                         Green
                       </label>
                       <input
@@ -3334,7 +3334,7 @@ const importFromEngineering = () => {
                         style={{ width: "100%", marginBottom: 8 }}
                       />
 
-                      <label style={{ fontSize: 11, color: "#8fa3bf" }}>
+                      <label style={{ fontSize: 11, color: "var(--info)" }}>
                         Blue
                       </label>
                       <input
@@ -3348,25 +3348,25 @@ const importFromEngineering = () => {
                     </div>
                   )}
 
-                  <label style={{ fontSize: 11, color: "#8fa3bf", display: "block", marginBottom: 3 }}>Clip Color</label>
+                  <label style={{ fontSize: 11, color: "var(--info)", display: "block", marginBottom: 3 }}>Clip Color</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
                     <input type="color" value={selectedClip.color || "#00b7ff"}
                       onChange={(e) => updateSelectedClip({ color: e.target.value })}
                       style={{ width: 36, height: 28, border: "none", cursor: "pointer", borderRadius: 3 }}
                     />
-                    <span style={{ fontFamily: "monospace", fontSize: 11, color: "#556677" }}>{(selectedClip.color || "#00b7ff").toUpperCase()}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 11, color: "var(--text-muted)" }}>{(selectedClip.color || "#00b7ff").toUpperCase()}</span>
                   </div>
 
                   {/* timecode summary */}
-                  <div style={{ background: "#080e1e", border: "1px solid #1a2a3a", borderRadius: 4, padding: "10px 12px", marginBottom: 14, fontFamily: "monospace", fontSize: 10, color: "#556677" }}>
+                  <div style={{ background: "var(--bg-base)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 4, padding: "10px 12px", marginBottom: 14, fontFamily: "monospace", fontSize: 11, color: "var(--text-muted)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Start</span><span style={{ color: "#00b7ff" }}>{fmtTC(selectedClip.startTime)}</span>
+                      <span>Start</span><span style={{ color: "var(--info)" }}>{fmtTC(selectedClip.startTime)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-                      <span>End</span><span style={{ color: "#00b7ff" }}>{fmtTC(selectedClip.startTime + selectedClip.duration)}</span>
+                      <span>End</span><span style={{ color: "var(--info)" }}>{fmtTC(selectedClip.startTime + selectedClip.duration)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-                      <span>Duration</span><span style={{ color: "#f59e0b" }}>{selectedClip.duration.toFixed(2)}s</span>
+                      <span>Duration</span><span style={{ color: "var(--warn)" }}>{selectedClip.duration.toFixed(2)}s</span>
                     </div>
                   </div>
 
@@ -3375,13 +3375,13 @@ const importFromEngineering = () => {
                       marginTop: 14,
                       marginBottom: 14,
                       padding: 10,
-                      border: "1px solid #1a2a3a",
+                      border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))",
                       borderRadius: 6,
-                      background: "#080e1e",
+                      background: "var(--bg-base)",
                     }}>
                       <div style={{
-                        fontSize: 10,
-                        color: "#556677",
+                        fontSize: 11,
+                        color: "var(--text-muted)",
                         marginBottom: 10,
                         textTransform: "uppercase",
                         letterSpacing: "0.08em",
@@ -3389,7 +3389,7 @@ const importFromEngineering = () => {
                         Motion Parameters
                       </div>
 
-                      <label style={{ fontSize: 11, color: "#8fa3bf" }}>
+                      <label style={{ fontSize: 11, color: "var(--info)" }}>
                         Pan: {selectedClip.pan || 0}°
                       </label>
                       <input
@@ -3401,7 +3401,7 @@ const importFromEngineering = () => {
                         style={{ width: "100%", marginBottom: 8 }}
                       />
 
-                      <label style={{ fontSize: 11, color: "#8fa3bf" }}>
+                      <label style={{ fontSize: 11, color: "var(--info)" }}>
                         Tilt: {selectedClip.tilt || 0}°
                       </label>
                       <input
@@ -3413,7 +3413,7 @@ const importFromEngineering = () => {
                         style={{ width: "100%", marginBottom: 8 }}
                       />
 
-                      <label style={{ fontSize: 11, color: "#8fa3bf" }}>
+                      <label style={{ fontSize: 11, color: "var(--info)" }}>
                         Angle: {selectedClip.angle || 0}°
                       </label>
                       <input
@@ -3427,20 +3427,20 @@ const importFromEngineering = () => {
                     </div>
                   )}
 
-                  <button onClick={deleteSelectedClip} style={{ width: "100%", padding: 10, background: "#ef4444", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 700 }}>
+                  <button onClick={deleteSelectedClip} style={{ width: "100%", padding: 10, background: "var(--error)", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 700 }}>
                     Delete Clip
                   </button>
 
-                  <div style={{ marginTop: 10, fontSize: 9, color: "#334455", textAlign: "center" }}>
+                  <div style={{ marginTop: 10, fontSize: 11, color: "var(--info)", textAlign: "center" }}>
                     ←/→ nudge · Shift+←/→ ×10 · Ctrl+D duplicate · Ctrl+C/V copy/paste
                   </div>
                 </>
               ) : (
-                <div style={{ padding: 20, textAlign: "center", color: "#334455", fontSize: 11 }}>
+                <div style={{ padding: 20, textAlign: "center", color: "var(--info)", fontSize: 11 }}>
                   <div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>◈</div>
                   Click a timeline row to create a cue.<br />
                   Click a clip to inspect it.<br />
-                  <span style={{ fontSize: 9, opacity: 0.6 }}>Space = Play/Pause</span>
+                  <span style={{ fontSize: 11, opacity: 0.6 }}>Space = Play/Pause</span>
                 </div>
               )}
             </div>
@@ -3478,19 +3478,19 @@ const importFromEngineering = () => {
           {rightTab === "cues" && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
               {/* cue toolbar */}
-              <div style={{ padding: "8px 12px", borderBottom: "1px solid #1d2733", display: "flex", gap: 8, alignItems: "center" }}>
-                <button onClick={addCue} style={{ padding: "4px 12px", fontSize: 10, borderRadius: 4, cursor: "pointer", border: "1px solid #1d2733", background: "#080e1e", color: "#8fa3bf" }}>
+              <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", display: "flex", gap: 8, alignItems: "center" }}>
+                <button onClick={addCue} style={{ padding: "4px 12px", fontSize: 11, borderRadius: 4, cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg-base)", color: "var(--info)" }}>
                   + Add Cue at {fmtTC(currentTime)}
                 </button>
                 <div style={{ flex: 1 }} />
-                <button onClick={goCue} disabled={!cues.some(c => c.time > currentTime)} style={{ padding: "5px 16px", fontSize: 12, fontWeight: "bold", borderRadius: 4, cursor: "pointer", border: "1px solid #00b7ff", background: cues.some(c => c.time > currentTime) ? "rgba(0,183,255,0.15)" : "#080e1e", color: cues.some(c => c.time > currentTime) ? "#00b7ff" : "#1a2a3a", letterSpacing: "0.1em" }}>
+                <button onClick={goCue} disabled={!cues.some(c => c.time > currentTime)} style={{ padding: "5px 16px", fontSize: 12, fontWeight: "bold", borderRadius: 4, cursor: "pointer", border: "1px solid var(--info)", background: cues.some(c => c.time > currentTime) ? "rgba(0,183,255,0.15)" : "var(--bg-base)", color: cues.some(c => c.time > currentTime) ? "var(--info)" : "var(--info)", letterSpacing: "0.1em" }}>
                   GO ▶
                 </button>
               </div>
               {/* cue list */}
               <div style={{ flex: 1, overflowY: "auto" }}>
                 {cues.length === 0 ? (
-                  <div style={{ padding: 24, textAlign: "center", color: "#334455", fontSize: 10 }}>
+                  <div style={{ padding: 24, textAlign: "center", color: "var(--info)", fontSize: 11 }}>
                     No cues yet.<br />Mark moments in the timeline.
                   </div>
                 ) : cues.map((cue, i) => {
@@ -3498,51 +3498,51 @@ const importFromEngineering = () => {
                   const isNext    = cues.find(c => c.time > currentTime)?.id === cue.id;
                   return (
                     <div key={cue.id} onClick={() => handleSeek(cue.time)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", cursor: "pointer", background: isCurrent ? "rgba(0,183,255,0.08)" : isNext ? "rgba(0,183,255,0.04)" : "transparent", borderLeft: `2px solid ${isCurrent ? "#00b7ff" : isNext ? "#00b7ff44" : "transparent"}` }}>
-                      <span style={{ width: 22, textAlign: "right", fontFamily: "monospace", fontSize: 9, color: isCurrent ? "#00b7ff" : "#334455" }}>{cue.number}</span>
+                      <span style={{ width: 22, textAlign: "right", fontFamily: "monospace", fontSize: 11, color: isCurrent ? "var(--info)" : "var(--info)" }}>{cue.number}</span>
                       <span style={{ width: 8, height: 8, borderRadius: 2, background: cue.color, flexShrink: 0 }} />
-                      <span style={{ flex: 1, fontSize: 10, color: isCurrent ? "#e8f4ff" : "#8899aa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cue.label}</span>
-                      <span style={{ fontFamily: "monospace", fontSize: 9, color: "#334455" }}>{fmtTC(cue.time)}</span>
-                      <button onClick={e => { e.stopPropagation(); removeCue(cue.id); }} style={{ background: "none", border: "none", color: "#1a2a3a", cursor: "pointer", fontSize: 12 }}>×</button>
+                      <span style={{ flex: 1, fontSize: 11, color: isCurrent ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cue.label}</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 11, color: "var(--info)" }}>{fmtTC(cue.time)}</span>
+                      <button onClick={e => { e.stopPropagation(); removeCue(cue.id); }} style={{ background: "none", border: "none", color: "var(--info)", cursor: "pointer", fontSize: 12 }}>×</button>
                     </div>
                   );
                 })}
               </div>
               {/* next cue indicator */}
               {cues.some(c => c.time > currentTime) && (
-                <div style={{ padding: "5px 12px", borderTop: "1px solid #1d2733", display: "flex", gap: 8, fontSize: 9, background: "rgba(0,183,255,0.04)" }}>
-                  <span style={{ color: "#334455" }}>NEXT</span>
-                  <span style={{ flex: 1, color: "#00b7ff" }}>{cues.find(c => c.time > currentTime)?.label}</span>
-                  <span style={{ fontFamily: "monospace", color: "#556677" }}>{fmtTC(cues.find(c => c.time > currentTime)?.time || 0)}</span>
+                <div style={{ padding: "5px 12px", borderTop: "1px solid var(--border)", display: "flex", gap: 8, fontSize: 11, background: "rgba(0,183,255,0.04)" }}>
+                  <span style={{ color: "var(--info)" }}>NEXT</span>
+                  <span style={{ flex: 1, color: "var(--info)" }}>{cues.find(c => c.time > currentTime)?.label}</span>
+                  <span style={{ fontFamily: "monospace", color: "var(--text-muted)" }}>{fmtTC(cues.find(c => c.time > currentTime)?.time || 0)}</span>
                 </div>
               )}
             </div>
           )}
 
           {/* status bar */}
-          <div style={{ padding: "5px 14px", borderTop: "1px solid #1d2733", display: "flex", gap: 10, fontSize: 10, color: "#556677", background: "#080e1e", flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontFamily: "monospace", color: "#8899aa" }}>{programmableTracks.length} tracks</span>
-            <span style={{ color: "#1a2a3a" }}>|</span>
-            <span style={{ fontFamily: "monospace", color: timelineClips.length > 0 ? "#00b7ff" : "#556677" }}>{timelineClips.length} clips</span>
-            <span style={{ color: "#1a2a3a" }}>|</span>
-            <span style={{ fontFamily: "monospace", color: cues.length > 0 ? "#f59e0b" : "#556677" }}>{cues.length} cues</span>
-            <span style={{ color: "#1a2a3a" }}>|</span>
+          <div style={{ padding: "5px 14px", borderTop: "1px solid var(--border)", display: "flex", gap: 10, fontSize: 11, color: "var(--text-muted)", background: "var(--bg-base)", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontFamily: "monospace", color: "var(--text-muted)" }}>{programmableTracks.length} tracks</span>
+            <span style={{ color: "var(--info)" }}>|</span>
+            <span style={{ fontFamily: "monospace", color: timelineClips.length > 0 ? "var(--info)" : "var(--text-muted)" }}>{timelineClips.length} clips</span>
+            <span style={{ color: "var(--info)" }}>|</span>
+            <span style={{ fontFamily: "monospace", color: cues.length > 0 ? "var(--warn)" : "var(--text-muted)" }}>{cues.length} cues</span>
+            <span style={{ color: "var(--info)" }}>|</span>
             {selectedClip ? (
-              <span style={{ fontFamily: "monospace", color: "#00ff88" }}>
+              <span style={{ fontFamily: "monospace", color: "var(--ok)" }}>
                 ◈ {selectedClip.name} · {fmtTC(selectedClip.startTime)} → {fmtTC(selectedClip.startTime + selectedClip.duration)}
               </span>
             ) : (
-              <span style={{ fontFamily: "monospace", color: "#334455" }}>No clip selected</span>
+              <span style={{ fontFamily: "monospace", color: "var(--info)" }}>No clip selected</span>
             )}
             <div style={{ flex: 1 }} />
             {currentProgramName && (
-              <span style={{ color: "#00b7ff", fontWeight: 600 }}>📀 {currentProgramName}</span>
+              <span style={{ color: "var(--info)", fontWeight: 600 }}>📀 {currentProgramName}</span>
             )}
             {hasUnsavedChanges && (
-              <span style={{ color: "#f59e0b", fontWeight: 600 }}>✏️ Unsaved</span>
+              <span style={{ color: "var(--warn)", fontWeight: 600 }}>✏️ Unsaved</span>
             )}
-            <span style={{ fontFamily: "monospace", color: "#8fa3bf" }}>{bpmFromStore} BPM</span>
-            <span style={{ color: "#1a2a3a" }}>|</span>
-            <span style={{ fontFamily: "monospace", color: "#8fa3bf" }}>{fmtTC(audioDuration)} {audioFile ? "source music" : "total"}{audioFile && patternBlocks.length > 0 ? ` · ${fmtTC(Math.max(...patternBlocks.map(block => block.endTime)))} water dance` : ""}</span>
+            <span style={{ fontFamily: "monospace", color: "var(--info)" }}>{bpmFromStore} BPM</span>
+            <span style={{ color: "var(--info)" }}>|</span>
+            <span style={{ fontFamily: "monospace", color: "var(--info)" }}>{fmtTC(audioDuration)} {audioFile ? "source music" : "total"}{audioFile && patternBlocks.length > 0 ? ` · ${fmtTC(Math.max(...patternBlocks.map(block => block.endTime)))} water dance` : ""}</span>
           </div>
         </div>
 
@@ -3570,14 +3570,14 @@ const importFromEngineering = () => {
 
             border:
               toast.type === "success"
-                ? "1px solid #22c55e"
+                ? "1px solid var(--ok)"
                 : toast.type === "warning"
-                ? "1px solid #f59e0b"
+                ? "1px solid var(--warn)"
                 : toast.type === "error"
-                ? "1px solid #ef4444"
-                : "1px solid #334155",
+                ? "1px solid var(--error)"
+                : "1px solid var(--info)",
 
-            color: "#f8fafc",
+            color: "var(--text-primary)",
             fontSize: 12,
             fontFamily: "monospace",
             zIndex: 5000,
@@ -3602,8 +3602,8 @@ const importFromEngineering = () => {
           justifyContent: 'center',
         }} onClick={() => setShowValidationModal(false)}>
           <div style={{
-            background: '#0f1722',
-            border: '1px solid #1d2733',
+            background: "var(--bg-base)",
+            border: "1px solid var(--border)",
             borderRadius: 8,
             width: 520,
             maxWidth: '90%',
@@ -3615,23 +3615,23 @@ const importFromEngineering = () => {
             {/* Header */}
             <div style={{
               padding: '12px 16px',
-              borderBottom: '1px solid #1d2733',
-              background: '#111827',
+              borderBottom: "1px solid var(--border)",
+              background: "var(--bg-panel)",
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span style={{ fontWeight: 700, color: '#e8f4ff', fontSize: 14 }}>
+              <span style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 14 }}>
                 🔍 Import Validation Report
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 4,
                   background: validationReport.readyForDryRun ? 'rgba(74,222,128,0.15)' : 'rgba(239,68,68,0.15)',
-                  color: validationReport.readyForDryRun ? '#4ade80' : '#ef4444',
+                  color: validationReport.readyForDryRun ? "var(--ok)" : "var(--error)",
                   border: `1px solid ${validationReport.readyForDryRun ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`,
                 }}>
                   {validationReport.readyForDryRun ? 'READY FOR DRY-RUN' : 'NOT READY'}
@@ -3639,7 +3639,7 @@ const importFromEngineering = () => {
                 <button onClick={() => setShowValidationModal(false)} style={{
                   background: 'none',
                   border: 'none',
-                  color: '#556677',
+                  color: "var(--text-muted)",
                   fontSize: 18,
                   cursor: 'pointer',
                 }}>✕</button>
@@ -3649,29 +3649,29 @@ const importFromEngineering = () => {
             {/* Stats grid */}
             <div style={{
               padding: '12px 16px',
-              background: '#080e1e',
-              borderBottom: '1px solid #1d2733',
+              background: "var(--bg-base)",
+              borderBottom: "1px solid var(--border)",
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
               gap: 8,
               fontSize: 11,
               fontFamily: 'monospace',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: '#0a1628', borderRadius: 4 }}>
-                <span style={{ color: '#8fa3bf' }}>📦 Fixtures</span>
-                <span style={{ color: '#00b7ff', fontWeight: 700 }}>{validationReport.fixturesFound}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: "var(--bg-base)", borderRadius: 4 }}>
+                <span style={{ color: "var(--info)" }}>📦 Fixtures</span>
+                <span style={{ color: "var(--info)", fontWeight: 700 }}>{validationReport.fixturesFound}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: '#0a1628', borderRadius: 4 }}>
-                <span style={{ color: '#8fa3bf' }}>🎚️ Tracks Generated</span>
-                <span style={{ color: '#00b7ff', fontWeight: 700 }}>{validationReport.tracksGenerated}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: "var(--bg-base)", borderRadius: 4 }}>
+                <span style={{ color: "var(--info)" }}>🎚️ Tracks Generated</span>
+                <span style={{ color: "var(--info)", fontWeight: 700 }}>{validationReport.tracksGenerated}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: '#0a1628', borderRadius: 4 }}>
-                <span style={{ color: '#8fa3bf' }}>🎬 Clips Created</span>
-                <span style={{ color: '#00b7ff', fontWeight: 700 }}>{validationReport.clipsCreated}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: "var(--bg-base)", borderRadius: 4 }}>
+                <span style={{ color: "var(--info)" }}>🎬 Clips Created</span>
+                <span style={{ color: "var(--info)", fontWeight: 700 }}>{validationReport.clipsCreated}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: '#0a1628', borderRadius: 4 }}>
-                <span style={{ color: '#8fa3bf' }}>⚠️ Unsupported Types</span>
-                <span style={{ color: validationReport.unsupportedTypes.length > 0 ? '#f59e0b' : '#4ade80' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: "var(--bg-base)", borderRadius: 4 }}>
+                <span style={{ color: "var(--info)" }}>⚠️ Unsupported Types</span>
+                <span style={{ color: validationReport.unsupportedTypes.length > 0 ? "var(--warn)" : "var(--ok)" }}>
                   {validationReport.unsupportedTypes.length || 0}
                 </span>
               </div>
@@ -3681,66 +3681,66 @@ const importFromEngineering = () => {
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
               {/* Missing TrackId */}
               {validationReport.clipsMissingTrackId > 0 && (
-                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(239,68,68,0.06)', borderLeft: '3px solid #ef4444', borderRadius: 4 }}>
-                  <span style={{ color: '#ef4444', fontWeight: 700 }}>❌ Missing trackId:</span>
-                  <span style={{ color: '#fca5a5', marginLeft: 8 }}>{validationReport.clipsMissingTrackId} clip(s)</span>
+                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(239,68,68,0.06)', borderLeft: "3px solid var(--error)", borderRadius: 4 }}>
+                  <span style={{ color: "var(--error)", fontWeight: 700 }}>❌ Missing trackId:</span>
+                  <span style={{ color: "var(--error)", marginLeft: 8 }}>{validationReport.clipsMissingTrackId} clip(s)</span>
                 </div>
               )}
 
               {/* Missing FixtureId */}
               {validationReport.clipsMissingFixtureId > 0 && (
-                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(239,68,68,0.06)', borderLeft: '3px solid #ef4444', borderRadius: 4 }}>
-                  <span style={{ color: '#ef4444', fontWeight: 700 }}>❌ Missing fixtureId:</span>
-                  <span style={{ color: '#fca5a5', marginLeft: 8 }}>{validationReport.clipsMissingFixtureId} clip(s)</span>
+                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(239,68,68,0.06)', borderLeft: "3px solid var(--error)", borderRadius: 4 }}>
+                  <span style={{ color: "var(--error)", fontWeight: 700 }}>❌ Missing fixtureId:</span>
+                  <span style={{ color: "var(--error)", marginLeft: 8 }}>{validationReport.clipsMissingFixtureId} clip(s)</span>
                 </div>
               )}
 
               {/* Missing Type */}
               {validationReport.clipsMissingType > 0 && (
-                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: '3px solid #f59e0b', borderRadius: 4 }}>
-                  <span style={{ color: '#f59e0b', fontWeight: 700 }}>⚠️ Missing type:</span>
-                  <span style={{ color: '#fcd34d', marginLeft: 8 }}>{validationReport.clipsMissingType} clip(s)</span>
+                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: "3px solid var(--warn)", borderRadius: 4 }}>
+                  <span style={{ color: "var(--warn)", fontWeight: 700 }}>⚠️ Missing type:</span>
+                  <span style={{ color: "var(--accent)", marginLeft: 8 }}>{validationReport.clipsMissingType} clip(s)</span>
                 </div>
               )}
 
               {/* Invalid Duration */}
               {validationReport.clipsInvalidDuration > 0 && (
-                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: '3px solid #f59e0b', borderRadius: 4 }}>
-                  <span style={{ color: '#f59e0b', fontWeight: 700 }}>⚠️ Invalid duration (≤0):</span>
-                  <span style={{ color: '#fcd34d', marginLeft: 8 }}>{validationReport.clipsInvalidDuration} clip(s)</span>
+                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: "3px solid var(--warn)", borderRadius: 4 }}>
+                  <span style={{ color: "var(--warn)", fontWeight: 700 }}>⚠️ Invalid duration (≤0):</span>
+                  <span style={{ color: "var(--accent)", marginLeft: 8 }}>{validationReport.clipsInvalidDuration} clip(s)</span>
                 </div>
               )}
 
               {/* Invalid StartTime */}
               {validationReport.clipsInvalidStartTime > 0 && (
-                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: '3px solid #f59e0b', borderRadius: 4 }}>
-                  <span style={{ color: '#f59e0b', fontWeight: 700 }}>⚠️ Invalid startTime:</span>
-                  <span style={{ color: '#fcd34d', marginLeft: 8 }}>{validationReport.clipsInvalidStartTime} clip(s)</span>
+                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: "3px solid var(--warn)", borderRadius: 4 }}>
+                  <span style={{ color: "var(--warn)", fontWeight: 700 }}>⚠️ Invalid startTime:</span>
+                  <span style={{ color: "var(--accent)", marginLeft: 8 }}>{validationReport.clipsInvalidStartTime} clip(s)</span>
                 </div>
               )}
 
               {/* Duplicate IDs */}
               {validationReport.duplicateCount > 0 && (
-                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(239,68,68,0.06)', borderLeft: '3px solid #ef4444', borderRadius: 4 }}>
-                  <span style={{ color: '#ef4444', fontWeight: 700 }}>❌ Duplicate clip IDs:</span>
-                  <span style={{ color: '#fca5a5', marginLeft: 8 }}>{validationReport.duplicateCount} duplicate(s)</span>
+                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(239,68,68,0.06)', borderLeft: "3px solid var(--error)", borderRadius: 4 }}>
+                  <span style={{ color: "var(--error)", fontWeight: 700 }}>❌ Duplicate clip IDs:</span>
+                  <span style={{ color: "var(--error)", marginLeft: 8 }}>{validationReport.duplicateCount} duplicate(s)</span>
                 </div>
               )}
 
               {/* Unsupported Types */}
               {validationReport.unsupportedTypes.length > 0 && (
-                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: '3px solid #f59e0b', borderRadius: 4 }}>
-                  <span style={{ color: '#f59e0b', fontWeight: 700 }}>⚠️ Unsupported clip types:</span>
-                  <span style={{ color: '#fcd34d', marginLeft: 8 }}>{validationReport.unsupportedTypes.join(', ')}</span>
+                <div style={{ marginBottom: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.06)', borderLeft: "3px solid var(--warn)", borderRadius: 4 }}>
+                  <span style={{ color: "var(--warn)", fontWeight: 700 }}>⚠️ Unsupported clip types:</span>
+                  <span style={{ color: "var(--accent)", marginLeft: 8 }}>{validationReport.unsupportedTypes.join(', ')}</span>
                 </div>
               )}
 
               {/* Not Ready Reasons */}
               {!validationReport.readyForDryRun && validationReport.readyReasons.length > 0 && (
                 <div style={{ marginTop: 12, padding: '8px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 4 }}>
-                  <div style={{ color: '#ef4444', fontWeight: 700, marginBottom: 6 }}>❌ Dry-run not ready because:</div>
+                  <div style={{ color: "var(--error)", fontWeight: 700, marginBottom: 6 }}>❌ Dry-run not ready because:</div>
                   {validationReport.readyReasons.map((reason, idx) => (
-                    <div key={idx} style={{ color: '#fca5a5', fontSize: 11, marginLeft: 12, marginBottom: 3 }}>• {reason}</div>
+                    <div key={idx} style={{ color: "var(--error)", fontSize: 11, marginLeft: 12, marginBottom: 3 }}>• {reason}</div>
                   ))}
                 </div>
               )}
@@ -3748,7 +3748,7 @@ const importFromEngineering = () => {
               {/* Ready Success */}
               {validationReport.readyForDryRun && (
                 <div style={{ marginTop: 12, padding: '10px', background: 'rgba(74,222,128,0.1)', borderRadius: 4, textAlign: 'center' }}>
-                  <span style={{ color: '#4ade80', fontWeight: 700, fontSize: 13 }}>✅ All checks passed! Ready for Dry-Run Preview.</span>
+                  <span style={{ color: "var(--ok)", fontWeight: 700, fontSize: 13 }}>✅ All checks passed! Ready for Dry-Run Preview.</span>
                 </div>
               )}
             </div>
@@ -3756,23 +3756,23 @@ const importFromEngineering = () => {
             {/* Footer */}
             <div style={{
               padding: '10px 16px',
-              borderTop: '1px solid #1d2733',
-              background: '#080e1e',
+              borderTop: "1px solid var(--border)",
+              background: "var(--bg-base)",
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              fontSize: 10,
-              color: '#556677',
+              fontSize: 11,
+              color: "var(--text-muted)",
             }}>
               <span>Validation is frontend-only. No hardware/backend calls.</span>
               <button
                 onClick={() => setShowValidationModal(false)}
                 style={{
                   padding: '4px 12px',
-                  background: '#1f2937',
-                  border: '1px solid #4b5563',
+                  background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+                  border: "1px solid var(--border-mid)",
                   borderRadius: 4,
-                  color: '#e5e7eb',
+                  color: "var(--text-primary)",
                   fontSize: 11,
                   cursor: 'pointer',
                 }}
@@ -3797,8 +3797,8 @@ const importFromEngineering = () => {
           justifyContent: 'center',
         }} onClick={() => setValidationModal(null)}>
           <div style={{
-            background: '#0f1722',
-            border: '1px solid #1d2733',
+            background: "var(--bg-base)",
+            border: "1px solid var(--border)",
             borderRadius: 8,
             width: 480,
             maxWidth: '90%',
@@ -3810,13 +3810,13 @@ const importFromEngineering = () => {
             {/* Header */}
             <div style={{
               padding: '12px 16px',
-              borderBottom: '1px solid #1d2733',
-              background: '#111827',
+              borderBottom: "1px solid var(--border)",
+              background: "var(--bg-panel)",
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span style={{ fontWeight: 700, color: '#e8f4ff', fontSize: 14 }}>
+              <span style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 14 }}>
                 {validationModal.errors.length > 0 ? '❌ Validation Failed' : validationModal.warnings.length > 0 ? '⚠️ Validation Warnings' : '✅ Validation Passed'}
               </span>
               <div style={{
@@ -3825,12 +3825,12 @@ const importFromEngineering = () => {
                 gap: 8,
               }}>
                 <span style={{
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 4,
                   background: validationModal.errors.length > 0 ? 'rgba(239,68,68,0.15)' : validationModal.warnings.length > 0 ? 'rgba(245,158,11,0.15)' : 'rgba(74,222,128,0.15)',
-                  color: validationModal.errors.length > 0 ? '#ef4444' : validationModal.warnings.length > 0 ? '#f59e0b' : '#4ade80',
+                  color: validationModal.errors.length > 0 ? "var(--error)" : validationModal.warnings.length > 0 ? "var(--warn)" : "var(--ok)",
                   border: `1px solid ${validationModal.errors.length > 0 ? 'rgba(239,68,68,0.3)' : validationModal.warnings.length > 0 ? 'rgba(245,158,11,0.3)' : 'rgba(74,222,128,0.3)'}`,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
@@ -3840,7 +3840,7 @@ const importFromEngineering = () => {
                 <button onClick={() => setValidationModal(null)} style={{
                   background: 'none',
                   border: 'none',
-                  color: '#556677',
+                  color: "var(--text-muted)",
                   fontSize: 18,
                   cursor: 'pointer',
                 }}>✕</button>
@@ -3850,8 +3850,8 @@ const importFromEngineering = () => {
             {/* Stats bar */}
             <div style={{
               padding: '12px 16px',
-              background: '#080e1e',
-              borderBottom: '1px solid #1d2733',
+              background: "var(--bg-base)",
+              borderBottom: "1px solid var(--border)",
               display: 'flex',
               gap: 16,
               fontSize: 11,
@@ -3859,24 +3859,24 @@ const importFromEngineering = () => {
               alignItems: 'center',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#00b7ff', fontWeight: 700, fontSize: 14 }}>{validationModal.stats.clips}</span>
-                <span style={{ color: '#556677', fontSize: 9, textTransform: 'uppercase' }}>clips</span>
+                <span style={{ color: "var(--info)", fontWeight: 700, fontSize: 14 }}>{validationModal.stats.clips}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 11, textTransform: 'uppercase' }}>clips</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 14 }}>{validationModal.stats.cues}</span>
-                <span style={{ color: '#556677', fontSize: 9, textTransform: 'uppercase' }}>cues</span>
+                <span style={{ color: "var(--warn)", fontWeight: 700, fontSize: 14 }}>{validationModal.stats.cues}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 11, textTransform: 'uppercase' }}>cues</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#8b5cf6', fontWeight: 700, fontSize: 14 }}>{validationModal.stats.beatMarkers}</span>
-                <span style={{ color: '#556677', fontSize: 9, textTransform: 'uppercase' }}>beats</span>
+                <span style={{ color: "var(--info)", fontWeight: 700, fontSize: 14 }}>{validationModal.stats.beatMarkers}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 11, textTransform: 'uppercase' }}>beats</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#8899aa', fontWeight: 700, fontSize: 14 }}>{validationModal.stats.bpm}</span>
-                <span style={{ color: '#556677', fontSize: 9, textTransform: 'uppercase' }}>BPM</span>
+                <span style={{ color: "var(--text-muted)", fontWeight: 700, fontSize: 14 }}>{validationModal.stats.bpm}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 11, textTransform: 'uppercase' }}>BPM</span>
               </div>
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#556677', fontSize: 9, textTransform: 'uppercase' }}>duration</span>
-                <span style={{ color: '#8fa3bf', fontWeight: 700, fontSize: 14 }}>{fmtTC(validationModal.stats.duration)}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 11, textTransform: 'uppercase' }}>duration</span>
+                <span style={{ color: "var(--info)", fontWeight: 700, fontSize: 14 }}>{fmtTC(validationModal.stats.duration)}</span>
               </div>
             </div>
 
@@ -3897,13 +3897,13 @@ const importFromEngineering = () => {
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: '#ef4444',
+                      background: "var(--error)",
                       display: 'inline-block',
                     }} />
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: '#ef4444',
+                      color: "var(--error)",
                       textTransform: 'uppercase',
                       letterSpacing: '0.08em',
                     }}>
@@ -3912,7 +3912,7 @@ const importFromEngineering = () => {
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: '#ef4444',
+                      color: "var(--error)",
                       background: 'rgba(239,68,68,0.15)',
                       padding: '2px 8px',
                       borderRadius: 4,
@@ -3929,12 +3929,12 @@ const importFromEngineering = () => {
                       borderRadius: 4,
                       marginBottom: 6,
                       fontSize: 12,
-                      color: '#fca5a5',
+                      color: "var(--error)",
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8,
                     }}>
-                      <span style={{ color: '#ef4444', fontWeight: 700, fontSize: 14 }}>×</span>
+                      <span style={{ color: "var(--error)", fontWeight: 700, fontSize: 14 }}>×</span>
                       {err}
                     </div>
                   ))}
@@ -3956,13 +3956,13 @@ const importFromEngineering = () => {
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: '#f59e0b',
+                      background: "var(--warn)",
                       display: 'inline-block',
                     }} />
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: '#f59e0b',
+                      color: "var(--warn)",
                       textTransform: 'uppercase',
                       letterSpacing: '0.08em',
                     }}>
@@ -3971,7 +3971,7 @@ const importFromEngineering = () => {
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: '#f59e0b',
+                      color: "var(--warn)",
                       background: 'rgba(245,158,11,0.15)',
                       padding: '2px 8px',
                       borderRadius: 4,
@@ -3988,12 +3988,12 @@ const importFromEngineering = () => {
                       borderRadius: 4,
                       marginBottom: 6,
                       fontSize: 12,
-                      color: '#fcd34d',
+                      color: "var(--accent)",
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8,
                     }}>
-                      <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 14 }}>!</span>
+                      <span style={{ color: "var(--warn)", fontWeight: 700, fontSize: 14 }}>!</span>
                       {warn}
                     </div>
                   ))}
@@ -4005,7 +4005,7 @@ const importFromEngineering = () => {
                 <div style={{
                   padding: 24,
                   textAlign: 'center',
-                  color: '#4ade80',
+                  color: "var(--ok)",
                   fontSize: 13,
                 }}>
                   <div style={{
@@ -4021,7 +4021,7 @@ const importFromEngineering = () => {
                     fontSize: 24,
                   }}>✅</div>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>Timeline looks good</div>
-                  <div style={{ fontSize: 11, color: '#556677' }}>Ready to compile</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Ready to compile</div>
                 </div>
               )}
             </div>
@@ -4029,23 +4029,23 @@ const importFromEngineering = () => {
             {/* Footer */}
             <div style={{
               padding: '12px 16px',
-              borderTop: '1px solid #1d2733',
-              background: '#080e1e',
+              borderTop: "1px solid var(--border)",
+              background: "var(--bg-base)",
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span style={{ fontSize: 10, color: '#445566' }}>
+              <span style={{ fontSize: 11, color: "var(--info)" }}>
                 Open browser console (F12) for detailed diagnostics.
               </span>
               <button
                 onClick={() => setValidationModal(null)}
                 style={{
                   padding: '6px 16px',
-                  background: '#1f2937',
-                  border: '1px solid #4b5563',
+                  background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))",
+                  border: "1px solid var(--border-mid)",
                   borderRadius: 4,
-                  color: '#e5e7eb',
+                  color: "var(--text-primary)",
                   fontSize: 12,
                   cursor: 'pointer',
                   fontWeight: 600,

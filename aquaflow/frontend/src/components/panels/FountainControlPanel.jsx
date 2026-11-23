@@ -45,7 +45,7 @@ function Step({ n, title, done, children }) {
     <div style={{ marginBottom: 14, paddingLeft: 10, borderLeft: `2px solid ${done ? C.ok : C.line}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
         <span style={{
-          width: 16, height: 16, borderRadius: "50%", fontSize: 9, fontFamily: MONO,
+          width: 16, height: 16, borderRadius: "50%", fontSize: 11, fontFamily: MONO,
           display: "flex", alignItems: "center", justifyContent: "center",
           background: done ? `${C.ok}22` : "transparent",
           border: `1px solid ${done ? C.ok : C.line}`, color: done ? C.ok : C.dim,
@@ -320,7 +320,7 @@ export default function FountainControlPanel() {
         <span style={{ color: C.bright, fontSize: 14 }}>Fountain Control — I-CAN Gateway</span>
         <span style={{ color: stateColor, fontSize: 11 }}>● {status?.state || "unknown"}</span>
         {connected && (
-          <span style={{ color: verified ? C.ok : C.warn, fontSize: 10 }}>
+          <span style={{ color: verified ? C.ok : C.warn, fontSize: 11 }}>
             {verified ? "gateway replied" : "unverified"}
           </span>
         )}
@@ -329,14 +329,14 @@ export default function FountainControlPanel() {
           // Visible proof the output stream is running. A count stuck at 0 while armed
           // means the state is not being re-sent, and a controller with an output
           // watchdog would drop its relays.
-          <span style={{ color: status?.streaming ? C.ok : C.danger, fontSize: 10 }}>
+          <span style={{ color: status?.streaming ? C.ok : C.danger, fontSize: 11 }}>
             {status?.streaming
               ? `streaming ${status.refresh_hz}Hz · ${status.frames_streamed} frames`
               : "NOT STREAMING"}
           </span>
         )}
       </div>
-      <div style={{ color: C.dim, fontSize: 10, marginBottom: 14, lineHeight: 1.5 }}>
+      <div style={{ color: C.dim, fontSize: 11, marginBottom: 14, lineHeight: 1.5 }}>
         Each step unlocks the next. Connecting does not arm the output, and neither does
         attaching — arming is deliberate and separate.
       </div>
@@ -344,7 +344,7 @@ export default function FountainControlPanel() {
       {connected && !verified && (
         <div style={{
           marginBottom: 10, padding: "7px 10px", borderRadius: 4,
-          background: `${C.warn}14`, border: `1px solid ${C.warn}55`, color: C.text, fontSize: 10, lineHeight: 1.5,
+          background: `${C.warn}14`, border: `1px solid ${C.warn}55`, color: C.text, fontSize: 11, lineHeight: 1.5,
         }}>
           <b style={{ color: C.warn }}>Link unverified.</b> The gateway did not answer the
           read-only poll. Commands are still sent — I-CAN output is fire-and-forget and the
@@ -356,7 +356,7 @@ export default function FountainControlPanel() {
       {status?.local_port_fallback && (
         <div style={{
           marginBottom: 10, padding: "7px 10px", borderRadius: 4,
-          background: `${C.danger}14`, border: `1px solid ${C.danger}55`, color: C.text, fontSize: 10, lineHeight: 1.5,
+          background: `${C.danger}14`, border: `1px solid ${C.danger}55`, color: C.text, fontSize: 11, lineHeight: 1.5,
         }}>
           <b style={{ color: C.danger }}>Local port {status.local_port} — not 2002.</b> Port
           2002 was busy, most likely because the original I-CAN software is still running.
@@ -381,7 +381,7 @@ export default function FountainControlPanel() {
 
       <Step n={0} title="Arm the safety system" done={permit}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, color: permit ? C.ok : C.warn }}>
+          <span style={{ fontSize: 11, color: permit ? C.ok : C.warn }}>
             {safety ? `${safety.state} · permit ${permit ? "GRANTED" : "WITHHELD"}` : "safety status unavailable"}
           </span>
           {!permit && (
@@ -389,13 +389,13 @@ export default function FountainControlPanel() {
           )}
         </div>
         {!permit && (
-          <div style={{ color: C.warn, fontSize: 10, marginTop: 4 }}>
+          <div style={{ color: C.warn, fontSize: 11, marginTop: 4 }}>
             Until the permit is granted every command is clamped to zero — the fountain
             will not move no matter what else is armed below.
           </div>
         )}
         {safety?.latched_faults?.length > 0 && (
-          <div style={{ color: C.danger, fontSize: 10, marginTop: 4 }}>
+          <div style={{ color: C.danger, fontSize: 11, marginTop: 4 }}>
             Latched faults block arming: {safety.latched_faults.join(", ")}
           </div>
         )}
@@ -406,7 +406,7 @@ export default function FountainControlPanel() {
           <button style={btn(busy === "discover")} disabled={!!busy} onClick={doDiscover}>
             {busy === "discover" ? "Scanning…" : "Discover"}
           </button>
-          <span style={{ color: C.dim, fontSize: 10 }}>or connect directly:</span>
+          <span style={{ color: C.dim, fontSize: 11 }}>or connect directly:</span>
           <input style={{ ...input, width: 110 }} value={manualIp} onChange={e => setManualIp(e.target.value)} />
           <input style={{ ...input, width: 52 }} value={gwPort} onChange={e => setGwPort(e.target.value)} title="gateway port" />
           <input style={{ ...input, width: 60 }} value={localPort} onChange={e => setLocalPort(e.target.value)} title="local port" />
@@ -414,13 +414,13 @@ export default function FountainControlPanel() {
           {connected && <button style={btn(false, C.warn)} disabled={!!busy} onClick={doDisconnect}>Disconnect</button>}
         </div>
         {connected && (
-          <div style={{ fontSize: 10, color: C.dim, marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>
             sending from local port <span style={{ color: C.bright }}>{status.local_port}</span>
             {" → "}{status.gateway_ip}:{status.gateway_port}
           </div>
         )}
         {scanInfo && (
-          <div style={{ fontSize: 10, marginTop: 4, marginBottom: 4,
+          <div style={{ fontSize: 11, marginTop: 4, marginBottom: 4,
                         color: scanInfo.found ? C.ok : C.warn }}>
             {scanInfo.found
               ? "gateway answered"
@@ -437,7 +437,7 @@ export default function FountainControlPanel() {
         {gateways.length > 0 && (
           <div style={{ marginTop: 4 }}>
             {gateways.map((g, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 10, color: C.text, padding: "2px 0" }}>
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: C.text, padding: "2px 0" }}>
                 <span style={{ color: C.accent }}>{g.ip || g.gateway_ip || g.address || "?"}</span>
                 <span style={{ color: C.dim }}>{g.verdict || g.reason || g.status || ""}</span>
                 <button style={btn(false, C.ok)} disabled={!!busy}
@@ -469,12 +469,12 @@ export default function FountainControlPanel() {
               disabled={!!busy}
               onChange={e => { doImportCapture(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
-          <span style={{ color: C.dim, fontSize: 10 }}>
+          <span style={{ color: C.dim, fontSize: 11 }}>
             changes.txt or capture.jsonl — maps every channel the real show drove
           </span>
         </div>
         {hasChannels ? (
-          <div style={{ fontSize: 10, color: C.text }}>
+          <div style={{ fontSize: 11, color: C.text }}>
             {channels.map(d => (
               <div key={d.device_id} style={{ padding: "1px 0" }}>
                 <span style={{ color: C.accent }}>g{d.ican_group}/c{d.ican_channel}</span>{" "}
@@ -482,14 +482,14 @@ export default function FountainControlPanel() {
               </div>
             ))}
           </div>
-        ) : <div style={{ color: C.dim, fontSize: 10 }}>No channels mapped yet.</div>}
+        ) : <div style={{ color: C.dim, fontSize: 11 }}>No channels mapped yet.</div>}
       </Step>
 
       <Step n={3} title="Attach to the output bus" done={!!attached}>
         <button style={btn(false)} disabled={!!busy || !connected || !hasChannels} onClick={doAttach}>
           Attach {channels.length ? `(${channels.length})` : ""}
         </button>
-        <span style={{ color: C.dim, fontSize: 10, marginLeft: 8 }}>
+        <span style={{ color: C.dim, fontSize: 11, marginLeft: 8 }}>
           {!connected ? "connect first" : !hasChannels ? "map a channel first" : "routes these channels to the runtime"}
         </span>
       </Step>
@@ -503,7 +503,7 @@ export default function FountainControlPanel() {
               disabled={!!busy || !connected || !permit || confirmText !== "ARM OUTPUT"} onClick={doArm}>
               Arm output
             </button>
-            <span style={{ color: C.dim, fontSize: 10 }}>
+            <span style={{ color: C.dim, fontSize: 11 }}>
               {!connected ? "connect first" : !permit ? "arm safety first" : "required for manual controls and the site demo"}
             </span>
           </div>
@@ -513,7 +513,7 @@ export default function FountainControlPanel() {
       </Step>
 
       <Step n={5} title="Run the proven one-minute fountain demo" done={siteDemo?.outcome === "completed"}>
-        <div style={{ fontSize: 10, color: C.text, lineHeight: 1.5, marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5, marginBottom: 8 }}>
           Replays 2,503 captured state changes across groups 1, 2, 9, 17 and 25.
           It stops automatically at 1:00 and sends all groups off. The red button stops
           it immediately.
@@ -528,7 +528,7 @@ export default function FountainControlPanel() {
             onClick={stopSiteDemo}>
             STOP DEMO
           </button>
-          <span style={{ color: siteDemo?.running ? C.ok : C.dim, fontSize: 10 }}>
+          <span style={{ color: siteDemo?.running ? C.ok : C.dim, fontSize: 11 }}>
             {siteDemo?.running
               ? `${siteDemo.frames_sent || 0}/${siteDemo.total_events || 2503} captured changes sent`
               : siteDemo?.outcome && siteDemo.outcome !== "idle"
@@ -540,20 +540,20 @@ export default function FountainControlPanel() {
           <div style={{ width: `${demoProgress}%`, height: "100%", background: siteDemo?.running ? C.ok : C.accent }} />
         </div>
         {(!connected || !armed || !permit) && (
-          <div style={{ color: C.warn, fontSize: 10, marginTop: 6 }}>
+          <div style={{ color: C.warn, fontSize: 11, marginTop: 6 }}>
             {!connected ? "Connect to 192.168.5.2 first." : !permit ? "Arm the safety system first." : "Type ARM OUTPUT and arm the output first."}
           </div>
         )}
       </Step>
 
       <Step n={6} title="Run the four-minute water-pump observation test" done={pumpTest?.outcome === "completed"}>
-        <div style={{ fontSize: 10, color: C.text, lineHeight: 1.5, marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5, marginBottom: 8 }}>
           Starts with a 1:00 walk delay, then uses separate 30-second windows for the
           recovered Running Fountain, Foam/front and Peacock/rear functions, with OFF
           windows between them. The four middle motors share one legacy command. The
           fire pump and fire valves stay off for the entire test.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "54px 1fr", gap: "2px 8px", marginBottom: 8, fontSize: 9 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "54px 1fr", gap: "2px 8px", marginBottom: 8, fontSize: 11 }}>
           {(pumpTest?.schedule || [
             { start_s: 0, end_s: 60, label: "Walk delay / all off" },
             { start_s: 60, end_s: 90, label: "Running Fountain / four middle motors" },
@@ -579,7 +579,7 @@ export default function FountainControlPanel() {
             onClick={stopPumpTest}>
             STOP PUMP TEST
           </button>
-          <span style={{ color: pumpTest?.running ? C.ok : C.dim, fontSize: 10 }}>
+          <span style={{ color: pumpTest?.running ? C.ok : C.dim, fontSize: 11 }}>
             {pumpTest?.running
               ? `${pumpTest.frames_sent || 0}/${pumpTest.total_events || 0} commands sent`
               : pumpTest?.outcome && pumpTest.outcome !== "idle"
@@ -626,14 +626,14 @@ export default function FountainControlPanel() {
             );
           })}
         </div>
-        {(!armed || !permit) && <div style={{ color: C.dim, fontSize: 10, marginTop: 6 }}>{!permit ? "Grant the safety permit (step 0) to enable these." : "Arm the output to enable these."}</div>}
+        {(!armed || !permit) && <div style={{ color: C.dim, fontSize: 11, marginTop: 6 }}>{!permit ? "Grant the safety permit (step 0) to enable these." : "Arm the output to enable these."}</div>}
       </Step>
 
       <div style={{ marginTop: 16 }}>
         <div style={label}>Activity</div>
         <div style={{
           maxHeight: 160, overflowY: "auto", border: `1px solid ${C.line}`,
-          borderRadius: 3, padding: 6, fontSize: 10,
+          borderRadius: 3, padding: 6, fontSize: 11,
         }}>
           {log.length === 0 && <div style={{ color: C.dim }}>Nothing yet.</div>}
           {log.map((l, i) => (

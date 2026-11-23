@@ -38,15 +38,15 @@ export default function RealtimeValidationPanel() {
         </span>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           {/* latency badge */}
-          <span title="Validation compute time" style={{ fontSize: 9,
-            color: withinLatencyBudget ? "#22c55e" : "#ef4444",
+          <span title="Validation compute time" style={{ fontSize: 11,
+            color: withinLatencyBudget ? "var(--ok)" : "var(--error)",
             fontFamily: "var(--font-mono, monospace)" }}>
             {durationMs.toFixed(1)} ms {withinLatencyBudget ? `✓ <${LATENCY_BUDGET_MS}ms` : "⚠ slow"}
           </span>
           {/* status pill */}
-          <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
             background: ok ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-            color: ok ? "#22c55e" : "#ef4444" }}>
+            color: ok ? "var(--ok)" : "var(--error)" }}>
             {ok ? "All checks passed" : `${counts.error} error${counts.error === 1 ? "" : "s"}`}
             {counts.warning ? ` · ${counts.warning} warn` : ""}
           </span>
@@ -56,7 +56,7 @@ export default function RealtimeValidationPanel() {
       <div style={{ flex: 1, overflow: "auto", padding: "8px 10px" }}>
         {results.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
-            justifyContent: "center", height: "100%", color: "#22c55e", gap: 6 }}>
+            justifyContent: "center", height: "100%", color: "var(--ok)", gap: 6 }}>
             <div style={{ fontSize: 30 }}>✓</div>
             <div style={{ fontSize: 12 }}>System valid — {fixtures.length} fixtures checked in {durationMs.toFixed(1)} ms</div>
           </div>
@@ -73,7 +73,7 @@ export default function RealtimeValidationPanel() {
                 <span style={{ color: s.color, fontSize: 12, lineHeight: "16px" }}>{s.icon}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, color: "var(--text-primary)" }}>{r.message}</div>
-                  <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 1 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
                     {r.code.replace(/_/g, " ")}
                     {r.target ? <span style={{ color: s.color }}> · {r.target} ↗</span> : null}
                   </div>
@@ -85,7 +85,7 @@ export default function RealtimeValidationPanel() {
       </div>
 
       <div style={{ borderTop: "1px solid var(--border)", background: "var(--bg-surface)",
-        padding: "5px 12px", flexShrink: 0, fontSize: 9, color: "var(--text-muted)",
+        padding: "5px 12px", flexShrink: 0, fontSize: 11, color: "var(--text-muted)",
         display: "flex", gap: 14 }}>
         <span>🔴 {counts.error} errors</span>
         <span>🟡 {counts.warning} warnings</span>

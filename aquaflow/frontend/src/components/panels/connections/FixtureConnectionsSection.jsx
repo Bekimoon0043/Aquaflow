@@ -19,7 +19,7 @@ export default function FixtureConnectionsSection({ fixture, fixtures, onUpdateF
   const id = fixture.id;
   const write = (fn, label) => onUpdateFixtures((prev) => fn(prev), label);
   const row = (label, control) => (
-    <div style={{ display: "flex", gap: 5, alignItems: "center", marginBottom: 4 }}><span style={{ color: "#7ab", fontSize: 9, width: 42 }}>{label}</span>{control}</div>
+    <div style={{ display: "flex", gap: 5, alignItems: "center", marginBottom: 4 }}><span style={{ color: "var(--info)", fontSize: 11, width: 42 }}>{label}</span>{control}</div>
   );
   const pumps = design ? [...design.pumps.values()] : [];
   const pumpSelect = (value, onChange) => (
@@ -59,17 +59,17 @@ export default function FixtureConnectionsSection({ fixture, fixtures, onUpdateF
       <option value="">— nearest —</option>{near(design.nozzles, l.item).map((n) => <option key={n.id} value={n.id}>{name(n.item)}</option>)}</select>) : null;
   } else if (design && role === "pump" && design.pumps.has(id)) {
     const p = design.pumps.get(id);
-    body = <div style={{ color: "#7ab", fontSize: 9 }}>{p.nozzleIds.length} outlets · {p.valveIds.length} valves — edit them in the Connections editor.</div>;
+    body = <div style={{ color: "var(--info)", fontSize: 11 }}>{p.nozzleIds.length} outlets · {p.valveIds.length} valves — edit them in the Connections editor.</div>;
   }
   return (
-    <div data-testid="fixture-connections" style={{ margin: "8px 0", padding: 7, background: "#050d14", border: "1px solid #0a3040", borderRadius: 4 }}>
-      <button type="button" onClick={() => setOpen((v) => !v)} style={{ background: "none", border: "none", color: "#65d9d0", fontSize: 9, fontWeight: "bold", cursor: "pointer", padding: 0 }}>
+    <div data-testid="fixture-connections" style={{ margin: "8px 0", padding: 7, background: "var(--bg-void)", border: "1px solid var(--border)", borderRadius: 4 }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} style={{ background: "none", border: "none", color: "var(--info)", fontSize: 11, fontWeight: "bold", cursor: "pointer", padding: 0 }}>
         {open ? "▾" : "▸"} 🔗 CONNECTIONS
       </button>
       {open && <div style={{ marginTop: 6 }}>
         {body}
         <button type="button" onClick={() => openWorkspaceTarget({ panel: "engtools", action: "tab", detail: { tab: "connections" } })}
-          style={{ width: "100%", padding: 3, background: "#06121c", color: "#7fd8ff", border: "1px solid #16415a", borderRadius: 3, cursor: "pointer", fontSize: 8 }}>
+          style={{ width: "100%", padding: 3, background: "var(--bg-base)", color: "var(--info)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>
           OPEN CONNECTIONS EDITOR
         </button>
       </div>}

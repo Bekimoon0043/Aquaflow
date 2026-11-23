@@ -66,10 +66,10 @@ export default function OptimizationPanel() {
 
   const CatCard = ({ cat, percent, detail }) => (
     <div style={{ ...box, padding: 10, flex: 1, minWidth: 130, borderTop: `3px solid ${CAT_COLOR[cat]}` }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "capitalize" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "capitalize" }}>
         {CAT_ICON[cat]} {cat}</div>
       <div style={{ fontSize: 22, fontWeight: 800, color: CAT_COLOR[cat] }}>{percent}%</div>
-      <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{detail}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{detail}</div>
     </div>
   );
 
@@ -82,28 +82,28 @@ export default function OptimizationPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           AI Optimization
         </span>
-        {res && <span style={{ marginLeft: "auto", fontSize: 10, color: "#22c55e" }}>
+        {res && <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--ok)" }}>
           Save {res.summary.total_cost_saving_per_day} /day · {res.summary.recommendation_count} recommendations
         </span>}
       </div>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ width: 300, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", padding: 10 }}>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>DESIGN (edit + analyse)</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>DESIGN (edit + analyse)</div>
           <button onClick={() => setText(JSON.stringify(projectInput, null, 2))} disabled={!fixtures.length}
             style={{ ...box, color: "var(--text-primary)", padding: 6, marginBottom: 6, cursor: fixtures.length ? "pointer" : "default" }}>
             Use current Engineering Design ({fixtures.length} fixtures)
           </button>
           <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false}
-            style={{ ...box, flex: 1, fontFamily: "monospace", fontSize: 10, padding: 8,
+            style={{ ...box, flex: 1, fontFamily: "monospace", fontSize: 11, padding: 8,
               color: "var(--text-primary)", resize: "none" }} />
           <button onClick={run} disabled={loading} style={{ marginTop: 8, background: "var(--accent)",
-            color: "#04140a", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 11,
+            color: "var(--text-on-accent)", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 11,
             fontWeight: 700, cursor: "pointer" }}>{loading ? "Optimising…" : "Optimise ▶"}</button>
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
-          {error && <div style={{ ...box, padding: 8, color: "#ef4444", fontSize: 11 }}>⛔ {error}</div>}
+          {error && <div style={{ ...box, padding: 8, color: "var(--error)", fontSize: 11 }}>⛔ {error}</div>}
           {!res && !error && <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
             Analyse a design to see energy, water and performance optimisations.</div>}
           {res && (
@@ -116,7 +116,7 @@ export default function OptimizationPanel() {
                 <CatCard cat="performance" percent={res.summary.performance_improvement_percent}
                   detail={`${res.performance.impact_retained_percent}% impact kept`} />
               </div>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 6 }}>RECOMMENDATIONS</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>RECOMMENDATIONS</div>
               {res.recommendations.map((r, i) => (
                 <div key={i} style={{ ...box, padding: "8px 10px", marginBottom: 5,
                   borderLeft: `3px solid ${CAT_COLOR[r.category] || "#888"}` }}>
@@ -124,7 +124,7 @@ export default function OptimizationPanel() {
                     <span style={{ color: CAT_COLOR[r.category] }}>{CAT_ICON[r.category]}</span> {r.action}
                   </div>
                   {(r.saving_kwh_day || r.saving_l_day || r.impact_retained_percent) && (
-                    <div style={{ fontSize: 9, color: CAT_COLOR[r.category], marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: CAT_COLOR[r.category], marginTop: 2 }}>
                       {r.saving_kwh_day != null ? `${r.saving_kwh_day} kWh/day` : ""}
                       {r.saving_l_day != null ? `${r.saving_l_day} L/day` : ""}
                       {r.impact_retained_percent != null ? `${r.impact_retained_percent}% impact retained` : ""}

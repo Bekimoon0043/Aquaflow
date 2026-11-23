@@ -37,7 +37,7 @@ export default function AIPanel() {
             flex:1, padding:"7px 0", background:"transparent", border:"none",
             borderBottom: tab===key ? "2px solid var(--accent)" : "2px solid transparent",
             color: tab===key ? "var(--text-accent)" : "var(--text-muted)",
-            fontFamily:"var(--font-body)", fontSize:9, fontWeight: tab===key ? 600 : 400,
+            fontFamily:"var(--font-body)", fontSize:11, fontWeight: tab===key ? 600 : 400,
             textTransform:"uppercase", letterSpacing:"0.05em", cursor:"pointer",
           }}>{label}</button>
         ))}
@@ -133,8 +133,8 @@ function LearnedGenerateTab({ show, onGenerate }) {
       {stats && (
         <div style={{ padding:"8px 10px", background:"rgba(0,212,255,0.04)", border:"1px solid var(--border-accent)", borderRadius:"var(--radius-sm)", marginBottom:12 }}>
           <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-            <span style={{ fontSize:9, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>AI LEARNING STATUS</span>
-            <span style={{ fontSize:9, fontFamily:"var(--font-mono)", color:qualityColor }}>● {qualityLabel?.toUpperCase()}</span>
+            <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>AI LEARNING STATUS</span>
+            <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:qualityColor }}>● {qualityLabel?.toUpperCase()}</span>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4 }}>
             {[
@@ -144,12 +144,12 @@ function LearnedGenerateTab({ show, onGenerate }) {
             ].map(([label, val]) => (
               <div key={label} style={{ textAlign:"center", padding:"4px", background:"var(--bg-surface)", borderRadius:3 }}>
                 <div style={{ fontSize:12, fontFamily:"var(--font-mono)", color:"var(--accent)", fontWeight:600 }}>{val ?? "—"}</div>
-                <div style={{ fontSize:8, color:"var(--text-muted)" }}>{label}</div>
+                <div style={{ fontSize:11, color:"var(--text-muted)" }}>{label}</div>
               </div>
             ))}
           </div>
           {stats.tips?.length > 0 && (
-            <div style={{ marginTop:6, fontSize:9, color:"var(--text-muted)", lineHeight:1.5 }}>
+            <div style={{ marginTop:6, fontSize:11, color:"var(--text-muted)", lineHeight:1.5 }}>
               💡 {stats.tips[0]}
             </div>
           )}
@@ -166,7 +166,7 @@ function LearnedGenerateTab({ show, onGenerate }) {
       <div style={{ display:"flex", gap:4, marginBottom:10, flexWrap:"wrap" }}>
         {MOODS.map(m => (
           <button key={m} onClick={()=>setMood(m)} style={{
-            padding:"3px 9px", borderRadius:"var(--radius-sm)", fontSize:10, cursor:"pointer",
+            padding:"3px 9px", borderRadius:"var(--radius-sm)", fontSize:11, cursor:"pointer",
             background: mood===m ? "rgba(0,212,255,0.1)" : "var(--bg-raised)",
             border:`1px solid ${mood===m ? "var(--accent)" : "var(--border)"}`,
             color: mood===m ? "var(--text-accent)" : "var(--text-muted)",
@@ -176,11 +176,11 @@ function LearnedGenerateTab({ show, onGenerate }) {
 
       <div style={{ display:"flex", gap:8, marginBottom:10 }}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>DURATION (s)</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>DURATION (s)</div>
           <input className="input" type="number" value={duration} onChange={e=>setDuration(e.target.value)} style={{ fontSize:12, fontFamily:"var(--font-mono)" }} />
         </div>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>BPM</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>BPM</div>
           <input className="input" type="number" value={bpm} onChange={e=>setBpm(e.target.value)} style={{ fontSize:12, fontFamily:"var(--font-mono)" }} />
         </div>
       </div>
@@ -197,13 +197,13 @@ function LearnedGenerateTab({ show, onGenerate }) {
         {loading ? "⟳ Learning & Generating..." : "✨ Smart Generate (Learned)"}
       </button>
 
-      {error && <div style={{ marginTop:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
+      {error && <div style={{ marginTop:8, fontSize:11, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
 
       {result && (
         <div style={{ marginTop:12 }}>
           <div style={{ padding:"10px 12px", background:"rgba(0,212,255,0.05)", border:"1px solid var(--border-accent)", borderRadius:"var(--radius-md)", marginBottom:8 }}>
             <div style={{ fontSize:12, fontWeight:600, color:"var(--text-primary)", marginBottom:4 }}>{result.show?.name}</div>
-            <div style={{ fontSize:10, color:"var(--text-secondary)", lineHeight:1.6, marginBottom:6 }}>{result.show?.notes}</div>
+            <div style={{ fontSize:11, color:"var(--text-secondary)", lineHeight:1.6, marginBottom:6 }}>{result.show?.notes}</div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
               <Tag label={`${result.patterns_used?.length} patterns used`} accent />
               <Tag label={`${result.tracks?.length} tracks`} />
@@ -214,9 +214,9 @@ function LearnedGenerateTab({ show, onGenerate }) {
           <SectionLabel>Generated Tracks</SectionLabel>
           {result.tracks?.map(track => (
             <div key={track.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 8px", marginBottom:4, background:"var(--bg-surface)", borderRadius:"var(--radius-sm)", border:"1px solid var(--border)" }}>
-              <div style={{ width:8, height:8, borderRadius:"50%", background:TRACK_COLORS[track.type] || "#94a3b8", flexShrink:0 }} />
+              <div style={{ width:8, height:8, borderRadius:"50%", background:TRACK_COLORS[track.type] || "var(--info)", flexShrink:0 }} />
               <span style={{ flex:1, fontSize:11, color:"var(--text-primary)" }}>{track.label}</span>
-              <span style={{ fontSize:9, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{track.clips?.length} clips</span>
+              <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{track.clips?.length} clips</span>
             </div>
           ))}
 
@@ -237,7 +237,7 @@ function LearnedGenerateTab({ show, onGenerate }) {
             ))}
           </div>
           {rated && (
-            <div style={{ textAlign:"center", fontSize:10, color:"var(--green)", marginBottom:8 }}>
+            <div style={{ textAlign:"center", fontSize:11, color:"var(--green)", marginBottom:8 }}>
               ✓ Rating saved — AI will improve future generations
             </div>
           )}
@@ -306,7 +306,7 @@ function LearnTab({ tracks, bpm }) {
       </div>
 
       <div style={{ padding:"8px 10px", background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:"var(--radius-sm)", marginBottom:10 }}>
-        <div style={{ fontSize:10, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:4 }}>CURRENT TIMELINE</div>
+        <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:4 }}>CURRENT TIMELINE</div>
         <div style={{ fontSize:11, color:"var(--text-secondary)" }}>
           {tracks?.length} tracks · {bpm} BPM ·{" "}
           {tracks?.reduce((sum, t) => sum + (t.clips?.length || 0), 0)} clips
@@ -315,13 +315,13 @@ function LearnTab({ tracks, bpm }) {
 
       <div style={{ display:"flex", gap:8, marginBottom:10 }}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>MOOD LABEL</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>MOOD LABEL</div>
           <select className="input" value={mood} onChange={e=>setMood(e.target.value)} style={{ fontSize:11 }}>
             {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>SOURCE TYPE</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>SOURCE TYPE</div>
           <select className="input" value={source} onChange={e=>setSource(e.target.value)} style={{ fontSize:11 }}>
             <option value="manual">Manual (operator)</option>
             <option value="audio_sync">Audio sync</option>
@@ -338,14 +338,14 @@ function LearnTab({ tracks, bpm }) {
       {result && (
         <div style={{ padding:"8px 10px", background: result.status==="error" ? "rgba(239,68,68,0.08)" : "rgba(16,185,129,0.08)", border:`1px solid ${result.status==="error" ? "rgba(239,68,68,0.2)" : "rgba(16,185,129,0.2)"}`, borderRadius:"var(--radius-sm)", marginBottom:12 }}>
           {result.status==="error" ? (
-            <div style={{ fontSize:10, color:"var(--red)" }}>✗ {result.message}</div>
+            <div style={{ fontSize:11, color:"var(--red)" }}>✗ {result.message}</div>
           ) : (
             <>
               <div style={{ fontSize:11, color:"var(--green)", marginBottom:4 }}>
                 ✓ Extracted {result.patterns_extracted} pattern(s) — total in memory: {result.total_in_memory}
               </div>
               {result.patterns?.map(p => (
-                <div key={p.id} style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
+                <div key={p.id} style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
                   {p.name} ({p.device_type}, {p.clips} clips)
                 </div>
               ))}
@@ -355,7 +355,7 @@ function LearnTab({ tracks, bpm }) {
       )}
 
       <SectionLabel>Pattern Evolution — create new patterns</SectionLabel>
-      <div style={{ fontSize:10, color:"var(--text-secondary)", lineHeight:1.5, marginBottom:8 }}>
+      <div style={{ fontSize:11, color:"var(--text-secondary)", lineHeight:1.5, marginBottom:8 }}>
         The AI combines and mutates your best patterns to create new variations using a genetic algorithm.
       </div>
       <div style={{ display:"flex", gap:6, marginBottom:8 }}>
@@ -363,7 +363,7 @@ function LearnTab({ tracks, bpm }) {
           {["pump","valve","lighting","fog","flame","laser"].map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <button className="btn" onClick={evolvePattern} disabled={evolving}
-          style={{ fontSize:10, padding:"5px 12px" }}>
+          style={{ fontSize:11, padding:"5px 12px" }}>
           {evolving ? "⟳" : "🧬 Evolve"}
         </button>
       </div>
@@ -371,11 +371,11 @@ function LearnTab({ tracks, bpm }) {
       {evolved && (
         <div style={{ padding:"8px 10px", background: evolved.status==="error" ? "rgba(239,68,68,0.08)" : "rgba(139,92,246,0.08)", border:`1px solid ${evolved.status==="error" ? "rgba(239,68,68,0.2)" : "rgba(139,92,246,0.3)"}`, borderRadius:"var(--radius-sm)", marginBottom:12 }}>
           {evolved.status==="error" ? (
-            <div style={{ fontSize:10, color:"var(--red)" }}>✗ {evolved.message}</div>
+            <div style={{ fontSize:11, color:"var(--red)" }}>✗ {evolved.message}</div>
           ) : (
             <>
               <div style={{ fontSize:11, color:"var(--purple)", marginBottom:2 }}>🧬 {evolved.pattern?.name}</div>
-              <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
+              <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
                 {evolved.pattern?.clips?.length} clips · score: {evolved.pattern?.score?.toFixed(2)} · {evolved.pattern?.source}
               </div>
             </>
@@ -384,21 +384,21 @@ function LearnTab({ tracks, bpm }) {
       )}
 
       <SectionLabel>Pattern Library</SectionLabel>
-      <button className="btn" onClick={loadPatterns} style={{ width:"100%", justifyContent:"center", fontSize:10, padding:"5px", marginBottom:8 }}>
+      <button className="btn" onClick={loadPatterns} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"5px", marginBottom:8 }}>
         View All Learned Patterns
       </button>
 
       {patterns && (
         <div style={{ maxHeight:300, overflowY:"auto" }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:6 }}>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:6 }}>
             {patterns.count} patterns · avg score: {patterns.stats?.avg_score?.toFixed(2)}
           </div>
           {patterns.patterns?.slice(0, 30).map(p => (
             <div key={p.id} style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 6px", marginBottom:3, background:"var(--bg-surface)", borderRadius:3, border:"1px solid var(--border)" }}>
-              <div style={{ width:6, height:6, borderRadius:"50%", background:TRACK_COLORS[p.device_type]||"#94a3b8", flexShrink:0 }} />
-              <span style={{ flex:1, fontSize:10, color:"var(--text-secondary)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</span>
-              <span style={{ fontSize:8, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{p.source}</span>
-              <span style={{ fontSize:9, fontFamily:"var(--font-mono)", color: p.score>=0.75?"var(--green)":p.score>=0.55?"var(--amber)":"var(--red)" }}>
+              <div style={{ width:6, height:6, borderRadius:"50%", background:TRACK_COLORS[p.device_type]||"var(--info)", flexShrink:0 }} />
+              <span style={{ flex:1, fontSize:11, color:"var(--text-secondary)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</span>
+              <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{p.source}</span>
+              <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color: p.score>=0.75?"var(--green)":p.score>=0.55?"var(--amber)":"var(--red)" }}>
                 {(p.score*100).toFixed(0)}%
               </span>
             </div>
@@ -441,7 +441,7 @@ function GenerateTab({ show, onGenerate }) {
 
   return (
     <div>
-      <div style={{ fontSize:10, color:"var(--text-muted)", lineHeight:1.5, marginBottom:8, padding:"6px 8px", background:"rgba(0,212,255,0.04)", border:"1px solid var(--border)", borderRadius:"var(--radius-sm)" }}>
+      <div style={{ fontSize:11, color:"var(--text-muted)", lineHeight:1.5, marginBottom:8, padding:"6px 8px", background:"rgba(0,212,255,0.04)", border:"1px solid var(--border)", borderRadius:"var(--radius-sm)" }}>
         💡 Try the <strong>Smart Generate</strong> tab for AI-powered generation that learns from your feedback.
       </div>
       <SectionLabel>Describe your show</SectionLabel>
@@ -450,7 +450,7 @@ function GenerateTab({ show, onGenerate }) {
         style={{ width:"100%", height:72, background:"var(--bg-void)", border:"1px solid var(--border-mid)", borderRadius:"var(--radius-sm)", color:"var(--text-primary)", fontFamily:"var(--font-body)", fontSize:11, padding:"8px", resize:"none", outline:"none", lineHeight:1.5 }} />
       <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:10, marginTop:4 }}>
         {EXAMPLE_PROMPTS.map((p,i) => (
-          <button key={i} onClick={()=>setPrompt(p)} style={{ fontSize:9, fontFamily:"var(--font-mono)", color:"var(--text-muted)", background:"var(--bg-raised)", border:"1px solid var(--border)", borderRadius:3, padding:"2px 6px", cursor:"pointer" }}>
+          <button key={i} onClick={()=>setPrompt(p)} style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)", background:"var(--bg-raised)", border:"1px solid var(--border)", borderRadius:3, padding:"2px 6px", cursor:"pointer" }}>
             {p.slice(0,28)}...
           </button>
         ))}
@@ -458,18 +458,18 @@ function GenerateTab({ show, onGenerate }) {
       <SectionLabel>Mood</SectionLabel>
       <div style={{ display:"flex", gap:5, marginBottom:10, flexWrap:"wrap" }}>
         {MOODS.map(m => (
-          <button key={m} onClick={()=>setMood(m)} style={{ padding:"4px 10px", borderRadius:"var(--radius-sm)", fontSize:10, cursor:"pointer", background:mood===m?"rgba(0,212,255,0.1)":"var(--bg-raised)", border:`1px solid ${mood===m?"var(--accent)":"var(--border)"}`, color:mood===m?"var(--text-accent)":"var(--text-muted)" }}>
+          <button key={m} onClick={()=>setMood(m)} style={{ padding:"4px 10px", borderRadius:"var(--radius-sm)", fontSize:11, cursor:"pointer", background:mood===m?"rgba(0,212,255,0.1)":"var(--bg-raised)", border:`1px solid ${mood===m?"var(--accent)":"var(--border)"}`, color:mood===m?"var(--text-accent)":"var(--text-muted)" }}>
             {MOOD_ICONS[m]} {m}
           </button>
         ))}
       </div>
       <div style={{ display:"flex", gap:8, marginBottom:10 }}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>DURATION (s)</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>DURATION (s)</div>
           <input className="input" type="number" value={duration} onChange={e=>setDuration(e.target.value)} style={{ fontSize:12, fontFamily:"var(--font-mono)" }} />
         </div>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>BPM</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>BPM</div>
           <input className="input" type="number" value={bpm} onChange={e=>setBpm(e.target.value)} style={{ fontSize:12, fontFamily:"var(--font-mono)" }} />
         </div>
       </div>
@@ -480,12 +480,12 @@ function GenerateTab({ show, onGenerate }) {
       <button className="btn primary" onClick={generate} disabled={loading} style={{ width:"100%", justifyContent:"center", fontSize:12, padding:"8px" }}>
         {loading ? "⟳ Generating..." : "✨ Generate Show"}
       </button>
-      {error && <div style={{ marginTop:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
+      {error && <div style={{ marginTop:8, fontSize:11, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
       {result && (
         <div style={{ marginTop:12 }}>
           <div style={{ padding:"10px 12px", background:"rgba(0,212,255,0.05)", border:"1px solid var(--border-accent)", borderRadius:"var(--radius-md)", marginBottom:8 }}>
             <div style={{ fontSize:12, fontWeight:600, color:"var(--text-primary)", marginBottom:4 }}>{result.show?.name || "Generated Show"}</div>
-            <div style={{ fontSize:10, color:"var(--text-secondary)", lineHeight:1.6 }}>{result.show?.notes}</div>
+            <div style={{ fontSize:11, color:"var(--text-secondary)", lineHeight:1.6 }}>{result.show?.notes}</div>
             {result.analysis && (
               <div style={{ marginTop:6, display:"flex", gap:8, flexWrap:"wrap" }}>
                 <Tag label={`${result.analysis.beat_count} beats`} />
@@ -500,7 +500,7 @@ function GenerateTab({ show, onGenerate }) {
             <div key={track.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 8px", marginBottom:4, background:"var(--bg-surface)", borderRadius:"var(--radius-sm)", border:"1px solid var(--border)" }}>
               <div style={{ width:8, height:8, borderRadius:"50%", background:track.color, flexShrink:0 }} />
               <span style={{ flex:1, fontSize:11, color:"var(--text-primary)" }}>{track.label}</span>
-              <span style={{ fontSize:9, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{track.clips?.length} clips</span>
+              <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{track.clips?.length} clips</span>
             </div>
           ))}
           <button className="btn primary" onClick={()=>onGenerate(result.tracks, result.show)} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"7px" }}>
@@ -539,7 +539,7 @@ function PatternTab({ bpm, onApply }) {
       <SectionLabel>Device Type</SectionLabel>
       <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:10 }}>
         {DEVICE_TYPES.map(t => (
-          <button key={t} onClick={()=>setDeviceType(t)} style={{ padding:"3px 10px", fontSize:10, cursor:"pointer", background:deviceType===t?"rgba(0,212,255,0.1)":"var(--bg-raised)", border:`1px solid ${deviceType===t?"var(--accent)":"var(--border)"}`, color:deviceType===t?"var(--text-accent)":"var(--text-muted)", borderRadius:"var(--radius-sm)" }}>{t}</button>
+          <button key={t} onClick={()=>setDeviceType(t)} style={{ padding:"3px 10px", fontSize:11, cursor:"pointer", background:deviceType===t?"rgba(0,212,255,0.1)":"var(--bg-raised)", border:`1px solid ${deviceType===t?"var(--accent)":"var(--border)"}`, color:deviceType===t?"var(--text-accent)":"var(--text-muted)", borderRadius:"var(--radius-sm)" }}>{t}</button>
         ))}
       </div>
       <SectionLabel>Pattern</SectionLabel>
@@ -547,28 +547,28 @@ function PatternTab({ bpm, onApply }) {
         {PATTERNS.map(p => (
           <button key={p} onClick={()=>setPattern(p)} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", fontSize:11, cursor:"pointer", background:pattern===p?"rgba(0,212,255,0.08)":"var(--bg-surface)", border:`1px solid ${pattern===p?"var(--border-accent)":"var(--border)"}`, color:pattern===p?"var(--text-primary)":"var(--text-secondary)", borderRadius:"var(--radius-sm)" }}>
             <span style={{ textTransform:"capitalize", fontWeight:pattern===p?600:400 }}>{p}</span>
-            <span style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{PATTERN_DESC[p]}</span>
+            <span style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{PATTERN_DESC[p]}</span>
           </button>
         ))}
       </div>
       <div style={{ display:"flex", gap:8, marginBottom:12 }}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>INTENSITY %</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>INTENSITY %</div>
           <input className="input" type="number" value={intensity} min={10} max={100} onChange={e=>setIntensity(parseInt(e.target.value))} style={{ fontSize:12, fontFamily:"var(--font-mono)" }} />
         </div>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>DURATION (s)</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:3 }}>DURATION (s)</div>
           <input className="input" type="number" value={duration} onChange={e=>setDuration(e.target.value)} style={{ fontSize:12, fontFamily:"var(--font-mono)" }} />
         </div>
       </div>
       <button className="btn primary" onClick={generate} disabled={loading} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"7px" }}>
         {loading ? "⟳ Generating..." : "✦ Generate Pattern"}
       </button>
-      {error && <div style={{ marginTop:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
+      {error && <div style={{ marginTop:8, fontSize:11, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
       {result && (
         <div style={{ marginTop:10, padding:"10px 12px", background:"rgba(0,212,255,0.05)", border:"1px solid var(--border-accent)", borderRadius:"var(--radius-md)" }}>
           <div style={{ fontSize:11, color:"var(--text-primary)", marginBottom:4 }}>{result.clip_count} clips generated · {result.pattern} pattern</div>
-          <button className="btn" onClick={()=>onApply(result.clips, result.device_type)} style={{ width:"100%", justifyContent:"center", fontSize:10, marginTop:6 }}>
+          <button className="btn" onClick={()=>onApply(result.clips, result.device_type)} style={{ width:"100%", justifyContent:"center", fontSize:11, marginTop:6 }}>
             ↓ Apply to {result.device_type} track
           </button>
         </div>
@@ -598,19 +598,19 @@ function EnhanceTab({ tracks, bpm }) {
         Analyze your current show and get AI suggestions to improve the choreography, timing, and visual impact.
       </div>
       <div style={{ padding:"8px 10px", background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:"var(--radius-sm)", marginBottom:12 }}>
-        <div style={{ fontSize:10, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:4 }}>CURRENT SHOW</div>
+        <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:4 }}>CURRENT SHOW</div>
         <div style={{ fontSize:11, color:"var(--text-secondary)" }}>{tracks.length} tracks · {bpm} BPM</div>
       </div>
       <button className="btn primary" onClick={enhance} disabled={loading} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"7px", marginBottom:12 }}>
         {loading ? "⟳ Analyzing..." : "🔍 Analyze Show"}
       </button>
-      {error && <div style={{ marginBottom:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
+      {error && <div style={{ marginBottom:8, fontSize:11, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
       {suggestions && (
         <div>
           <SectionLabel>Suggestions ({suggestions.length})</SectionLabel>
           {suggestions.map((s,i) => (
             <div key={i} style={{ display:"flex", gap:8, padding:"8px 10px", marginBottom:6, background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:"var(--radius-sm)" }}>
-              <span style={{ color:"var(--accent)", fontSize:10, flexShrink:0, marginTop:1 }}>✦</span>
+              <span style={{ color:"var(--accent)", fontSize:11, flexShrink:0, marginTop:1 }}>✦</span>
               <span style={{ fontSize:11, color:"var(--text-secondary)", lineHeight:1.5 }}>{s}</span>
             </div>
           ))}
@@ -643,22 +643,22 @@ function OptimizeTab({ tracks, bpm }) {
       <button className="btn primary" onClick={optimize} disabled={loading} style={{ width:"100%", justifyContent:"center", fontSize:11, padding:"7px", marginBottom:12 }}>
         {loading ? "⟳ Optimizing..." : "⚡ Optimize Energy"}
       </button>
-      {error && <div style={{ marginBottom:8, fontSize:10, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
+      {error && <div style={{ marginBottom:8, fontSize:11, color:"var(--red)", fontFamily:"var(--font-mono)" }}>{error}</div>}
       {result && (
         <div>
           <div style={{ padding:"10px 12px", background:"rgba(16,185,129,0.06)", border:"1px solid rgba(16,185,129,0.2)", borderRadius:"var(--radius-md)", marginBottom:10 }}>
             <div style={{ fontSize:18, fontFamily:"var(--font-mono)", color:"var(--green)", fontWeight:700 }}>{result.estimated_savings}</div>
-            <div style={{ fontSize:10, color:"var(--text-muted)" }}>Estimated energy savings</div>
+            <div style={{ fontSize:11, color:"var(--text-muted)" }}>Estimated energy savings</div>
           </div>
           {result.optimizations?.map((o,i) => (
             <div key={i} style={{ padding:"7px 10px", marginBottom:5, background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:"var(--radius-sm)" }}>
-              <div style={{ fontSize:10, fontWeight:600, color:"var(--text-primary)" }}>{o.track}</div>
-              <div style={{ fontSize:10, color:"var(--text-muted)", marginTop:2 }}>{o.action}</div>
+              <div style={{ fontSize:11, fontWeight:600, color:"var(--text-primary)" }}>{o.track}</div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginTop:2 }}>{o.action}</div>
             </div>
           ))}
           <SectionLabel>Recommendations</SectionLabel>
           {result.recommendations?.map((r,i) => (
-            <div key={i} style={{ display:"flex", gap:6, marginBottom:5, fontSize:10, color:"var(--text-secondary)", lineHeight:1.5 }}>
+            <div key={i} style={{ display:"flex", gap:6, marginBottom:5, fontSize:11, color:"var(--text-secondary)", lineHeight:1.5 }}>
               <span style={{ color:"var(--green)" }}>→</span> {r}
             </div>
           ))}
@@ -671,14 +671,14 @@ function OptimizeTab({ tracks, bpm }) {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function SectionLabel({ children }) {
   return (
-    <div style={{ fontSize:9, fontWeight:600, fontFamily:"var(--font-mono)", color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:7, marginTop:12, borderBottom:"1px solid var(--border)", paddingBottom:3 }}>
+    <div style={{ fontSize:11, fontWeight:600, fontFamily:"var(--font-mono)", color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:7, marginTop:12, borderBottom:"1px solid var(--border)", paddingBottom:3 }}>
       {children}
     </div>
   );
 }
 function Tag({ label, accent }) {
   return (
-    <span style={{ fontSize:9, fontFamily:"var(--font-mono)", padding:"1px 6px", borderRadius:3, background:accent?"rgba(0,212,255,0.1)":"var(--bg-raised)", color:accent?"var(--accent)":"var(--text-muted)", border:`1px solid ${accent?"rgba(0,212,255,0.2)":"var(--border)"}` }}>
+    <span style={{ fontSize:11, fontFamily:"var(--font-mono)", padding:"1px 6px", borderRadius:3, background:accent?"rgba(0,212,255,0.1)":"var(--bg-raised)", color:accent?"var(--accent)":"var(--text-muted)", border:`1px solid ${accent?"rgba(0,212,255,0.2)":"var(--border)"}` }}>
       {label}
     </span>
   );
@@ -689,7 +689,7 @@ function Toggle({ label, value, onChange }) {
       <div style={{ width:32, height:16, borderRadius:8, background:value?"rgba(0,212,255,0.2)":"var(--bg-raised)", border:`1px solid ${value?"var(--accent)":"var(--border)"}`, position:"relative", transition:"all 0.15s" }}>
         <div style={{ width:10, height:10, borderRadius:"50%", background:value?"var(--accent)":"var(--text-muted)", position:"absolute", top:2, left:value?18:2, transition:"left 0.15s" }} />
       </div>
-      <span style={{ fontSize:10, color:value?"var(--text-primary)":"var(--text-muted)" }}>{label}</span>
+      <span style={{ fontSize:11, color:value?"var(--text-primary)":"var(--text-muted)" }}>{label}</span>
     </div>
   );
 }

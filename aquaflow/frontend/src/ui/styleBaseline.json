@@ -1,7 +1,7 @@
 {
  "totals": {
-  "inline": 3661,
-  "hex": 2654
+  "inline": 3662,
+  "hex": 920
  },
  "files": {
   "AppLicenseGate.jsx": {
@@ -10,7 +10,7 @@
   },
   "CommissioningBanner.jsx": {
    "inline": 1,
-   "hex": 6
+   "hex": 0
   },
   "ConnectionBanner.jsx": {
    "inline": 8,
@@ -34,7 +34,7 @@
   },
   "MemoryBanner.jsx": {
    "inline": 8,
-   "hex": 4
+   "hex": 3
   },
   "nodes/NodeEditor.jsx": {
    "inline": 24,
@@ -42,23 +42,23 @@
   },
   "PanelErrorBoundary.jsx": {
    "inline": 5,
-   "hex": 2
+   "hex": 0
   },
   "panels/AdaptationPanel.jsx": {
    "inline": 31,
-   "hex": 11
+   "hex": 4
   },
   "panels/AiCommissioningHelp.jsx": {
    "inline": 10,
-   "hex": 12
+   "hex": 3
   },
   "panels/AiDesignReview.jsx": {
    "inline": 19,
-   "hex": 5
+   "hex": 3
   },
   "panels/AIPanel.jsx": {
    "inline": 146,
-   "hex": 8
+   "hex": 6
   },
   "panels/AudioPanel.jsx": {
    "inline": 76,
@@ -66,55 +66,55 @@
   },
   "panels/BasinListPanel.jsx": {
    "inline": 8,
-   "hex": 11
+   "hex": 3
   },
   "panels/CADImportDialog.jsx": {
    "inline": 122,
-   "hex": 90
+   "hex": 19
   },
   "panels/CalibrationPanel.jsx": {
    "inline": 53,
-   "hex": 67
+   "hex": 10
   },
   "panels/CloudPanel.jsx": {
    "inline": 33,
-   "hex": 12
+   "hex": 11
   },
   "panels/CollaborationPanel.jsx": {
    "inline": 26,
-   "hex": 2
+   "hex": 0
   },
   "panels/CompilePanel.jsx": {
    "inline": 48,
-   "hex": 65
+   "hex": 11
   },
   "panels/connections/ConnectionsEditor.jsx": {
    "inline": 61,
-   "hex": 43
+   "hex": 28
   },
   "panels/connections/FixtureConnectionsSection.jsx": {
    "inline": 7,
-   "hex": 11
+   "hex": 3
   },
   "panels/DependencyGraphPanel.jsx": {
    "inline": 17,
-   "hex": 17
+   "hex": 15
   },
   "panels/designer/DesignerSidebar.jsx": {
    "inline": 216,
-   "hex": 344
+   "hex": 18
   },
   "panels/designer/FixturePropertiesPanel.jsx": {
    "inline": 29,
-   "hex": 52
+   "hex": 16
   },
   "panels/designer/PyroExportButton.jsx": {
    "inline": 2,
-   "hex": 4
+   "hex": 0
   },
   "panels/DeviceDiscoveryPanel.jsx": {
    "inline": 126,
-   "hex": 17
+   "hex": 8
   },
   "panels/DevicePanel.jsx": {
    "inline": 26,
@@ -122,43 +122,43 @@
   },
   "panels/DiagnosticsPanel.jsx": {
    "inline": 22,
-   "hex": 51
+   "hex": 23
   },
   "panels/DigitalTwinPanel.jsx": {
    "inline": 29,
-   "hex": 15
+   "hex": 12
   },
   "panels/DocumentationPanel.jsx": {
    "inline": 32,
-   "hex": 1
+   "hex": 0
   },
   "panels/EasyFountainPanel.jsx": {
-   "inline": 117,
-   "hex": 19
+   "inline": 118,
+   "hex": 17
   },
   "panels/EngineeringToolsPanel.jsx": {
    "inline": 48,
-   "hex": 7
+   "hex": 0
   },
   "panels/EnvironmentMaterialPanel.jsx": {
    "inline": 26,
-   "hex": 4
+   "hex": 0
   },
   "panels/Export3DPanel.jsx": {
    "inline": 25,
-   "hex": 4
+   "hex": 0
   },
   "panels/FixtureLibraryBrowser.jsx": {
    "inline": 17,
-   "hex": 21
+   "hex": 1
   },
   "panels/FixtureTrustPanel.jsx": {
    "inline": 20,
-   "hex": 35
+   "hex": 10
   },
   "panels/FleetPanel.jsx": {
    "inline": 29,
-   "hex": 20
+   "hex": 18
   },
   "panels/FountainControlPanel.jsx": {
    "inline": 76,
@@ -166,7 +166,7 @@
   },
   "panels/GenerativeDesignerPanel.jsx": {
    "inline": 38,
-   "hex": 2
+   "hex": 0
   },
   "panels/ICANManualPatternEditor.jsx": {
    "inline": 40,
@@ -178,63 +178,63 @@
   },
   "panels/InspectorPanel.jsx": {
    "inline": 91,
-   "hex": 8
+   "hex": 6
   },
   "panels/MobileMonitorPanel.jsx": {
    "inline": 18,
-   "hex": 16
+   "hex": 14
   },
   "panels/NozzleMap.jsx": {
    "inline": 3,
-   "hex": 15
+   "hex": 14
   },
   "panels/OperatorPanel.jsx": {
    "inline": 58,
-   "hex": 99
+   "hex": 40
   },
   "panels/OptimizationPanel.jsx": {
    "inline": 24,
-   "hex": 7
+   "hex": 4
   },
   "panels/PatternDesignerPanel.jsx": {
    "inline": 90,
-   "hex": 25
+   "hex": 22
   },
   "panels/PipePropertiesPanel.jsx": {
    "inline": 28,
-   "hex": 35
+   "hex": 5
   },
   "panels/PLCPanel.jsx": {
    "inline": 118,
-   "hex": 26
+   "hex": 20
   },
   "panels/PoolGeometryDesigner.jsx": {
    "inline": 34,
-   "hex": 53
+   "hex": 1
   },
   "panels/PreflightPanel.jsx": {
    "inline": 19,
-   "hex": 25
+   "hex": 3
   },
   "panels/PresetBrowser.jsx": {
    "inline": 31,
-   "hex": 45
+   "hex": 6
   },
   "panels/ProvenanceBadge.jsx": {
    "inline": 3,
-   "hex": 10
+   "hex": 9
   },
   "panels/RealtimeValidationPanel.jsx": {
    "inline": 19,
-   "hex": 8
+   "hex": 3
   },
   "panels/SafetyMonitorPanel.jsx": {
    "inline": 47,
-   "hex": 81
+   "hex": 30
   },
   "panels/SchedulerPanel.jsx": {
    "inline": 152,
-   "hex": 17
+   "hex": 16
   },
   "panels/siemens/SiemensAcceptance.jsx": {
    "inline": 3,
@@ -242,11 +242,11 @@
   },
   "panels/siemens/SiemensFixtureLink.jsx": {
    "inline": 2,
-   "hex": 5
+   "hex": 2
   },
   "panels/siemens/SiemensHardwarePicker.jsx": {
    "inline": 7,
-   "hex": 1
+   "hex": 0
   },
   "panels/siemens/SiemensIOMap.jsx": {
    "inline": 5,
@@ -258,11 +258,11 @@
   },
   "panels/siemens/SiemensPlcMonitor.jsx": {
    "inline": 4,
-   "hex": 1
+   "hex": 0
   },
   "panels/siemens/SiemensSetupWizard.jsx": {
    "inline": 14,
-   "hex": 3
+   "hex": 0
   },
   "panels/siemens/SiemensTagImport.jsx": {
    "inline": 5,
@@ -274,39 +274,39 @@
   },
   "panels/SiemensEasyWorkflow.jsx": {
    "inline": 16,
-   "hex": 15
+   "hex": 3
   },
   "panels/SiemensReadiness.jsx": {
    "inline": 11,
-   "hex": 15
+   "hex": 5
   },
   "panels/SiemensSitePanel.jsx": {
    "inline": 56,
-   "hex": 16
+   "hex": 5
   },
   "panels/SimulationCacheSection.jsx": {
    "inline": 23,
-   "hex": 3
+   "hex": 0
   },
   "panels/TrainingAcademyPanel.jsx": {
    "inline": 34,
-   "hex": 13
+   "hex": 0
   },
   "panels/VerifiedModelsTool.jsx": {
    "inline": 24,
-   "hex": 3
+   "hex": 0
   },
   "panels/WindDriftPanel.jsx": {
    "inline": 21,
-   "hex": 13
+   "hex": 11
   },
   "preview/camera/CameraLane.jsx": {
    "inline": 17,
-   "hex": 18
+   "hex": 15
   },
   "preview/editor/ui/workspaceUI.jsx": {
    "inline": 52,
-   "hex": 17
+   "hex": 11
   },
   "preview/focus/FocusPreview.jsx": {
    "inline": 1,
@@ -314,35 +314,35 @@
   },
   "preview/HydraulicPreviewPanel.jsx": {
    "inline": 27,
-   "hex": 21
+   "hex": 10
   },
   "preview/ICANPreviewControls.jsx": {
    "inline": 10,
-   "hex": 11
+   "hex": 2
   },
   "preview/PreviewPanel_v5.jsx": {
    "inline": 142,
-   "hex": 176
+   "hex": 51
   },
   "preview/RealismReport.jsx": {
    "inline": 9,
-   "hex": 11
+   "hex": 3
   },
   "preview/studio/StudioShowView.jsx": {
    "inline": 6,
-   "hex": 6
+   "hex": 2
   },
   "programmer/AIChoreographyPanel.jsx": {
    "inline": 4,
-   "hex": 36
+   "hex": 35
   },
   "programmer/ArrayNozzleSelector.jsx": {
    "inline": 10,
-   "hex": 14
+   "hex": 8
   },
   "programmer/ArrayPatternBuilder.jsx": {
    "inline": 46,
-   "hex": 43
+   "hex": 4
   },
   "programmer/AudioWaveform.jsx": {
    "inline": 2,
@@ -354,31 +354,31 @@
   },
   "programmer/ClipInspector.jsx": {
    "inline": 7,
-   "hex": 40
+   "hex": 36
   },
   "programmer/PatternBlocks.jsx": {
    "inline": 30,
-   "hex": 26
+   "hex": 5
   },
   "programmer/ShowChoreographyAssistant.jsx": {
    "inline": 8,
-   "hex": 9
+   "hex": 3
   },
   "programmer/ShowProgrammerPanel.jsx": {
    "inline": 301,
-   "hex": 420
+   "hex": 58
   },
   "programmer/ShowSectionEditor.jsx": {
    "inline": 17,
-   "hex": 10
+   "hex": 3
   },
   "programmer/SiemensShowControls.jsx": {
    "inline": 11,
-   "hex": 8
+   "hex": 0
   },
   "programmer/SiteShowActions.jsx": {
    "inline": 11,
-   "hex": 14
+   "hex": 3
   },
   "programmer/studio/CalibrationDialog.jsx": {
    "inline": 3,
@@ -402,7 +402,7 @@
   },
   "programmer/studio/PatternBuilder.jsx": {
    "inline": 3,
-   "hex": 7
+   "hex": 6
   },
   "programmer/studio/PatternCreator.jsx": {
    "inline": 0,
@@ -438,11 +438,11 @@
   },
   "programmer/studio/StudioPlcPanel.jsx": {
    "inline": 4,
-   "hex": 2
+   "hex": 0
   },
   "programmer/studio/StudioPreview.jsx": {
    "inline": 1,
-   "hex": 4
+   "hex": 1
   },
   "programmer/studio/StudioTimeline.jsx": {
    "inline": 13,
@@ -454,7 +454,7 @@
   },
   "ProjectRecoveryHost.jsx": {
    "inline": 22,
-   "hex": 18
+   "hex": 13
   },
   "ShowBrowser.jsx": {
    "inline": 85,
@@ -462,19 +462,19 @@
   },
   "timeline/AudioWaveformTrack.jsx": {
    "inline": 13,
-   "hex": 15
+   "hex": 9
   },
   "timeline/KeyframeEditor.jsx": {
    "inline": 23,
-   "hex": 42
+   "hex": 18
   },
   "timeline/Timeline.jsx": {
    "inline": 64,
-   "hex": 6
+   "hex": 4
   },
   "TopBar.jsx": {
    "inline": 55,
-   "hex": 1
+   "hex": 0
   },
   "workspace/DesktopWorkspaces.jsx": {
    "inline": 1,

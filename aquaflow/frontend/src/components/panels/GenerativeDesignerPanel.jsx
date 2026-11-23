@@ -89,29 +89,29 @@ export default function GenerativeDesignerPanel() {
         </span>
       </div>
 
-      {error && <div style={{ ...box, margin: 8, padding: 8, color: "#ef4444", fontSize: 10 }}>⛔ {error}</div>}
+      {error && <div style={{ ...box, margin: 8, padding: 8, color: "var(--error)", fontSize: 11 }}>⛔ {error}</div>}
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* brief */}
         <div style={{ width: 210, flexShrink: 0, overflow: "auto", padding: 10, borderRight: "1px solid var(--border)" }}>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6 }}>DESIGN BRIEF</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>DESIGN BRIEF</div>
           {[["Venue", "venue", "text"], ["Theme", "theme", "text"],
             ["Area (m²)", "area_m2", "number"], ["Depth (m)", "depth_m", "number"],
             ["Budget (USD)", "budget_usd", "number"]].map(([label, key, type]) => (
             <label key={key} style={{ display: "block", marginBottom: 6 }}>
-              <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{label}</span>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</span>
               <input type={type} value={brief[key]} style={field}
                 onChange={(e) => set(key, type === "number" ? Number(e.target.value) : e.target.value)} />
             </label>
           ))}
           <label style={{ display: "block", marginBottom: 8 }}>
-            <span style={{ fontSize: 9, color: "var(--text-muted)" }}>Style</span>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Style</span>
             <select value={brief.style} style={field} onChange={(e) => set("style", e.target.value)}>
               {STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
           <button onClick={generate} disabled={busy} style={{ width: "100%", background: "var(--accent)",
-            border: "none", borderRadius: 6, color: "#fff", fontSize: 11, fontWeight: 600,
+            border: "none", borderRadius: 6, color: "var(--text-primary)", fontSize: 11, fontWeight: 600,
             padding: "7px 0", cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
             {busy ? "Generating…" : "✨ Generate Concepts"}
           </button>
@@ -119,7 +119,7 @@ export default function GenerativeDesignerPanel() {
 
         {/* concepts */}
         <div style={{ flex: 1, overflow: "auto", padding: 10, borderRight: "1px solid var(--border)" }}>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
             CONCEPTS ({concepts.length})
           </div>
           {concepts.length === 0 ? (
@@ -130,15 +130,15 @@ export default function GenerativeDesignerPanel() {
               outline: selected?.id === c.id ? "1px solid var(--accent)" : "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", flex: 1 }}>{c.name}</span>
-                <span style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>{c.archetype}</span>
+                <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>{c.archetype}</span>
               </div>
               <div style={{ display: "flex", gap: 3, margin: "4px 0" }}>
                 {(c.palette || []).map((p, i) => (
                   <span key={i} style={{ width: 16, height: 8, borderRadius: 2, background: p }} />
                 ))}
               </div>
-              <div style={{ fontSize: 9.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>{c.narrative}</div>
-              <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>{c.narrative}</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
                 {c.estimate.fixture_count} fixtures · {money(c.estimate.total_cost_usd)} ·
                 {" "}{c.within_budget ? "✓ within budget" : "⚠ over budget"}
               </div>
@@ -148,21 +148,21 @@ export default function GenerativeDesignerPanel() {
 
         {/* selected concept + packages */}
         <div style={{ width: 260, flexShrink: 0, overflow: "auto", padding: 10 }}>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>SELECTED CONCEPT</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>SELECTED CONCEPT</div>
           {!selected ? (
             <div style={{ fontSize: 11, color: "var(--text-muted)" }}>No concept selected.</div>
           ) : (
             <>
               <div style={{ ...box, padding: 10, marginBottom: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{selected.name}</div>
-                <div style={{ fontSize: 9.5, color: "var(--text-muted)", margin: "3px 0 6px" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "3px 0 6px" }}>
                   {selected.pool.length_m}×{selected.pool.width_m}×{selected.pool.depth_m} m · {selected.pool.area_m2} m²
                 </div>
-                <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 2 }}>SIGNATURE ELEMENTS</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>SIGNATURE ELEMENTS</div>
                 {selected.signature_elements.map((s, i) => (
-                  <div key={i} style={{ fontSize: 9.5, color: "var(--text-secondary)", marginBottom: 2 }}>• {s}</div>
+                  <div key={i} style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>• {s}</div>
                 ))}
-                <div style={{ display: "flex", gap: 8, marginTop: 6, fontSize: 9.5, color: "var(--text-secondary)" }}>
+                <div style={{ display: "flex", gap: 8, marginTop: 6, fontSize: 11, color: "var(--text-secondary)" }}>
                   <span>Equip {money(selected.estimate.equipment_cost_usd)}</span>
                   <span>Civil {money(selected.estimate.civil_cost_usd)}</span>
                 </div>
@@ -170,7 +170,7 @@ export default function GenerativeDesignerPanel() {
                   Total {money(selected.estimate.total_cost_usd)}
                 </div>
               </div>
-              <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>DELIVERABLE PACKAGES</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>DELIVERABLE PACKAGES</div>
               <button onClick={openInEngineering} style={{ width: "100%", marginBottom: 6,
                 background: "rgba(0,212,255,0.08)", border: "1px solid var(--accent)", borderRadius: 6,
                 color: "var(--text-accent)", fontSize: 11, padding: "8px 0", cursor: "pointer" }}>

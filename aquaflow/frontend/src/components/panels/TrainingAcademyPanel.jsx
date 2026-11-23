@@ -20,7 +20,7 @@ function learnerId() {
 function ProgressBar({ percent }) {
   return (
     <div style={{ height: 6, background: "var(--bg-panel)", borderRadius: 3, overflow: "hidden" }}>
-      <div style={{ width: `${percent}%`, height: "100%", background: percent >= 100 ? "#22c55e" : "var(--accent)" }} />
+      <div style={{ width: `${percent}%`, height: "100%", background: percent >= 100 ? "var(--ok)" : "var(--accent)" }} />
     </div>
   );
 }
@@ -81,7 +81,7 @@ export default function TrainingAcademyPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Training Academy
         </span>
-        {progress && <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-muted)" }}>
+        {progress && <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
           Overall {progress.overall_percent}% · {progress.certificates?.length || 0} certificate(s)
         </span>}
       </div>
@@ -96,7 +96,7 @@ export default function TrainingAcademyPanel() {
                 style={{ ...box, padding: 8, marginBottom: 6, cursor: "pointer",
                   borderColor: course?.id === c.id ? "var(--accent)" : "var(--border)" }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)" }}>{c.title}</div>
-                <div style={{ fontSize: 9, color: "var(--text-muted)", margin: "2px 0 4px" }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 4px" }}>
                   {c.lesson_count} lessons · pass {c.pass_threshold}%</div>
                 <ProgressBar percent={pc?.percent || 0} />
               </div>
@@ -106,7 +106,7 @@ export default function TrainingAcademyPanel() {
 
         {/* lesson / course view */}
         <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
-          {error && <div style={{ ...box, padding: 8, color: "#ef4444", fontSize: 11, marginBottom: 8 }}>⛔ {error}</div>}
+          {error && <div style={{ ...box, padding: 8, color: "var(--error)", fontSize: 11, marginBottom: 8 }}>⛔ {error}</div>}
           {!course && <div style={{ color: "var(--text-muted)", fontSize: 12 }}>Select a course to begin.</div>}
 
           {course && !lesson && (
@@ -119,22 +119,22 @@ export default function TrainingAcademyPanel() {
                   <div key={l.id} onClick={() => openLesson(l.id)}
                     style={{ ...box, padding: "8px 10px", marginBottom: 5, cursor: "pointer",
                       display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ color: done ? "#22c55e" : "var(--text-muted)" }}>{done ? "✓" : "○"}</span>
+                    <span style={{ color: done ? "var(--ok)" : "var(--text-muted)" }}>{done ? "✓" : "○"}</span>
                     <span style={{ flex: 1, fontSize: 11 }}>{l.title}</span>
-                    {done && <span style={{ fontSize: 10, color: "#22c55e" }}>{cp.lesson_scores[l.id]}%</span>}
+                    {done && <span style={{ fontSize: 11, color: "var(--ok)" }}>{cp.lesson_scores[l.id]}%</span>}
                   </div>
                 );
               })}
               {cp?.eligible_for_certificate && !cert && (
-                <button onClick={claimCert} style={{ marginTop: 8, background: "#22c55e", color: "#04140a",
+                <button onClick={claimCert} style={{ marginTop: 8, background: "var(--ok)", color: "var(--text-on-accent)",
                   border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                   🎓 Claim certificate ({cp.average_score}%)
                 </button>
               )}
               {cert?.certificate && (
-                <div style={{ ...box, padding: 10, marginTop: 8, borderColor: "#22c55e" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#22c55e" }}>Certificate awarded 🎓</div>
-                  <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+                <div style={{ ...box, padding: 10, marginTop: 8, borderColor: "var(--ok)" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ok)" }}>Certificate awarded 🎓</div>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                     {cert.certificate.certificate_id} · score {cert.certificate.score}%<br />
                     Verify code: <b>{cert.certificate.verification_code}</b></div>
                 </div>
@@ -145,7 +145,7 @@ export default function TrainingAcademyPanel() {
           {lesson && (
             <div>
               <button onClick={() => setLesson(null)} style={{ background: "transparent", border: "none",
-                color: "var(--text-muted)", fontSize: 10, cursor: "pointer", marginBottom: 6 }}>← back to {course.title}</button>
+                color: "var(--text-muted)", fontSize: 11, cursor: "pointer", marginBottom: 6 }}>← back to {course.title}</button>
               <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{lesson.title}</div>
               <p style={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--text-secondary)" }}>{lesson.content}</p>
               {lesson.quiz.map((q, i) => (
@@ -154,26 +154,26 @@ export default function TrainingAcademyPanel() {
                   {q.options.map((opt, oi) => (
                     <label key={oi} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11,
                       padding: "3px 0", cursor: "pointer",
-                      color: result ? (oi === result.feedback[i].correct_answer ? "#22c55e"
-                        : (answers[i] === oi ? "#ef4444" : "var(--text-secondary)")) : "var(--text-secondary)" }}>
+                      color: result ? (oi === result.feedback[i].correct_answer ? "var(--ok)"
+                        : (answers[i] === oi ? "var(--error)" : "var(--text-secondary)")) : "var(--text-secondary)" }}>
                       <input type="radio" name={`q${i}`} checked={answers[i] === oi} disabled={!!result}
                         onChange={() => setAnswers({ ...answers, [i]: oi })} />
                       {opt}
                     </label>
                   ))}
                   {result && result.feedback[i].explanation && (
-                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>ℹ {result.feedback[i].explanation}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>ℹ {result.feedback[i].explanation}</div>
                   )}
                 </div>
               ))}
               {!result ? (
                 <button onClick={submit} disabled={Object.keys(answers).length < lesson.quiz.length}
-                  style={{ background: "var(--accent)", color: "#04140a", border: "none", borderRadius: 6,
+                  style={{ background: "var(--accent)", color: "var(--text-on-accent)", border: "none", borderRadius: 6,
                     padding: "8px 16px", fontSize: 11, fontWeight: 700,
                     cursor: Object.keys(answers).length < lesson.quiz.length ? "not-allowed" : "pointer",
                     opacity: Object.keys(answers).length < lesson.quiz.length ? 0.5 : 1 }}>Submit answers</button>
               ) : (
-                <div style={{ fontSize: 12, fontWeight: 700, color: result.passed ? "#22c55e" : "#ef4444" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: result.passed ? "var(--ok)" : "var(--error)" }}>
                   {result.passed ? "✓ Passed" : "Try again"} — {result.correct}/{result.total} correct ({result.score}%)
                 </div>
               )}

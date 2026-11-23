@@ -161,20 +161,20 @@ export default function KeyframeEditor({ clipId, durationMs = 4000 }) {
   const selectedKfData = selectedKf !== null ? kfs[selectedKf] : null;
 
   return (
-    <div style={{ background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px", padding:12, height:"100%" }}>
+    <div style={{ background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"monospace", fontSize:"11px", padding:12, height:"100%" }}>
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-        <span style={{ color:"#ffcc00", fontWeight:"bold", fontSize:12 }}>◈ KEYFRAME EDITOR</span>
-        {clipId && <span style={{ color:"#334455", fontSize:9 }}>clip: {clipId}</span>}
+        <span style={{ color:"var(--accent)", fontWeight:"bold", fontSize:12 }}>◈ KEYFRAME EDITOR</span>
+        {clipId && <span style={{ color:"var(--info)", fontSize:11 }}>clip: {clipId}</span>}
         <div style={{ flex:1 }}/>
         <button onClick={()=>{ setPlayhead(0); setPlaying(p=>!p); }} style={{
-          padding:"3px 10px", background: playing?"#1a0a0a":"#0a1520",
-          color: playing?"#ff4444":"#00ff88",
+          padding:"3px 10px", background: playing?"var(--bg-base)":"var(--bg-base)",
+          color: playing?"var(--error)":"var(--ok)",
           border:`1px solid ${playing?"#ff444444":"#00ff8844"}`,
-          borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10,
+          borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
         }}>{playing ? "■ STOP" : "▶ PREVIEW"}</button>
         <button onClick={deleteSelected} disabled={selectedKf===null} style={{
-          padding:"3px 8px", background:"#1a0808", color:"#ff4444",
-          border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10,
+          padding:"3px 8px", background:"var(--bg-base)", color:"var(--error)",
+          border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
           opacity: selectedKf===null ? 0.3 : 1,
         }}>✕ DELETE KF</button>
       </div>
@@ -183,16 +183,16 @@ export default function KeyframeEditor({ clipId, durationMs = 4000 }) {
       <div style={{ display:"flex", gap:4, marginBottom:8, flexWrap:"wrap" }}>
         {CHANNELS.map(c => (
           <button key={c.key} onClick={()=>setActiveChannel(c.key)} style={{
-            padding:"3px 8px", background: activeChannel===c.key ? `${c.color}22` : "#0a1825",
-            color: activeChannel===c.key ? c.color : "#556677",
+            padding:"3px 8px", background: activeChannel===c.key ? `${c.color}22` : "var(--bg-base)",
+            color: activeChannel===c.key ? c.color : "var(--text-muted)",
             border:`1px solid ${activeChannel===c.key ? `${c.color}44` : "#0a2030"}`,
-            borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:10,
+            borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11,
           }}>{c.label}</button>
         ))}
       </div>
 
       {/* SVG curve editor */}
-      <div style={{ border:"1px solid #0a2030", borderRadius:6, background:"#020608", marginBottom:8, overflow:"hidden" }}>
+      <div style={{ border:"1px solid var(--border)", borderRadius:6, background:"var(--bg-void)", marginBottom:8, overflow:"hidden" }}>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
@@ -258,22 +258,22 @@ export default function KeyframeEditor({ clipId, durationMs = 4000 }) {
       <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
         {selectedKfData ? (
           <>
-            <span style={{ color:"#556677", fontSize:9 }}>EASING:</span>
+            <span style={{ color:"var(--text-muted)", fontSize:11 }}>EASING:</span>
             {EASINGS.map(e => (
               <button key={e.key} onClick={()=>setEasing(e.key)} style={{
-                padding:"2px 7px", fontSize:9, fontFamily:"monospace",
-                background: selectedKfData.easing===e.key ? "#002030":"#0a1825",
-                color: selectedKfData.easing===e.key ? "#00aaff":"#556677",
+                padding:"2px 7px", fontSize:11, fontFamily:"monospace",
+                background: selectedKfData.easing===e.key ? "var(--bg-base)":"var(--bg-base)",
+                color: selectedKfData.easing===e.key ? "var(--info)":"var(--text-muted)",
                 border:`1px solid ${selectedKfData.easing===e.key?"#00aaff44":"#0a2030"}`,
                 borderRadius:3, cursor:"pointer",
               }}>{e.label}</button>
             ))}
-            <span style={{ color:"#334455", marginLeft:8, fontSize:9 }}>
+            <span style={{ color:"var(--info)", marginLeft:8, fontSize:11 }}>
               t={Math.round(selectedKfData.t*100)}% · v={Math.round(selectedKfData.value*100)}%
             </span>
           </>
         ) : (
-          <span style={{ color:"#223344", fontSize:9 }}>Click on the curve to add a keyframe · drag handles to adjust</span>
+          <span style={{ color:"var(--info)", fontSize:11 }}>Click on the curve to add a keyframe · drag handles to adjust</span>
         )}
       </div>
 
@@ -281,11 +281,11 @@ export default function KeyframeEditor({ clipId, durationMs = 4000 }) {
       <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
         {CHANNELS.map(c => (
           <div key={c.key} style={{ display:"flex", alignItems:"center", gap:4 }}>
-            <span style={{ color:c.color, fontSize:9 }}>{c.label}</span>
-            <div style={{ width:40, height:3, background:"#0a1825", borderRadius:2, overflow:"hidden" }}>
+            <span style={{ color:c.color, fontSize:11 }}>{c.label}</span>
+            <div style={{ width:40, height:3, background:"var(--bg-base)", borderRadius:2, overflow:"hidden" }}>
               <div style={{ width:`${Math.round(interpolateKeyframes(keyframes[c.key]||[], playhead)*100)}%`, height:"100%", background:c.color }} />
             </div>
-            <span style={{ color:"#334455", fontSize:9, width:24 }}>{Math.round(interpolateKeyframes(keyframes[c.key]||[], playhead)*100)}%</span>
+            <span style={{ color:"var(--info)", fontSize:11, width:24 }}>{Math.round(interpolateKeyframes(keyframes[c.key]||[], playhead)*100)}%</span>
           </div>
         ))}
       </div>

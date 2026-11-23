@@ -104,7 +104,7 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
   }, [clips, fixtures]);
   return <div className="sp-preview" ref={wrapper} onPointerEnter={() => sceneRef.current && setActiveScene(sceneRef.current)}>
     {viewThrough && hasKeys && freeLook && <button type="button" className="sp-free-view-chip" onClick={() => { sceneRef.current?.resumeCameraTrack(); setFreeLook(false); }}
-      style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: '#0f3346', color: '#33d6ff', border: '1px solid #33d6ff', borderRadius: 12, padding: '3px 12px', fontSize: 11, cursor: 'pointer' }}>
+      style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: "color-mix(in srgb, var(--info) 18%, var(--bg-panel))", color: "var(--info)", border: "1px solid var(--info)", borderRadius: 12, padding: '3px 12px', fontSize: 11, cursor: 'pointer' }}>
       Free view · Back to camera</button>}
     <div className="studio-viewport-header"><ViewportHeader sceneRef={sceneRef} selected={selected}/></div>
     <canvas ref={canvas} onPointerMove={e=>{const r=wrapper.current?.getBoundingClientRect();if(r)sceneRef.current?.setHoverFixture(hitPoints.current.find(p=>Math.hypot(p.x-e.clientX+r.left,p.y-e.clientY+r.top)<12)?.id);}} onPointerDown={e => { start.current = [e.clientX, e.clientY]; }} onPointerUp={e => {

@@ -30,36 +30,36 @@ export default function RealismReport({ fixtures, realWorld, onToggle }) {
   return (
     <div data-testid="realism-report">
       <label title="On: water and light look only as the specified equipment will (nozzle family, outlet, pressure, real lights). Off: manual looks are drawn and every frame is stamped “Artistic preview”."
-        style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6, color:"#cfe0ee", fontSize:10 }}>
+        style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6, color:"var(--text-primary)", fontSize:11 }}>
         <input type="checkbox" checked={realWorld} onChange={e => onToggle(e.target.checked)} />
         Real-world simulation
       </label>
       {!realWorld && (
-        <div style={{ color:"#ffbe46", fontSize:9, marginBottom:6 }}>
+        <div style={{ color:"var(--warn)", fontSize:11, marginBottom:6 }}>
           Artistic preview — not real-world. Exports are stamped.
         </div>
       )}
-      <div style={{ color:"#71869a", fontSize:9, marginBottom:4 }}>
+      <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:4 }}>
         Realism report{items.length ? ` · ${items.length}` : ""}
       </div>
       {items.length === 0 && (
-        <div style={{ color:"#3ddc84", fontSize:9, marginBottom:6 }}>No estimates or ignored overrides.</div>
+        <div style={{ color:"var(--ok)", fontSize:11, marginBottom:6 }}>No estimates or ignored overrides.</div>
       )}
       <ul style={{ listStyle:"none", margin:0, padding:0, marginBottom:6 }}>
         {items.map(it => {
           const st = LEVEL_STYLE[it.level] || LEVEL_STYLE.info;
           const shown = open === it.id;
           return (
-            <li key={it.id} style={{ fontSize:9, lineHeight:1.35, marginBottom:4, color:"#b9c8d6" }}>
+            <li key={it.id} style={{ fontSize:11, lineHeight:1.35, marginBottom:4, color:"var(--info)" }}>
               <span style={{ color: st.color, marginRight:4 }}>{st.mark}</span>{it.text}
               {it.ids.length > 0 && (
                 <button onClick={() => setOpen(shown ? null : it.id)}
-                  style={{ marginLeft:4, fontSize:8, padding:"0 4px", background:"none", color:"#58c7ff", border:"1px solid #24405e", borderRadius:3, cursor:"pointer" }}>
+                  style={{ marginLeft:4, fontSize:11, padding:"0 4px", background:"none", color:"var(--info)", border:"1px solid var(--info)", borderRadius:3, cursor:"pointer" }}>
                   {shown ? "hide" : "ids"}
                 </button>
               )}
               {shown && (
-                <div style={{ color:"#71869a", fontFamily:"monospace", fontSize:8, wordBreak:"break-word", marginTop:2 }}>
+                <div style={{ color:"var(--text-muted)", fontFamily:"monospace", fontSize:11, wordBreak:"break-word", marginTop:2 }}>
                   {it.ids.slice(0, 120).join(", ")}{it.ids.length > 120 ? ` … +${it.ids.length - 120}` : ""}
                 </div>
               )}

@@ -78,7 +78,7 @@ export function CameraLaneRow({ zoom, labelWidth, scrollX, width, time, onSeek, 
   return (
     <div data-testid="camera-lane" aria-label="Camera lane" style={{ position: "absolute", top, left: 0, width, height: CAMERA_ROW_HEIGHT, background: C.bg, borderBottom: `1px solid ${C.line}` }}
       onPointerDown={(e) => { if (e.button !== 0 || e.target.closest("button,[data-lane-label]")) return; e.stopPropagation(); onSeek?.(tAt(e.clientX, e.currentTarget)); }}>
-      <div data-lane-label style={{ position: "absolute", left: scrollX, width: labelWidth, height: "100%", display: "flex", alignItems: "center", gap: 6, paddingLeft: 8, boxSizing: "border-box", background: "#0b1a26", borderRight: `1px solid ${C.line}`, zIndex: 2, color: C.text, fontSize: 11 }}>
+      <div data-lane-label style={{ position: "absolute", left: scrollX, width: labelWidth, height: "100%", display: "flex", alignItems: "center", gap: 6, paddingLeft: 8, boxSizing: "border-box", background: "var(--bg-base)", borderRight: `1px solid ${C.line}`, zIndex: 2, color: C.text, fontSize: 11 }}>
         <span aria-hidden>🎥</span><strong>Camera</strong><span style={{ color: C.dim }}>{track.keys.length ? `${track.keys.length} key${track.keys.length > 1 ? "s" : ""}` : "no keys"}</span>
       </div>
       {keys.slice(1).map((k, i) => {
@@ -113,8 +113,8 @@ export function CameraLaneRow({ zoom, labelWidth, scrollX, width, time, onSeek, 
           }}
           onPointerCancel={() => { drag.current = null; setGhost(null); }} />
       ))}
-      {!track.keys.length && <span style={{ position: "absolute", left: scrollX + labelWidth + 10, top: 9, fontSize: 10, color: C.dim }}>Move the 3D view where you want it, then press “+ Camera key” — or pick a Camera move.</span>}
-      <div style={{ position: "absolute", left: labelWidth + time * zoom, top: 0, height: "100%", borderLeft: "1px solid #ff5d73", pointerEvents: "none" }} />
+      {!track.keys.length && <span style={{ position: "absolute", left: scrollX + labelWidth + 10, top: 9, fontSize: 11, color: C.dim }}>Move the 3D view where you want it, then press “+ Camera key” — or pick a Camera move.</span>}
+      <div style={{ position: "absolute", left: labelWidth + time * zoom, top: 0, height: "100%", borderLeft: "1px solid var(--error)", pointerEvents: "none" }} />
     </div>
   );
 }
@@ -181,7 +181,7 @@ export function CameraLaneControls({ time, onSeek, selectedId, onSelectKey }) {
   };
 
   return (
-    <div className="sp-camera-strip" aria-label="Camera animation" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "4px 8px", background: "#071019", borderBottom: `1px solid ${C.line}`, color: C.text, fontSize: 11 }}
+    <div className="sp-camera-strip" aria-label="Camera animation" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "4px 8px", background: "var(--bg-base)", borderBottom: `1px solid ${C.line}`, color: C.text, fontSize: 11 }}
       onKeyDown={(e) => {
         const k = e.key.toLowerCase();
         if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) redoCameraTrack(); else undoCameraTrack(); }

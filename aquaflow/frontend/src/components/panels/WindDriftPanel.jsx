@@ -50,15 +50,15 @@ export default function WindDriftPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Wind Drift Safety
         </span>
-        <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 600, padding: "2px 8px",
+        <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, padding: "2px 8px",
           borderRadius: 10, background: summary.safe ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-          color: summary.safe ? "#22c55e" : "#ef4444" }}>
+          color: summary.safe ? "var(--ok)" : "var(--error)" }}>
           {summary.safe ? "Within safe limits" : `${summary.breachCount} breach${summary.breachCount === 1 ? "" : "es"}`}
         </span>
       </div>
 
       <div style={{ display: "flex", gap: 10, padding: "8px 10px", flexWrap: "wrap",
-        borderBottom: "1px solid var(--border)", fontSize: 10, color: "var(--text-muted)" }}>
+        borderBottom: "1px solid var(--border)", fontSize: 11, color: "var(--text-muted)" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 120 }}>
           Wind speed: <b style={{ color: "var(--text-primary)" }}>{windSpeed.toFixed(1)} m/s</b>
           <input type="range" min="0" max="20" step="0.5" value={windSpeed}
@@ -110,7 +110,7 @@ export default function WindDriftPanel() {
 
         {/* Operator warnings */}
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
             OPERATOR WARNINGS · {jets.length} jets · exclusion {zones.exclusionRadiusM.toFixed(2)} m
             (gust {zones.gustExclusionRadiusM.toFixed(2)} m)
           </div>
@@ -123,7 +123,7 @@ export default function WindDriftPanel() {
                 <span style={{ color: s.color, fontSize: 12 }}>{s.icon}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: "var(--text-primary)" }}>{w.message}</div>
-                  <div style={{ fontSize: 9, color: s.color, marginTop: 1 }}>
+                  <div style={{ fontSize: 11, color: s.color, marginTop: 1 }}>
                     {w.severity} · {w.code.replace(/_/g, " ")}
                   </div>
                 </div>

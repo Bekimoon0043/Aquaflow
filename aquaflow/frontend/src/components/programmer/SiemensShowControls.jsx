@@ -106,10 +106,10 @@ export default function SiemensShowControls({ clips, onLoadExample, selectedSite
       <button className="btn" onClick={() => action("Reload sites", async () => setSites((await siemensRequest()).sites))}>Reload sites</button>
     </div>}
     <SiemensLinkStatus status={status} mode={site?.mode} />
-    {site?.mode === "simulated" && <div role="alert" style={{ margin: "8px 0", padding: 8, border: "1px solid #b98539", color: "#ffe0a3", background: "rgba(185,133,57,.12)" }}>
+    {site?.mode === "simulated" && <div role="alert" style={{ margin: "8px 0", padding: 8, border: "1px solid var(--warn)", color: "var(--brand-gold-pale)", background: "rgba(185,133,57,.12)" }}>
       This mode animates AquaFlow only. It never writes DB100. To monitor changing values in TIA Portal, switch the saved site to PLCSIM network mode, start NetToPLCsim, then Verify and Prepare &amp; Arm.
     </div>}
-    {!site?.show?.clips?.length && <div role="alert" style={{ margin: "8px 0", color: "#ffb4b4" }}>No compiled show is saved for this revision (saving any setting clears it on purpose). {site?.previous_show_clips?.length ? "Recompile the previous show below, or compile the current timeline." : "Compile the example or the current timeline before starting."}
+    {!site?.show?.clips?.length && <div role="alert" style={{ margin: "8px 0", color: "var(--text-primary)" }}>No compiled show is saved for this revision (saving any setting clears it on purpose). {site?.previous_show_clips?.length ? "Recompile the previous show below, or compile the current timeline." : "Compile the example or the current timeline before starting."}
       {site?.previous_show_clips?.length > 0 && <div style={{ marginTop: 6 }}>{button(`Recompile previous show (${site.previous_show_clips.length} commands)`, async () => {
         const result = await siemensRequest(`/${id}/compile`, "POST", { revision: site.revision, clips: site.previous_show_clips });
         if (!selectedSite) setSites((await siemensRequest()).sites);
@@ -178,16 +178,16 @@ export default function SiemensShowControls({ clips, onLoadExample, selectedSite
     </details>
     {status && <details className="siemens-runtime__more"><summary>PLC feedback and diagnostics</summary><div style={{ marginTop: 10 }}>
       {status.quality} · {status.running ? "RUNNING" : "IDLE"} · {status.armed ? "ARMED" : "DISARMED"} · {(status.elapsed || 0).toFixed(1)}s
-      {status.plc_running && !status.running && <div role="alert" style={{ color: "#ff919a" }}>Last PLC status reported RUN while AquaFlow playback is stopped. Check the PLC and field equipment.</div>}
+      {status.plc_running && !status.running && <div role="alert" style={{ color: "var(--error)" }}>Last PLC status reported RUN while AquaFlow playback is stopped. Check the PLC and field equipment.</div>}
       <div>Verification: {status.verified ? (status.hardware_verified ? "PLC contract verified" : "simulation only") : "required"}. Stop: {status.stop_confirmed ? "OFF acknowledged; PLC reports stopped" : "unconfirmed — check PLC state"}</div>
-      {networked && status.verified && !status.telemetry_fresh && <div style={{ color: "#f6d795" }}>Idle PLC readings are {status.last_rx_age_seconds ?? "?"} seconds old. Arm will recheck the heartbeat and local permit.</div>}
+      {networked && status.verified && !status.telemetry_fresh && <div style={{ color: "var(--brand-gold-pale)" }}>Idle PLC readings are {status.last_rx_age_seconds ?? "?"} seconds old. Arm will recheck the heartbeat and local permit.</div>}
       <div>Connection: {status.connection_state || "not connected"} · Contract v{status.contract_version || "?"} · Fault: {status.fault || "none"}</div>
       {Object.entries(status.values || {}).map(([cid, value]) => <div key={cid}>Commanded {site?.channels.find(c => c.id === cid)?.name || cid}: {typeof value === "number" ? `${value.toFixed(1)}%` : `RGB ${value.red}/${value.green}/${value.blue}`}</div>)}
-      {!status.feedback_valid && status.feedback && Object.keys(status.feedback).length > 0 && <div role="alert" style={{ color: "#ff919a" }}>PLC feedback is stale; reconnect and verify before relying on it.</div>}
+      {!status.feedback_valid && status.feedback && Object.keys(status.feedback).length > 0 && <div role="alert" style={{ color: "var(--error)" }}>PLC feedback is stale; reconnect and verify before relying on it.</div>}
       {status.feedback_valid && Object.entries(status.feedback || {}).map(([cid, value]) => <div key={`fb-${cid}`}>Feedback {site?.channels.find(c => c.id === cid)?.name || cid}: {value.kind === "pump" ? `${value.running ? "RUNNING" : "STOPPED"}, ${value.applied_percent.toFixed(1)}%${value.fault ? ", FAULT" : ""}` : value.kind === "valve" ? (value.open ? "OPEN" : "CLOSED") : `RGB ${value.rgb.join("/")}`} ({value.source})</div>)}
-      {status.error && <div role="alert" style={{ color: "#ff919a" }}>{status.error}</div>}
+      {status.error && <div role="alert" style={{ color: "var(--error)" }}>{status.error}</div>}
     </div></details>}
-    {message && <p role="status" style={{ color: "#f6d795" }}>{message}</p>}
+    {message && <p role="status" style={{ color: "var(--brand-gold-pale)" }}>{message}</p>}
     {/* Advice only: explains the fault in plain words; never sends, arms or starts anything. */}
     {id && (status?.fault || status?.error || ["lost", "failed", "stop_unconfirmed"].includes(status?.connection_state) || (status?.plc_running && !status?.running)
       || Object.values(status?.feedback || {}).some(v => v?.fault) || (!status && message))

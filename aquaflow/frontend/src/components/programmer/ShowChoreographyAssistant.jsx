@@ -100,8 +100,8 @@ export default function ShowChoreographyAssistant({ fixtures, tracks, audioFile,
       if (onApply(result, { replace: result.music }) !== false) setMessage("Applied as editable blocks. Undo restores the previous timeline; Save keeps this show.");
     } catch (error) { setMessage(error.message); }
   };
-  return <div style={{ padding: 12, overflowY: "auto", color: "#cbd5e1", fontSize: 12, display: "grid", gap: 9 }}>
-    <strong style={{ color: "#67e8f9", fontSize: 15 }}>AI / Music Show Builder</strong>
+  return <div style={{ padding: 12, overflowY: "auto", color: "var(--text-primary)", fontSize: 12, display: "grid", gap: 9 }}>
+    <strong style={{ color: "var(--info)", fontSize: 15 }}>AI / Music Show Builder</strong>
     <p style={{ margin: 0, lineHeight: 1.5 }}>Describe a movement or analyze music, review in 3D, then apply editable blocks. The offline assistant uses supported styles, measured beats and energy.</p>
     <label>Dance name<input aria-label="AI dance name" maxLength={60} style={inputStyle} value={settings.name} disabled={!!busy} onChange={e => patch({ name: e.target.value })} /></label>
     <label>Describe the dance<textarea aria-label="Describe fountain dance" rows={3} style={inputStyle} value={settings.prompt} disabled={!!busy} onChange={e => patch({ prompt: e.target.value })} /></label>
@@ -112,16 +112,16 @@ export default function ShowChoreographyAssistant({ fixtures, tracks, audioFile,
     <strong>Music choreography</strong>
     <label>Choose WAV<input aria-label="Music for AI choreography" type="file" accept="audio/*" disabled={!!busy} onChange={onMusicFile} style={{ width: "100%", marginTop: 5 }} /></label>
     <span>{audioFile?.name || "Select the show’s music file."}</span>
-    <span style={{ color: "#94a3b8", lineHeight: 1.5 }}>Music uses the beginning of the selected track at timeline 0. Duration limits the excerpt. Grouped valve patterns follow beat positions; heights are illustrative. Save/export includes blocks and beats; reselect the WAV after reopening.</span>
+    <span style={{ color: "var(--info)", lineHeight: 1.5 }}>Music uses the beginning of the selected track at timeline 0. Duration limits the excerpt. Grouped valve patterns follow beat positions; heights are illustrative. Save/export includes blocks and beats; reselect the WAV after reopening.</span>
     <button style={buttonStyle} disabled={!!busy || !audioFile} onClick={analyze}>Analyze selected music</button>
     <button style={buttonStyle} disabled={!!busy || !analysis} onClick={() => generate(true)}>Generate music blocks</button>
     {analysis && <span>Tempo {analysis.result.bpm.toFixed(1)} BPM · {analysis.result.beats.length} beats · {analysis.result.analysis_method}{(analysis.result.bpm_confidence ?? 1) < 0.5 ? " · Low tempo confidence: check beat alignment in preview." : ""}</span>}
     {busy && <><span role="status">{busy}</span><button style={buttonStyle} onClick={() => { controller.current?.abort(); }}>Cancel generation / analysis</button></>}
-    {message && <div role="status" style={{ padding: 9, background: "#172033", borderRadius: 6, lineHeight: 1.5 }}>{message}</div>}
+    {message && <div role="status" style={{ padding: 9, background: "var(--bg-surface)", borderRadius: 6, lineHeight: 1.5 }}>{message}</div>}
     {proposal && <>
       <button style={buttonStyle} disabled={!!busy} onClick={preview}>Preview proposal in 3D</button>
-      <button style={{ ...buttonStyle, borderColor: "#22d3ee" }} disabled={!!busy} onClick={apply}>{proposal.analysis ? "Replace timeline with music blocks" : "Append prompt blocks to timeline"}</button>
+      <button style={{ ...buttonStyle, borderColor: "var(--info)" }} disabled={!!busy} onClick={apply}>{proposal.analysis ? "Replace timeline with music blocks" : "Append prompt blocks to timeline"}</button>
     </>}
-    <span style={{ color: "#94a3b8", lineHeight: 1.5 }}>Mapped running valves only. Pump support, frequency and rear outputs stay OFF during generation. Use the existing site review controls for a commissioned real-water run.</span>
+    <span style={{ color: "var(--info)", lineHeight: 1.5 }}>Mapped running valves only. Pump support, frequency and rear outputs stay OFF during generation. Use the existing site review controls for a commissioned real-water run.</span>
   </div>;
 }

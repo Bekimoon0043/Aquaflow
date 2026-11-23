@@ -110,10 +110,10 @@ export default function SiemensSitePanel() {
       <button className="btn" disabled={busy} onClick={() => action(refresh)}>Reload sites</button>
     </div>
     {draft && <SiemensShowControls selectedSite={sites.find(s => s.id === draft.id) || draft} configurationPending={dirty} onCompiled={() => refresh().catch(() => {})} />}
-    <details style={{ border: "1px solid #31504c", borderRadius: 8, padding: 11, marginBottom: 12 }}>
+    <details style={{ border: "1px solid var(--info)", borderRadius: 8, padding: 11, marginBottom: 12 }}>
       <summary style={{ cursor: "pointer", fontWeight: 600 }}>Create a new site or PLCSIM test</summary>
-    <div style={{ border: "1px solid #2f7280", borderRadius: 8, padding: 11, marginBottom: 12, background: "rgba(21,89,105,.14)" }}>
-      <b style={{ color: "#8de3d0" }}>Ready-made PLCSIM tests</b>
+    <div style={{ border: "1px solid var(--info)", borderRadius: 8, padding: 11, marginBottom: 12, background: "rgba(21,89,105,.14)" }}>
+      <b style={{ color: "var(--info)" }}>Ready-made PLCSIM tests</b>
       <p style={{ margin: "5px 0 8px" }}>Created in simulation mode. Select Physical mode later to connect.</p>
       <button className="btn" disabled={busy} onClick={createQuickTest}>Create ready 20-second TIA/PLCSIM test</button>
       <button className="btn" disabled={busy} onClick={create1212cStarter}>Create CPU 1212C starter (simulation)</button>
@@ -147,7 +147,7 @@ export default function SiemensSitePanel() {
         onUseDetectedTia={version => change({ tia: { ...draft.tia, version } })}
         onMakePlcSim={() => change({ mode: "plcsim", plc: { ...draft.plc, port: 102, rack: 0, slot: 1, db: draft.plc.db || 100 } })}
         onMakePhysical={() => change({ mode: "physical", plc: { ...draft.plc, port: 102, rack: 0, slot: 1, db: draft.plc.db || 100 } })} />
-      <details open={dirty ? true : undefined} style={{ border: "1px solid #31504c", borderRadius: 8, padding: 11, margin: "12px 0" }}>
+      <details open={dirty ? true : undefined} style={{ border: "1px solid var(--info)", borderRadius: 8, padding: 11, margin: "12px 0" }}>
       <summary style={{ cursor: "pointer", fontWeight: 600 }}>Controller, safety inputs and channel mapping {dirty ? "· unsaved" : ""}</summary>
       <h4>Controller and safety inputs</h4>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -180,7 +180,7 @@ export default function SiemensSitePanel() {
       </details>
       <h4>Saved channel map</h4>
       <p>Map each output to its PLC address. Save changes before verifying or running.</p>
-      <p style={{ color: "#f5cf91" }}>Pump fault inputs and pump/valve feedback are supported. Valve/light fault inputs and light feedback are not implemented by this runtime; packages with those bindings are blocked. RGB bytes require a compatible lighting interface, not direct DMX wiring.</p>
+      <p style={{ color: "var(--brand-gold-pale)" }}>Pump fault inputs and pump/valve feedback are supported. Valve/light fault inputs and light feedback are not implemented by this runtime; packages with those bindings are blocked. RGB bytes require a compatible lighting interface, not direct DMX wiring.</p>
       <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr>{["Channel", "Zone", "Supplying pump", "PLC output", "Pump enable", "Feedback input", "Fault input", "Speed ceiling %", "Min on/off ms", "Commissioning observation"].map(h => <th key={h} style={{ textAlign: "left", padding: 6 }}>{h}</th>)}</tr></thead>
         <tbody>{draft.channels.map(c => <tr key={c.id}>
@@ -210,11 +210,11 @@ export default function SiemensSitePanel() {
           change({ engineering: project }); setMessage("Engineering layout attached to the draft. Save mapping to keep it.");
         }}>Keep current engineering layout</button>
       </div>
-      <div aria-live="polite" style={{ minHeight: 28, margin: "-6px 0 12px", padding: "6px 8px", border: "1px solid #3c5362", color: "#f6c978" }}>
+      <div aria-live="polite" style={{ minHeight: 28, margin: "-6px 0 12px", padding: "6px 8px", border: "1px solid var(--info)", color: "var(--brand-gold-pale)" }}>
         {message || (dirty ? "Unsaved changes: click Save mapping before Export TIA package becomes available." : "Mapping is saved; the TIA package can be exported.")}
       </div>
       </details>
-      <details style={{ padding: 10, border: "1px solid #3c5362", marginBottom: 12 }}><summary style={{ cursor: "pointer" }}>TIA automatic engineering and download</summary>
+      <details style={{ padding: 10, border: "1px solid var(--info)", marginBottom: 12 }}><summary style={{ cursor: "pointer" }}>TIA automatic engineering and download</summary>
         <h4 style={{ marginTop: 0 }}>Official Siemens engineering workflow</h4>
         <p>Stages are recorded separately: source → TIA project → successful Siemens compilation → physical download. A ZIP export or S7 connection never counts as a compiled/downloaded PLC program.</p>
         <div>Current stage: <b>{engineeringStatus?.engineering?.stage || "not generated"}</b>{engineeringStatus?.current === false && engineeringStatus?.engineering ? " (stale — regenerate)" : ""}</div>
@@ -224,7 +224,7 @@ export default function SiemensSitePanel() {
           <button className="btn" disabled={dirty || busy || !engineeringStatus?.available || !engineeringStatus?.engineering} onClick={() => engineer("diagnostics")}>Read TIA status</button>
         </div>
         <p><b>AquaFlowCycle is automatic:</b> Step 1 generates the S7-1200 cyclic-interrupt OB through the matching Siemens Openness installation, then reads back and verifies OB200, cycle 100 ms, phase 0, the DB number and all safety-input arguments. If Siemens cannot confirm those properties, project generation fails and compile/download stay blocked.</p>
-        {engineeringStatus?.cpu_compatibility?.supported === false && <p style={{ color: "#ff7777" }}>The saved CPU TypeIdentifier is outside the reviewed standard S7-1200 CPU scope.</p>}
+        {engineeringStatus?.cpu_compatibility?.supported === false && <p style={{ color: "var(--error)" }}>The saved CPU TypeIdentifier is outside the reviewed standard S7-1200 CPU scope.</p>}
         <p>Download changes the physical PLC and can put it in STOP. Secure the fountain electrically and verify the selected CPU/network first. AquaFlow leaves the CPU in STOP after download.</p>
         <label>Confirmation <input style={{ ...input, minWidth: 280 }} placeholder={`DOWNLOAD ${draft.name}`} value={downloadConfirmation} onChange={e => setDownloadConfirmation(e.target.value)} /></label>
         <label style={{ marginLeft: 8 }}><input type="checkbox" checked={cpuStopAcknowledged} onChange={e => setCpuStopAcknowledged(e.target.checked)} /> Outputs secured; CPU STOP allowed</label>
@@ -233,7 +233,7 @@ export default function SiemensSitePanel() {
         <label style={{ marginLeft: 8 }}>PLC password <input style={input} type="password" autoComplete="off" value={plcPassword} onChange={e => setPlcPassword(e.target.value)} /></label>
         <button className="btn" disabled={dirty || busy || !engineeringStatus?.available || engineeringStatus?.engineering?.stage !== "compiled" || downloadConfirmation !== `DOWNLOAD ${draft.name}` || !cpuStopAcknowledged || !targetHardwareConfirmed}
           onClick={() => engineer("download", { confirmation: downloadConfirmation, cpu_stop_acknowledged: cpuStopAcknowledged, target_hardware_confirmed: targetHardwareConfirmed, memory_reinitialization_confirmed: memoryResetConfirmed, password: plcPassword }).finally(() => setPlcPassword(""))}>3. Download to PLC (leave STOP)</button>
-        {engineeringStatus?.engineering?.diagnostics?.map((item, index) => <div key={index} style={{ color: item.severity?.toLowerCase().includes("error") ? "#ff7777" : "#f6c978" }}>{item.severity}: {item.message || item.description}</div>)}
+        {engineeringStatus?.engineering?.diagnostics?.map((item, index) => <div key={index} style={{ color: item.severity?.toLowerCase().includes("error") ? "var(--error)" : "var(--brand-gold-pale)" }}>{item.severity}: {item.message || item.description}</div>)}
       </details>
       {dirty && <p>Save mapping before verification, export or playback. STOP remains available.</p>}
     </>}

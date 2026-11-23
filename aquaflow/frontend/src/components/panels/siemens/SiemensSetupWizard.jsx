@@ -120,8 +120,8 @@ export default function SiemensSetupWizard({ onOpenAdvanced }) {
           {site && fromDesign && <button className="btn primary" disabled={busy} onClick={syncDesign}>Update "{site.name}" from my design</button>}
           {(!site || !fromDesign) && <button className="btn primary" disabled={busy || !fixtures.length} onClick={createFromDesign}>Create Siemens site from my design</button>}
         </div>
-        {site && !fromDesign && <p style={{ color: "#f6d795" }}>"{site.name}" was created as a test or by hand, not from a design. It keeps working as before; create a new site from your design to use the device model.</p>}
-        {!fixtures.length && <p style={{ color: "#f6d795" }}>No design is open. Draw or open your fountain in Engineering Design first.</p>}
+        {site && !fromDesign && <p style={{ color: "var(--brand-gold-pale)" }}>"{site.name}" was created as a test or by hand, not from a design. It keeps working as before; create a new site from your design to use the device model.</p>}
+        {!fixtures.length && <p style={{ color: "var(--brand-gold-pale)" }}>No design is open. Draw or open your fountain in Engineering Design first.</p>}
       </div>
       {designReport && <div className="s7-card">
         <b>What AquaFlow did</b>
@@ -167,7 +167,7 @@ export default function SiemensSetupWizard({ onOpenAdvanced }) {
               onChange={() => { setPreviewChosen(mode === "simulated"); return mode === "simulated" ? saveConnection({ mode, plc: { port: 102, rack: 0, slot: 1 } }) : setPendingMode(mode === site.mode ? null : mode); }} /> {label}</label>)}
         </div>
         {connectMode !== "simulated" && <ConnectFields site={site} mode={connectMode} pending={connectMode !== site.mode} busy={busy} onSave={plc => saveConnection({ mode: connectMode, plc })} />}
-        {connectMode !== site.mode && <p style={{ color: "#f6d795" }}>Not saved yet: this site still runs as {site.mode === "simulated" ? "an AquaFlow animation that never talks to a PLC" : site.mode}. Check the address and press Save to use {connectMode === "plcsim" ? "PLCSIM as the test PLC" : "the real PLC"}.</p>}
+        {connectMode !== site.mode && <p style={{ color: "var(--brand-gold-pale)" }}>Not saved yet: this site still runs as {site.mode === "simulated" ? "an AquaFlow animation that never talks to a PLC" : site.mode}. Check the address and press Save to use {connectMode === "plcsim" ? "PLCSIM as the test PLC" : "the real PLC"}.</p>}
         {site.mode === "simulated" && connectMode === "simulated" && <div className="s7-msg s7-msg--bad">AquaFlow animation only: Verify always passes here and nothing is sent to PLCSIM or TIA Portal.</div>}
         {connectMode === "plcsim" && <p>Standard PLCSIM is reached through NetToPLCsim: start it, add a station with your PLCSIM CPU (<SiemensTerm k="rackslot">rack 0 / slot 1</SiemensTerm>), let it stop the S7DOS service, then enter this PC's network address above. Check the path in PowerShell with <span className="s7-mono">Test-NetConnection &lt;ip&gt; -Port 102</span>.</p>}
       </div>

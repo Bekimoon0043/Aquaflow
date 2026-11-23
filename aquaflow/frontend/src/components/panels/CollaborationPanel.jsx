@@ -43,7 +43,7 @@ export default function CollaborationPanel() {
   });
 
   const Btn = ({ onClick, children }) => (
-    <button onClick={onClick} style={{ background: "var(--accent)", color: "#04140a", border: "none",
+    <button onClick={onClick} style={{ background: "var(--accent)", color: "var(--text-on-accent)", border: "none",
       borderRadius: 6, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{children}</button>
   );
 
@@ -59,12 +59,12 @@ export default function CollaborationPanel() {
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-        {error && <div style={{ ...box, padding: 8, color: "#ef4444", fontSize: 11 }}>⛔ {error}</div>}
+        {error && <div style={{ ...box, padding: 8, color: "var(--error)", fontSize: 11 }}>⛔ {error}</div>}
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
+          <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
             Document<input value={docId} onChange={(e) => setDocId(e.target.value)} style={input} /></label>
-          <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
+          <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
             User<input value={user} onChange={(e) => setUser(e.target.value)} style={input} /></label>
           <Btn onClick={open}>Open</Btn>
           <Btn onClick={join}>Join</Btn>
@@ -73,11 +73,11 @@ export default function CollaborationPanel() {
         {doc && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <div style={{ ...box, padding: 8, minWidth: 90 }}>
-              <div style={{ fontSize: 9, color: "var(--text-muted)" }}>Version</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Version</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent)" }}>{doc.version}</div>
             </div>
             <div style={{ ...box, padding: 8, flex: 1, minWidth: 140 }}>
-              <div style={{ fontSize: 9, color: "var(--text-muted)" }}>Active users ({users.length})</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Active users ({users.length})</div>
               <div style={{ fontSize: 11, color: "var(--text-primary)" }}>
                 {users.map((u) => u.name || u.user_id).join(", ") || "—"}</div>
             </div>
@@ -86,9 +86,9 @@ export default function CollaborationPanel() {
 
         {joined && doc && (
           <div style={{ ...box, padding: 8, display: "flex", gap: 6, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
+            <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
               Field<input value={editKey} onChange={(e) => setEditKey(e.target.value)} style={{ ...input, width: 120 }} /></label>
-            <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
+            <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
               Value<input value={editVal} onChange={(e) => setEditVal(e.target.value)} style={{ ...input, width: 90 }} /></label>
             <Btn onClick={edit}>Apply edit</Btn>
           </div>
@@ -96,8 +96,8 @@ export default function CollaborationPanel() {
 
         {doc && (
           <div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>Document state</div>
-            <pre style={{ ...box, padding: 8, fontSize: 10.5, maxHeight: "22vh", overflow: "auto",
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Document state</div>
+            <pre style={{ ...box, padding: 8, fontSize: 11, maxHeight: "22vh", overflow: "auto",
               color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
               {JSON.stringify(doc.data ?? doc, null, 2)}</pre>
           </div>
@@ -105,9 +105,9 @@ export default function CollaborationPanel() {
 
         {history.length > 0 && (
           <div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>History ({history.length})</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>History ({history.length})</div>
             {history.slice(-8).reverse().map((h, i) => (
-              <div key={i} style={{ ...box, padding: "4px 8px", marginBottom: 3, fontSize: 10, color: "var(--text-secondary)" }}>
+              <div key={i} style={{ ...box, padding: "4px 8px", marginBottom: 3, fontSize: 11, color: "var(--text-secondary)" }}>
                 v{h.version} · {h.author || "?"} · {(h.changed || []).join(", ") || h.message || "—"}</div>
             ))}
           </div>

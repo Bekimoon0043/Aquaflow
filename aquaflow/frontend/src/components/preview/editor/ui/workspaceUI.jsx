@@ -97,7 +97,7 @@ export function EditorToolbar({ editor, onExitEditor, onSave, saveLabel = "Save"
       {onSave && <button title="Commit viewport layout to Engineering Design"
         onClick={onSave} style={btn(false, "#3ddc84")}>✓ {saveLabel}</button>}
       <span style={{ width: 1, height: 16, background: C.line, margin: "0 3px" }} />
-      <span style={{ color: C.dim, fontSize: 9, fontFamily: MONO }}>
+      <span style={{ color: C.dim, fontSize: 11, fontFamily: MONO }}>
         {sel.length ? `${sel.length} selected` : "nothing selected"}
       </span>
       {onExitEditor && (
@@ -150,7 +150,7 @@ export function LibraryPalette({ editor, compact = false }) {
   return (
     <div>
       <div style={label}>Library</div>
-      <div style={{ color: C.dim, fontSize: 9, fontFamily: MONO, marginBottom: 6 }}>
+      <div style={{ color: C.dim, fontSize: 11, fontFamily: MONO, marginBottom: 6 }}>
         Drag into the 3D view
       </div>
       <div style={{ display:"flex", gap:3, flexWrap:"wrap", paddingBottom:5, marginBottom:5 }}>
@@ -159,7 +159,7 @@ export function LibraryPalette({ editor, compact = false }) {
       </div>
       {Object.entries(grouped).filter(([group]) => group === category).map(([group, items]) => (
         <div key={group} style={{ marginBottom: 8 }}>
-          <div style={{ color: C.text, fontSize: 9, fontFamily: MONO, marginBottom: 3 }}>{group}</div>
+          <div style={{ color: C.text, fontSize: 11, fontFamily: MONO, marginBottom: 3 }}>{group}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
             {items.map(f => (
               <div key={f.key}
@@ -179,14 +179,14 @@ export function LibraryPalette({ editor, compact = false }) {
       ))}
       {!["Nozzles", "Lighting", "Hydraulics"].includes(category) && <div style={{ marginTop: compact ? 2 : 10, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
         <div style={label}>3D Models · {category}</div>
-        <div style={{ color: C.dim, fontSize: 9, fontFamily: MONO, marginBottom: 5 }}>
+        <div style={{ color: C.dim, fontSize: 11, fontFamily: MONO, marginBottom: 5 }}>
           Drag a person, tree or building into the view. Select it to move, rotate or resize.
         </div>
         {[category].map(group => {
           const items = models.filter(asset => asset.category === group);
           if (!items.length) return null;
           return <div key={group} style={{ marginBottom: 7 }}>
-            <div style={{ color: C.text, fontSize: 9, fontFamily: MONO, marginBottom: 3 }}>{group}</div>
+            <div style={{ color: C.text, fontSize: 11, fontFamily: MONO, marginBottom: 3 }}>{group}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
               {items.map(asset => <div key={asset.id} draggable
                 onDragStart={event => {
@@ -206,7 +206,7 @@ export function LibraryPalette({ editor, compact = false }) {
         <button onClick={() => fileRef.current?.click()} style={btn(false)} title="Import a self-contained glTF Binary file exported from Blender">
           Import Blender GLB…
         </button>
-        {importMessage && <div role="status" style={{ color: C.text, fontSize: 9, marginTop: 5 }}>{importMessage}</div>}
+        {importMessage && <div role="status" style={{ color: C.text, fontSize: 11, marginTop: 5 }}>{importMessage}</div>}
       </div>}
     </div>
   );
@@ -238,12 +238,12 @@ export function SceneTree({ editor }) {
         placeholder="filter…"
         style={{
           width: "100%", boxSizing: "border-box", marginBottom: 5, padding: "3px 6px",
-          background: "#010409", border: `1px solid ${C.line}`, borderRadius: 3,
-          color: C.bright, fontSize: 10, fontFamily: MONO, outline: "none",
+          background: "var(--bg-void)", border: `1px solid ${C.line}`, borderRadius: 3,
+          color: C.bright, fontSize: 11, fontFamily: MONO, outline: "none",
         }} />
       <div style={{ maxHeight: 190, overflowY: "auto", border: `1px solid ${C.line}`, borderRadius: 3 }}>
         {rows.length === 0 && (
-          <div style={{ padding: "8px 6px", color: C.dim, fontSize: 10, fontFamily: MONO }}>
+          <div style={{ padding: "8px 6px", color: C.dim, fontSize: 11, fontFamily: MONO }}>
             {filter ? "no match" : "scene is empty — drag a fixture in"}
           </div>
         )}
@@ -259,9 +259,9 @@ export function SceneTree({ editor }) {
               style={{
                 display: "flex", alignItems: "center", gap: 4, cursor: "pointer",
                 padding: "2px 5px", paddingLeft: 5 + depth * 12,
-                background: selected ? "#00aaff22" : "transparent",
+                background: selected ? "color-mix(in srgb, var(--info) 13%, transparent)" : "transparent",
                 color: selected ? C.accent : (visible ? C.text : C.dim),
-                fontSize: 10, fontFamily: MONO,
+                fontSize: 11, fontFamily: MONO,
                 borderBottom: `1px solid #06121c`,
               }}>
               <span style={{ opacity: 0.8 }}>{glyph(node.type)}</span>
@@ -279,7 +279,7 @@ export function SceneTree({ editor }) {
           );
         })}
       </div>
-      <div style={{ color: C.dim, fontSize: 9, fontFamily: MONO, marginTop: 4 }}>
+      <div style={{ color: C.dim, fontSize: 11, fontFamily: MONO, marginTop: 4 }}>
         {graph.count()} objects
       </div>
     </div>
@@ -309,7 +309,7 @@ export function Inspector({ editor }) {
     return (
       <div>
         <div style={label}>Transformation</div>
-        <div style={{ color: C.dim, fontSize: 10, fontFamily: MONO }}>
+        <div style={{ color: C.dim, fontSize: 11, fontFamily: MONO }}>
           Select an object in the viewport or the hierarchy.
         </div>
       </div>
@@ -319,7 +319,7 @@ export function Inspector({ editor }) {
     return (
       <div>
         <div style={label}>Transformation</div>
-        <div style={{ color: C.text, fontSize: 10, fontFamily: MONO }}>
+        <div style={{ color: C.text, fontSize: 11, fontFamily: MONO }}>
           {ids.length} objects selected. The gizmo moves them together; select one to type
           exact values.
         </div>
@@ -348,15 +348,15 @@ export function Inspector({ editor }) {
         onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setDraft(null); }}
         style={{
           width: "100%", boxSizing: "border-box", padding: "2px 4px",
-          background: "#010409", border: `1px solid ${C.line}`, borderRadius: 3,
-          color: C.bright, fontSize: 10, fontFamily: MONO, outline: "none",
+          background: "var(--bg-void)", border: `1px solid ${C.line}`, borderRadius: 3,
+          color: C.bright, fontSize: 11, fontFamily: MONO, outline: "none",
         }} />
     );
   };
 
   const Row = ({ title, group, vec, unit }) => (
     <div style={{ marginBottom: 6 }}>
-      <div style={{ color: C.text, fontSize: 9, fontFamily: MONO, marginBottom: 2 }}>
+      <div style={{ color: C.text, fontSize: 11, fontFamily: MONO, marginBottom: 2 }}>
         {title} <span style={{ color: C.dim }}>{unit}</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3 }}>
@@ -373,7 +373,7 @@ export function Inspector({ editor }) {
         onChange={e => editor.setNodeName(single.id, e.target.value)}
         style={{
           width: "100%", boxSizing: "border-box", marginBottom: 6, padding: "3px 6px",
-          background: "#010409", border: `1px solid ${C.line}`, borderRadius: 3,
+          background: "var(--bg-void)", border: `1px solid ${C.line}`, borderRadius: 3,
           color: C.accent, fontSize: 11, fontFamily: MONO, outline: "none",
         }} />
 
@@ -381,7 +381,7 @@ export function Inspector({ editor }) {
       <Row title="Rotation" group="rotation" vec={t.rotation} unit="deg" />
 
       <div style={{ marginBottom: 6 }}>
-        <div style={{ color: C.text, fontSize: 9, fontFamily: MONO, marginBottom: 2 }}>Size</div>
+        <div style={{ color: C.text, fontSize: 11, fontFamily: MONO, marginBottom: 2 }}>Size</div>
         <input
           value={typeof t.scale === "number" ? t.scale : 1}
           onChange={e => {
@@ -390,13 +390,13 @@ export function Inspector({ editor }) {
           }}
           style={{
             width: "100%", boxSizing: "border-box", padding: "2px 4px",
-            background: "#010409", border: `1px solid ${C.line}`, borderRadius: 3,
-            color: C.bright, fontSize: 10, fontFamily: MONO, outline: "none",
+            background: "var(--bg-void)", border: `1px solid ${C.line}`, borderRadius: 3,
+            color: C.bright, fontSize: 11, fontFamily: MONO, outline: "none",
           }} />
       </div>
 
       {single.parentId && (
-        <div style={{ color: C.dim, fontSize: 9, fontFamily: MONO, marginBottom: 6 }}>
+        <div style={{ color: C.dim, fontSize: 11, fontFamily: MONO, marginBottom: 6 }}>
           World: {world.x.toFixed(2)}, {world.y.toFixed(2)}, {world.z.toFixed(2)} m
           <br />(local values shown above are relative to the parent)
         </div>
@@ -427,9 +427,9 @@ function FixtureProps({ editor, node }) {
           value={node.props.nozzleType || "jet_1d"}
           onChange={e => set("nozzleType", e.target.value)}
           style={{
-            width: "100%", padding: "3px 4px", background: "#010409",
+            width: "100%", padding: "3px 4px", background: "var(--bg-void)",
             border: `1px solid ${C.line}`, borderRadius: 3, color: C.bright,
-            fontSize: 10, fontFamily: MONO, outline: "none",
+            fontSize: 11, fontFamily: MONO, outline: "none",
           }}>
           {types.map(t => <option key={t.key} value={t.props.nozzleType}>{t.label}</option>)}
         </select>
@@ -450,7 +450,7 @@ function FixtureProps({ editor, node }) {
             onChange={e => set("intensity", parseFloat(e.target.value))}
             style={{ flex: 1 }} />
         </div>
-        <div style={{ color: C.dim, fontSize: 9, fontFamily: MONO }}>
+        <div style={{ color: C.dim, fontSize: 11, fontFamily: MONO }}>
           Intensity {(node.props.intensity ?? 0.85).toFixed(2)}
         </div>
       </div>
@@ -480,8 +480,8 @@ export function ShortcutHint() {
 function RowHint({ k, d }) {
   return (
     <>
-      <span style={{ color: C.accent, fontSize: 9, fontFamily: MONO, whiteSpace: "nowrap" }}>{k}</span>
-      <span style={{ color: C.dim, fontSize: 9, fontFamily: MONO }}>{d}</span>
+      <span style={{ color: C.accent, fontSize: 11, fontFamily: MONO, whiteSpace: "nowrap" }}>{k}</span>
+      <span style={{ color: C.dim, fontSize: 11, fontFamily: MONO }}>{d}</span>
     </>
   );
 }

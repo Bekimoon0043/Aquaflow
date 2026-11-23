@@ -29,10 +29,10 @@ export default function PyroExportButton({ fixtures = [] }) {
     <>
       <button type="button" onClick={() => setStatus(exportFiringScript().message)}
         title="CSV for the firing system (cue, ignition time + SMPTE, module/pin, product). AquaFlow never fires pyro."
-        style={{ width: "100%", padding: "7px", marginBottom: 4, background: "#2a1204", color: "#ffb070", border: "1px solid #ff8a3d88", borderRadius: 3, cursor: "pointer", fontSize: 10, fontFamily: "monospace" }}>
+        style={{ width: "100%", padding: "7px", marginBottom: 4, background: "var(--bg-base)", color: "var(--brand-gold-pale)", border: "1px solid color-mix(in srgb, var(--warn) 53%, transparent)", borderRadius: 3, cursor: "pointer", fontSize: 11, fontFamily: "monospace" }}>
         EXPORT PYRO FIRING SCRIPT (CSV)
       </button>
-      {status && <div role="status" style={{ color: "#ffb070", fontSize: 8, lineHeight: 1.5, marginBottom: 6 }}>{status}</div>}
+      {status && <div role="status" style={{ color: "var(--brand-gold-pale)", fontSize: 11, lineHeight: 1.5, marginBottom: 6 }}>{status}</div>}
     </>
   );
 }

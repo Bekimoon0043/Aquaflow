@@ -529,65 +529,65 @@ export default function Timeline({ height }) {
         padding: "0 12px",
         flexShrink: 0,
       }}>
-        <span style={{ fontFamily: "var(--font-display)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
+        <span style={{ fontFamily: "var(--font-display)", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           {simulationActive ? "Simulation Timeline" : "Timeline"}
         </span>
-        <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"2px 7px", borderRadius:10, background: simulationActive ? "rgba(16,185,129,0.12)" : "rgba(201,162,39,0.08)", color: simulationActive ? "var(--green)" : "var(--text-accent)", fontSize:9, fontFamily:"var(--font-mono)" }}>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"2px 7px", borderRadius:10, background: simulationActive ? "rgba(16,185,129,0.12)" : "rgba(201,162,39,0.08)", color: simulationActive ? "var(--green)" : "var(--text-accent)", fontSize:11, fontFamily:"var(--font-mono)" }}>
           <span style={{ width:5, height:5, borderRadius:"50%", background:"currentColor", boxShadow:"0 0 6px currentColor" }} />
           {simulationActive ? "DESIGN SIM · NO OUTPUT" : "SHOW PROGRAM"}
         </span>
-        <span style={{ fontSize: 9, color: serverAuthoritative ? "var(--green)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <span style={{ fontSize: 11, color: serverAuthoritative ? "var(--green)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {serverAuthoritative ? "SERVER AUTHORITY" : "LOCAL PREVIEW"}
         </span>
-        <span style={{ fontSize: 9, color: snapToGrid ? "var(--text-accent)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <span style={{ fontSize: 11, color: snapToGrid ? "var(--text-accent)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {snapToGrid ? `SNAP ${snapStep.toFixed(2)}s` : "FREE MOVE"}
         </span>
-        <span style={{ fontSize: 9, color: visibleSoloCount > 0 ? "var(--amber)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <span style={{ fontSize: 11, color: visibleSoloCount > 0 ? "var(--amber)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {visibleSoloCount > 0 ? `${visibleSoloCount} SOLO` : "ALL TRACKS ACTIVE"}
         </span>
-        <span style={{ fontSize: 9, color: selectedClipCount > 0 ? "var(--text-accent)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <span style={{ fontSize: 11, color: selectedClipCount > 0 ? "var(--text-accent)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {simulationActive ? `${displayedTracks.length} VISUAL LANES` : selectedClipCount > 0 ? `${selectedClipCount} SELECTED` : "NO CLIP SELECTION"}
         </span>
         <div style={{ flex: 1 }} />
         {simulationActive && <><div style={{ display:"flex", alignItems:"center", gap:2, padding:"2px 4px", border:"1px solid var(--border-mid)", borderRadius:5, background:"var(--bg-void)" }}>
-          <button className="btn icon-btn" title="Go to start" onClick={() => seekActive(0)} style={{ padding:"2px 6px", fontSize:10 }}>⏮</button>
-          <button className="btn icon-btn" title="Back 5 seconds" onClick={() => seekActive(activePlayhead - 5)} style={{ padding:"2px 6px", fontSize:10 }}>−5</button>
+          <button className="btn icon-btn" title="Go to start" onClick={() => seekActive(0)} style={{ padding:"2px 6px", fontSize:11 }}>⏮</button>
+          <button className="btn icon-btn" title="Back 5 seconds" onClick={() => seekActive(activePlayhead - 5)} style={{ padding:"2px 6px", fontSize:11 }}>−5</button>
           <button className="btn icon-btn primary" title={`${activePlayback === "playing" ? "Pause" : "Play"} · Space`} onClick={playOrPause} style={{ padding:"2px 8px", fontSize:11 }}>{activePlayback === "playing" ? "Ⅱ" : "▶"}</button>
-          <button className="btn icon-btn" title="Stop · Shift+Space" onClick={stopPlayback} style={{ padding:"2px 6px", fontSize:10 }}>■</button>
-          <button className="btn icon-btn" title="Forward 5 seconds" onClick={() => seekActive(activePlayhead + 5)} style={{ padding:"2px 6px", fontSize:10 }}>+5</button>
+          <button className="btn icon-btn" title="Stop · Shift+Space" onClick={stopPlayback} style={{ padding:"2px 6px", fontSize:11 }}>■</button>
+          <button className="btn icon-btn" title="Forward 5 seconds" onClick={() => seekActive(activePlayhead + 5)} style={{ padding:"2px 6px", fontSize:11 }}>+5</button>
         </div>
-        <span style={{ minWidth:94, textAlign:"center", color: activePlayback === "playing" ? "var(--green)" : "var(--text-secondary)", fontFamily:"var(--font-mono)", fontSize:10 }}>
+        <span style={{ minWidth:94, textAlign:"center", color: activePlayback === "playing" ? "var(--green)" : "var(--text-secondary)", fontFamily:"var(--font-mono)", fontSize:11 }}>
           {formatTime(activePlayhead)} / {formatTime(activeDuration)}
         </span></>}
         {!simulationActive && <>
-        <button className="btn" disabled={!canUndo} onClick={() => { undo(); addServerLog({ level: "info", msg: "Undo executed from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 10, opacity: canUndo ? 1 : 0.5 }}>↶ Undo</button>
-        <button className="btn" disabled={!canRedo} onClick={() => { redo(); addServerLog({ level: "info", msg: "Redo executed from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 10, opacity: canRedo ? 1 : 0.5 }}>↷ Redo</button>
-        <button className="btn" onClick={() => { healTimelineOverlaps(); addServerLog({ level: "info", msg: "Timeline overlap healing executed" }); }} style={{ padding: "2px 8px", fontSize: 10 }}>Heal</button>
+        <button className="btn" disabled={!canUndo} onClick={() => { undo(); addServerLog({ level: "info", msg: "Undo executed from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 11, opacity: canUndo ? 1 : 0.5 }}>↶ Undo</button>
+        <button className="btn" disabled={!canRedo} onClick={() => { redo(); addServerLog({ level: "info", msg: "Redo executed from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 11, opacity: canRedo ? 1 : 0.5 }}>↷ Redo</button>
+        <button className="btn" onClick={() => { healTimelineOverlaps(); addServerLog({ level: "info", msg: "Timeline overlap healing executed" }); }} style={{ padding: "2px 8px", fontSize: 11 }}>Heal</button>
         <div style={{ width: 1, height: 16, background: "var(--border)" }} />
-        <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>ZOOM</span>
+        <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>ZOOM</span>
         <button className="btn icon-btn" onClick={() => setTimelineZoom(timelineZoom / 1.5)} style={{ padding: "2px 6px", fontSize: 12 }}>−</button>
         <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-secondary)", minWidth: 36, textAlign: "center" }}>
           {timelineZoom}x
         </span>
         <button className="btn icon-btn" onClick={() => setTimelineZoom(timelineZoom * 1.5)} style={{ padding: "2px 6px", fontSize: 12 }}>+</button>
         <div style={{ width: 1, height: 16, background: "var(--border)" }} />
-        <button className="btn" onClick={() => { addTimelineTrack(); addServerLog({ level: "info", msg: "Track added from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 10 }}>+ Track</button>
-        <button className="btn" onClick={addTrackThenClip} style={{ padding: "2px 8px", fontSize: 10 }}>+ Clip</button>
-        <button className="btn" disabled={!selectedClipCount} onClick={handleDuplicate} style={{ padding: "2px 8px", fontSize: 10, opacity: selectedClipCount ? 1 : 0.5 }}>{selectedClipCount > 1 ? "Duplicate Sel" : "Duplicate"}</button>
-        <button className="btn danger" disabled={!selectedClipCount} onClick={handleDelete} style={{ padding: "2px 8px", fontSize: 10, opacity: selectedClipCount ? 1 : 0.5 }}>{selectedClipCount > 1 ? "Delete Sel" : "Delete"}</button>
-        <button className="btn" onClick={() => { quantizeTimeline(); addServerLog({ level: "info", msg: "Timeline quantized from toolbar" }); }} style={{ padding: "2px 8px", fontSize: 10 }}>Quantize</button>
+        <button className="btn" onClick={() => { addTimelineTrack(); addServerLog({ level: "info", msg: "Track added from timeline toolbar" }); }} style={{ padding: "2px 8px", fontSize: 11 }}>+ Track</button>
+        <button className="btn" onClick={addTrackThenClip} style={{ padding: "2px 8px", fontSize: 11 }}>+ Clip</button>
+        <button className="btn" disabled={!selectedClipCount} onClick={handleDuplicate} style={{ padding: "2px 8px", fontSize: 11, opacity: selectedClipCount ? 1 : 0.5 }}>{selectedClipCount > 1 ? "Duplicate Sel" : "Duplicate"}</button>
+        <button className="btn danger" disabled={!selectedClipCount} onClick={handleDelete} style={{ padding: "2px 8px", fontSize: 11, opacity: selectedClipCount ? 1 : 0.5 }}>{selectedClipCount > 1 ? "Delete Sel" : "Delete"}</button>
+        <button className="btn" onClick={() => { quantizeTimeline(); addServerLog({ level: "info", msg: "Timeline quantized from toolbar" }); }} style={{ padding: "2px 8px", fontSize: 11 }}>Quantize</button>
         <button className="btn primary" onClick={() => {
           window.dispatchEvent(new CustomEvent("aquaflow:open-panel", { detail: { panel: "show_programmer" } }));
           window.setTimeout(() => window.dispatchEvent(new CustomEvent("aquaflow:open-show-ai")), 0);
           addServerLog({ level: "info", msg: "Opened the fixture-aware AI / Music Show Builder" });
-        }} style={{ padding: "2px 8px", fontSize: 10 }}>✨ AI Show Builder</button>
+        }} style={{ padding: "2px 8px", fontSize: 11 }}>✨ AI Show Builder</button>
         </>}
-        {simulationActive && <button className="btn" onClick={sitePreview.close} style={{ padding:"2px 8px", fontSize:10 }}>Exit simulation</button>}
+        {simulationActive && <button className="btn" onClick={sitePreview.close} style={{ padding:"2px 8px", fontSize:11 }}>Exit simulation</button>}
       </div>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ width: HEADER_W, flexShrink: 0, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column" }}>
-          <div style={{ height: RULER_H, borderBottom: "1px solid var(--border)", background: "var(--bg-surface)", display: "flex", alignItems: "center", padding: "0 10px", fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+          <div style={{ height: RULER_H, borderBottom: "1px solid var(--border)", background: "var(--bg-surface)", display: "flex", alignItems: "center", padding: "0 10px", fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
             TRACKS
           </div>
           <div style={{ flex: 1, overflowY: "hidden" }}>
@@ -684,7 +684,7 @@ export default function Timeline({ height }) {
               bottom: 0,
               left: activePlayhead * displayZoom,
               width: 1,
-              background: simulationActive ? "#34d399" : "#c9a227",
+              background: simulationActive ? "var(--ok)" : "var(--accent)",
               pointerEvents: "none",
               zIndex: 15,
               boxShadow: simulationActive ? "0 0 6px rgba(52,211,153,0.65)" : "0 0 6px rgba(201,162,39,0.65)",
@@ -701,7 +701,7 @@ export default function Timeline({ height }) {
         padding: "0 12px",
         borderTop: "1px solid var(--border)",
         background: "var(--bg-surface)",
-        fontSize: 10,
+        fontSize: 11,
         color: "var(--text-muted)",
         fontFamily: "var(--font-mono)",
         flexShrink: 0,
@@ -735,7 +735,7 @@ export default function Timeline({ height }) {
 
 function TrackHeader({ track, index, selected, readOnly = false, canMoveUp, canMoveDown, onSelect, onAddClip, onToggleMute, onToggleSolo, onMoveUp, onMoveDown }) {
   return (
-    <div onClick={onSelect} style={{
+    <div className="tl-track-header" onClick={onSelect} style={{
       height: TRACK_H,
       display: "flex",
       alignItems: "center",
@@ -748,19 +748,21 @@ function TrackHeader({ track, index, selected, readOnly = false, canMoveUp, canM
       <div style={{ width: 3, height: 28, borderRadius: 2, background: track.color, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{index + 1}. {track.label}</div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <span style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>{track.type}</span>
-          <span style={{ fontSize: 9, color: track.muted ? "var(--red)" : track.solo ? "var(--amber)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{track.type}</span>
+          <span style={{ fontSize: 11, color: track.muted ? "var(--red)" : track.solo ? "var(--amber)" : "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
             {track.muted ? "MUTED" : track.solo ? "SOLO" : `${track.clips?.length || 0} CLIPS`}
           </span>
         </div>
       </div>
       {!readOnly && <div style={{ display: "flex", gap: 3 }} onClick={(event) => event.stopPropagation()}>
-        <button className="btn icon-btn" onClick={onMoveUp} disabled={!canMoveUp} style={{ padding: "2px 4px", fontSize: 9, color: canMoveUp ? "var(--text-secondary)" : "var(--text-muted)", opacity: canMoveUp ? 1 : 0.35 }} data-tip="Move Up">↑</button>
-        <button className="btn icon-btn" onClick={onMoveDown} disabled={!canMoveDown} style={{ padding: "2px 4px", fontSize: 9, color: canMoveDown ? "var(--text-secondary)" : "var(--text-muted)", opacity: canMoveDown ? 1 : 0.35 }} data-tip="Move Down">↓</button>
-        <button className="btn icon-btn" onClick={onAddClip} style={{ padding: "2px 4px", fontSize: 9, color: "var(--text-secondary)" }} data-tip="Add Clip">+</button>
-        <button className="btn icon-btn" onClick={onToggleMute} style={{ padding: "2px 4px", fontSize: 9, color: track.muted ? "var(--red)" : "var(--text-muted)" }} data-tip="Mute">M</button>
-        <button className="btn icon-btn" onClick={onToggleSolo} style={{ padding: "2px 4px", fontSize: 9, color: track.solo ? "var(--amber)" : "var(--text-muted)" }} data-tip="Solo">S</button>
+        <span className="tl-track-extra">
+        <button className="btn icon-btn" onClick={onMoveUp} disabled={!canMoveUp} style={{ padding: "2px 4px", fontSize: 11, color: canMoveUp ? "var(--text-secondary)" : "var(--text-muted)", opacity: canMoveUp ? 1 : 0.35 }} data-tip="Move Up">↑</button>
+        <button className="btn icon-btn" onClick={onMoveDown} disabled={!canMoveDown} style={{ padding: "2px 4px", fontSize: 11, color: canMoveDown ? "var(--text-secondary)" : "var(--text-muted)", opacity: canMoveDown ? 1 : 0.35 }} data-tip="Move Down">↓</button>
+        <button className="btn icon-btn" onClick={onAddClip} style={{ padding: "2px 4px", fontSize: 11, color: "var(--text-secondary)" }} data-tip="Add Clip">+</button>
+        </span>
+        <button className="btn icon-btn" onClick={onToggleMute} style={{ padding: "2px 4px", fontSize: 11, color: track.muted ? "var(--red)" : "var(--text-muted)" }} data-tip="Mute">M</button>
+        <button className="btn icon-btn" onClick={onToggleSolo} style={{ padding: "2px 4px", fontSize: 11, color: track.solo ? "var(--amber)" : "var(--text-muted)" }} data-tip="Solo">S</button>
       </div>}
     </div>
   );
@@ -839,7 +841,7 @@ function Clip({ clip, color, timelineZoom, selected, muted, solo, readOnly = fal
     >
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: intHeight, background: muted ? "rgba(239,68,68,0.16)" : `${color}33`, borderTop: `1px solid ${color}44` }} />
       {width > 40 && (
-        <span style={{ position: "absolute", left: 8, right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 9, fontWeight: 500, fontFamily: "var(--font-mono)", color: labelColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", pointerEvents: "none" }}>
+        <span style={{ position: "absolute", left: 8, right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, fontWeight: 500, fontFamily: "var(--font-mono)", color: labelColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", pointerEvents: "none" }}>
           {clip.label}
         </span>
       )}

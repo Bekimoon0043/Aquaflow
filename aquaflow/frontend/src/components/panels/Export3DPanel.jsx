@@ -87,7 +87,7 @@ export default function Export3DPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           3D Export Bridge
         </span>
-        <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-muted)" }}>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
           {stats.fixtures} fixtures · {stats.triangles.toLocaleString()} tris
         </span>
       </div>
@@ -98,14 +98,14 @@ export default function Export3DPanel() {
           {[["Nodes", stats.nodes], ["Fixtures", stats.fixtures], ["Lights", stats.lights], ["Triangles", stats.triangles.toLocaleString()]]
             .map(([label, val]) => (
             <div key={label} style={{ ...box, padding: "8px 12px", flex: 1, minWidth: 90 }}>
-              <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)" }}>{val}</div>
             </div>
           ))}
         </div>
 
         {!hasContent && (
-          <div style={{ ...box, padding: 12, fontSize: 11, color: "var(--text-muted)", borderLeft: "3px solid #f59e0b" }}>
+          <div style={{ ...box, padding: 12, fontSize: 11, color: "var(--text-muted)", borderLeft: "3px solid var(--warn)" }}>
             No fixtures found. Add fixtures in the Engineering Designer, then export. A pool-only
             scene will still export if geometry is defined.
           </div>
@@ -113,7 +113,7 @@ export default function Export3DPanel() {
 
         {/* Format picker */}
         <div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
             Format
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -124,7 +124,7 @@ export default function Export3DPanel() {
                 background: format === f.id ? "var(--bg-hover, var(--bg-surface))" : "var(--bg-surface)",
                 outline: format === f.id ? "1px solid var(--accent)" : "none" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>{f.label}</div>
-                <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.35 }}>{f.blurb}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.35 }}>{f.blurb}</div>
               </button>
             ))}
           </div>
@@ -147,16 +147,16 @@ export default function Export3DPanel() {
           <button onClick={doExport} disabled={!hasContent} style={{
             padding: "9px 18px", borderRadius: 6, border: "none", cursor: hasContent ? "pointer" : "not-allowed",
             background: hasContent ? "var(--accent)" : "var(--bg-surface)",
-            color: hasContent ? "#04121a" : "var(--text-muted)", fontWeight: 700, fontSize: 12 }}>
+            color: hasContent ? "var(--text-on-accent)" : "var(--text-muted)", fontWeight: 700, fontSize: 12 }}>
             ⬇ Export {activeFmt?.label.split(" (")[0]}
           </button>
-          {status && <span style={{ fontSize: 11, color: "#22c55e" }}>{status}</span>}
-          {error && <span style={{ fontSize: 11, color: "#ef4444" }}>{error}</span>}
+          {status && <span style={{ fontSize: 11, color: "var(--ok)" }}>{status}</span>}
+          {error && <span style={{ fontSize: 11, color: "var(--error)" }}>{error}</span>}
         </div>
 
         <SimulationCacheSection fixtures={design.fixtures} name={projectName || design.name} design={design} />
 
-        <div style={{ ...box, padding: 12, fontSize: 10.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
+        <div style={{ ...box, padding: 12, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
           <strong style={{ color: "var(--text-secondary)" }}>About</strong> — AquaFlow stays control
           software; this exports a presentation copy of the 3D scene (pool basin, water surface, site,
           fixtures, water jets, lights) in real metres. FBX, glTF, OBJ, COLLADA and USD are Y-up;

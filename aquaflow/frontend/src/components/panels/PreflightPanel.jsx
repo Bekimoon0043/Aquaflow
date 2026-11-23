@@ -46,7 +46,7 @@ export function PreflightIssueList({ issues, onFix = issueAction }) {
   return <div data-testid="preflight-issues">
     {["error", "warning", "info"].map(severity => groups[severity].length > 0 && (
       <div key={severity} data-severity={severity} style={{ marginBottom: 8 }}>
-        <div style={{ color: SEVERITY_STYLE[severity].color, fontSize: 10, fontWeight: "bold", marginBottom: 3 }}>
+        <div style={{ color: SEVERITY_STYLE[severity].color, fontSize: 11, fontWeight: "bold", marginBottom: 3 }}>
           {SEVERITY_STYLE[severity].icon} {SEVERITY_STYLE[severity].title} ({groups[severity].length})
         </div>
         {groups[severity].map((issue, i) => (
@@ -55,13 +55,13 @@ export function PreflightIssueList({ issues, onFix = issueAction }) {
             title={issue.fix ? `${fixLabel(issue.fix)}: ${issue.fix.target}` : "No fix location"}
             data-fix-kind={issue.fix?.kind || ""}
             style={{ display: "block", width: "100%", textAlign: "left", padding: "4px 6px", marginBottom: 2,
-              background: "#0a1520", color: "#cce8ff", border: `1px solid ${SEVERITY_STYLE[severity].color}33`,
-              borderRadius: 3, cursor: issue.fix ? "pointer" : "default", fontFamily: "monospace", fontSize: 10 }}>
+              background: "var(--bg-base)", color: "var(--text-primary)", border: `1px solid ${SEVERITY_STYLE[severity].color}33`,
+              borderRadius: 3, cursor: issue.fix ? "pointer" : "default", fontFamily: "monospace", fontSize: 11 }}>
             <span style={{ color: SEVERITY_STYLE[severity].color }}>{issue.code}</span>
-            {issue.timeMs !== null && issue.timeMs !== undefined && <span style={{ color: "#556677" }}> @ {fmtTime(issue.timeMs)}</span>}
-            {issue.source && issue.source !== "preflight" && <span style={{ color: "#556677" }}> [{issue.source}]</span>}
+            {issue.timeMs !== null && issue.timeMs !== undefined && <span style={{ color: "var(--text-muted)" }}> @ {fmtTime(issue.timeMs)}</span>}
+            {issue.source && issue.source !== "preflight" && <span style={{ color: "var(--text-muted)" }}> [{issue.source}]</span>}
             <div>{issue.message}</div>
-            {issue.fix && <div style={{ color: "#00aaff", fontSize: 9 }}>→ {fixLabel(issue.fix)} ({issue.fix.target})</div>}
+            {issue.fix && <div style={{ color: "var(--info)", fontSize: 11 }}>→ {fixLabel(issue.fix)} ({issue.fix.target})</div>}
           </button>
         ))}
       </div>
@@ -99,32 +99,32 @@ export default function PreflightPanel() {
   };
 
   const preview = kind === "preview";
-  return <div style={{ background: "#050d18", border: "1px solid #0a2030", borderRadius: 6, padding: 10, marginBottom: 12 }}>
+  return <div style={{ background: "var(--bg-void)", border: "1px solid var(--border)", borderRadius: 6, padding: 10, marginBottom: 12 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-      <span style={{ color: "#ffcc00", fontSize: 12, fontWeight: "bold" }}>◈ PREFLIGHT</span>
-      {preview && <span role="note" style={{ color: "#f6d795", fontSize: 9, border: "1px solid #b98539", borderRadius: 3, padding: "1px 5px" }}>{PREVIEW_ONLY_LABEL}</span>}
+      <span style={{ color: "var(--accent)", fontSize: 12, fontWeight: "bold" }}>◈ PREFLIGHT</span>
+      {preview && <span role="note" style={{ color: "var(--brand-gold-pale)", fontSize: 11, border: "1px solid var(--warn)", borderRadius: 3, padding: "1px 5px" }}>{PREVIEW_ONLY_LABEL}</span>}
     </div>
-    <div style={{ fontSize: 9, color: "#556677", marginBottom: 6 }}>
+    <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
       Checks the resolved show for missing links, address conflicts, pump/valve dependencies, output limits,
       minimum on/off times, unsupported channels and unsafe transitions. Errors block hardware output; nothing is sent from here.
     </div>
     <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
       <select aria-label="Preflight controller" value={kind} onChange={e => setKind(e.target.value)}
-        style={{ flex: 1, padding: "4px 6px", background: "#0a1825", color: "#cce8ff", border: "1px solid #0a2535", borderRadius: 3, fontFamily: "monospace", fontSize: 10 }}>
+        style={{ flex: 1, padding: "4px 6px", background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "monospace", fontSize: 11 }}>
         {PREFLIGHT_TARGETS.map(t => <option key={t.kind} value={t.kind} disabled={t.kind === "siemens" && !siteId}>
           {t.label}{t.kind === "siemens" && !siteId ? " — choose a site in Show Programming" : ""}</option>)}
       </select>
       <button type="button" onClick={run} disabled={running}
-        style={{ padding: "4px 10px", background: "#1a1000", color: "#ffcc00", border: "1px solid #ffcc0044", borderRadius: 3, cursor: running ? "wait" : "pointer", fontFamily: "monospace", fontSize: 10 }}>
+        style={{ padding: "4px 10px", background: "var(--bg-void)", color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 27%, transparent)", borderRadius: 3, cursor: running ? "wait" : "pointer", fontFamily: "monospace", fontSize: 11 }}>
         {running ? "⟳ CHECKING..." : "RUN PREFLIGHT"}
       </button>
     </div>
-    {error && <div role="alert" style={{ color: "#ff8866", fontSize: 10 }}>Preflight could not run: {error}. Hardware output stays blocked.</div>}
+    {error && <div role="alert" style={{ color: "var(--error)", fontSize: 11 }}>Preflight could not run: {error}. Hardware output stays blocked.</div>}
     {result && <>
-      <div style={{ color: result.ok ? "#00ff88" : "#ff6b6b", fontSize: 10, fontWeight: "bold", marginBottom: 6 }}>
+      <div style={{ color: result.ok ? "var(--ok)" : "var(--error)", fontSize: 11, fontWeight: "bold", marginBottom: 6 }}>
         {result.ok ? "✓ No blocking errors" : "✗ Hardware output refused"} · {result.summary.errors} error(s), {result.summary.warnings} warning(s)
-        {result.resolved_revision && <span style={{ color: "#556677", fontWeight: "normal" }}> · {result.resolved_revision}</span>}
-        {result.hardware === false && <span style={{ color: "#f6d795", fontWeight: "normal" }}> · {PREVIEW_ONLY_LABEL}</span>}
+        {result.resolved_revision && <span style={{ color: "var(--text-muted)", fontWeight: "normal" }}> · {result.resolved_revision}</span>}
+        {result.hardware === false && <span style={{ color: "var(--brand-gold-pale)", fontWeight: "normal" }}> · {PREVIEW_ONLY_LABEL}</span>}
       </div>
       <PreflightIssueList issues={result.issues} />
     </>}

@@ -73,12 +73,12 @@ export default function CompilePanel() {
   const clipCount  = (tracks||[]).reduce((sum,t) => sum+(t.clips||[]).length, 0);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px", overflow:"auto" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"monospace", fontSize:"11px", overflow:"auto" }}>
 
       {/* Header */}
-      <div style={{ padding:"8px 12px", borderBottom:"1px solid #0a2030", background:"#030608", flexShrink:0 }}>
-        <span style={{ color:"#ffcc00", fontSize:13, fontWeight:"bold" }}>◈ SHOW COMPILER</span>
-        <div style={{ fontSize:9, color:"#334455", marginTop:2 }}>Compile editor show into a validated .luxshow deployment bundle</div>
+      <div style={{ padding:"8px 12px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", flexShrink:0 }}>
+        <span style={{ color:"var(--accent)", fontSize:13, fontWeight:"bold" }}>◈ SHOW COMPILER</span>
+        <div style={{ fontSize:11, color:"var(--info)", marginTop:2 }}>Compile editor show into a validated .luxshow deployment bundle</div>
       </div>
 
       <div style={{ padding:12, flex:1, overflow:"auto" }}>
@@ -87,8 +87,8 @@ export default function CompilePanel() {
         <PreflightPanel />
 
         {/* Current show info */}
-        <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10, marginBottom:12 }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>CURRENT SHOW</div>
+        <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:10, marginBottom:12 }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>CURRENT SHOW</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
             {[
               ["Show name", currentShow?.name || "Untitled Show", "#ffcc00"],
@@ -97,8 +97,8 @@ export default function CompilePanel() {
               ["BPM",       currentShow?.bpm || "128", "#aa88ff"],
               ["Duration",  currentShow?.duration_ms ? `${Math.round(currentShow.duration_ms/1000)}s` : "—", "#7ab"],
             ].map(([label,val,color]) => (
-              <div key={label} style={{ padding:"5px 7px", background:"#0a1520", borderRadius:3 }}>
-                <div style={{ color:"#334455", fontSize:8 }}>{label}</div>
+              <div key={label} style={{ padding:"5px 7px", background:"var(--bg-base)", borderRadius:3 }}>
+                <div style={{ color:"var(--info)", fontSize:11 }}>{label}</div>
                 <div style={{ color, fontSize:12, fontWeight:"bold" }}>{val}</div>
               </div>
             ))}
@@ -106,13 +106,13 @@ export default function CompilePanel() {
         </div>
 
         {/* Compile options */}
-        <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10, marginBottom:12 }}>
-          <div style={{ color:"#556677", fontSize:9, marginBottom:8 }}>COMPILE OPTIONS</div>
+        <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:10, marginBottom:12 }}>
+          <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:8 }}>COMPILE OPTIONS</div>
 
           <div style={{ marginBottom:8 }}>
-            <div style={{ color:"#7ab", fontSize:9, marginBottom:3 }}>Target hardware</div>
+            <div style={{ color:"var(--info)", fontSize:11, marginBottom:3 }}>Target hardware</div>
             <select value={target} onChange={e => setTarget(e.target.value)}
-              style={{ width:"100%", padding:"4px 6px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }}>
+              style={{ width:"100%", padding:"4px 6px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }}>
               <option value="development">Development (no hardware)</option>
               <option value="field_pc">Field PC</option>
               <option value="industrial_pc">Industrial PC</option>
@@ -121,18 +121,18 @@ export default function CompilePanel() {
           </div>
 
           <div style={{ marginBottom:8 }}>
-            <div style={{ color:"#7ab", fontSize:9, marginBottom:3 }}>Operator notes</div>
+            <div style={{ color:"var(--info)", fontSize:11, marginBottom:3 }}>Operator notes</div>
             <input value={notes} onChange={e => setNotes(e.target.value)}
               placeholder="Optional — notes about this compile"
-              style={{ width:"100%", padding:"4px 6px", background:"#0a1825", color:"#cce8ff", border:"1px solid #0a2535", borderRadius:3, fontFamily:"monospace", fontSize:10 }} />
+              style={{ width:"100%", padding:"4px 6px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--border)", borderRadius:3, fontFamily:"monospace", fontSize:11 }} />
           </div>
 
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <div onClick={() => setDryRun(!dryRun)} style={{ cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
-              <div style={{ width:12, height:12, border:`1px solid ${dryRun?"#00ccaa":"#0a2535"}`, borderRadius:2, background: dryRun?"#00ccaa22":"transparent", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                {dryRun && <span style={{ color:"#00ccaa", fontSize:8 }}>✓</span>}
+              <div style={{ width:12, height:12, border:`1px solid ${dryRun?"#00ccaa":"#0a2535"}`, borderRadius:2, background: dryRun?"color-mix(in srgb, var(--info) 13%, transparent)":"transparent", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                {dryRun && <span style={{ color:"var(--info)", fontSize:11 }}>✓</span>}
               </div>
-              <span style={{ color: dryRun?"#00ccaa":"#556677", fontSize:10 }}>Dry run (validate only, no output)</span>
+              <span style={{ color: dryRun?"var(--info)":"var(--text-muted)", fontSize:11 }}>Dry run (validate only, no output)</span>
             </div>
           </div>
         </div>
@@ -140,8 +140,8 @@ export default function CompilePanel() {
         {/* Compile button */}
         <button onClick={compile} disabled={compiling} style={{
           width:"100%", padding:"10px", marginBottom:12,
-          background: compiling ? "#0a1520" : "#1a1000",
-          color: compiling ? "#556677" : "#ffcc00",
+          background: compiling ? "var(--bg-base)" : "var(--bg-void)",
+          color: compiling ? "var(--text-muted)" : "var(--accent)",
           border:`1px solid ${compiling?"#0a2030":"#ffcc0044"}`,
           borderRadius:6, cursor: compiling?"not-allowed":"pointer",
           fontFamily:"monospace", fontSize:12, fontWeight:"bold",
@@ -151,32 +151,32 @@ export default function CompilePanel() {
 
         {/* Compile result */}
         {result && (
-          <div style={{ background: result.success ? "#050d18" : "#1a0808", border:`1px solid ${result.success?"#00ff8844":"#ff444444"}`, borderRadius:6, padding:10, marginBottom:12 }}>
+          <div style={{ background: result.success ? "var(--bg-void)" : "var(--bg-base)", border:`1px solid ${result.success?"#00ff8844":"#ff444444"}`, borderRadius:6, padding:10, marginBottom:12 }}>
             {result.success ? (
               <>
-                <div style={{ color:"#00ff88", fontWeight:"bold", marginBottom:6 }}>✓ COMPILE SUCCESS</div>
-                <div style={{ color:"#7ab", fontSize:10, marginBottom:4 }}>Bundle: {result.bundle_id}</div>
+                <div style={{ color:"var(--ok)", fontWeight:"bold", marginBottom:6 }}>✓ COMPILE SUCCESS</div>
+                <div style={{ color:"var(--info)", fontSize:11, marginBottom:4 }}>Bundle: {result.bundle_id}</div>
                 {result.stats && (
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     {Object.entries(result.stats).map(([k,v]) => (
-                      <span key={k} style={{ fontSize:9, color:"#556677" }}>{k.replace(/_/g," ")}: <span style={{ color:"#7ab" }}>{v}</span></span>
+                      <span key={k} style={{ fontSize:11, color:"var(--text-muted)" }}>{k.replace(/_/g," ")}: <span style={{ color:"var(--info)" }}>{v}</span></span>
                     ))}
                   </div>
                 )}
-                {result.message && <div style={{ color:"#7ab", fontSize:10, marginTop:4 }}>{result.message}</div>}
+                {result.message && <div style={{ color:"var(--info)", fontSize:11, marginTop:4 }}>{result.message}</div>}
               </>
             ) : (
               <>
-                <div style={{ color:"#ff4444", fontWeight:"bold", marginBottom:6 }}>✗ COMPILE FAILED</div>
+                <div style={{ color:"var(--error)", fontWeight:"bold", marginBottom:6 }}>✗ COMPILE FAILED</div>
                 {(result.errors||[]).map((e,i) => (
-                  <div key={i} style={{ color:"#ff8866", fontSize:10, padding:"2px 0" }}>• {e.message || e}</div>
+                  <div key={i} style={{ color:"var(--error)", fontSize:11, padding:"2px 0" }}>• {e.message || e}</div>
                 ))}
               </>
             )}
             {(result.warnings||[]).length > 0 && (
               <div style={{ marginTop:6 }}>
                 {result.warnings.map((w,i) => (
-                  <div key={i} style={{ color:"#ffcc00", fontSize:9, padding:"1px 0" }}>⚠ {w.message || w}</div>
+                  <div key={i} style={{ color:"var(--accent)", fontSize:11, padding:"1px 0" }}>⚠ {w.message || w}</div>
                 ))}
               </div>
             )}
@@ -185,28 +185,28 @@ export default function CompilePanel() {
 
         {/* Bundle list */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-          <span style={{ color:"#556677", fontSize:9 }}>COMPILED BUNDLES ({bundles.length})</span>
-          <button onClick={loadBundles} style={{ background:"none", border:"none", color:"#334455", cursor:"pointer", fontSize:9 }}>↺ REFRESH</button>
+          <span style={{ color:"var(--text-muted)", fontSize:11 }}>COMPILED BUNDLES ({bundles.length})</span>
+          <button onClick={loadBundles} style={{ background:"none", border:"none", color:"var(--info)", cursor:"pointer", fontSize:11 }}>↺ REFRESH</button>
         </div>
         {bundles.length === 0 ? (
-          <div style={{ color:"#223344", fontSize:10, textAlign:"center", padding:"16px 0" }}>
+          <div style={{ color:"var(--info)", fontSize:11, textAlign:"center", padding:"16px 0" }}>
             No bundles yet — compile a show to create one
           </div>
         ) : (
           bundles.map((b,i) => (
-            <div key={b.bundle_id||i} style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:5, padding:"8px 10px", marginBottom:6 }}>
+            <div key={b.bundle_id||i} style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:5, padding:"8px 10px", marginBottom:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                <span style={{ color:"#ffcc00", fontSize:11, fontWeight:"bold" }}>{b.show_name}</span>
-                <span style={{ color:"#334455", fontSize:9 }}>{b.size_kb} KB</span>
+                <span style={{ color:"var(--accent)", fontSize:11, fontWeight:"bold" }}>{b.show_name}</span>
+                <span style={{ color:"var(--info)", fontSize:11 }}>{b.size_kb} KB</span>
               </div>
-              <div style={{ fontSize:9, color:"#556677", marginBottom:6 }}>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:6 }}>
                 {b.bundle_id} · {b.track_count} tracks · {b.device_count} devices · {new Date((b.compiled_at||0)*1000).toLocaleString()}
               </div>
               <div style={{ display:"flex", gap:5 }}>
-                <button onClick={() => loadBundle(b.bundle_id)} style={{ flex:1, padding:"4px 0", background:"#003520", color:"#00ff88", border:"1px solid #00aa4444", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:9 }}>
+                <button onClick={() => loadBundle(b.bundle_id)} style={{ flex:1, padding:"4px 0", background:"var(--bg-panel)", color:"var(--ok)", border:"1px solid color-mix(in srgb, var(--ok) 27%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11 }}>
                   ▶ LOAD TO RUNTIME
                 </button>
-                <button onClick={() => deleteBundle(b.bundle_id)} style={{ padding:"4px 8px", background:"#1a0808", color:"#ff4444", border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:9 }}>
+                <button onClick={() => deleteBundle(b.bundle_id)} style={{ padding:"4px 8px", background:"var(--bg-base)", color:"var(--error)", border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3, cursor:"pointer", fontFamily:"monospace", fontSize:11 }}>
                   ✕
                 </button>
               </div>

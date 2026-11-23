@@ -200,23 +200,23 @@ function ParamsTab({ subject, isNode, updateNodeParam, updateDevicePatch, addSer
           <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{subject.label}</span>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <span className={`badge ${subject.protocol || ""}`} style={{ fontSize: 9 }}>
+          <span className={`badge ${subject.protocol || ""}`} style={{ fontSize: 11 }}>
             {subject.protocol?.toUpperCase() || "INTERNAL"}
           </span>
-          <span className={`badge ${subject.status}`} style={{ fontSize: 9 }}>
+          <span className={`badge ${subject.status}`} style={{ fontSize: 11 }}>
             {subject.status?.toUpperCase()}
           </span>
         </div>
         {!isNode && (
           // AF-NEXT-012 — equipment data source for this device (generic unless linked
           // to a fixture type / verified model with a complete provenance).
-          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "var(--text-muted)" }}>
+          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
             <span>Equipment data</span>
             <ProvenanceBadge provenance={getFixtureProvenance({ type: subject.fixtureType || subject.fixture_type || subject.model || subject.type, provenance: subject.provenance })} />
           </div>
         )}
         {subject.ip && (
-          <div style={{ marginTop: 6, fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+          <div style={{ marginTop: 6, fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
             {subject.ip}:{subject.port}
           </div>
         )}
@@ -263,7 +263,7 @@ function ParamsTab({ subject, isNode, updateNodeParam, updateDevicePatch, addSer
             </button>
           </div>
           {actionStatus && (
-            <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+            <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
               {actionStatus}
             </div>
           )}
@@ -287,9 +287,9 @@ function IOTab({ subject, isNode }) {
           background: "var(--bg-surface)", borderRadius: "var(--radius-sm)",
           border: "1px solid var(--border)",
         }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", border: "1.5px solid #00d4ff", background: "var(--bg-base)" }} />
+          <div style={{ width: 7, height: 7, borderRadius: "50%", border: "1.5px solid var(--info)", background: "var(--bg-base)" }} />
           <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>{port}</span>
-          <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--text-muted)" }}>IN</span>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>IN</span>
         </div>
       ))}
       <SectionLabel>Output Ports</SectionLabel>
@@ -300,9 +300,9 @@ function IOTab({ subject, isNode }) {
           background: "var(--bg-surface)", borderRadius: "var(--radius-sm)",
           border: "1px solid var(--border)",
         }}>
-          <span style={{ fontSize: 9, color: "var(--text-muted)" }}>OUT</span>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>OUT</span>
           <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>{port}</span>
-          <div style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", border: "1.5px solid #8b5cf6", background: "var(--bg-base)" }} />
+          <div style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", border: "1.5px solid var(--info)", background: "var(--bg-base)" }} />
         </div>
       ))}
     </div>
@@ -396,13 +396,13 @@ function AITab({ subject, currentShow, applyPatternToTrack, addServerLog }) {
           lineHeight: 1.6,
         }}>
           <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>{result.summary}</div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
             Pattern: {result.pattern || "—"} · Clips: {result.clip_count ?? 0} · Target track: {trackType}
           </div>
           {result.clips?.length > 0 && (
             <button
               className="btn"
-              style={{ marginTop: 8, fontSize: 10, justifyContent: "center", width: "100%" }}
+              style={{ marginTop: 8, fontSize: 11, justifyContent: "center", width: "100%" }}
               onClick={() => {
                 applyPatternToTrack(trackType, result.clips);
                 addServerLog({ level: "info", msg: `Applied AI pattern to ${trackType} track` });
@@ -421,13 +421,13 @@ function AITab({ subject, currentShow, applyPatternToTrack, addServerLog }) {
             <button
               key={action}
               className="btn"
-              style={{ fontSize: 10, justifyContent: "flex-start", gap: 6 }}
+              style={{ fontSize: 11, justifyContent: "flex-start", gap: 6 }}
               onClick={() => {
                 setPrompt(action);
                 generate(action);
               }}
             >
-              <span style={{ color: "var(--accent)", fontSize: 9 }}>✦</span> {action}
+              <span style={{ color: "var(--accent)", fontSize: 11 }}>✦</span> {action}
             </button>
           ))}
         </div>
@@ -458,7 +458,7 @@ function MultiClipSummary({ selectedClips, duplicateSelectedTimelineClips, remov
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)" }} />
           <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{selectedClips.length} Clips Selected</span>
         </div>
-        <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {trackCount} track{trackCount === 1 ? "" : "s"} · {typeSummary}
         </div>
       </div>
@@ -491,7 +491,7 @@ function MultiClipSummary({ selectedClips, duplicateSelectedTimelineClips, remov
               borderRadius: "var(--radius-sm)",
               background: "var(--bg-surface)",
               border: `1px solid ${track?.color || "var(--border)"}33`,
-              fontSize: 10,
+              fontSize: 11,
             }}
           >
             <div>
@@ -505,7 +505,7 @@ function MultiClipSummary({ selectedClips, duplicateSelectedTimelineClips, remov
           </div>
         ))}
         {selectedClips.length > 8 && (
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
             +{selectedClips.length - 8} more clips in selection
           </div>
         )}
@@ -547,7 +547,7 @@ function ClipTab({ clip, track, currentShow, updateTimelineClip, removeTimelineC
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: track?.color || "var(--accent)" }} />
           <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{clip.label}</span>
         </div>
-        <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
           {track?.label || "Track"} · {track?.type?.toUpperCase() || "TRACK"}
           {track?.muted ? " · MUTED" : ""}
           {track?.solo ? " · SOLO" : ""}
@@ -604,7 +604,7 @@ function ParamRow({ label, value, onChange }) {
       marginBottom: 6, minHeight: 26,
     }}>
       <span style={{
-        fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-muted)",
+        fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)",
         width: 90, flexShrink: 0, textAlign: "right",
       }}>
         {label}
@@ -645,7 +645,7 @@ function ParamRow({ label, value, onChange }) {
 function SectionLabel({ children }) {
   return (
     <div style={{
-      fontSize: 9, fontWeight: 600, fontFamily: "var(--font-mono)",
+      fontSize: 11, fontWeight: 600, fontFamily: "var(--font-mono)",
       color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em",
       marginBottom: 8, marginTop: 14, borderBottom: "1px solid var(--border)", paddingBottom: 4,
     }}>

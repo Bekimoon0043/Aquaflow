@@ -151,7 +151,7 @@ export default function ICANSiteDesignStudio() {
   return <div style={{ padding:10, overflowY:"auto", height:"100%", color:C.text, fontFamily:"monospace" }}>
     <div style={{ padding:9, border:`1px solid ${C.line}`, background:"rgba(0,170,255,.035)", marginBottom:9 }}>
       <div style={{ color:C.bright, fontSize:12, marginBottom:5 }}>Real Fountain Design Studio</div>
-      <div style={{ fontSize:9, lineHeight:1.55 }}>
+      <div style={{ fontSize:11, lineHeight:1.55 }}>
         The engineering model contains 76 running jets, 16 foam outlets and 8 peacock outlets. Hardware pattern output remains limited to the first 64 capture-mapped running valves;
         running valves 65-76 and peacock frequency setpoints remain commissioning-locked. Hardware Run still requires the three Fountain Control safety gates.
       </div>
@@ -159,10 +159,10 @@ export default function ICANSiteDesignStudio() {
         <button onClick={()=>openSiteDesign("geometry")} style={button(C.accent)}>OPEN SITE ENGINEERING DESIGN</button>
         <button onClick={()=>openSiteDesign("preview")} style={button(C.ok)}>OPEN SITE 3D SIMULATION</button>
       </div>
-      <div style={{ color:C.warn, fontSize:9, marginTop:5 }}>
+      <div style={{ color:C.warn, fontSize:11, marginTop:5 }}>
         Layout and quantities are confirmed. Dimensions, hydraulic values, pipe sizes and exact coordinates are provisional until the site survey.
       </div>
-      <div style={{ display:"flex", gap:10, marginTop:6, fontSize:9 }}>
+      <div style={{ display:"flex", gap:10, marginTop:6, fontSize:11 }}>
         <span style={{ color:connected?C.ok:C.warn }}>Gateway {connected?"connected":"not connected"}</span>
         <span style={{ color:permit?C.ok:C.warn }}>Safety {permit?"armed":"withheld"}</span>
         <span style={{ color:armed?C.ok:C.warn }}>Output {armed?"armed":"disarmed"}</span>
@@ -171,23 +171,23 @@ export default function ICANSiteDesignStudio() {
 
     <div style={{ display:"grid", gridTemplateColumns:"minmax(250px,1fr) minmax(250px,1fr)", gap:9, marginBottom:10 }}>
       <div style={{ padding:9, border:`1px solid ${C.line}` }}>
-        <div style={{ color:C.accent, fontSize:10, marginBottom:6 }}>AI prompt pattern</div>
+        <div style={{ color:C.accent, fontSize:11, marginBottom:6 }}>AI prompt pattern</div>
         <textarea value={prompt} onChange={event=>setPrompt(event.target.value)} style={{...input,width:"100%",height:55,resize:"vertical",boxSizing:"border-box"}} />
         <div style={{ display:"flex", gap:5, marginTop:6, flexWrap:"wrap" }}>
           <select value={style} onChange={event=>setStyle(event.target.value)} style={input}>
             <option value="">Auto style</option><option>wave</option><option>reverse-wave</option><option>center-out</option>
             <option>edges-in</option><option>alternate</option><option>pulse</option><option>cascade</option><option>calm</option><option>dramatic</option>
           </select>
-          <label style={{fontSize:9}}>Seconds <input type="number" min="1" max="600" value={duration} onChange={e=>setDuration(e.target.value)} style={{...input,width:55}} /></label>
-          <label style={{fontSize:9}}>BPM <input type="number" min="40" max="240" value={bpm} onChange={e=>setBpm(e.target.value)} style={{...input,width:55}} /></label>
+          <label style={{fontSize:11}}>Seconds <input type="number" min="1" max="600" value={duration} onChange={e=>setDuration(e.target.value)} style={{...input,width:55}} /></label>
+          <label style={{fontSize:11}}>BPM <input type="number" min="40" max="240" value={bpm} onChange={e=>setBpm(e.target.value)} style={{...input,width:55}} /></label>
           <button onClick={generate} disabled={!!busy} style={button(C.ok)}>{busy==="generate"?"Creating…":"Create editable draft"}</button>
         </div>
       </div>
 
       <div style={{ padding:9, border:`1px solid ${C.line}` }}>
-        <div style={{ color:C.accent, fontSize:10, marginBottom:6 }}>Automatic music choreography</div>
+        <div style={{ color:C.accent, fontSize:11, marginBottom:6 }}>Automatic music choreography</div>
         <input type="file" accept="audio/wav,audio/*" disabled={!!busy} onChange={event=>uploadAudio(event.target.files?.[0])} style={{...input,width:"100%",boxSizing:"border-box"}} />
-        <div style={{ fontSize:9, minHeight:28, marginTop:5, color:result?C.ok:C.text }}>
+        <div style={{ fontSize:11, minHeight:28, marginTop:5, color:result?C.ok:C.text }}>
           {result ? `${result.filename} · ${result.duration}s · ${result.bpm} BPM · ${result.analysis_method}`
             : job ? `Analysis: ${job.status}` : "Choose a WAV. Analysis runs offline on this PC."}
         </div>
@@ -198,15 +198,15 @@ export default function ICANSiteDesignStudio() {
     </div>
 
     <div style={{ padding:9, border:`1px solid ${C.line}`, marginBottom:10 }}>
-      <div style={{ color:C.accent, fontSize:10 }}>Recovered 4KILO programs</div>
-      <div style={{ fontSize:9, margin:"5px 0" }}>Imports six old timelines as editable valve patterns. Proprietary binaries are never launched; pump, frequency, light, fire and valve outputs 65–76 stay protected.</div>
+      <div style={{ color:C.accent, fontSize:11 }}>Recovered 4KILO programs</div>
+      <div style={{ fontSize:11, margin:"5px 0" }}>Imports six old timelines as editable valve patterns. Proprietary binaries are never launched; pump, frequency, light, fire and valve outputs 65–76 stay protected.</div>
       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
         <button onClick={importBundled} disabled={!!busy} style={button(C.warn)}>{busy==="legacy"?"Importing…":"Import the 6 built-in programs"}</button>
         <label style={button(C.text)}>Import another analysis ZIP<input type="file" accept=".zip" onChange={event=>importZip(event.target.files?.[0])} style={{display:"none"}} /></label>
       </div>
     </div>
 
-    {messages.length>0 && <div style={{ marginBottom:8, fontSize:9 }}>
+    {messages.length>0 && <div style={{ marginBottom:8, fontSize:11 }}>
       {messages.map((item,index)=><div key={`${item.time}-${index}`} style={{color:item.kind==="err"?C.danger:item.kind==="ok"?C.ok:C.text}}>{item.time} · {item.message}</div>)}
     </div>}
 

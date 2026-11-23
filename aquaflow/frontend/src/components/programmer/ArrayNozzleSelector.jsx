@@ -12,9 +12,9 @@ export default function ArrayNozzleSelector({ fixtures, selectedIds, onChange, z
   const minY = Math.min(0, ...ys), maxY = Math.max(1, ...ys);
   const toggle = id => { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); onChange([...next]); };
   const subset = predicate => onChange(fixtures.filter(predicate).map(f => f.id));
-  return <div style={{ margin: "10px 0", color: "#9fb5cd", fontSize: 10 }}>
+  return <div style={{ margin: "10px 0", color: "var(--info)", fontSize: 11 }}>
     <div style={{ fontWeight: 800, marginBottom: 5 }}>Select outlets on the engineering plan</div>
-    <svg aria-label="Array outlet selection" viewBox="0 0 340 150" style={{ width: "100%", background: "#041421", border: "1px solid #234153", borderRadius: 5 }}>
+    <svg aria-label="Array outlet selection" viewBox="0 0 340 150" style={{ width: "100%", background: "var(--bg-base)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 5 }}>
       {fixtures.map((f, index) => <g key={f.id} role="button" tabIndex={0}
         aria-label={`${f.label || f.id}, outlet ${index + 1}`} aria-pressed={selected.has(f.id)}
         onClick={() => toggle(f.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(f.id); } }} style={{ cursor: "pointer" }}>
@@ -36,7 +36,7 @@ export default function ArrayNozzleSelector({ fixtures, selectedIds, onChange, z
       <button style={button} onClick={() => subset(f => !selected.has(f.id))}>Invert</button>
     </div>
     <div style={{ display: "flex", gap: 4, marginTop: 7 }}>
-      <input aria-label="Zone name" value={zoneName} onChange={e => setZoneName(e.target.value)} placeholder="Name this zone" style={{ minWidth: 0, flex: 1, background: "#08111f", color: "#dcefff", border: "1px solid #26384d", padding: 5 }} />
+      <input aria-label="Zone name" value={zoneName} onChange={e => setZoneName(e.target.value)} placeholder="Name this zone" style={{ minWidth: 0, flex: 1, background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", padding: 5 }} />
       <button style={button} disabled={!zoneName.trim() || !selected.size} onClick={() => { onSaveZone(zoneName.trim(), [...selected]); setZoneName(""); }}>Save zone</button>
     </div>
     {zones.map(zone => <div key={zone.id} style={{ display: "flex", gap: 4, marginTop: 4 }}>

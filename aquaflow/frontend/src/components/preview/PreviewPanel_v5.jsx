@@ -897,7 +897,7 @@ if (sitePreview.active && sitePreview.plan) {
     <div ref={containerRef}
       onDragOver={libraryDrop.onDragOver}
       onDrop={libraryDrop.onDrop}
-      style={{ position:"relative", width:"100%", height:"100%", background:"#030806", overflow:"hidden", display:"flex" }}>
+      style={{ position:"relative", width:"100%", height:"100%", background:"var(--bg-void)", overflow:"hidden", display:"flex" }}>
 
       {/* ── 3D Canvas ── (the Studio look, the Easy Fountain Design renderer, draws over it) */}
       <div style={{ position:"relative", flex:1, minWidth:0, display:"flex" }}>
@@ -911,7 +911,7 @@ if (sitePreview.active && sitePreview.plan) {
       </div>
       {freeLook && cam === CAMERA_MODES.ANIMATED && (
         <button type="button" onClick={() => { sceneRef.current?.resumeCameraTrack?.(); setFreeLook(false); }}
-          style={{ position:"absolute", top:44, left:"50%", transform:"translateX(-50%)", zIndex:20, background:"#0f3346", color:"#33d6ff", border:"1px solid #33d6ff", borderRadius:12, padding:"3px 12px", fontSize:11, cursor:"pointer" }}>
+          style={{ position:"absolute", top:44, left:"50%", transform:"translateX(-50%)", zIndex:20, background:"color-mix(in srgb, var(--info) 18%, var(--bg-panel))", color:"var(--info)", border:"1px solid var(--info)", borderRadius:12, padding:"3px 12px", fontSize:11, cursor:"pointer" }}>
           Free view · Back to camera
         </button>
       )}
@@ -925,19 +925,19 @@ if (sitePreview.active && sitePreview.plan) {
         backdropFilter:"blur(8px)", fontFamily:"var(--font-mono)",
       }}>
         <button onClick={() => setEditMode(v => !v)} title={editMode ? "Return to review mode" : "Edit objects in the viewport"} style={{
-          ...btnSm(editMode, "#c9a227"), minWidth:52, padding:"4px 8px", color:editMode?"#e8d5a0":"#9aaa96",
+          ...btnSm(editMode, "#c9a227"), minWidth:52, padding:"4px 8px", color:editMode?"var(--brand-gold-pale)":"var(--text-secondary)",
         }}>{editMode ? "Edit" : "Object"}</button>
         <button onClick={() => { setEditMode(true); setAddMenuOpen(v => !v); }}
           aria-expanded={addMenuOpen} title="Add fixtures and 3D models"
-          style={{ ...btnSm(addMenuOpen, "#3ddc84"), padding:"4px 9px", color:addMenuOpen?"#9fffc1":"#9aaa96", fontWeight:800 }}>
+          style={{ ...btnSm(addMenuOpen, "#3ddc84"), padding:"4px 9px", color:addMenuOpen?"var(--ok)":"var(--text-secondary)", fontWeight:800 }}>
           ＋ Add
         </button>
         <span style={{ width:1, height:16, background:"rgba(26,107,58,0.35)" }} />
-        <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} title="Frame all objects" style={{ ...btnSm(false), padding:"4px 7px", color:"#9aaa96" }}>⤢</button>
+        <button onClick={() => sceneRef.current?.fitCameraToDesign?.()} title="Frame all objects" style={{ ...btnSm(false), padding:"4px 7px", color:"var(--text-secondary)" }}>⤢</button>
         <span title={sitePreview.active ? "Simulation running — no hardware output" : `Signal source: ${engineSignals?.source || "preview"}`}
-          style={{ width:7, height:7, borderRadius:"50%", margin:"0 4px", background:sitePreview.active ? "#34d399" : "#c9a227" }} />
+          style={{ width:7, height:7, borderRadius:"50%", margin:"0 4px", background:sitePreview.active ? "var(--ok)" : "var(--accent)" }} />
         <button onClick={() => setSidebarOpen(v => !v)} title={sidebarOpen ? "Hide properties sidebar" : "Show properties sidebar"}
-          aria-expanded={sidebarOpen} style={{ ...btnSm(sidebarOpen), padding:"4px 7px", color:sidebarOpen?"#58c7ff":"#607264" }}>
+          aria-expanded={sidebarOpen} style={{ ...btnSm(sidebarOpen), padding:"4px 7px", color:sidebarOpen?"var(--info)":"var(--text-muted)" }}>
           ◧
         </button>
       </div>
@@ -949,7 +949,7 @@ if (sitePreview.active && sitePreview.plan) {
         boxShadow:"0 18px 50px rgba(0,0,0,0.55)", backdropFilter:"blur(10px)",
       }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
-          <strong style={{ color:"#cfe0f0", fontSize:11, letterSpacing:".06em" }}>ADD TO SCENE</strong>
+          <strong style={{ color:"var(--text-primary)", fontSize:11, letterSpacing:".06em" }}>ADD TO SCENE</strong>
           <button onClick={() => setAddMenuOpen(false)} style={{ ...btnSm(false), padding:"2px 6px" }}>✕</button>
         </div>
         <LibraryPalette editor={editorRef.current} compact />
@@ -968,8 +968,8 @@ if (sitePreview.active && sitePreview.plan) {
           padding:"7px 10px", borderRadius:6, background:"rgba(4,10,16,0.72)",
           border:"1px solid rgba(215,185,87,0.28)", backdropFilter:"blur(6px)",
         }}>
-          <div style={{ color:"#e8eef6", fontSize:12, fontWeight:700, lineHeight:1.2 }}>{projectName || "AquaFlow Scene"}</div>
-          <div style={{ color:"#8ea4b8", fontSize:10, fontFamily:"monospace", marginTop:3 }}>
+          <div style={{ color:"var(--text-primary)", fontSize:12, fontWeight:700, lineHeight:1.2 }}>{projectName || "AquaFlow Scene"}</div>
+          <div style={{ color:"var(--info)", fontSize:11, fontFamily:"monospace", marginTop:3 }}>
             {fixtureCount} fixtures · {poolDesc} · {(hydraulics?.totalFlowM3Hr||0).toFixed(1)} m³/h
           </div>
         </div>
@@ -985,7 +985,7 @@ if (sitePreview.active && sitePreview.plan) {
         <div data-testid="artistic-badge" title="Manual looks (crownTuft, topLitFraction, columnGlow) are drawn as set. Turn on Real-world simulation in Render ▸ Real-world."
           style={{
             position:"absolute", top:12, left:"50%", transform:"translateX(-50%)", zIndex:16, pointerEvents:"auto",
-            padding:"5px 12px", borderRadius:14, fontSize:11, fontWeight:700, color:"#fff",
+            padding:"5px 12px", borderRadius:14, fontSize:11, fontWeight:700, color:"var(--text-primary)",
             background:"rgba(40,26,4,0.82)", border:"1px solid rgba(255,190,70,0.9)", whiteSpace:"nowrap",
           }}>
           ⚠ {ARTISTIC_STAMP_TEXT}
@@ -1006,10 +1006,10 @@ if (sitePreview.active && sitePreview.plan) {
             background:"rgba(4,10,16,0.72)", border:"1px solid rgba(88,199,255,0.22)", backdropFilter:"blur(6px)",
           }}>
           <span style={{ fontSize:14, fontWeight:700,
-            color: perfStats.fps >= 55 ? "#3ddc84" : perfStats.fps >= 30 ? "#ffcc00" : "#ff5544" }}>{perfStats.fps}</span>
-          <span style={{ fontSize:9, color:"#8ea4b8" }}>fps</span>
-          <span style={{ fontSize:9, color:"#58c7ff", textTransform:"capitalize" }}>{perfStats.quality}</span>
-          {perfStats.renderScale < 1 && <span style={{ fontSize:9, color:"#ffcc00" }}>{Math.round(perfStats.renderScale * 100)}%</span>}
+            color: perfStats.fps >= 55 ? "var(--ok)" : perfStats.fps >= 30 ? "var(--accent)" : "var(--error)" }}>{perfStats.fps}</span>
+          <span style={{ fontSize:11, color:"var(--info)" }}>fps</span>
+          <span style={{ fontSize:11, color:"var(--info)", textTransform:"capitalize" }}>{perfStats.quality}</span>
+          {perfStats.renderScale < 1 && <span style={{ fontSize:11, color:"var(--accent)" }}>{Math.round(perfStats.renderScale * 100)}%</span>}
         </div>
       )}
 
@@ -1021,7 +1021,7 @@ if (sitePreview.active && sitePreview.plan) {
         }}>
           <div style={{
             maxWidth:"80%", padding:"10px 18px", borderRadius:10, textAlign:"center",
-            background:"rgba(2,6,16,0.72)", color:"#eaf2ff", fontSize:15, letterSpacing:0.2,
+            background:"rgba(2,6,16,0.72)", color:"var(--text-primary)", fontSize:15, letterSpacing:0.2,
             border:"1px solid rgba(120,150,200,0.3)", backdropFilter:"blur(4px)",
           }}>{tourCaption}</div>
         </div>
@@ -1038,16 +1038,16 @@ if (sitePreview.active && sitePreview.plan) {
           invert: true, containerPx: containerRef.current?.clientWidth || 0,
         })}
       />}
-      {sidebarOpen && <div style={{ width:layout.previewSidebar, flexShrink:0, background:"linear-gradient(180deg,#0c1410 0%,#080e0a 100%)", borderLeft:"1px solid rgba(26,107,58,0.25)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"-12px 0 30px rgba(0,0,0,0.18)" }}>
+      {sidebarOpen && <div style={{ width:layout.previewSidebar, flexShrink:0, background:"linear-gradient(180deg,var(--bg-base) 0%,var(--bg-void) 100%)", borderLeft:"1px solid rgba(26,107,58,0.25)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"-12px 0 30px rgba(0,0,0,0.18)" }}>
 
         {/* Tabs */}
-        <div style={{ display:"flex", borderBottom:"1px solid #0a2030" }}>
+        <div style={{ display:"flex", borderBottom:"1px solid var(--border)" }}>
           {[["render","Render"],["design","Edit"],["signals","Live"],["info","Eng"]].map(([key,label])=>(
             <button key={key} onClick={()=>setTab(key)} title={key==="info" ? "Engineering" : undefined} style={{
               flex:1, minWidth:0, padding:"6px 0", background:"transparent", border:"none",
-              borderBottom: tab===key ? "2px solid #c9a227" : "2px solid transparent",
-              color: tab===key ? "#d4ac3a" : "#607264",
-              fontSize:10, cursor:"pointer",
+              borderBottom: tab===key ? "2px solid var(--accent)" : "2px solid transparent",
+              color: tab===key ? "var(--warn)" : "var(--text-muted)",
+              fontSize:11, cursor:"pointer",
             }}>{label}</button>
           ))}
         </div>
@@ -1079,12 +1079,12 @@ if (sitePreview.active && sitePreview.plan) {
           {tab==="render" && (<>
             <Section title="Real-world" defaultOpen>
               <label title="Play the show with the Easy Fountain Design renderer: drops keep the swing they left with, bloom, reflective water, night sky"
-                style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#cde", margin:"2px 0 6px" }}>
+                style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"var(--text-primary)", margin:"2px 0 6px" }}>
                 <input type="checkbox" checked={renderSettings.studioLook !== false} onChange={(e) => updateRender({ studioLook: e.target.checked })} />
                 Studio look (Easy Fountain Design renderer)
               </label>
               <label title="Lit spray clouds drifting over the jets (Studio look). Off: clear night air, no haze or fog."
-                style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#cde", margin:"0 0 6px 18px", opacity: renderSettings.studioLook !== false ? 1 : 0.5 }}>
+                style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"var(--text-primary)", margin:"0 0 6px 18px", opacity: renderSettings.studioLook !== false ? 1 : 0.5 }}>
                 <input type="checkbox" checked={renderSettings.studioMist === true} disabled={renderSettings.studioLook === false}
                   onChange={(e) => updateRender({ studioMist: e.target.checked })} />
                 Spray mist clouds
@@ -1133,18 +1133,18 @@ if (sitePreview.active && sitePreview.plan) {
               {cameraKeyHere && <button onClick={() => deleteCameraKey(cameraKeyHere.id)} style={btnSm(false, "#ff6677")}>Delete</button>}
             </div>
             {cameraKeyHere && <select value={cameraKeyHere.ease} onChange={e => updateRender({ cameraTrack: updateCameraKey(cameraTrack, cameraKeyHere.id, { ease: e.target.value }) })}
-              title="How the camera leaves this key" style={{ width:"100%", marginBottom:5, background:"#0b1220", color:"#cde", border:"1px solid #24405e", fontSize:10 }}>
+              title="How the camera leaves this key" style={{ width:"100%", marginBottom:5, background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", fontSize:11 }}>
               {["smooth","linear","easeIn","easeOut","hold","cut"].map(e => <option key={e} value={e}>{e}</option>)}
             </select>}
-            <div title="Camera row — click a diamond to move the show playhead" style={{ position:"relative", height:22, marginBottom:6, border:"1px solid #24405e", borderRadius:3, background:"#08111d" }}>
-              <span style={{ position:"absolute", left:3, top:3, fontSize:8, color:"#61798d" }}>Camera</span>
+            <div title="Camera row — click a diamond to move the show playhead" style={{ position:"relative", height:22, marginBottom:6, border:"1px solid var(--info)", borderRadius:3, background:"var(--bg-base)" }}>
+              <span style={{ position:"absolute", left:3, top:3, fontSize:11, color:"var(--info)" }}>Camera</span>
               {cameraTrack.keys.map(key => <button key={key.id} onClick={() => { useShowStore.getState().setPlayhead(key.t); setCam(CAMERA_MODES.ANIMATED); }}
                 title={`${key.label || "Camera key"} · ${key.t.toFixed(2)} s · ${key.ease}`}
                 style={{ position:"absolute", left:`calc(${Math.min(100, key.t / showDuration * 100)}% - 5px)`, top:8, width:10, height:10, padding:0, border:0,
-                  transform:"rotate(45deg)", background:cameraKeyHere?.id === key.id ? "#fff" : "#33d6ff", cursor:"pointer" }} />)}
+                  transform:"rotate(45deg)", background:cameraKeyHere?.id === key.id ? "#fff" : "var(--info)", cursor:"pointer" }} />)}
             </div>
             <select defaultValue="" onChange={e => { if (e.target.value) addCameraMove(e.target.value); e.target.value = ""; }}
-              style={{ width:"100%", marginBottom:8, background:"#0b1220", color:"#cde", border:"1px solid #24405e", fontSize:10 }}>
+              style={{ width:"100%", marginBottom:8, background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", fontSize:11 }}>
               <option value="">Add 10 s camera move…</option>
               {CAMERA_MOVES.map(move => <option key={move.key} value={move.key}>{move.label}</option>)}
             </select>
@@ -1158,7 +1158,7 @@ if (sitePreview.active && sitePreview.plan) {
               ))}
             </div>
             <label title={`Lowers resolution, then quality, when below 30 fps.\nGPU: ${gpuProfile.renderer || "unknown"} (${gpuProfile.gpuClass}) · rendering ${effectiveQuality}${renderScale < 1 ? ` at ${Math.round(renderScale * 100)}%` : ""}`}
-              style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, color:"#71869a", fontSize:9 }}>
+              style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, color:"var(--text-muted)", fontSize:11 }}>
               <input type="checkbox" checked={adaptiveQuality} onChange={e=>setAdaptiveQuality(e.target.checked)} />
               Adaptive
             </label>
@@ -1173,7 +1173,7 @@ if (sitePreview.active && sitePreview.plan) {
               ))}
             </div>
             {effectiveQuality === "medium" && (
-              <label style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, color:"#71869a", fontSize:9 }}>
+              <label style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, color:"var(--text-muted)", fontSize:11 }}>
                 <input type="checkbox" checked={halfResSpray} onChange={e=>setHalfResSpray(e.target.checked)} />
                 Half-res spray
               </label>
@@ -1184,7 +1184,7 @@ if (sitePreview.active && sitePreview.plan) {
               {LIGHT_PRESETS.map(lp=>(
                 <div key={lp.color} onClick={()=>setLightCol(lp.color)} title={lp.label} style={{
                   width:"100%", paddingBottom:"100%", background:lp.color, borderRadius:3,
-                  cursor:"pointer", border:lightCol===lp.color?"2px solid #fff":"1px solid #222",
+                  cursor:"pointer", border:lightCol===lp.color?"2px solid var(--border-bright)":"1px solid var(--border)",
                   position:"relative",
                 }}/>
               ))}
@@ -1194,7 +1194,7 @@ if (sitePreview.active && sitePreview.plan) {
 
             <div style={subLabel}>Pattern</div>
             <select value={pattern} onChange={e => setPattern(e.target.value)}
-              style={{ width:"100%", fontSize:10, padding:"3px 4px", marginBottom:6, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4, textTransform:"capitalize" }}>
+              style={{ width:"100%", fontSize:11, padding:"3px 4px", marginBottom:6, background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:4, textTransform:"capitalize" }}>
               {PATTERNS.map(p => <option key={p} value={p}>{p === "none" ? "Project timeline" : p}</option>)}
             </select>
             </Section>
@@ -1205,16 +1205,16 @@ if (sitePreview.active && sitePreview.plan) {
               ["Edge reflection", waveBoundaryDamping, setWaveBoundaryDamping, 0.5, 1, 0.01, value => `${Math.round(value * 100)}%`],
             ].map(([label, value, setter, min, max, step, format]) => (
               <label key={label} style={{ display:"block", marginBottom:6 }}>
-                <span style={{ display:"flex", justifyContent:"space-between", color:"#71869a", fontSize:9 }}>
-                  <span>{label}</span><span style={{ color:"#58c7ff" }}>{format(value)}</span>
+                <span style={{ display:"flex", justifyContent:"space-between", color:"var(--text-muted)", fontSize:11 }}>
+                  <span>{label}</span><span style={{ color:"var(--info)" }}>{format(value)}</span>
                 </span>
                 <input type="range" min={min} max={max} step={step} value={value}
                   onChange={event => setter(Number(event.target.value))}
-                  style={{ width:"100%", accentColor:"#21b6d7" }} />
+                  style={{ width:"100%", accentColor:"var(--info)" }} />
               </label>
             ))}
 
-            <label title="Virtual point-light clusters around illuminated jets. This is a real-time approximation, not path-traced water illumination." style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, color:"#71869a", fontSize:9 }}>
+            <label title="Virtual point-light clusters around illuminated jets. This is a real-time approximation, not path-traced water illumination." style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, color:"var(--text-muted)", fontSize:11 }}>
               <input type="checkbox" aria-label="Fountain indirect lighting" checked={fountainIndirect} onChange={event => setFountainIndirect(event.target.checked)} />
               Fountain indirect light · approximation
             </label>
@@ -1223,21 +1223,21 @@ if (sitePreview.active && sitePreview.plan) {
             {[["X",windX,setWindX],["Z",windZ,setWindZ]].map(([axis,val,setter])=>(
               <div key={axis} style={{ marginBottom:6 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
-                  <span style={{ color:"#556677", fontSize:9 }}>{axis}-axis</span>
-                  <span style={{ color:"#00aaff", fontSize:9 }}>{val.toFixed(1)} m/s</span>
+                  <span style={{ color:"var(--text-muted)", fontSize:11 }}>{axis}-axis</span>
+                  <span style={{ color:"var(--info)", fontSize:11 }}>{val.toFixed(1)} m/s</span>
                 </div>
                 <input type="range" min={-4} max={4} step={0.1} value={val}
                   onChange={e=>setter(parseFloat(e.target.value))}
-                  style={{ width:"100%", accentColor:"#00aaff" }}/>
+                  style={{ width:"100%", accentColor:"var(--info)" }}/>
               </div>
             ))}
             <div style={subLabel} title="Laser beams are only visible where light scatters: haze machines, water mist or fog. 0 = clear air (only the spots on the water show).">Haze (laser beams)</div>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
-              <span style={{ color:"#556677", fontSize:9 }}>{laserHaze < 0.1 ? "Clear air" : laserHaze < 0.5 ? "Light haze" : "Heavy haze"}</span>
-              <span style={{ color:"#ec4899", fontSize:9 }}>{Math.round(laserHaze * 100)}%</span>
+              <span style={{ color:"var(--text-muted)", fontSize:11 }}>{laserHaze < 0.1 ? "Clear air" : laserHaze < 0.5 ? "Light haze" : "Heavy haze"}</span>
+              <span style={{ color:"var(--violet)", fontSize:11 }}>{Math.round(laserHaze * 100)}%</span>
             </div>
             <input type="range" aria-label="Haze for laser beams" min={0} max={1} step={0.05} value={laserHaze}
-              onChange={e=>setLaserHaze(parseFloat(e.target.value))} style={{ width:"100%", accentColor:"#ec4899" }}/>
+              onChange={e=>setLaserHaze(parseFloat(e.target.value))} style={{ width:"100%", accentColor:"var(--violet)" }}/>
             </Section>
             <Section title="Overlays">
             {[
@@ -1245,7 +1245,7 @@ if (sitePreview.active && sitePreview.plan) {
               ["Scale overlays", reviewOverlays, setReviewOverlays],
               ["Performance", showPerf, setShowPerf],
             ].map(([label, on, setter]) => (
-              <label key={label} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, color:"#71869a", fontSize:9 }}>
+              <label key={label} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, color:"var(--text-muted)", fontSize:11 }}>
                 <input type="checkbox" checked={!!on} onChange={e => setter(e.target.checked)} />{label}
               </label>
             ))}
@@ -1267,7 +1267,7 @@ if (sitePreview.active && sitePreview.plan) {
           {/* ── SIGNALS TAB ── */}
           {tab==="signals" && (<>
 
-<div style={{ color:"#00aaff", fontSize:9, marginBottom:8, fontFamily:"monospace" }}>
+<div style={{ color:"var(--info)", fontSize:11, marginBottom:8, fontFamily:"monospace" }}>
   Source: {engineSignals?.source || "—"} · Active clips: {engineSignals?.activeClips?.length || 0}
 </div>
 <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
@@ -1275,53 +1275,53 @@ if (sitePreview.active && sitePreview.plan) {
     width:18,
     height:18,
     borderRadius:3,
-    border:"1px solid #334455",
+    border:"1px solid var(--info)",
     background:`rgb(
       ${Math.round((engineSignals?.lightingColor?.r ?? 1) * 255)},
       ${Math.round((engineSignals?.lightingColor?.g ?? 1) * 255)},
       ${Math.round((engineSignals?.lightingColor?.b ?? 1) * 255)}
     )`
   }} />
-  <div style={{ color:"#778899", fontSize:9, fontFamily:"monospace" }}>
+  <div style={{ color:"var(--text-muted)", fontSize:11, fontFamily:"monospace" }}>
     RGB: R{Math.round((engineSignals?.lightingColor?.r ?? 1) * 255)}
     {" "}G{Math.round((engineSignals?.lightingColor?.g ?? 1) * 255)}
     {" "}B{Math.round((engineSignals?.lightingColor?.b ?? 1) * 255)}
   </div>
 </div>
-<div style={{ color:"#00ff88", fontSize:9, fontFamily:"monospace", marginBottom:8 }}>
+<div style={{ color:"var(--ok)", fontSize:11, fontFamily:"monospace", marginBottom:8 }}>
   Manual Priority: {manualPriority ? "ON" : "OFF"} · Playback: {playbackState || "—"}
 </div>
 {engineSignals?.activeClips?.length > 0 && (
   <div style={{ marginBottom:8 }}>
-    <div style={{ color:"#334455", fontSize:9, marginBottom:4, textTransform:"uppercase" }}>
+    <div style={{ color:"var(--info)", fontSize:11, marginBottom:4, textTransform:"uppercase" }}>
       Active Clips
     </div>
     {engineSignals.activeClips.slice(0, 5).map((clip, idx) => (
-      <div key={`${clip.id || idx}`} style={{ color:"#99aabb", fontSize:9, fontFamily:"monospace", marginBottom:2 }}>
+      <div key={`${clip.id || idx}`} style={{ color:"var(--info)", fontSize:11, fontFamily:"monospace", marginBottom:2 }}>
         {clip.type} · {Math.round((clip.intensity || 0) * 100)}%
       </div>
     ))}
   </div>
 )}
-<div style={{ color:"#334455", fontSize:9, margin:"8px 0 4px", textTransform:"uppercase" }}>
+<div style={{ color:"var(--info)", fontSize:11, margin:"8px 0 4px", textTransform:"uppercase" }}>
   Device Groups
 </div>
 
 {Object.entries(engineSignals?.groups || {}).map(([groupId, value]) => (
   <div key={groupId} style={{ marginBottom:6 }}>
     <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
-      <span style={{ color:"#778899", fontSize:9 }}>
+      <span style={{ color:"var(--text-muted)", fontSize:11 }}>
         {groupId.replaceAll("_", " ")}
       </span>
-      <span style={{ color:"#00aaff", fontSize:9, fontFamily:"monospace" }}>
+      <span style={{ color:"var(--info)", fontSize:11, fontFamily:"monospace" }}>
         {Math.round((value || 0) * 100)}%
       </span>
     </div>
-    <div style={{ height:3, background:"#0a1825", borderRadius:1, overflow:"hidden" }}>
+    <div style={{ height:3, background:"var(--bg-base)", borderRadius:1, overflow:"hidden" }}>
       <div style={{
         width:`${(value || 0) * 100}%`,
         height:"100%",
-        background:"#00aaff",
+        background:"var(--info)",
         borderRadius:1
       }}/>
     </div>
@@ -1337,10 +1337,10 @@ if (sitePreview.active && sitePreview.plan) {
             ].map(([key,label,color])=>(
               <div key={key} style={{ marginBottom:8 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
-                  <span style={{ color, fontSize:9 }}>{label}</span>
-                  <span style={{ color, fontSize:9, fontFamily:"monospace" }}>{Math.round((engineSignals?.[key] ?? 0)*100)}%</span>
+                  <span style={{ color, fontSize:11 }}>{label}</span>
+                  <span style={{ color, fontSize:11, fontFamily:"monospace" }}>{Math.round((engineSignals?.[key] ?? 0)*100)}%</span>
                 </div>
-                <div style={{ height:3, background:"#0a1825", borderRadius:1, marginBottom:3, overflow:"hidden" }}>
+                <div style={{ height:3, background:"var(--bg-base)", borderRadius:1, marginBottom:3, overflow:"hidden" }}>
                   <div style={{ width:`${(engineSignals?.[key] ?? 0)*100}%`, height:"100%", background:color, borderRadius:1 }}/>
                 </div>
                 <input type="range" min={0} max={1} step={0.01} value={engineSignals?.[key] ?? 0}
@@ -1360,11 +1360,11 @@ if (sitePreview.active && sitePreview.plan) {
           {/* ── ENGINEERING INFO TAB ── */}
           {tab==="info" && (<>
             <HydraulicPreviewPanel {...engineeringPreview} />
-            <div style={{ color: hasData?"#00ff88":"#334455", fontSize:9, marginBottom:6 }}>
+            <div style={{ color: hasData?"var(--ok)":"var(--info)", fontSize:11, marginBottom:6 }}>
               {hasData ? "● Live sync active" : "○ No project loaded"}
             </div>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:2 }}>Project</div>
-            <div style={{ color:"#7ab", fontSize:10, marginBottom:8, wordBreak:"break-word" }}>{projectName||"—"}</div>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:2 }}>Project</div>
+            <div style={{ color:"var(--info)", fontSize:11, marginBottom:8, wordBreak:"break-word" }}>{projectName||"—"}</div>
             {[
               ["Pool type", poolType||"—",     "#00ccaa"],
               ["Dimensions", poolDesc,          "#00ccaa"],
@@ -1377,13 +1377,13 @@ if (sitePreview.active && sitePreview.plan) {
               ["TDH",   `${(hydraulics?.totalDynamicHeadM||0).toFixed(1)} m`, "#ffcc00"],
               ["Power", `${(hydraulics?.totalWatts||0).toFixed(0)} W`,        "#ff4444"],
             ].map(([label,val,color])=>(
-              <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", borderBottom:"1px solid #0a1520" }}>
-                <span style={{ color:"#334455", fontSize:9 }}>{label}</span>
-                <span style={{ color, fontSize:9, fontFamily:"monospace" }}>{val}</span>
+              <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", borderBottom:"1px solid var(--border)" }}>
+                <span style={{ color:"var(--info)", fontSize:11 }}>{label}</span>
+                <span style={{ color, fontSize:11, fontFamily:"monospace" }}>{val}</span>
               </div>
             ))}
             {!hasData && (
-              <div style={{ marginTop:8, color:"#223344", fontSize:9, lineHeight:1.5 }}>
+              <div style={{ marginTop:8, color:"var(--info)", fontSize:11, lineHeight:1.5 }}>
                 No design loaded
               </div>
             )}
@@ -1391,39 +1391,39 @@ if (sitePreview.active && sitePreview.plan) {
         </div>
 
         {/* Bottom actions */}
-        <div style={{ flexShrink:0, borderTop:"1px solid #0a2030", padding:"6px 8px", display:"flex", flexDirection:"column", gap:4 }}>
+        <div style={{ flexShrink:0, borderTop:"1px solid var(--border)", padding:"6px 8px", display:"flex", flexDirection:"column", gap:4 }}>
           {/* The old "Dry-Run Preview" toggle was removed: its session producer lived in the
               retired ShowProgrammerPanel, so it could never receive data. */}
           <div style={{ display:"flex", gap:4 }}>
-            <button onClick={screenshot} title="Save a PNG screenshot" style={{ ...btnSm(false,"#00ff88"), color:"#00ff88", flex:1, textAlign:"center" }}>
+            <button onClick={screenshot} title="Save a PNG screenshot" style={{ ...btnSm(false,"#00ff88"), color:"var(--ok)", flex:1, textAlign:"center" }}>
               Screenshot
             </button>
             <button onClick={toggleRecord} disabled={!!bake} title={`Live screen capture at ${exportRes==="4k"?"4K":exportRes} · ${exportFps} fps (real time — may stutter on heavy scenes)`}
-              style={{ ...btnSm(recording,"#ff4444"), color:recording?"#ff4444":"#ff8866", flex:1, textAlign:"center" }}>
+              style={{ ...btnSm(recording,"#ff4444"), color:recording?"var(--error)":"var(--error)", flex:1, textAlign:"center" }}>
               {recording ? "⏹ Stop" : "⏺ Record"}
             </button>
           </div>
           <details>
-            <summary style={{ color:"#71869a", fontSize:9, cursor:"pointer", padding:"2px 0" }}>Video export</summary>
+            <summary style={{ color:"var(--text-muted)", fontSize:11, cursor:"pointer", padding:"2px 0" }}>Video export</summary>
             <div style={{ display:"flex", flexDirection:"column", gap:4, marginTop:4 }}>
           {!recording && (
             <div style={{ display:"flex", gap:3 }}>
               <select value={exportRes} onChange={e=>setExportRes(e.target.value)} title="Export resolution"
-                style={{ flex:1, fontSize:11, padding:"3px 4px", background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4 }}>
+                style={{ flex:1, fontSize:11, padding:"3px 4px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:4 }}>
                 <option value="720p">720p</option>
                 <option value="1080p">1080p</option>
                 <option value="1440p">1440p</option>
                 <option value="4k">4K UHD</option>
               </select>
               <select value={exportFps} onChange={e=>setExportFps(Number(e.target.value))} title="Export frame rate"
-                style={{ width:74, fontSize:11, padding:"3px 4px", background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4 }}>
+                style={{ width:74, fontSize:11, padding:"3px 4px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:4 }}>
                 <option value={24}>24 fps</option>
                 <option value={30}>30 fps</option>
                 <option value={60}>60 fps</option>
               </select>
             </div>
           )}
-          <div style={{ border:"1px solid #1d4d3a", borderRadius:4, padding:6, display:"flex", flexDirection:"column", gap:4 }}>
+          <div style={{ border:"1px solid color-mix(in srgb, var(--ok) 40%, var(--border))", borderRadius:4, padding:6, display:"flex", flexDirection:"column", gap:4 }}>
             {!bake && (
               <div style={{ display:"flex", gap:3 }}>
                 {EXPORT_QUALITY_OPTIONS.map(o => (
@@ -1432,34 +1432,34 @@ if (sitePreview.active && sitePreview.plan) {
                 ))}
                 <select value={exportFormat} onChange={e=>setExportFormat(e.target.value)}
                   title={EXPORT_FORMAT_OPTIONS.map(o => `${o.label}: ${o.tip}`).join("\n")}
-                  style={{ width:66, fontSize:10, padding:"2px 2px", background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:4 }}>
+                  style={{ width:66, fontSize:11, padding:"2px 2px", background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:4 }}>
                   {EXPORT_FORMAT_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
                 </select>
               </div>
             )}
             {!bake && (
-              <div style={{ display:"flex", gap:5, fontSize:10, color:"#8ea4b8", alignItems:"center" }}>
+              <div style={{ display:"flex", gap:5, fontSize:11, color:"var(--info)", alignItems:"center" }}>
                 <label title="Render deterministic subframes and average them, like a camera shutter">
                   <input type="checkbox" checked={!!motionBlur} onChange={e=>setMotionBlur(e.target.checked)} /> Motion blur
                 </label>
                 <select value={motionBlurSamples} disabled={!motionBlur} onChange={e=>setMotionBlurSamples(Number(e.target.value))}
-                  title="Subframes per output frame" style={{ fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }}>
+                  title="Subframes per output frame" style={{ fontSize:11, background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:3 }}>
                   <option value={4}>4 samples</option><option value={8}>8 samples</option><option value={16}>16 samples</option><option value={32}>32 samples</option>
                 </select>
                 <select value={shutterAngle} disabled={!motionBlur} onChange={e=>setShutterAngle(Number(e.target.value))}
-                  title="Camera shutter angle" style={{ fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }}>
+                  title="Camera shutter angle" style={{ fontSize:11, background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:3 }}>
                   <option value={90}>90°</option><option value={180}>180°</option><option value={270}>270°</option><option value={360}>360°</option>
                 </select>
               </div>
             )}
             {!bake && (
-              <div style={{ display:"flex", gap:3, fontSize:10, color:"#8ea4b8", alignItems:"center" }}>
+              <div style={{ display:"flex", gap:3, fontSize:11, color:"var(--info)", alignItems:"center" }}>
                 <span>from</span>
                 <input type="number" min={0} step={0.5} value={bakeStart} onChange={e=>setBakeStart(e.target.value)}
-                  title="Start time (s)" style={{ width:44, fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }} />
+                  title="Start time (s)" style={{ width:44, fontSize:11, background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:3 }} />
                 <span>len</span>
                 <input type="number" min={0} step={1} value={bakeDuration} onChange={e=>setBakeDuration(e.target.value)}
-                  title="Length in seconds (0 = to end of show)" style={{ width:44, fontSize:10, background:"#0b1220", color:"#cde", border:"1px solid #24405e", borderRadius:3 }} />
+                  title="Length in seconds (0 = to end of show)" style={{ width:44, fontSize:11, background:"var(--bg-base)", color:"var(--text-primary)", border:"1px solid var(--info)", borderRadius:3 }} />
               </div>
             )}
             {!bake && (() => {
@@ -1468,10 +1468,10 @@ if (sitePreview.active && sitePreview.plan) {
                 : exportFormat === "png" ? `Write "${song.file.name || "the song"}" as a WAV next to the frames, cut to the same range.`
                   : `Put "${song.file.name || "the song"}" in the video as its sound track, cut to the same range and in sync with frame 1.`;
               return (
-                <label title={hint} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color: song ? "#8ea4b8" : "#4f6475", cursor: song ? "pointer" : "default" }}>
+                <label title={hint} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color: song ? "var(--info)" : "var(--info)", cursor: song ? "pointer" : "default" }}>
                   <input type="checkbox" checked={bakeAudio && !!song} disabled={!song} onChange={e=>setBakeAudio(e.target.checked)} />
                   <span>Include music</span>
-                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:"#5f7f94" }}>{song ? `♪ ${song.file.name || "song"}` : "(no song attached)"}</span>
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:"var(--info)" }}>{song ? `♪ ${song.file.name || "song"}` : "(no song attached)"}</span>
                 </label>
               );
             })()}
@@ -1482,26 +1482,26 @@ if (sitePreview.active && sitePreview.plan) {
                 prepare: "Preparing…", finalize: "Writing file…" }[bake.phase];
               return (
               <>
-                <div style={{ height:6, background:"#0b1220", borderRadius:3, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${st.pct}%`, background:"#3ddc84" }} />
+                <div style={{ height:6, background:"var(--bg-base)", borderRadius:3, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${st.pct}%`, background:"var(--ok)" }} />
                 </div>
-                <div style={{ fontSize:10, color:"#bce2d9", fontFamily:"monospace" }}
+                <div style={{ fontSize:11, color:"var(--info)", fontFamily:"monospace" }}
                   title={`${tierLabel(bake.tier)}${bake.supersample > 1 ? ` · ${bake.supersample}× supersampled` : ""}${st.secPerFrame ? ` · ${st.secPerFrame.toFixed(2)} s/frame` : ""}\nElapsed ${elapsed}`}>
                   {label && bake.phase !== "render" ? `${label} ${elapsed}`
                     : `${bake.frame}/${bake.frames} · ${elapsed} · ~${formatClock(st.etaS)} left`}
                 </div>
-                {bake.notice && <div style={{ fontSize:9, color:"#e8c06a" }} title={bake.notice}>⚠ {bake.notice}</div>}
-                <button onClick={cancelBake} style={{ ...btnSm(true,"#ff4444"), color:"#ff6666", textAlign:"center" }}>Cancel</button>
+                {bake.notice && <div style={{ fontSize:11, color:"var(--warn)" }} title={bake.notice}>⚠ {bake.notice}</div>}
+                <button onClick={cancelBake} style={{ ...btnSm(true,"#ff4444"), color:"var(--error)", textAlign:"center" }}>Cancel</button>
               </>
               );
             })() : (
               <button onClick={renderSmoothVideo} disabled={recording}
                 title={`Renders every frame at exact show time${exportQuality !== "preview" ? " at final quality (the live view returns afterwards)" : ""}. Smooth at any resolution; slower than real time on slow GPUs.`}
-                style={{ ...btnSm(false,"#3ddc84"), color:"#3ddc84", textAlign:"center" }}>
+                style={{ ...btnSm(false,"#3ddc84"), color:"var(--ok)", textAlign:"center" }}>
                 {exportFormat === "png" ? "Render frames" : "Render video"}
               </button>
             )}
-            {bakeMsg && <div title={bakeMsg.tip || ""} style={{ fontSize:9, color: bakeMsg.error ? "#ff8866" : "#8ea4b8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{bakeMsg.text}{bakeMsg.music && <div style={{ color: bakeMsg.musicWarn ? "#e8c06a" : "#5f9f84", overflow:"hidden", textOverflow:"ellipsis" }}>{bakeMsg.music}</div>}{bakeMsg.file && <div style={{ color:"#5f7f94", overflow:"hidden", textOverflow:"ellipsis" }}>{String(bakeMsg.file).split(/[\\/]/).pop()}</div>}</div>}
+            {bakeMsg && <div title={bakeMsg.tip || ""} style={{ fontSize:11, color: bakeMsg.error ? "var(--error)" : "var(--info)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{bakeMsg.text}{bakeMsg.music && <div style={{ color: bakeMsg.musicWarn ? "var(--warn)" : "var(--ok)", overflow:"hidden", textOverflow:"ellipsis" }}>{bakeMsg.music}</div>}{bakeMsg.file && <div style={{ color:"var(--info)", overflow:"hidden", textOverflow:"ellipsis" }}>{String(bakeMsg.file).split(/[\\/]/).pop()}</div>}</div>}
           </div>
             </div>
           </details>
@@ -1516,13 +1516,13 @@ if (sitePreview.active && sitePreview.plan) {
 function Section({ title, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div style={{ borderBottom:"1px solid #0c1c26", marginBottom:6 }}>
+    <div style={{ borderBottom:"1px solid var(--border)", marginBottom:6 }}>
       <button onClick={() => setOpen(v => !v)} aria-expanded={open} style={{
         display:"flex", width:"100%", alignItems:"center", justifyContent:"space-between", padding:"5px 0",
-        background:"transparent", border:"none", cursor:"pointer", color: open ? "#9fb3c4" : "#5f7384",
-        fontSize:10, fontWeight:600, letterSpacing:"0.04em",
+        background:"transparent", border:"none", cursor:"pointer", color: open ? "var(--info)" : "var(--text-muted)",
+        fontSize:11, fontWeight:600, letterSpacing:"0.04em",
       }}>
-        <span>{title}</span><span style={{ fontSize:8 }}>{open ? "▾" : "▸"}</span>
+        <span>{title}</span><span style={{ fontSize:11 }}>{open ? "▾" : "▸"}</span>
       </button>
       {open && <div style={{ paddingBottom:6 }}>{children}</div>}
     </div>

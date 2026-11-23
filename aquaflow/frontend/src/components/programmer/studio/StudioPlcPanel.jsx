@@ -162,7 +162,7 @@ export default function StudioPlcPanel({ clips, items = [], pending, onPlcStatus
         <button className="btn" disabled={busy || pending || status?.running || !confirmed} onClick={() => play(true)} title="Click-matched test cues for measuring the sound ↔ water timing (Site sync → Sync test)">▶ Play sync test on {target}</button>
       </div>
       {(busy || step >= 0) && <ol className="s7-progress" aria-label="Play on PLC steps">{PLAY_STEPS.map((label, i) =>
-        <li key={label} style={{ color: i < step || step === PLAY_STEPS.length ? '#4cc38a' : i === step && busy ? '#f6d795' : 'var(--text-muted)' }}>{i < step || step === PLAY_STEPS.length ? '✓' : i === step && busy ? '…' : '·'} {label}</li>)}</ol>}
+        <li key={label} style={{ color: i < step || step === PLAY_STEPS.length ? "var(--ok)" : i === step && busy ? "var(--brand-gold-pale)" : 'var(--text-muted)' }}>{i < step || step === PLAY_STEPS.length ? '✓' : i === step && busy ? '…' : '·'} {label}</li>)}</ol>}
       {status?.running && <p className="sp-help">PLC show time {Number(status.elapsed || 0).toFixed(1)} s — the timeline follows the PLC.</p>}
     </>}
     {message.text && <div role="status" className={`s7-msg ${message.tone === 'ok' ? 's7-msg--ok' : message.tone === 'bad' ? 's7-msg--bad' : ''}`}>{message.text}</div>}

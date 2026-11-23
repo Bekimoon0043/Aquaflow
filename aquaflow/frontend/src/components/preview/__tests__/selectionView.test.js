@@ -1,3 +1,5 @@
 import {it,expect} from 'vitest';import {fixtureBounds,isolationWeight} from '../selectionView';
 it('frames a subset independently of the pool and distant fixtures',()=>{const b=fixtureBounds([{id:'a',x:10,z:-5,designHeightM:8},{id:'b',x:100,z:100}],['a']);expect(b.center.x).toBe(10);expect(b.max.y).toBe(8);expect(b.radius).toBeLessThan(5);expect(fixtureBounds([],['missing'])).toBeNull();});
 it('ghosts other fixtures, restores all on empty selection and prioritizes hidden items',()=>{expect(isolationWeight('b',new Set(['a']),.15)).toBe(.15);expect(isolationWeight('a',new Set(['a']),.15)).toBe(1);expect(isolationWeight('b',new Set(),.15)).toBe(1);expect(isolationWeight('a',new Set(['a']),.15,new Set(['a']))).toBe(0);});
+import {heatColor} from '../selectionView';
+it('maps output level to a blue→red heat scale and clamps out-of-range input',()=>{expect(heatColor(0)).toBe(0x2244aa);expect(heatColor(1)).toBe(0xe63228);expect(heatColor(.5)).toBe(0x3cc85a);expect(heatColor(-3)).toBe(heatColor(0));expect(heatColor(7)).toBe(heatColor(1));expect(heatColor(undefined)).toBe(heatColor(0));});

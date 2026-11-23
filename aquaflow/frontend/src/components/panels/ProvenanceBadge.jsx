@@ -34,7 +34,7 @@ export default function ProvenanceBadge({ provenance, compact = false, style }) 
       style={{
         display: "inline-flex", alignItems: "center", gap: 4, padding: "1px 5px",
         borderRadius: 3, border: `1px solid ${t.border}`, background: t.bg, color: t.color,
-        fontSize: 8, fontFamily: "monospace", whiteSpace: "nowrap", lineHeight: 1.4, ...style,
+        fontSize: 11, fontFamily: "monospace", whiteSpace: "nowrap", lineHeight: 1.4, ...style,
       }}
     >
       {compact ? b.short : b.label}
@@ -50,7 +50,7 @@ export function CitationLine({ citation, style }) {
     ? Object.entries(citation.units).map(([k, v]) => `${k} ${v}`).join(", ")
     : citation.unitsBasis || "";
   return (
-    <div data-testid="citation-line" style={{ fontSize: 8, color: "#7a96aa", lineHeight: 1.5, ...style }}>
+    <div data-testid="citation-line" style={{ fontSize: 11, color: "var(--info)", lineHeight: 1.5, ...style }}>
       <ProvenanceBadge provenance={citation} compact />{" "}
       {citation.equipmentModel || citation.equipment_model} · rev {citation.revision || "—"}
       {units ? ` · ${units}` : ""}

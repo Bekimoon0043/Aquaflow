@@ -37,7 +37,7 @@ export default function MobileMonitorPanel() {
 
   const cell = (label, value, color) => (
     <div style={{ ...box, padding: 8, minWidth: 90, flex: 1 }}>
-      <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</div>
       <div style={{ fontSize: 13, fontWeight: 700, color: color || "var(--text-primary)" }}>{value}</div>
     </div>
   );
@@ -53,11 +53,11 @@ export default function MobileMonitorPanel() {
         </span>
         <button onClick={refresh} style={{ marginLeft: "auto", background: "transparent",
           border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)",
-          fontSize: 10, padding: "3px 8px", cursor: "pointer" }}>↻ Refresh</button>
+          fontSize: 11, padding: "3px 8px", cursor: "pointer" }}>↻ Refresh</button>
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: 10 }}>
-        {error && <div style={{ ...box, padding: 8, color: "#ef4444", fontSize: 11, marginBottom: 8 }}>⛔ {error}</div>}
+        {error && <div style={{ ...box, padding: 8, color: "var(--error)", fontSize: 11, marginBottom: 8 }}>⛔ {error}</div>}
         {snapshot && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             {cell("Health", (snapshot.health || "—").toUpperCase(), HEALTH_COLOR[snapshot.health])}
@@ -70,21 +70,21 @@ export default function MobileMonitorPanel() {
           </div>
         )}
 
-        <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>ALERTS ({alerts.length})</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>ALERTS ({alerts.length})</div>
         {alerts.length === 0 ? (
-          <div style={{ color: "#22c55e", fontSize: 11 }}>✓ No active alerts.</div>
+          <div style={{ color: "var(--ok)", fontSize: 11 }}>✓ No active alerts.</div>
         ) : alerts.map((a, i) => (
           <div key={i} style={{ ...box, display: "flex", gap: 8, alignItems: "center", padding: "6px 8px",
             marginBottom: 4, borderLeft: `3px solid ${SEV_COLOR[a.severity] || "#888"}` }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 11, color: "var(--text-primary)" }}>{a.message}</div>
-              <div style={{ fontSize: 9, color: SEV_COLOR[a.severity] }}>{a.severity} · {a.code}
+              <div style={{ fontSize: 11, color: SEV_COLOR[a.severity] }}>{a.severity} · {a.code}
                 {a.acknowledged ? " · acknowledged" : ""}</div>
             </div>
             {!a.acknowledged && (
               <button onClick={() => ack(a.code)} style={{ background: "transparent",
                 border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)",
-                fontSize: 10, padding: "3px 8px", cursor: "pointer" }}>Ack</button>
+                fontSize: 11, padding: "3px 8px", cursor: "pointer" }}>Ack</button>
             )}
           </div>
         ))}

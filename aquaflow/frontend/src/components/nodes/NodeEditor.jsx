@@ -413,7 +413,7 @@ export default function NodeEditor() {
         position: "absolute", top: 52, left: 12,
         background: "var(--bg-raised)", border: "1px solid var(--border)",
         padding: "5px 8px", borderRadius: "var(--radius-sm)",
-        fontSize: 10, color: pendingConn ? "var(--green)" : "var(--text-muted)",
+        fontSize: 11, color: pendingConn ? "var(--green)" : "var(--text-muted)",
         fontFamily: "var(--font-mono)",
       }}>
         {pendingConn ? `CONNECT: ${pendingConn.fromPort} → select an input port` : `MODE: ${toolMode.toUpperCase()}`}
@@ -421,7 +421,7 @@ export default function NodeEditor() {
 
       <div style={{
         position: "absolute", bottom: 12, right: 12,
-        fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)",
+        fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)",
         background: "var(--bg-raised)", border: "1px solid var(--border)",
         padding: "4px 8px", borderRadius: "var(--radius-sm)",
       }}>
@@ -438,7 +438,7 @@ export default function NodeEditor() {
         {Object.entries(NODE_COLORS).slice(0, 5).map(([type, c]) => (
           <div key={type} style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: c.border }} />
-            <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase" }}>{type}</span>
+            <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase" }}>{type}</span>
           </div>
         ))}
       </div>
@@ -453,7 +453,7 @@ export default function NodeEditor() {
             padding: "4px 0", minWidth: 180,
             boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
           }}>
-            <div style={{ padding: "4px 12px 6px", fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em" }}>
+            <div style={{ padding: "4px 12px 6px", fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em" }}>
               ADD NODE
             </div>
             {NODE_TYPES.map((t) => {
@@ -472,7 +472,7 @@ export default function NodeEditor() {
                 >
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: c.border, flexShrink: 0 }} />
                   <span style={{ textTransform: "capitalize" }}>{t}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+                  <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
                     {NODE_ICONS[t]}
                   </span>
                 </button>

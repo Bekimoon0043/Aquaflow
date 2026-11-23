@@ -60,15 +60,15 @@ export default function ShowSectionEditor({ clips, blocks, selectedIds, onSelect
     } catch (error) { notify(error.message, "warning"); }
     finally { event.target.value = ""; }
   };
-  return <div style={{ padding: 12, fontSize: 11, color: "#b4d8ef" }}>
+  return <div style={{ padding: 12, fontSize: 11, color: "var(--text-primary)" }}>
     <b style={{ fontSize: 14 }}>Reusable show sections</b>
     <p>Tick blocks on the left to combine their dances. Layer different zones at the same time, or sequence movements into a larger show.</p>
     <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
       <button style={button} onClick={() => onSelection(blocks.map(b => b.id))}>Select all blocks</button>
       <button style={button} onClick={() => onSelection([])}>Clear block selection</button>
     </div>
-    <p style={{ color: "#7ee6de" }}>{selected.length} blocks selected{selected.length ? ` · ${new Set(selected.flatMap(b => b.members.map(c => c.fixtureId))).size} outlets` : ""}</p>
-    {selected.map(b => <div key={b.id} style={{ fontSize: 10, marginBottom: 4 }}>{b.name} · {b.startTime.toFixed(2)}–{b.endTime.toFixed(2)}s</div>)}
+    <p style={{ color: "var(--info)" }}>{selected.length} blocks selected{selected.length ? ` · ${new Set(selected.flatMap(b => b.members.map(c => c.fixtureId))).size} outlets` : ""}</p>
+    {selected.map(b => <div key={b.id} style={{ fontSize: 11, marginBottom: 4 }}>{b.name} · {b.startTime.toFixed(2)}–{b.endTime.toFixed(2)}s</div>)}
     <label style={fieldLabel}>Start time (seconds)<input aria-label="Section start" type="number" min={0} step={0.1} style={input} value={start} onChange={e => setStart(e.target.value)} /></label>
     <button style={{ ...button, marginBottom: 9 }} onClick={() => setStart(Number(currentTime).toFixed(2))}>Use section playhead</button>
     <label style={fieldLabel}>Gap (seconds)<input aria-label="Section gap" type="number" min={0} step={0.1} style={input} value={gap} onChange={e => setGap(e.target.value)} /></label>
@@ -77,12 +77,12 @@ export default function ShowSectionEditor({ clips, blocks, selectedIds, onSelect
       <button disabled={!selected.length} style={button} onClick={() => onArrange(selectedIds, { mode: "layer", startTime: start, gap: 0 })}>Layer selected blocks</button>
       <button disabled={!selected.length} style={button} onClick={() => onArrange(selectedIds, { mode: "move", startTime: start, gap: 0 })}>Move selection together</button>
     </div>
-    <p style={{ color: "#859fb7", fontSize: 10 }}>Sequence follows timeline order. Layer aligns starts; Move preserves relative offsets. Overlapping ON valves combine. Exact site conversion checks conflicting ON/OFF clips and commissioning limits.</p>
+    <p style={{ color: "var(--info)", fontSize: 11 }}>Sequence follows timeline order. Layer aligns starts; Move preserves relative offsets. Overlapping ON valves combine. Exact site conversion checks conflicting ON/OFF clips and commissioning limits.</p>
     <label style={fieldLabel}>Section name<input aria-label="Section name" style={input} value={name} onChange={e => setName(e.target.value)} /></label>
     <button disabled={!selected.length || !!library.error} style={{ ...button, width: "100%" }} onClick={save}>Save selected as section</button>
-    <div style={{ borderTop: "1px solid #2d455c", marginTop: 16, paddingTop: 12 }}>
+    <div style={{ borderTop: "1px solid var(--info)", marginTop: 16, paddingTop: 12 }}>
       <b>Saved section library · {library.items.length}</b>
-      {library.error && <p role="alert" style={{ color: "#f6c877" }}>{library.error}</p>}
+      {library.error && <p role="alert" style={{ color: "var(--brand-gold-pale)" }}>{library.error}</p>}
       <select aria-label="Saved show section" value={template?.id || ""} onChange={e => setTemplateId(e.target.value)} style={{ ...input, marginTop: 9 }}>
         {!template && <option value="">No sections saved yet</option>}
         {library.items.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -90,12 +90,12 @@ export default function ShowSectionEditor({ clips, blocks, selectedIds, onSelect
       {template && <p>{getPatternBlocks(template.clips).length} blocks · {template.clips.length} clips · {template.duration.toFixed(2)}s. Outlet identities stay linked to this engineering project.</p>}
       <label style={fieldLabel}>Section repeats<input aria-label="Section repeats" type="number" min={1} max={20} step={1} style={input} value={repeats} onChange={e => setRepeats(e.target.value)} /></label>
       <button style={{ ...button, width: "100%" }} disabled={!template} onClick={() => onInsert(template, { startTime: start, repeats, gap })}>Insert saved section</button>
-      <p style={{ fontSize: 10, color: "#859fb7" }}>Repeats keep the section's internal layering and OFF gaps. The Gap field separates repeated sections. Insert creates independent editable blocks.</p>
+      <p style={{ fontSize: 11, color: "var(--info)" }}>Repeats keep the section's internal layering and OFF gaps. The Gap field separates repeated sections. Insert creates independent editable blocks.</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         <button disabled={!template} style={button} onClick={() => download(template, "aquaflow-show-section.json")}>Export selected section</button>
         <button disabled={!library.items.length} style={button} onClick={() => download(library.items, "aquaflow-section-library.json")}>Export section library</button>
         <label style={button}>Import sections<input aria-label="Import show sections" type="file" accept="application/json" onChange={importFile} style={{ display: "none" }} /></label>
-        {template && <button style={{ ...button, color: "#fdb2bb" }} onClick={() => attempt(() => persist(library.items.filter(s => s.id !== template.id)))}>Remove saved section</button>}
+        {template && <button style={{ ...button, color: "var(--text-primary)" }} onClick={() => attempt(() => persist(library.items.filter(s => s.id !== template.id)))}>Remove saved section</button>}
       </div>
     </div>
   </div>;

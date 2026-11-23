@@ -30,25 +30,25 @@ export default function AiCommissioningHelp({ issues = [], plc = null, mode = nu
   const { help } = state;
   return <div data-testid="ai-commissioning" style={{ marginTop: 6 }}>
     <button type="button" onClick={ask} disabled={state.loading}
-      title="Optional: Claude explains these warnings and faults in plain words with on-site steps. Advice only — nothing is sent to the equipment. Uses your Anthropic key (Your fountain → AI director)."
-      style={{ padding: "3px 10px", background: "#0a1825", color: "#9fd8ff", border: "1px solid #2a5a7a", borderRadius: 3, cursor: state.loading ? "wait" : "pointer", fontFamily: "monospace", fontSize: 10 }}>
+      title="Optional: Claude explains these warnings and faults in plain words with on-site steps. Advice only — nothing is sent to the equipment. Uses your Anthropic key (File → Preferences → AI director)."
+      style={{ padding: "3px 10px", background: "var(--bg-base)", color: "var(--info)", border: "1px solid var(--info)", borderRadius: 3, cursor: state.loading ? "wait" : "pointer", fontFamily: "monospace", fontSize: 11 }}>
       {state.loading ? "Asking…" : label}
     </button>
-    {state.error && <div role="alert" style={{ color: "#ff8866", fontSize: 10, marginTop: 4 }}>{state.error}</div>}
+    {state.error && <div role="alert" style={{ color: "var(--error)", fontSize: 11, marginTop: 4 }}>{state.error}</div>}
     {help && <div style={card}>
       {help.summary && <div style={{ marginBottom: 4 }}>{help.summary}</div>}
-      {(help.safety || []).length > 0 && <div role="note" style={{ color: "#f6d795", border: "1px solid #b98539", borderRadius: 3, padding: 4, marginBottom: 4 }}>
+      {(help.safety || []).length > 0 && <div role="note" style={{ color: "var(--brand-gold-pale)", border: "1px solid var(--warn)", borderRadius: 3, padding: 4, marginBottom: 4 }}>
         {(help.safety || []).map((s, i) => <div key={i}>⚠ {s}</div>)}
       </div>}
       <ol style={{ margin: 0, paddingLeft: 16 }}>
         {(help.steps || []).map((s, i) => <li key={i} data-testid="ai-step" style={{ marginBottom: 4 }}>
           <b>{s.title}</b>
           {s.detail && <div>{s.detail}</div>}
-          {s.check && <div style={{ color: "#8fd" }}>Check: {s.check}</div>}
-          {s.relatedIds?.length > 0 && <div style={{ color: "#556677" }}>Related: {s.relatedIds.join(", ")}</div>}
+          {s.check && <div style={{ color: "var(--ok)" }}>Check: {s.check}</div>}
+          {s.relatedIds?.length > 0 && <div style={{ color: "var(--text-muted)" }}>Related: {s.relatedIds.join(", ")}</div>}
         </li>)}
       </ol>
-      <div style={{ color: "#556677", fontSize: 9 }}>Advice from {help.model || "Claude"} — AquaFlow sent nothing to the equipment.</div>
+      <div style={{ color: "var(--text-muted)", fontSize: 11 }}>Advice from {help.model || "Claude"} — AquaFlow sent nothing to the equipment.</div>
     </div>}
   </div>;
 }

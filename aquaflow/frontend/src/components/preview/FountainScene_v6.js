@@ -1,4 +1,4 @@
-import {fixtureBounds, isolationWeight} from './selectionView';
+import {fixtureBounds, heatColor, isolationWeight} from './selectionView';
 /**
  * FountainScene_v6.js — AquaFlow Phase 13C (Phase 1 + Phase 2 integrated)
  *
@@ -3224,7 +3224,9 @@ export class FountainScene {
     const selected=new Set(this._selectionIds), T=this.THREE;
     for(const root of [this._fixtureInstances?.group,this._lightMarkers?.bodies?.group]) root?.traverse(mesh=>{
       if(!mesh.isInstancedMesh || !mesh.userData.nodeIds)return;
-      mesh.userData.nodeIds.forEach((id,i)=>mesh.setColorAt(i,new T.Color(selected.has(id)?0xc9a227:this._hoverFixture===id?0xe4e5e7:0xffffff).multiplyScalar(this._fixtureWeight(id))));
+      const heat=this._viewportShading==='heat'?(this._signals?.fixtureIntensities||{}):null;
+      // Heat-map shading colours each body by its live output; selection and hover still win.
+      mesh.userData.nodeIds.forEach((id,i)=>mesh.setColorAt(i,new T.Color(selected.has(id)?0xc9a227:this._hoverFixture===id?0xe4e5e7:heat?heatColor(heat[id]):0xffffff).multiplyScalar(this._fixtureWeight(id))));
       if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
     });
     if(this._selectionEdges){this.scene.remove(this._selectionEdges);this._selectionEdges.geometry.dispose();this._selectionEdges.material.dispose();}
@@ -3244,6 +3246,7 @@ export class FountainScene {
     this._viewportShading=mode;
     for(const root of [this._fixtureInstances?.group,this._lightMarkers?.group])root?.traverse(o=>{for(const m of (Array.isArray(o.material)?o.material:[o.material]).filter(Boolean)){m.wireframe=mode==='wire';m.needsUpdate=true;}});
     if(mode==='solid')this.setEnvironment('day');else if(mode==='realistic')this.setEnvironment('night');
+    this._heatShadeAt=0;this._updateFixtureHighlight();
   }
   /** Animate to a view that fits the whole site (basin and every fixture). */
   frameAll() {
@@ -3557,6 +3560,11 @@ export class FountainScene {
     );
 
     this._applyRuntimeLighting();
+    // Heat-map shading follows the live signals, refreshed at most 10 times a second.
+    if (this._viewportShading === 'heat') {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (!this._heatShadeAt || now - this._heatShadeAt > 100) { this._heatShadeAt = now; this._updateFixtureHighlight(); }
+    }
   }
   setPerNozzleIntensities(a) {
     // Stops pattern playback; explicit per-nozzle takes precedence

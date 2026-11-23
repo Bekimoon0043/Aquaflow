@@ -61,6 +61,10 @@ import {
   DimensionsSection, FixturePickerSection, LayersSection, PoolPropertiesSection, PoolTypeSection, ProjectHeaderSection,
   ProjectOutputSection, SiteSurfacesSection, SurfacePropertiesSection, ToolsSection,
 } from "./designer/DesignerSidebar";
+import { usePanelLayout, shownSize } from "../../ui/dock/panelLayout";
+import { IconButton, Splitter } from "../../ui";
+
+const ENGINEERING_PANELS = { panels: { sidebar: { size: 220, min: 180, max: 520 } } };
 
 const ownerFnFor = (basins) => (entity) => ownerForPoint(basins, entity);
 const DESIGNER_TYPING_TOOLS = new Set(["pipe"]);
@@ -71,6 +75,9 @@ const DRAFT_TARGET_LABEL = { pool: "pool outline", land: "land surface", depth: 
 const CLOSE_TOLERANCE_PX = 12;
 
 export default function PoolGeometryDesigner() {
+  // Dockable sidebar: resize, collapse, swap side; saved per workspace, cleared by View → Reset layout.
+  const panelLayout = usePanelLayout("engineering", ENGINEERING_PANELS);
+  const sidebarPanel = panelLayout.layout.panels.sidebar;
   const canvasRef = useRef(null);
   const canvasHostRef = useRef(null);
   const projectFileInputRef = useRef(null);
@@ -1670,11 +1677,17 @@ export default function PoolGeometryDesigner() {
   const overlayButton = { background:"none", border:"none", color:"#7ab", cursor:"pointer", fontSize:9, fontFamily:"monospace" };
 
   return (
-    <div style={{ display:"flex", height:"100%", background:"#040810", color:"#cce8ff", fontFamily:"monospace", fontSize:"11px", overflow:"hidden" }}>
+    <div style={{ display:"flex", flexDirection: panelLayout.layout.swapped ? "row-reverse" : "row", height:"100%", background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"var(--font-body)", fontSize:"12px", overflow:"hidden" }}>
 
       {/* Left toolbar */}
       {showCADImport && <CADImportDialog currentProject={buildProjectPayload()} onApply={applyCADDesign} onClose={() => setShowCADImport(false)} />}
-      <div style={{ width:220, flexShrink:0, borderRight:"1px solid #0a2030", display:"flex", flexDirection:"column", overflow:"auto" }}>
+      <div className="ws-side-panel" style={{ width: shownSize(sidebarPanel) }}>
+        <div className="ws-side-panel-bar">
+          {!sidebarPanel.collapsed && <span>Design tools</span>}
+          {!sidebarPanel.collapsed && <IconButton icon="move" label="Move sidebar to the other side" onClick={panelLayout.swap} />}
+          <IconButton icon="chevron" label={sidebarPanel.collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => panelLayout.toggle("sidebar")} />
+        </div>
+        <div className="ws-side-panel-body" hidden={sidebarPanel.collapsed}>
         <ProjectHeaderSection d={d} />
         <PoolTypeSection d={d} />
         <DimensionsSection d={d} />
@@ -1700,20 +1713,22 @@ export default function PoolGeometryDesigner() {
         <SiteSurfacesSection d={d} />
         <LayersSection d={d} />
         <ProjectOutputSection d={d} />
+        </div>
       </div>
+      <Splitter label="Resize design tools" onResize={(dx) => panelLayout.resize("sidebar", panelLayout.layout.swapped ? -dx : dx)} />
 
       {/* Main canvas + command line */}
       <div style={{ flex:1, minWidth:0, minHeight:0, display:"flex", flexDirection:"column" }}>
       <div ref={canvasHostRef} style={{ flex:1, minWidth:0, minHeight:0, position:"relative", overflow:"hidden" }}>
-        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 20, display: "flex", gap: 8, alignItems: "center", pointerEvents: "none" }}>
-          <div style={{ padding: "5px 8px", borderRadius: 6, background: "rgba(2,8,16,0.88)", border: "1px solid rgba(0,255,204,0.45)", color: "#7fffd4", fontSize: 10, fontFamily: "monospace", fontWeight: 800, boxShadow: "0 0 12px rgba(0,255,204,0.16)" }}>
+        <div style={{ position: "absolute", top: 10, right: 10, zIndex: 20, display: "flex", gap: 8, alignItems: "center", pointerEvents: "none" }}>
+          <div style={{ padding: "5px 8px", borderRadius: 6, background: "rgba(2,8,16,0.88)", border: "1px solid rgba(0,255,204,0.45)", color: "var(--ok)", fontSize: 11, fontFamily: "monospace", fontWeight: 800, boxShadow: "0 0 12px rgba(0,255,204,0.16)" }}>
             TOOL: {tool.toUpperCase()}
           </div>
           <div style={{
-            padding: "5px 8px", borderRadius: 6, fontSize: 10, fontFamily: "monospace", fontWeight: 800,
+            padding: "5px 8px", borderRadius: 6, fontSize: 11, fontFamily: "monospace", fontWeight: 800,
             background: drawing ? "rgba(113,63,18,0.92)" : "rgba(2,8,16,0.88)",
             border: drawing ? "1px solid rgba(245,158,11,0.75)" : "1px solid rgba(148,163,184,0.28)",
-            color: drawing ? "#fbbf24" : "#94a3b8",
+            color: drawing ? "var(--warn)" : "var(--info)",
             boxShadow: drawing ? "0 0 12px rgba(245,158,11,0.22)" : "none",
           }}>
             DRAW: {drawing ? "ACTIVE" : "IDLE"}
@@ -1755,59 +1770,59 @@ export default function PoolGeometryDesigner() {
         <DynamicInputOverlay input={dynamicInput} screen={cursorScreen} polar={pipeOverlay?.polar} snap={pipeOverlay?.snap} />
         <CommandPalette open={paletteOpen} commands={paletteCommands} onClose={() => setPaletteOpen(false)} />
         {pipeContextMenu && (
-          <div style={{ position:"fixed", left:pipeContextMenu.x, top:pipeContextMenu.y, background:"#050d14", border:"1px solid #0a3040", borderRadius:4, padding:4, zIndex:9999, minWidth:150, boxShadow:"0 4px 12px rgba(0,0,0,0.45)" }}>
+          <div style={{ position:"fixed", left:pipeContextMenu.x, top:pipeContextMenu.y, background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:4, padding:4, zIndex:9999, minWidth:150, boxShadow:"0 4px 12px rgba(0,0,0,0.45)" }}>
             <button onClick={() => { insertNodeAtPoint(pipeContextMenu.world); setPipeContextMenu(null); }}
-              style={{ width:"100%", padding:"5px", background:"#06121c", color:"#00ccaa", border:"1px solid #00ccaa44", cursor:"pointer", fontSize:9, marginBottom:3 }}>
+              style={{ width:"100%", padding:"5px", background:"var(--bg-base)", color:"var(--info)", border:"1px solid color-mix(in srgb, var(--info) 27%, transparent)", cursor:"pointer", fontSize:11, marginBottom:3 }}>
               ＋ Insert Node
             </button>
             {selectedSegment && (
               <button onClick={() => { deleteSelectedSegment(); setPipeContextMenu(null); }}
-                style={{ width:"100%", padding:"5px", background:"#1a0808", color:"#ff8888", border:"1px solid #ff444422", cursor:"pointer", fontSize:9, marginBottom:3 }}>
+                style={{ width:"100%", padding:"5px", background:"var(--bg-base)", color:"var(--error)", border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", cursor:"pointer", fontSize:11, marginBottom:3 }}>
                 ✕ Delete Segment
               </button>
             )}
             <button onClick={() => { deleteSelectedPipe(); setPipeContextMenu(null); }}
-              style={{ width:"100%", padding:"5px", background:"#1a0808", color:"#ff4444", border:"1px solid #ff444422", cursor:"pointer", fontSize:9, marginBottom:3 }}>
+              style={{ width:"100%", padding:"5px", background:"var(--bg-base)", color:"var(--error)", border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", cursor:"pointer", fontSize:11, marginBottom:3 }}>
               ✕ Delete Pipe
             </button>
             <button onClick={() => { setSelectedPipeId(null); setSelectedNode(null); setSelectedSegment(null); setPipeContextMenu(null); }}
-              style={{ width:"100%", padding:"5px", background:"#06121c", color:"#7ab", border:"1px solid #0a3040", cursor:"pointer", fontSize:9 }}>
+              style={{ width:"100%", padding:"5px", background:"var(--bg-base)", color:"var(--info)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11 }}>
               Clear Selection
             </button>
           </div>
         )}
 
         {/* Top overlay toolbar */}
-        <div style={{ position:"absolute", top:8, left:8, display:"flex", gap:5, background:"rgba(0,0,0,0.7)", border:"1px solid #0a2030", borderRadius:5, padding:"4px 8px", alignItems:"center" }}>
+        <div style={{ position:"absolute", top:8, left:8, display:"flex", gap:5, background:"rgba(0,0,0,0.7)", border:"1px solid var(--border)", borderRadius:5, padding:"4px 8px", alignItems:"center" }}>
           <button onClick={()=>setZoom(z=>Math.min(100,z*1.2))} style={{ ...overlayButton, fontSize:14, padding:"0 3px" }}>+</button>
-          <span style={{ color:"#334455", fontSize:10, minWidth:40, textAlign:"center" }}>{Math.round(zoom)}px/m</span>
+          <span style={{ color:"var(--info)", fontSize:11, minWidth:40, textAlign:"center" }}>{Math.round(zoom)}px/m</span>
           <button onClick={()=>setZoom(z=>Math.max(10,z/1.2))} style={{ ...overlayButton, fontSize:14, padding:"0 3px" }}>−</button>
-          <div style={{ width:1, height:14, background:"#0a2030" }}/>
+          <div style={{ width:1, height:14, background:"var(--bg-panel)" }}/>
           <button onClick={resetView} style={overlayButton}>⌂ HOME</button>
           <button onClick={fitView} style={overlayButton}>FIT</button>
-          <div style={{ width:1, height:14, background:"#0a2030" }}/>
-          <button onClick={handleUndo} disabled={!historyApi.canUndo} title={historyApi.state.undoLabel ? `Undo ${historyApi.state.undoLabel}` : "Nothing to undo"} style={{ ...overlayButton, color:historyApi.canUndo?"#00ccaa":"#334455" }}>↶ UNDO</button>
-          <button onClick={handleRedo} disabled={!historyApi.canRedo} title={historyApi.state.redoLabel ? `Redo ${historyApi.state.redoLabel}` : "Nothing to redo"} style={{ ...overlayButton, color:historyApi.canRedo?"#00ccaa":"#334455" }}>↷ REDO</button>
-          <div style={{ width:1, height:14, background:"#0a2030" }}/>
-          <button onClick={pushFixturesToDevices} disabled={!fixtures.length} style={{ ...overlayButton, color: fixtures.length?"#ffcc00":"#334455" }}>⇒ PUSH TO DEVICES</button>
-          <div style={{ width:1, height:14, background:"#0a2030" }}/>
-          <button onClick={()=>setShowGrid(g=>!g)} style={{ ...overlayButton, color: showGrid?"#00ccaa":"#334455" }}>GRID</button>
-          <button onClick={()=>setSnapToGrid(s=>!s)} style={{ background:snapToGrid?"rgba(255,204,0,0.12)":"none", border:`1px solid ${snapToGrid ? "rgba(255,204,0,0.55)" : "transparent"}`, borderRadius:3, padding:"2px 6px", color: snapToGrid?"#ffcc00":"#334455", cursor:"pointer", fontSize:9, fontFamily:"monospace", fontWeight:snapToGrid?800:400 }}>SNAP {snapToGrid ? `${gridStep}m` : "OFF"}</button>
-          <select value={gridStep} onChange={e=>setGridStep(parseFloat(e.target.value))} style={{ background:"#06121c", color:"#7ab", border:"1px solid #0a3040", borderRadius:3, fontSize:9, fontFamily:"monospace", height:18 }}>
+          <div style={{ width:1, height:14, background:"var(--bg-panel)" }}/>
+          <button onClick={handleUndo} disabled={!historyApi.canUndo} title={historyApi.state.undoLabel ? `Undo ${historyApi.state.undoLabel}` : "Nothing to undo"} style={{ ...overlayButton, color:historyApi.canUndo?"var(--info)":"var(--info)" }}>↶ UNDO</button>
+          <button onClick={handleRedo} disabled={!historyApi.canRedo} title={historyApi.state.redoLabel ? `Redo ${historyApi.state.redoLabel}` : "Nothing to redo"} style={{ ...overlayButton, color:historyApi.canRedo?"var(--info)":"var(--info)" }}>↷ REDO</button>
+          <div style={{ width:1, height:14, background:"var(--bg-panel)" }}/>
+          <button onClick={pushFixturesToDevices} disabled={!fixtures.length} style={{ ...overlayButton, color: fixtures.length?"var(--accent)":"var(--info)" }}>⇒ PUSH TO DEVICES</button>
+          <div style={{ width:1, height:14, background:"var(--bg-panel)" }}/>
+          <button onClick={()=>setShowGrid(g=>!g)} style={{ ...overlayButton, color: showGrid?"var(--info)":"var(--info)" }}>GRID</button>
+          <button onClick={()=>setSnapToGrid(s=>!s)} style={{ background:snapToGrid?"rgba(255,204,0,0.12)":"none", border:`1px solid ${snapToGrid ? "rgba(255,204,0,0.55)" : "transparent"}`, borderRadius:3, padding:"2px 6px", color: snapToGrid?"var(--accent)":"var(--info)", cursor:"pointer", fontSize:11, fontFamily:"monospace", fontWeight:snapToGrid?800:400 }}>SNAP {snapToGrid ? `${gridStep}m` : "OFF"}</button>
+          <select value={gridStep} onChange={e=>setGridStep(parseFloat(e.target.value))} style={{ background:"var(--bg-base)", color:"var(--info)", border:"1px solid var(--border)", borderRadius:3, fontSize:11, fontFamily:"monospace", height:18 }}>
             <option value={0.1}>0.10m</option>
             <option value={0.25}>0.25m</option>
             <option value={0.5}>0.50m</option>
             <option value={1}>1.00m</option>
           </select>
-          <button onClick={()=>setOsnap(v=>!v)} title="Object snap: endpoint, port, intersection, midpoint, center, insertion, perpendicular, nearest (10 px aperture)" style={{ ...overlayButton, color: osnap?"#00ffcc":"#334455" }}>OSNAP</button>
-          <button onClick={()=>setShowDepth(v=>!v)} style={{ ...overlayButton, color: showDepth?"#00ccaa":"#334455" }}>DEPTH</button>
-          <button onClick={()=>setShowDimensions(v=>!v)} style={{ ...overlayButton, color: showDimensions?"#ffcc00":"#334455" }}>DIM</button>
+          <button onClick={()=>setOsnap(v=>!v)} title="Object snap: endpoint, port, intersection, midpoint, center, insertion, perpendicular, nearest (10 px aperture)" style={{ ...overlayButton, color: osnap?"var(--info)":"var(--info)" }}>OSNAP</button>
+          <button onClick={()=>setShowDepth(v=>!v)} style={{ ...overlayButton, color: showDepth?"var(--info)":"var(--info)" }}>DEPTH</button>
+          <button onClick={()=>setShowDimensions(v=>!v)} style={{ ...overlayButton, color: showDimensions?"var(--accent)":"var(--info)" }}>DIM</button>
           <button onClick={()=>setPaletteOpen(true)} title="Command palette (Ctrl+K)" style={overlayButton}>⌘K</button>
         </div>
 
         {/* Info overlay */}
-        <div style={{ position:"absolute", bottom:30, left:8, background:"rgba(0,0,0,0.7)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#334455" }}>
-          {draft ? <span style={{ color:"#7ec8e3" }}>Drawing {DRAFT_TARGET_LABEL[draft.target]}: click points or type a length / size + Enter · Enter or Space finishes · Backspace undoes a point · Esc cancels</span> : <>
+        <div style={{ position:"absolute", bottom:30, left:8, background:"rgba(0,0,0,0.7)", border:"1px solid var(--border)", borderRadius:4, padding:"4px 8px", fontSize:11, color:"var(--info)" }}>
+          {draft ? <span style={{ color:"var(--info)" }}>Drawing {DRAFT_TARGET_LABEL[draft.target]}: click points or type a length / size + Enter · Enter or Space finishes · Backspace undoes a point · Esc cancels</span> : <>
           {tool==="select" && "Drag grips to stretch · Drag pool to move · Shift+click adds · drag on empty space (or Ctrl+drag) selects: →window ←crossing · Ctrl+G groups · Del deletes · Ctrl+D duplicates · Ctrl+K commands"}
           {tool==="nozzle" && "Click on pool to place nozzle"}
           {tool==="light"  && "Click on pool to place light fixture"}
@@ -1827,7 +1842,7 @@ export default function PoolGeometryDesigner() {
         </div>
 
         {drawPreview && (drawStart || polylinePoints.length > 0 || landDrawPoints.length > 0) && (
-          <div style={{ position:"absolute", top:40, right:8, background:"rgba(0,0,0,0.75)", border:"1px solid #0a3040", borderRadius:4, padding:"6px 8px", fontSize:10, color:"#00ccaa", fontFamily:"monospace" }}>
+          <div style={{ position:"absolute", top:40, right:8, background:"rgba(0,0,0,0.75)", border:"1px solid var(--border)", borderRadius:4, padding:"6px 8px", fontSize:11, color:"var(--info)", fontFamily:"monospace" }}>
             {tool==="rectangle" && drawStart && <>
               W {Math.abs(drawPreview.x-drawStart.x).toFixed(3)} m<br/>
               L {Math.abs(drawPreview.y-drawStart.y).toFixed(3)} m
@@ -1848,7 +1863,7 @@ export default function PoolGeometryDesigner() {
         )}
 
         {/* CAD coordinate readout */}
-        <div style={{ position:"absolute", bottom:8, right:8, background:"rgba(0,0,0,0.72)", border:"1px solid #0a2030", borderRadius:4, padding:"4px 8px", fontSize:9, color:"#7ab", fontFamily:"monospace" }}>
+        <div style={{ position:"absolute", bottom:8, right:8, background:"rgba(0,0,0,0.72)", border:"1px solid var(--border)", borderRadius:4, padding:"4px 8px", fontSize:11, color:"var(--info)", fontFamily:"monospace" }}>
           TOOL {tool.toUpperCase()}&nbsp;&nbsp; X {cursorWorld.x.toFixed(3)} m&nbsp;&nbsp; Y {cursorWorld.y.toFixed(3)} m&nbsp;&nbsp; ZOOM {Math.round(zoom)} px/m&nbsp;&nbsp; SNAP {snapToGrid ? gridStep + "m" : "OFF"}&nbsp;&nbsp; OSNAP {osnap ? "ON" : "OFF"}{pipeOverlay?.snap?.mode ? ` (${pipeOverlay.snap.label})` : ""}&nbsp;&nbsp; DRAW {drawing ? "ACTIVE" : "IDLE"}&nbsp;&nbsp; LAYERS {layers.filter(l=>l.visible).length}/{layers.length}&nbsp;&nbsp; SELECTED {selectionLabel}
         </div>
       </div>

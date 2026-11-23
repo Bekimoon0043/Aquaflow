@@ -213,13 +213,13 @@ export default function ProjectRecoveryHost() {
                 {items.map((item) => {
                   const [label, color] = STATUS_STYLE[item.status] || [item.status, "inherit"];
                   return (
-                    <tr key={item.id} style={{ borderTop: "1px solid var(--border, #1f2a33)" }}>
+                    <tr key={item.id} style={{ borderTop: "1px solid var(--border, color-mix(in srgb, var(--info) 40%, var(--border)))" }}>
                       <td style={{ color, fontWeight: 600, padding: "6px 6px 6px 0", whiteSpace: "nowrap" }}>{label}</td>
                       <td style={{ padding: 6 }}>
                         <div>{item.name}</div>
                         <div style={muted}>{item.resolvedPath || item.relativePath || item.path || item.locator?.assetId || ""}{item.resolvedVia ? ` · via ${item.resolvedVia}` : ""}</div>
-                        {item.status === "changed" && <div style={{ ...muted, color: "var(--amber, #f0b429)" }}>Content differs from the saved hash (size {item.size ?? "?"} → {item.actualSize ?? "?"} bytes).</div>}
-                        {item.warning && <div style={{ ...muted, color: "var(--amber, #f0b429)" }}>{item.warning}</div>}
+                        {item.status === "changed" && <div style={{ ...muted, color: "var(--amber, var(--warn))" }}>Content differs from the saved hash (size {item.size ?? "?"} → {item.actualSize ?? "?"} bytes).</div>}
+                        {item.warning && <div style={{ ...muted, color: "var(--amber, var(--warn))" }}>{item.warning}</div>}
                       </td>
                       <td style={{ padding: 6 }}>{item.role}</td>
                       <td style={{ padding: 6, textAlign: "right" }}>
@@ -268,7 +268,7 @@ export default function ProjectRecoveryHost() {
         <div style={{ position: "fixed", right: 16, bottom: 36, zIndex: 3100, display: "flex", flexDirection: "column", gap: 8, maxWidth: "min(420px, calc(100vw - 32px))" }} aria-live="polite">
           {toasts.map((t) => (
             <div key={t.id} role={t.level === "error" ? "alert" : "status"} style={{
-              background: "var(--bg-surface, #151d24)", color: "var(--text-primary, #e8eef2)", fontSize: 12, padding: "10px 12px", borderRadius: 8,
+              background: "var(--bg-surface, var(--bg-panel))", color: "var(--text-primary, var(--text-primary))", fontSize: 12, padding: "10px 12px", borderRadius: 8,
               border: `1px solid ${t.level === "error" ? "var(--red, #ff5c5c)" : t.level === "warn" ? "var(--amber, #f0b429)" : "var(--border-mid, #2a3640)"}`,
               boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
             }}>{t.text}</div>

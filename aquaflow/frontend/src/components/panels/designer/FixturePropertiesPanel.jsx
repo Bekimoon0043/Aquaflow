@@ -115,7 +115,7 @@ function PumpReadout({ engineering }) {
   const r = pumpReadoutText(engineering);
   if (!r) return null;
   return (
-    <div data-testid="pump-readout" style={{ color: r.warn ? "#fbbf24" : "#7ab", fontSize: 9, lineHeight: 1.4, margin: "2px 0 6px" }}>
+    <div data-testid="pump-readout" style={{ color: r.warn ? "var(--warn)" : "var(--info)", fontSize: 11, lineHeight: 1.4, margin: "2px 0 6px" }}>
       {r.text}
     </div>
   );
@@ -126,7 +126,7 @@ function EngineeringFields({ fixture, engineering, onEngineering }) {
   const type = t(fixture);
   return sectionsFor(type).map((section) => (
     <div key={section.key}>
-      {section.heading && <div style={{ color: "#7ab", fontSize: 8, marginBottom: 4 }}>{section.heading}</div>}
+      {section.heading && <div style={{ color: "var(--info)", fontSize: 11, marginBottom: 4 }}>{section.heading}</div>}
       {section.fields.map(([label, key, min, max, step]) => (
         <NumberField key={key} label={label} min={min} max={max} step={step} color={section.color}
           value={engineering[key]} onChange={(v) => onEngineering(key, v)} />
@@ -164,10 +164,10 @@ export default function FixturePropertiesPanel({
   const actions = (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 6 }}>
       <button type="button" onClick={onSelectSimilar} title="Select every fixture of the same type / CAD block"
-        style={{ padding: 4, background: "#06121c", color: "#7fd8ff", border: "1px solid #16415a", borderRadius: 3, cursor: "pointer", fontSize: 8 }}>SELECT SIMILAR</button>
+        style={{ padding: 4, background: "var(--bg-base)", color: "var(--info)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>SELECT SIMILAR</button>
       {groupCount > 0
-        ? <button type="button" onClick={onUngroup} style={{ padding: 4, background: "#06121c", color: "#ffcc88", border: "1px solid #5a4316", borderRadius: 3, cursor: "pointer", fontSize: 8 }}>UNGROUP</button>
-        : <button type="button" onClick={onGroup} disabled={selected.length < 2} style={{ padding: 4, background: "#06121c", color: selected.length < 2 ? "#334455" : "#ffcc88", border: "1px solid #5a4316", borderRadius: 3, cursor: "pointer", fontSize: 8 }}>GROUP</button>}
+        ? <button type="button" onClick={onUngroup} style={{ padding: 4, background: "var(--bg-base)", color: "var(--brand-gold-pale)", border: "1px solid color-mix(in srgb, var(--warn) 40%, var(--border))", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>UNGROUP</button>
+        : <button type="button" onClick={onGroup} disabled={selected.length < 2} style={{ padding: 4, background: "var(--bg-base)", color: selected.length < 2 ? "var(--info)" : "var(--brand-gold-pale)", border: "1px solid color-mix(in srgb, var(--warn) 40%, var(--border))", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>GROUP</button>}
     </div>
   );
 
@@ -176,30 +176,30 @@ export default function FixturePropertiesPanel({
     const engFields = sharedEngineeringFields(selected);
     const engValues = sharedFieldValues(selected.map((f) => ({ ...f, engineering: { ...getDefaultEngineering(f.type), ...(f.engineering || {}) } })), engFields.map(({ field }) => `engineering.${field[1]}`));
     return (
-      <div style={{ padding: "8px 10px", borderBottom: "1px solid #0a2030" }} data-testid="multi-fixture-properties">
-        <div style={{ color: "#ffcc00", fontSize: 9, marginBottom: 5, fontWeight: "bold" }}>⧉ {selected.length} FIXTURES SELECTED</div>
+      <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border)" }} data-testid="multi-fixture-properties">
+        <div style={{ color: "var(--accent)", fontSize: 11, marginBottom: 5, fontWeight: "bold" }}>⧉ {selected.length} FIXTURES SELECTED</div>
         {actions}
         <NumberField label="Rotation (°)" min={0} max={360} step={5} color="#ffcc00" value={shared.rotation} mixed={shared.rotation === MIXED}
           onChange={(v) => update((f) => ({ ...f, rotation: v }), "Rotate fixtures")} />
         <div style={{ marginBottom: 5 }}>
           <div style={fieldLabel}>Depth zone</div>
           <select aria-label="Depth zone" value={shared.zone === MIXED ? "" : (shared.zone || "medium")} onChange={(e) => update((f) => ({ ...f, zone: e.target.value }))}
-            style={{ width: "100%", padding: "3px", background: "#0a1825", color: "#cce8ff", border: "1px solid #0a2535", borderRadius: 3, fontSize: 9, fontFamily: "monospace" }}>
+            style={{ width: "100%", padding: "3px", background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: 3, fontSize: 11, fontFamily: "monospace" }}>
             {shared.zone === MIXED && <option value="">mixed</option>}
             {safeDepthZones.map((z) => <option key={z.key} value={z.key}>{z.label} ({z.depth}m)</option>)}
           </select>
         </div>
         <TextField label="Group" value={shared["engineering.group"]} mixed={shared["engineering.group"] === MIXED} onChange={(v) => setEngineering("group", v)} />
         {engFields.length > 0 && (
-          <div style={{ margin: "8px 0", padding: "7px", background: "#050d14", border: "1px solid #0a3040", borderRadius: 4 }}>
-            <div style={{ color: "#ffcc00", fontSize: 9, fontWeight: "bold", marginBottom: 6 }}>⚙ SHARED ENGINEERING DATA</div>
+          <div style={{ margin: "8px 0", padding: "7px", background: "var(--bg-void)", border: "1px solid var(--border)", borderRadius: 4 }}>
+            <div style={{ color: "var(--accent)", fontSize: 11, fontWeight: "bold", marginBottom: 6 }}>⚙ SHARED ENGINEERING DATA</div>
             {engFields.map(({ field: [label, key, min, max, step], color }) => (
               <NumberField key={key} label={label} min={min} max={max} step={step} color={color}
                 value={engValues[`engineering.${key}`]} mixed={engValues[`engineering.${key}`] === MIXED} onChange={(v) => setEngineering(key, v)} />
             ))}
           </div>
         )}
-        <button type="button" onClick={onDelete} style={{ width: "100%", padding: "4px", background: "#1a0808", color: "#ff4444", border: "1px solid #ff444422", borderRadius: 3, cursor: "pointer", fontSize: 9 }}>
+        <button type="button" onClick={onDelete} style={{ width: "100%", padding: "4px", background: "var(--bg-base)", color: "var(--error)", border: "1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>
           ✕ Delete {selected.length} fixtures&nbsp;&nbsp;<span style={{ opacity: 0.65 }}>DEL</span>
         </button>
       </div>
@@ -212,8 +212,8 @@ export default function FixturePropertiesPanel({
   const sfEngineering = { ...getDefaultEngineering(sf.type), ...(sf.engineering || {}) };
   const span = Math.max(params.width, params.length, params.radius || 0) + 2;
   return (
-    <div style={{ padding: "8px 10px", borderBottom: "1px solid #0a2030" }}>
-      <div style={{ color: ft.color, fontSize: 9, marginBottom: 5, fontWeight: "bold" }}>
+    <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ color: ft.color, fontSize: 11, marginBottom: 5, fontWeight: "bold" }}>
         {ft.icon} {sf.label}
       </div>
       {/* AF-NEXT-012: data source badge, solved-result citation, type replacement + control-footprint review */}
@@ -224,8 +224,8 @@ export default function FixturePropertiesPanel({
       {[["X pos (m)", "x"], ["Y pos (m)", "y"], ["Rotation (°)", "rotation"]].map(([label, key]) => (
         <div key={key} style={{ marginBottom: 5 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-            <span style={{ color: "#7ab", fontSize: 9 }}>{label}</span>
-            <span style={{ color: ft.color, fontSize: 9 }}>{(sf[key] || 0).toFixed(1)}</span>
+            <span style={{ color: "var(--info)", fontSize: 11 }}>{label}</span>
+            <span style={{ color: ft.color, fontSize: 11 }}>{(sf[key] || 0).toFixed(1)}</span>
           </div>
           <input type="range"
             min={key === "rotation" ? 0 : -span}
@@ -235,20 +235,20 @@ export default function FixturePropertiesPanel({
             style={{ width: "100%" }} />
         </div>
       ))}
-      <div style={{ margin: "8px 0", padding: "7px", background: "#050d14", border: "1px solid #0a3040", borderRadius: 4 }}>
-        <div style={{ color: "#ffcc00", fontSize: 9, fontWeight: "bold", marginBottom: 6 }}>⚙ ENGINEERING DATA</div>
+      <div style={{ margin: "8px 0", padding: "7px", background: "var(--bg-void)", border: "1px solid var(--border)", borderRadius: 4 }}>
+        <div style={{ color: "var(--accent)", fontSize: 11, fontWeight: "bold", marginBottom: 6 }}>⚙ ENGINEERING DATA</div>
         <EngineeringFields fixture={sf} engineering={sfEngineering} onEngineering={setEngineering} />
       </div>
       <FixtureConnectionsSection fixture={sf} fixtures={fixtures} onUpdateFixtures={onUpdateFixtures} />
       <div style={{ marginBottom: 5 }}>
-        <div style={{ color: "#7ab", fontSize: 9, marginBottom: 2 }}>Depth zone</div>
+        <div style={{ color: "var(--info)", fontSize: 11, marginBottom: 2 }}>Depth zone</div>
         <select value={sf.zone || "medium"} onChange={(e) => update((f) => ({ ...f, zone: e.target.value }))}
-          style={{ width: "100%", padding: "3px", background: "#0a1825", color: "#cce8ff", border: "1px solid #0a2535", borderRadius: 3, fontSize: 9, fontFamily: "monospace" }}>
+          style={{ width: "100%", padding: "3px", background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: 3, fontSize: 11, fontFamily: "monospace" }}>
           {safeDepthZones.map((z) => <option key={z.key} value={z.key}>{z.label} ({z.depth}m)</option>)}
         </select>
       </div>
       <button title="Delete selected fixture · Delete / Backspace" onClick={onDelete}
-        style={{ width: "100%", padding: "4px", background: "#1a0808", color: "#ff4444", border: "1px solid #ff444422", borderRadius: 3, cursor: "pointer", fontSize: 9 }}>
+        style={{ width: "100%", padding: "4px", background: "var(--bg-base)", color: "var(--error)", border: "1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>
         ✕ Delete fixture&nbsp;&nbsp;<span style={{ opacity: 0.65 }}>DEL</span>
       </button>
     </div>

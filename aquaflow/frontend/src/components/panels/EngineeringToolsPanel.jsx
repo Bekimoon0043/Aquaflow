@@ -54,8 +54,8 @@ export function ProvenanceSummary({ provenance }) {
   const by = provenance.by_source || provenance.bySource || {};
   const generic = provenance.generic_items ?? provenance.genericItems ?? 0;
   return (
-    <div data-testid="provenance-summary" style={{ ...box, padding: 6, fontSize: 10, color: generic ? "#fbbf24" : "#4ade80",
-      borderColor: generic ? "#78350f" : "#166534" }}>
+    <div data-testid="provenance-summary" style={{ ...box, padding: 6, fontSize: 11, color: generic ? "var(--warn)" : "var(--ok)",
+      borderColor: generic ? "var(--warn)" : "color-mix(in srgb, var(--ok) 40%, var(--border))" }}>
       Equipment data: {by.manufacturer_datasheet || 0} datasheet · {by.user_measured || 0} measured · {by.generic_estimate || 0} generic estimate
       {generic ? <div>{provenance.warning || GENERIC_LABEL}</div> : null}
     </div>
@@ -64,12 +64,12 @@ export function ProvenanceSummary({ provenance }) {
 
 function Result({ state }) {
   if (state.loading) return <div style={{ color: "var(--text-muted)", fontSize: 11, padding: 8 }}>Running…</div>;
-  if (state.error) return <div style={{ color: "#ef4444", fontSize: 11, padding: 8, ...box }}>⛔ {state.error}</div>;
+  if (state.error) return <div style={{ color: "var(--error)", fontSize: 11, padding: 8, ...box }}>⛔ {state.error}</div>;
   if (state.data === undefined) return null;
   return (
     <>
     <ProvenanceSummary provenance={findProvenance(state.data)} />
-    <pre style={{ ...box, padding: 8, fontSize: 10.5, lineHeight: 1.5, maxHeight: "50vh",
+    <pre style={{ ...box, padding: 8, fontSize: 11, lineHeight: 1.5, maxHeight: "50vh",
       overflow: "auto", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
       {typeof state.data === "string" ? state.data : JSON.stringify(state.data, null, 2)}
     </pre>
@@ -79,7 +79,7 @@ function Result({ state }) {
 
 function RunButton({ onClick, label = "Run" }) {
   return (
-    <button onClick={onClick} style={{ background: "var(--accent)", color: "#04140a", border: "none",
+    <button onClick={onClick} style={{ background: "var(--accent)", color: "var(--text-on-accent)", border: "none",
       borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
       {label} ▶
     </button>
@@ -97,9 +97,9 @@ function JsonTool({ endpoint, sample, hint }) {
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{hint} · <code>POST {endpoint}</code></div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{hint} · <code>POST {endpoint}</code></div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false}
-        style={{ ...box, height: 150, fontFamily: "monospace", fontSize: 10.5, padding: 8,
+        style={{ ...box, height: 150, fontFamily: "monospace", fontSize: 11, padding: 8,
           color: "var(--text-primary)", resize: "vertical" }} />
       <div><RunButton onClick={run} /></div>
       <Result state={state} />
@@ -138,7 +138,7 @@ function NozzleTool() {
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Nozzle performance database · <code>GET /nozzles/models</code>, <code>POST /nozzles/query</code></div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Nozzle performance database · <code>GET /nozzles/models</code>, <code>POST /nozzles/query</code></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <RunButton onClick={load} label="Load models" />
         {models && (
@@ -148,16 +148,16 @@ function NozzleTool() {
               {models.map((m) => <option key={m.model_id || m.id} value={m.model_id || m.id}>
                 {m.model_id || m.id} — {m.manufacturer || ""}{m.verified ? "" : " (generic estimate)"}</option>)}
             </select>
-            <label style={{ fontSize: 10, color: "var(--text-muted)" }}>Pressure (bar)
+            <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Pressure (bar)
               <input type="number" step="0.1" value={pressure} onChange={(e) => setPressure(e.target.value)}
                 style={{ ...box, width: 64, padding: 4, marginLeft: 4, color: "var(--text-primary)" }} /></label>
             <RunButton onClick={query} label="Query flow" />
           </>
         )}
       </div>
-      {models && <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{models.length} models loaded.</div>}
+      {models && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{models.length} models loaded.</div>}
       {selectedModel && (
-        <div style={{ fontSize: 10, display: "flex", gap: 6, alignItems: "center" }}>
+        <div style={{ fontSize: 11, display: "flex", gap: 6, alignItems: "center" }}>
           <ProvenanceBadge provenance={selectedModel.provenance} />
           <span style={{ color: "var(--text-muted)" }}>rev {selectedModel.provenance?.revision || "—"}</span>
         </div>
@@ -180,7 +180,7 @@ function FixtureTool({ endpoint, label, svg }) {
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
         {label} from {fixtures.length} design fixtures · <code>POST {endpoint}</code>
       </div>
       <div><RunButton onClick={run} /></div>
@@ -218,7 +218,7 @@ function BomTool() {
   const th = { textAlign: "left", padding: 3, color: "var(--text-muted)", fontWeight: 500 };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
         Generate the Bill of Materials from {fixtures.length} design fixtures · <code>POST /bom/generate</code>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
@@ -227,11 +227,11 @@ function BomTool() {
         <RunButton onClick={() => download("xlsx")} label="XLSX" />
       </div>
       {state.loading && <div style={{ color: "var(--text-muted)", fontSize: 11 }}>Running…</div>}
-      {state.error && <div style={{ color: "#ef4444", fontSize: 11 }}>⛔ {state.error}</div>}
+      {state.error && <div style={{ color: "var(--error)", fontSize: 11 }}>⛔ {state.error}</div>}
       {state.data && <ProvenanceSummary provenance={state.data.summary?.data_provenance} />}
       {lines.length > 0 && (
         <div style={{ overflow: "auto", maxHeight: "50vh" }}>
-          <table style={{ fontSize: 10, borderCollapse: "collapse", color: "var(--text-primary)", width: "100%" }}>
+          <table style={{ fontSize: 11, borderCollapse: "collapse", color: "var(--text-primary)", width: "100%" }}>
             <thead><tr>{["#", "Description", "Qty", "Equipment model", "Data source", "Units", "Revision"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>
               {lines.map((l) => (
@@ -272,7 +272,7 @@ function WeatherTool() {
     catch (e) { setState({ error: String(e.message || e) }); }
   };
   const F = ({ k, label, step = 1 }) => (
-    <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
+    <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column" }}>
       {label}
       <input type="number" step={step} value={c[k]} onChange={(e) => set(k, Number(e.target.value))}
         style={{ ...box, width: 80, padding: 4, color: "var(--text-primary)" }} />
@@ -280,7 +280,7 @@ function WeatherTool() {
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Weather simulation · <code>POST /weather/simulate</code></div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Weather simulation · <code>POST /weather/simulate</code></div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <F k="wind_speed" label="Wind m/s" step={0.5} />
         <F k="wind_direction" label="Wind from °" step={5} />
@@ -313,7 +313,7 @@ export default function EngineeringToolsPanel() {
         {TABS.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: "7px 12px", background: "transparent",
             border: "none", borderBottom: tab === k ? "2px solid var(--accent)" : "2px solid transparent",
-            color: tab === k ? "var(--text-accent)" : "var(--text-muted)", fontSize: 10,
+            color: tab === k ? "var(--text-accent)" : "var(--text-muted)", fontSize: 11,
             fontWeight: tab === k ? 600 : 400, cursor: "pointer" }}>{label}</button>
         ))}
       </div>

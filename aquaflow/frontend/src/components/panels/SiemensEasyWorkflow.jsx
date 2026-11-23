@@ -37,15 +37,15 @@ export default function SiemensEasyWorkflow({ site, dirty, busy, engineeringStat
     } catch (error) { setVerifyMessage(error.message); }
     finally { setVerifying(false); }
   };
-  return <section style={{ border: "1px solid #2f7280", borderRadius: 8, padding: 13, margin: "12px 0", background: "#09151e" }}>
-    <h4 style={{ margin: "0 0 9px", color: "#8de3d0" }}>Setup · Design → Map → Export → Program → Connect</h4>
-    <details style={{ padding: 9, marginBottom: 8, border: "1px solid #365a69", background: "#0b1720" }}>
+  return <section style={{ border: "1px solid var(--info)", borderRadius: 8, padding: 13, margin: "12px 0", background: "var(--bg-base)" }}>
+    <h4 style={{ margin: "0 0 9px", color: "var(--info)" }}>Setup · Design → Map → Export → Program → Connect</h4>
+    <details style={{ padding: 9, marginBottom: 8, border: "1px solid var(--info)", background: "var(--bg-base)" }}>
       <summary style={{ cursor: "pointer" }}>TIA installation on this PC</summary>
       <div>{detectedVersions.length
         ? `Siemens PublicAPI detected: ${detectedVersions.map(version => `V${version}`).join(", ")}.`
         : "Finish installing TIA Portal, then click Refresh TIA detection above."}</div>
       {detectedVersion && Number(site.tia?.version) !== detectedVersion && <button className="btn" type="button" disabled={busy || dirty} onClick={() => onUseDetectedTia(detectedVersion)}>Use detected TIA V{detectedVersion}</button>}
-      <div style={{ color: "#9fb7c3", marginTop: 4 }}>Manual ZIP import needs TIA Portal only. Automatic project creation also needs TIA Openness and its Windows user group.</div>
+      <div style={{ color: "var(--info)", marginTop: 4 }}>Manual ZIP import needs TIA Portal only. Automatic project creation also needs TIA Openness and its Windows user group.</div>
     </details>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <div style={card(state.patternReady)}>
@@ -56,14 +56,14 @@ export default function SiemensEasyWorkflow({ site, dirty, busy, engineeringStat
       <div style={card(state.outputsMapped && state.saved)}>
         <b>2 · Map and save the equipment {state.outputsMapped && state.saved ? "✓" : ""}</b>
         <p>{!state.outputsMapped ? "Enter the PLC outputs below." : dirty ? "Save your changes." : "Mapping saved."}</p>
-        {!state.safetyMapped && <p style={{ color: "#f6c978" }}>Safety inputs are incomplete. Map real healthy-high inputs before physical commissioning.</p>}
+        {!state.safetyMapped && <p style={{ color: "var(--brand-gold-pale)" }}>Safety inputs are incomplete. Map real healthy-high inputs before physical commissioning.</p>}
         <button className="btn" type="button" disabled={busy || !dirty} onClick={onSave}>Save mapping</button>
       </div>
       <div style={card(false)}>
         <b>3 · Export one TIA commissioning ZIP</b>
         <p>Download the PLC source and show package.</p>
         <button className="btn" type="button" disabled={busy || dirty || !state.patternReady || !state.outputsMapped} onClick={onExport}>Export TIA V17+ + pattern</button>
-        {!state.patternReady && <div style={{ color: "#f6c978", marginTop: 5 }}>Compile the pattern in step 1 first.</div>}
+        {!state.patternReady && <div style={{ color: "var(--brand-gold-pale)", marginTop: 5 }}>Compile the pattern in step 1 first.</div>}
       </div>
     </div>
     <div style={{ ...card(tiaDone), marginTop: 8 }}>
@@ -73,7 +73,7 @@ export default function SiemensEasyWorkflow({ site, dirty, busy, engineeringStat
         <input type="checkbox" checked={Boolean(checks[key])} onChange={event => setChecks(value => ({ ...value, [key]: event.target.checked }))} /> {label}
       </label>)}
       <details style={{ marginTop: 8 }}>
-        <summary style={{ cursor: "pointer", color: "#8de3d0" }}>Show the shortest TIA/PLCSIM procedure</summary>
+        <summary style={{ cursor: "pointer", color: "var(--info)" }}>Show the shortest TIA/PLCSIM procedure</summary>
         <ol style={{ lineHeight: 1.55, paddingLeft: 20 }}>
           <li>Add the exact S7-1200 CPU and enable approved PUT/GET access.</li>
           <li>Generate blocks from <code>AquaFlowSiteIO.db</code>, then <code>AquaFlowSiteControl.scl</code>.</li>
@@ -90,8 +90,8 @@ export default function SiemensEasyWorkflow({ site, dirty, busy, engineeringStat
       {site.mode !== "plcsim" && <button className="btn" type="button" disabled={!tiaDone} onClick={onMakePlcSim}>Use PLCSIM network mode</button>}
       {site.mode !== "physical" && <button className="btn" type="button" disabled={!tiaDone} onClick={onMakePhysical}>Use Physical PLC mode</button>}
       <button className="btn" type="button" disabled={busy || verifying || dirty || !tiaDone || !state.connectionReady} onClick={verify}>{verifying ? "Verifying…" : "Verify PLC connection"}</button>
-      {!state.connectionReady && <span style={{ marginLeft: 8, color: "#f6c978" }}>Choose PLCSIM network or Physical mode and enter its IP, port, rack, slot and DB below, then save.</span>}
-      {verifyMessage && <div role="status" style={{ marginTop: 7, color: verifyMessage.startsWith("Connected") ? "#8de3d0" : "#f6c978" }}>{verifyMessage}</div>}
+      {!state.connectionReady && <span style={{ marginLeft: 8, color: "var(--brand-gold-pale)" }}>Choose PLCSIM network or Physical mode and enter its IP, port, rack, slot and DB below, then save.</span>}
+      {verifyMessage && <div role="status" style={{ marginTop: 7, color: verifyMessage.startsWith("Connected") ? "var(--info)" : "var(--brand-gold-pale)" }}>{verifyMessage}</div>}
     </div>
   </section>;
 }

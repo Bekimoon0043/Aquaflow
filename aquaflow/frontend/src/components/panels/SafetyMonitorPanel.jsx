@@ -126,15 +126,15 @@ export default function SafetyMonitorPanel() {
   return (
     <div style={{
       display:"flex", flexDirection:"column", height:"100%",
-      background:"#040810", color:"#cce8ff", fontFamily:"monospace",
+      background:"var(--bg-void)", color:"var(--text-primary)", fontFamily:"monospace",
       fontSize:"11px", overflow:"auto",
     }}>
 
       {/* Header */}
-      <div style={{ padding:"8px 12px", borderBottom:"1px solid #0a2030", background:"#030608", display:"flex", alignItems:"center", gap:10 }}>
-        <span style={{ color:"#ff4444", fontSize:13, fontWeight:"bold" }}>⚡ SAFETY MONITOR</span>
+      <div style={{ padding:"8px 12px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)", display:"flex", alignItems:"center", gap:10 }}>
+        <span style={{ color:"var(--error)", fontSize:13, fontWeight:"bold" }}>⚡ SAFETY MONITOR</span>
         <div style={{ flex:1 }} />
-        <span style={{ color:"#334455", fontSize:9 }}>PHASE 6</span>
+        <span style={{ color:"var(--info)", fontSize:11 }}>PHASE 6</span>
       </div>
 
       <div style={{ display:"flex", gap:8, padding:8, flex:1, minHeight:0, overflow:"auto" }}>
@@ -143,43 +143,43 @@ export default function SafetyMonitorPanel() {
         <div style={{ width:200, display:"flex", flexDirection:"column", gap:8, flexShrink:0 }}>
 
           {/* Safety state */}
-          <div style={{ background:"#050d18", border:`1px solid ${safetyColor}44`, borderRadius:6, padding:10 }}>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:4 }}>SAFETY STATE</div>
+          <div style={{ background:"var(--bg-void)", border:`1px solid ${safetyColor}44`, borderRadius:6, padding:10 }}>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:4 }}>SAFETY STATE</div>
             <div style={{ color:safetyColor, fontSize:16, fontWeight:"bold", letterSpacing:1 }}>
               {safetyState}
             </div>
             {faults.length > 0 && (
               <div style={{ marginTop:6 }}>
                 {faults.map(f => (
-                  <div key={f} style={{ color:"#ff4444", fontSize:9, padding:"2px 0" }}>
+                  <div key={f} style={{ color:"var(--error)", fontSize:11, padding:"2px 0" }}>
                     ⚠ {FAULT_LABELS[f] || f}
                   </div>
                 ))}
               </div>
             )}
             {safety?.fault_message && (
-              <div style={{ color:"#ff6644", fontSize:9, marginTop:4, fontStyle:"italic" }}>
+              <div style={{ color:"var(--error)", fontSize:11, marginTop:4, fontStyle:"italic" }}>
                 {safety.fault_message}
               </div>
             )}
           </div>
 
           {/* Transport state */}
-          <div style={{ background:"#050d18", border:`1px solid ${transportColor}44`, borderRadius:6, padding:10 }}>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:4 }}>TRANSPORT</div>
+          <div style={{ background:"var(--bg-void)", border:`1px solid ${transportColor}44`, borderRadius:6, padding:10 }}>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:4 }}>TRANSPORT</div>
             <div style={{ color:transportColor, fontSize:14, fontWeight:"bold" }}>
               {transportState}
             </div>
             {transport && (
-              <div style={{ color:"#7ab", fontSize:10, marginTop:4 }}>
+              <div style={{ color:"var(--info)", fontSize:11, marginTop:4 }}>
                 {formatMs(transport.position_ms || 0)} / {formatMs(transport.duration_ms || 0)}
               </div>
             )}
           </div>
 
           {/* Safety controls */}
-          <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10 }}>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>SAFETY CONTROLS</div>
+          <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:10 }}>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>SAFETY CONTROLS</div>
             <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
               {[
                 { label:"ARM",         path:"/safety/arm",         color:"#ffcc00" },
@@ -189,15 +189,15 @@ export default function SafetyMonitorPanel() {
                 { label:"RESET FAULTS",path:"/safety/reset",       color:"#00ff88" },
               ].map(b => (
                 <button key={b.label} onClick={()=>action(b.path)} style={{
-                  padding:"5px 0", background:"#0a1825", color:b.color,
+                  padding:"5px 0", background:"var(--bg-base)", color:b.color,
                   border:`1px solid ${b.color}44`, borderRadius:3,
-                  cursor:"pointer", fontFamily:"monospace", fontSize:10,
+                  cursor:"pointer", fontFamily:"monospace", fontSize:11,
                 }}>{b.label}</button>
               ))}
               {/* E-STOP — big red */}
               <button onClick={()=>action("/safety/estop")} style={{
-                padding:"8px 0", background:"#2a0000", color:"#ff0000",
-                border:"2px solid #ff0000", borderRadius:4, marginTop:4,
+                padding:"8px 0", background:"var(--bg-base)", color:"var(--error)",
+                border:"2px solid var(--error)", borderRadius:4, marginTop:4,
                 cursor:"pointer", fontFamily:"monospace", fontSize:12, fontWeight:"bold",
                 letterSpacing:2,
               }}>⛔ E-STOP</button>
@@ -205,8 +205,8 @@ export default function SafetyMonitorPanel() {
           </div>
 
           {/* Transport controls */}
-          <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10 }}>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>TRANSPORT</div>
+          <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:10 }}>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>TRANSPORT</div>
             <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
               {[
                 { label:"▶ PLAY",  path:"/transport/play",   color:"#00ff88" },
@@ -215,17 +215,17 @@ export default function SafetyMonitorPanel() {
                 { label:"↩ RECOVER",path:"/transport/recover",color:"#00aaff" },
               ].map(b => (
                 <button key={b.label} onClick={()=>action(b.path)} style={{
-                  padding:"4px 8px", background:"#0a1825", color:b.color,
+                  padding:"4px 8px", background:"var(--bg-base)", color:b.color,
                   border:`1px solid ${b.color}44`, borderRadius:3,
-                  cursor:"pointer", fontFamily:"monospace", fontSize:9, flex:1,
+                  cursor:"pointer", fontFamily:"monospace", fontSize:11, flex:1,
                 }}>{b.label}</button>
               ))}
             </div>
             <button onClick={()=>action("/transport/rollback",{steps:1})} style={{
               width:"100%", marginTop:5, padding:"4px 0",
-              background:"#0a1520", color:"#7799bb",
-              border:"1px solid #0a2535", borderRadius:3,
-              cursor:"pointer", fontFamily:"monospace", fontSize:9,
+              background:"var(--bg-base)", color:"var(--info)",
+              border:"1px solid var(--border)", borderRadius:3,
+              cursor:"pointer", fontFamily:"monospace", fontSize:11,
             }}>↩ ROLLBACK 1 STEP</button>
           </div>
         </div>
@@ -234,8 +234,8 @@ export default function SafetyMonitorPanel() {
         <div style={{ flex:1, display:"flex", flexDirection:"column", gap:8, minWidth:0 }}>
 
           {/* Interlock grid */}
-          <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10 }}>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:8 }}>INTERLOCKS & PERMITS</div>
+          <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:10 }}>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:8 }}>INTERLOCKS & PERMITS</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5 }}>
               {[
                 ["Water Level",     inputs.water_level_ok,     true],
@@ -253,13 +253,13 @@ export default function SafetyMonitorPanel() {
               ].map(([label, val, critical]) => (
                 <div key={label} style={{
                   display:"flex", justifyContent:"space-between", alignItems:"center",
-                  padding:"3px 6px", background:"#0a1520", borderRadius:3,
+                  padding:"3px 6px", background:"var(--bg-base)", borderRadius:3,
                   border:`1px solid ${val ? "#0a3020" : (critical ? "#3a0a0a" : "#1a1a2a")}`,
                 }}>
-                  <span style={{ color:"#7ab", fontSize:9 }}>{label}</span>
+                  <span style={{ color:"var(--info)", fontSize:11 }}>{label}</span>
                   <span style={{
-                    color: val ? "#00ff88" : (critical ? "#ff4444" : "#334455"),
-                    fontSize:9, fontWeight:"bold",
+                    color: val ? "var(--ok)" : (critical ? "var(--error)" : "var(--info)"),
+                    fontSize:11, fontWeight:"bold",
                   }}>{val ? "OK" : (val === undefined ? "—" : "NO")}</span>
                 </div>
               ))}
@@ -268,17 +268,17 @@ export default function SafetyMonitorPanel() {
 
           {/* Transport details */}
           {transport && (
-            <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10 }}>
-              <div style={{ color:"#556677", fontSize:9, marginBottom:6 }}>TRANSPORT DETAILS</div>
+            <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:10 }}>
+              <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6 }}>TRANSPORT DETAILS</div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4 }}>
                 {[
                   ["Show ID",     transport.show_id || "—"],
                   ["Ticks",       transport.tick_count || 0],
                   ["Snapshots",   transport.snapshot_count || 0],
                 ].map(([k,v]) => (
-                  <div key={k} style={{ padding:"3px 6px", background:"#0a1520", borderRadius:3 }}>
-                    <div style={{ color:"#334455", fontSize:8 }}>{k}</div>
-                    <div style={{ color:"#7ab", fontSize:10 }}>{v}</div>
+                  <div key={k} style={{ padding:"3px 6px", background:"var(--bg-base)", borderRadius:3 }}>
+                    <div style={{ color:"var(--info)", fontSize:11 }}>{k}</div>
+                    <div style={{ color:"var(--info)", fontSize:11 }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -286,20 +286,20 @@ export default function SafetyMonitorPanel() {
           )}
 
           {/* Event log */}
-          <div style={{ background:"#050d18", border:"1px solid #0a2030", borderRadius:6, padding:10, flex:1, minHeight:0 }}>
-            <div style={{ color:"#556677", fontSize:9, marginBottom:6, display:"flex", justifyContent:"space-between" }}>
+          <div style={{ background:"var(--bg-void)", border:"1px solid var(--border)", borderRadius:6, padding:10, flex:1, minHeight:0 }}>
+            <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:6, display:"flex", justifyContent:"space-between" }}>
               <span>EVENT LOG</span>
-              <button onClick={()=>setLog([])} style={{ background:"none", border:"none", color:"#334455", cursor:"pointer", fontSize:9 }}>CLEAR</button>
+              <button onClick={()=>setLog([])} style={{ background:"none", border:"none", color:"var(--info)", cursor:"pointer", fontSize:11 }}>CLEAR</button>
             </div>
             <div style={{ overflowY:"auto", maxHeight:180 }}>
-              {log.length === 0 && <div style={{ color:"#223344", fontSize:9 }}>No events yet</div>}
+              {log.length === 0 && <div style={{ color:"var(--info)", fontSize:11 }}>No events yet</div>}
               {[...log].reverse().map((entry, i) => (
                 <div key={i} style={{
-                  padding:"2px 0", borderBottom:"1px solid #0a1520",
-                  color: entry.level === "error" ? "#ff6644" : entry.level === "ok" ? "#00ff88" : "#7ab",
-                  fontSize:9,
+                  padding:"2px 0", borderBottom:"1px solid var(--border)",
+                  color: entry.level === "error" ? "var(--error)" : entry.level === "ok" ? "var(--ok)" : "var(--info)",
+                  fontSize:11,
                 }}>
-                  <span style={{ color:"#334455", marginRight:6 }}>{entry.time}</span>
+                  <span style={{ color:"var(--info)", marginRight:6 }}>{entry.time}</span>
                   {entry.msg}
                 </div>
               ))}

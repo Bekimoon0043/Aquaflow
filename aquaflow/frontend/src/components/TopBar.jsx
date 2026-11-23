@@ -339,7 +339,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
         <img src="/luxcon-icon.png" alt="" style={{ height: 26, width: "auto" }} />
         <div style={{ display: "flex", flexDirection: "column" }}>
           <span style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: 12, color: "var(--brand-gold-light)", lineHeight: 1.2 }}>Luxury Con</span>
-          <span style={{ fontSize: 9, color: "var(--brand-gold)", opacity: 0.7, lineHeight: 1.2 }}>Fountain Studio</span>
+          <span style={{ fontSize: 11, color: "var(--brand-gold)", opacity: 0.7, lineHeight: 1.2 }}>Fountain Studio</span>
         </div>
       </div>
 
@@ -412,7 +412,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
                       return <div key={i} style={{ height: 1, background: "var(--border)", margin: "5px 0" }} />;
                     }
                     if (type === "header") {
-                      return <div key={i} style={{ padding: "7px 14px 3px", color: "var(--text-muted)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", borderTop: i ? "1px solid var(--border)" : "none", marginTop: i ? 4 : 0 }}>{label}</div>;
+                      return <div key={i} style={{ padding: "7px 14px 3px", color: "var(--text-muted)", fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", borderTop: i ? "1px solid var(--border)" : "none", marginTop: i ? 4 : 0 }}>{label}</div>;
                     }
 
                     const isActivePanel = type === "panel" && activePanel === value;
@@ -440,7 +440,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
                         onMouseLeave={(e) => (e.currentTarget.style.background = isActivePanel ? "rgba(201,162,39,0.14)" : "transparent")}
                       >
                         <span>{label}</span>
-                        <span style={{ display:"inline-flex", alignItems:"center", gap:8, color:"var(--text-muted)", fontFamily:"var(--font-mono)", fontSize:10 }}>
+                        <span style={{ display:"inline-flex", alignItems:"center", gap:8, color:"var(--text-muted)", fontFamily:"var(--font-mono)", fontSize:11 }}>
                           {shortcut && <span>{shortcut}</span>}
                           {isActivePanel && <span style={{ color: "var(--text-accent)" }}>●</span>}
                         </span>
@@ -460,7 +460,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
       {/* Show name */}
       <div style={{ padding: "0 8px", borderLeft: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
         <span style={{ color: "var(--text-secondary)", fontSize: 11, maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentShow.name}</span>
-        {isDirty && <span style={{ fontSize: 8, color: "var(--amber)" }}>●</span>}
+        {isDirty && <span style={{ fontSize: 11, color: "var(--amber)" }}>●</span>}
       </div>
 
       <div style={{ flex: 1 }} />
@@ -479,12 +479,12 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
 
       {/* Timecode */}
       <div style={{ padding: "0 8px", borderRight: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 500, color: playbackState === "playing" ? "var(--text-accent)" : "var(--text-primary)", flexShrink: 0 }}>
-        {fmt(displayedPosition)}{sitePreview.active && <span style={{ fontSize: 9, color: "#57e6a5", marginLeft: 6 }}>SIMULATION</span>}
+        {fmt(displayedPosition)}{sitePreview.active && <span style={{ fontSize: 11, color: "var(--ok)", marginLeft: 6 }}>SIMULATION</span>}
       </div>
 
       {/* BPM */}
       <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "0 6px", borderRight: "1px solid var(--border)", flexShrink: 0 }}>
-        <span style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>BPM</span>
+        <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>BPM</span>
         <input
           type="number"
           value={bpm}
@@ -513,20 +513,20 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
       {/* Status + E-STOP */}
       <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 6px", flexShrink: 0 }}>
         <div style={{ width: 6, height: 6, borderRadius: "50%", background: connOk ? "var(--green)" : "var(--amber)" }} />
-        <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{connOk ? "LIVE" : "OFF"}</span>
-        <button className="btn" onClick={onToggleLogs} style={{ padding: "2px 5px", fontSize: 10, color: "var(--text-muted)" }}>Logs</button>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{connOk ? "LIVE" : "OFF"}</span>
+        <button className="btn" onClick={onToggleLogs} style={{ padding: "2px 5px", fontSize: 11, color: "var(--text-muted)" }}>Logs</button>
         <button className="btn danger" onClick={handleEStop} style={{ padding: "3px 7px", fontSize: 11, fontWeight: 700 }}>⛔</button>
       </div>
       {showShortcutHelp && (
         <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onMouseDown={() => setShowShortcutHelp(false)} style={{ position:"fixed", inset:0, zIndex:1200, display:"grid", placeItems:"center", background:"rgba(0,0,0,0.68)", backdropFilter:"blur(3px)" }}>
           <div onMouseDown={(event) => event.stopPropagation()} style={{ width:"min(760px, calc(100vw - 48px))", maxHeight:"calc(100vh - 70px)", overflow:"auto", background:"var(--bg-raised)", border:"1px solid var(--border-accent)", borderRadius:10, boxShadow:"0 24px 80px rgba(0,0,0,0.7)" }}>
             <div style={{ display:"flex", alignItems:"center", padding:"14px 18px", borderBottom:"1px solid var(--border)", position:"sticky", top:0, background:"var(--bg-raised)", zIndex:1 }}>
-              <div><div style={{ color:"var(--text-accent)", fontSize:14, fontWeight:700 }}>Keyboard Shortcuts</div><div style={{ color:"var(--text-muted)", fontSize:10, marginTop:2 }}>Shortcuts follow the active editor and are disabled while typing.</div></div>
+              <div><div style={{ color:"var(--text-accent)", fontSize:14, fontWeight:700 }}>Keyboard Shortcuts</div><div style={{ color:"var(--text-muted)", fontSize:11, marginTop:2 }}>Shortcuts follow the active editor and are disabled while typing.</div></div>
               <button className="btn" onClick={() => setShowShortcutHelp(false)} style={{ marginLeft:"auto" }}>Close · Esc</button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:12, padding:16 }}>
               {SHORTCUT_GROUPS.map(([group, entries]) => <div key={group} style={{ border:"1px solid var(--border)", borderRadius:7, padding:10, background:"var(--bg-panel)" }}>
-                <div style={{ color:"var(--text-accent)", fontSize:10, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:7 }}>{group}</div>
+                <div style={{ color:"var(--text-accent)", fontSize:11, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:7 }}>{group}</div>
                 {entries.map(([label, keys]) => <div key={label} style={{ display:"flex", justifyContent:"space-between", gap:14, padding:"5px 0", borderBottom:"1px solid rgba(255,255,255,0.04)", fontSize:11 }}><span style={{ color:"var(--text-secondary)" }}>{label}</span><kbd style={{ color:"var(--text-primary)", fontFamily:"var(--font-mono)", whiteSpace:"nowrap" }}>{keys}</kbd></div>)}
               </div>)}
             </div>
@@ -621,7 +621,7 @@ function AboutDialog({ onClose, connOk }) {
           <img src="/luxcon-icon.png" alt="" style={{ height:34, width:"auto" }} />
           <div>
             <div style={{ color:"var(--brand-gold-light)", fontFamily:"var(--font-display)", fontWeight:700, fontSize:15 }}>AquaFlow Studio</div>
-            <div style={{ color:"var(--text-muted)", fontSize:10 }}>Fountain design, engineering, programming & operation</div>
+            <div style={{ color:"var(--text-muted)", fontSize:11 }}>Fountain design, engineering, programming & operation</div>
           </div>
         </div>
         {desktopVersion && row("Desktop app version", desktopVersion)}
@@ -633,7 +633,7 @@ function AboutDialog({ onClose, connOk }) {
           {row("Licensed to", licensee)}
           {row("Expires", expiry)}
         </>}
-        <div style={{ marginTop:14, color:"var(--text-muted)", fontSize:10, textAlign:"center" }}>© LuxuryCon</div>
+        <div style={{ marginTop:14, color:"var(--text-muted)", fontSize:11, textAlign:"center" }}>© LuxuryCon</div>
       </div>
     </ModalShell>
   );

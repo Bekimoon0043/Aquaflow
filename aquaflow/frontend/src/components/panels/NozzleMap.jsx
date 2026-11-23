@@ -347,7 +347,7 @@ const NozzleMap = React.memo(function NozzleMap({
           borderRadius: 6,
           padding: "6px 10px",
           fontSize: 12,
-          color: "#c8e8ff",
+          color: "var(--text-primary)",
           whiteSpace: "nowrap",
           zIndex: 100,
           lineHeight: 1.5,

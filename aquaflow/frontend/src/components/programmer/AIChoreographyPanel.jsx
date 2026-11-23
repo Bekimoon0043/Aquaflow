@@ -309,7 +309,7 @@ export default function AIChoreographyPanel({
                         key={ci}
                         style={{
                           ...styles.miniClip,
-                          backgroundColor: clip.color || '#4a9eff',
+                          backgroundColor: clip.color || "var(--info)",
                           width: `${Math.max((clip.duration || 1) * 2, 20)}px`,
                         }}
                         title={`${clip.name || clip.type} @ ${formatTime(clip.startTime)}`}

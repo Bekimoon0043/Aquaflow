@@ -39,7 +39,7 @@ export default function DigitalTwinPanel() {
 
   const cell = (label, value, color) => (
     <div style={{ ...box, padding: 8, minWidth: 84, flex: 1 }}>
-      <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{label}</div>
       <div style={{ fontSize: 14, fontWeight: 700, color: color || "var(--text-primary)" }}>{value}</div>
     </div>
   );
@@ -55,7 +55,7 @@ export default function DigitalTwinPanel() {
         </span>
         <button onClick={refresh} style={{ marginLeft: "auto", background: "transparent",
           border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)",
-          fontSize: 10, padding: "3px 8px", cursor: "pointer" }}>↻ Refresh</button>
+          fontSize: 11, padding: "3px 8px", cursor: "pointer" }}>↻ Refresh</button>
       </div>
 
       {summary && (
@@ -69,18 +69,18 @@ export default function DigitalTwinPanel() {
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ width: 220, borderRight: "1px solid var(--border)", overflow: "auto", flexShrink: 0, padding: 8 }}>
-          {error && <div style={{ ...box, padding: 8, color: "#ef4444", fontSize: 10, marginBottom: 6 }}>⛔ {error}</div>}
+          {error && <div style={{ ...box, padding: 8, color: "var(--error)", fontSize: 11, marginBottom: 6 }}>⛔ {error}</div>}
           {assets.length === 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>No mirrored assets yet.</div>}
           {assets.map((a) => (
             <div key={a.id} onClick={() => openAsset(a.id)} style={{ ...box, padding: 8, marginBottom: 6, cursor: "pointer",
               borderColor: selected === a.id ? "var(--accent)" : "var(--border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%",
-                  background: a.state?.running ? "#22c55e" : "#64748b" }} />
+                  background: a.state?.running ? "var(--ok)" : "#64748b" }} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{a.name}</span>
-                <span style={{ fontSize: 9, color: "var(--text-muted)" }}>{a.type}</span>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.type}</span>
               </div>
-              <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
                 {a.state?.runtime_hours ?? 0} h
                 {a.state?.temperature_c != null ? ` · ${a.state.temperature_c}°C` : ""}
                 {" · "}{a.sample_count} samples
@@ -104,18 +104,18 @@ export default function DigitalTwinPanel() {
                 {cell("Days to service", detail.forecast.days_to_service ?? "—")}
               </div>
               {detail.forecast.estimated_service_date && (
-                <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 10 }}>
                   Estimated service: {new Date(detail.forecast.estimated_service_date).toLocaleDateString()}
                 </div>
               )}
-              <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>PREDICTIVE ALERTS</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>PREDICTIVE ALERTS</div>
               {detail.alerts.length === 0 ? (
-                <div style={{ fontSize: 11, color: "#22c55e" }}>✓ No predictive alerts.</div>
+                <div style={{ fontSize: 11, color: "var(--ok)" }}>✓ No predictive alerts.</div>
               ) : detail.alerts.map((al, i) => (
                 <div key={i} style={{ ...box, padding: "6px 8px", marginBottom: 4,
                   borderLeft: `3px solid ${SEV_COLOR[al.severity] || "#888"}` }}>
                   <div style={{ fontSize: 11, color: "var(--text-primary)" }}>{al.message}</div>
-                  <div style={{ fontSize: 9, color: SEV_COLOR[al.severity] }}>{al.severity} · {al.type.replace(/_/g, " ")}</div>
+                  <div style={{ fontSize: 11, color: SEV_COLOR[al.severity] }}>{al.severity} · {al.type.replace(/_/g, " ")}</div>
                 </div>
               ))}
             </div>

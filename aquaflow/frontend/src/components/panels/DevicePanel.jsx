@@ -119,7 +119,7 @@ export default function DevicePanel({ width }) {
         <div className="dot" />
         <span className="panel-title">Devices</span>
         <span style={{
-          marginLeft: "auto", fontSize: 9, fontFamily: "var(--font-mono)",
+          marginLeft: "auto", fontSize: 11, fontFamily: "var(--font-mono)",
           color: "var(--green)", background: "rgba(16,185,129,0.1)",
           border: "1px solid rgba(16,185,129,0.2)", padding: "1px 5px", borderRadius: 3,
         }}>
@@ -138,18 +138,18 @@ export default function DevicePanel({ width }) {
       <div style={{ display: "flex", gap: 4, padding: "6px 10px", borderBottom: "1px solid var(--border)" }}>
         <button
           className="btn primary"
-          style={{ flex: 1, padding: "4px 6px", fontSize: 10, justifyContent: "center" }}
+          style={{ flex: 1, padding: "4px 6px", fontSize: 11, justifyContent: "center" }}
           onClick={handleScan}
           disabled={scanActive}
         >
           {scanActive ? "Scanning..." : "⟳ Scan Network"}
         </button>
-        <button className="btn" style={{ padding: "4px 6px", fontSize: 10 }} onClick={handleAdd}>+ Fixture</button>
+        <button className="btn" style={{ padding: "4px 6px", fontSize: 11 }} onClick={handleAdd}>+ Fixture</button>
       </div>
 
       <div className="panel-body">
         {!entries.length && (
-          <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 10, lineHeight: 1.55 }}>
+          <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 11, lineHeight: 1.55 }}>
             No project fixtures or verified runtime devices yet. Draw the fountain in Engineering Design, or use Scan Network to identify a controller.
           </div>
         )}
@@ -171,15 +171,15 @@ export default function DevicePanel({ width }) {
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-surface)"}
               >
-                <span style={{ fontSize: 9, transition: "transform 0.15s", display: "inline-block",
+                <span style={{ fontSize: 11, transition: "transform 0.15s", display: "inline-block",
                   transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", color: "var(--text-muted)" }}>
                   ▾
                 </span>
-                <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)",
+                <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)",
                   textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   {TYPE_ICONS[group]} {group}
                 </span>
-                <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--text-muted)" }}>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
                   {groupDevices.length}
                 </span>
               </div>
@@ -201,10 +201,10 @@ export default function DevicePanel({ width }) {
         borderTop: "1px solid var(--border)", padding: "8px 10px",
         background: "var(--bg-surface)", flexShrink: 0,
       }}>
-        <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
           PROJECT + RUNTIME STATUS
         </div>
-        <div style={{ fontSize: 9, color: "var(--text-muted)", lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
           {fixtures.length} designed fixtures · {onlineCount} verified online · {runtimeDevices.length - onlineCount} not online/verified
         </div>
       </div>
@@ -240,25 +240,25 @@ function DeviceRow({ device, selected, onSelect }) {
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {device.label}
         </span>
-        <span className={`badge ${device.protocol}`} style={{ fontSize: 8 }}>
+        <span className={`badge ${device.protocol}`} style={{ fontSize: 11 }}>
           {String(device.protocol || "unmapped").toUpperCase()}
         </span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
         {device.ip && (
-          <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+          <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
             {device.ip}
           </span>
         )}
         {healthKnown && <div style={{ flex: 1, height: 2, background: "var(--border)", borderRadius: 1, overflow: "hidden" }}>
           <div style={{ width: `${device.health}%`, height: "100%", background: healthBarColor, borderRadius: 1 }} />
         </div>}
-        <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
           {isDesigned ? "DESIGN" : healthKnown ? `${device.health}%` : String(device.status || "unverified").toUpperCase()}
         </span>
       </div>
-      {device.detail && <div title={device.detail} style={{ marginTop: 2, fontSize: 8, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {device.detail && <div title={device.detail} style={{ marginTop: 2, fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {device.detail}
       </div>}
     </div>

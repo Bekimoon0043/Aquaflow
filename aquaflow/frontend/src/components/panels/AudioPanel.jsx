@@ -44,7 +44,7 @@ export default function AudioPanel() {
           Audio Engine
         </span>
         {selectedJobId && (
-          <span style={{ fontSize:9, color:"var(--accent)", fontFamily:"var(--font-mono)", marginLeft:"auto" }}>
+          <span style={{ fontSize:11, color:"var(--accent)", fontFamily:"var(--font-mono)", marginLeft:"auto" }}>
             JOB: {selectedJobId.slice(0, 8)}...
           </span>
         )}
@@ -56,7 +56,7 @@ export default function AudioPanel() {
             flex:1, padding:"7px 0", background:"transparent", border:"none",
             borderBottom: tab===key ? "2px solid var(--accent)" : "2px solid transparent",
             color: tab===key ? "var(--text-accent)" : "var(--text-muted)",
-            fontFamily:"var(--font-body)", fontSize:10, fontWeight: tab===key ? 600 : 400,
+            fontFamily:"var(--font-body)", fontSize:11, fontWeight: tab===key ? 600 : 400,
             textTransform:"uppercase", letterSpacing:"0.05em", cursor:"pointer",
           }}>{label}</button>
         ))}
@@ -203,7 +203,7 @@ function UploadTab({ onAnalyzed, addServerLog, addJob, fileJobs, selectedJobId, 
         <div style={{ fontSize:12, color:"var(--text-primary)", marginBottom:4 }}>
           Drop audio file here or click to browse
         </div>
-        <div style={{ fontSize:10, color:"var(--text-muted)" }}>
+        <div style={{ fontSize:11, color:"var(--text-muted)" }}>
           MP3 · WAV · FLAC · OGG · AAC supported
         </div>
         <input ref={fileRef} type="file" accept=".mp3,.wav,.flac,.ogg,.aac,.m4a"
@@ -217,7 +217,7 @@ function UploadTab({ onAnalyzed, addServerLog, addJob, fileJobs, selectedJobId, 
           <div style={{ height:4, background:"var(--border)", borderRadius:2, overflow:"hidden", marginBottom:4 }}>
             <div style={{ width:`${progress*100}%`, height:"100%", background:"var(--accent)", borderRadius:2, transition:"width 0.3s" }} />
           </div>
-          <div style={{ fontSize:10, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{status}</div>
+          <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{status}</div>
         </div>
       )}
 
@@ -237,7 +237,7 @@ function UploadTab({ onAnalyzed, addServerLog, addJob, fileJobs, selectedJobId, 
 
       <SectionLabel>Uploaded Files ({files.length})</SectionLabel>
       {files.length === 0 ? (
-        <div style={{ fontSize:10, color:"var(--text-muted)", textAlign:"center", padding:"16px 0" }}>
+        <div style={{ fontSize:11, color:"var(--text-muted)", textAlign:"center", padding:"16px 0" }}>
           No audio files uploaded yet
         </div>
       ) : (
@@ -273,7 +273,7 @@ function UploadTab({ onAnalyzed, addServerLog, addJob, fileJobs, selectedJobId, 
                 display:"flex", alignItems:"center", justifyContent:"center",
                 flexShrink:0,
               }}>
-                {isSelected && <span style={{ color:"var(--bg-void)", fontSize:9 }}>✓</span>}
+                {isSelected && <span style={{ color:"var(--bg-void)", fontSize:11 }}>✓</span>}
               </div>
               
               <span style={{ fontSize:14, opacity:0.6 }}>♪</span>
@@ -281,7 +281,7 @@ function UploadTab({ onAnalyzed, addServerLog, addJob, fileJobs, selectedJobId, 
                 <div style={{ fontSize:11, color:"var(--text-primary)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {f.filename}
                 </div>
-                                <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
+                                <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
                   {f.size_mb} MB {job ? `• Job: ${job.jobId.slice(0,8)}...` : `• ID: ${fallbackId.slice(0,8)}...`}
                 </div>
               </div>
@@ -291,7 +291,7 @@ function UploadTab({ onAnalyzed, addServerLog, addJob, fileJobs, selectedJobId, 
                 <div style={{ display:"flex", gap:4, flexShrink:0 }}>
                   <button 
                     className="btn" 
-                    style={{ fontSize:9, padding:"3px 8px" }}
+                    style={{ fontSize:11, padding:"3px 8px" }}
                     onClick={(e) => { e.stopPropagation(); selectJob(job.jobId); setTab?.("analyze"); }}
                   >
                     Analyze
@@ -361,7 +361,7 @@ function AnalysisTab({ addServerLog, selectedJobId, fileJobs, selectJob }) {
             </option>
           ))}
         </select>
-        <button className="btn primary" onClick={() => loadAnalysis()} disabled={loading || !jobId} style={{ fontSize:10, flexShrink:0 }}>
+        <button className="btn primary" onClick={() => loadAnalysis()} disabled={loading || !jobId} style={{ fontSize:11, flexShrink:0 }}>
           {loading ? "..." : "Load"}
         </button>
       </div>
@@ -391,7 +391,7 @@ function AnalysisTab({ addServerLog, selectedJobId, fileJobs, selectJob }) {
               ["Sections", result.section_count, "#f97316"],
             ].map(([label,value,color]) => (
               <div key={label} style={{ padding:"8px 10px", background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:"var(--radius-sm)" }}>
-                <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:2 }}>{label}</div>
+                <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", marginBottom:2 }}>{label}</div>
                 <div style={{ fontSize:13, fontWeight:600, color, fontFamily:"var(--font-mono)" }}>{value}</div>
               </div>
             ))}
@@ -403,11 +403,11 @@ function AnalysisTab({ addServerLog, selectedJobId, fileJobs, selectJob }) {
               <div style={{ width:40, height:4, background:"var(--border)", borderRadius:2, overflow:"hidden" }}>
                 <div style={{ width:`${s.energy*100}%`, height:"100%", background:`hsl(${200-s.energy*120},80%,55%)`, borderRadius:2 }} />
               </div>
-              <span style={{ fontSize:10, fontFamily:"var(--font-mono)", color:"var(--text-muted)", width:28 }}>
+              <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)", width:28 }}>
                 {Math.floor(s.start/60)}:{String(Math.floor(s.start%60)).padStart(2,"0")}
               </span>
               <span style={{ fontSize:11, color:"var(--text-primary)", flex:1, textTransform:"capitalize" }}>{s.label}</span>
-              <span style={{ fontSize:10, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{Math.round(s.energy*100)}%</span>
+              <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{Math.round(s.energy*100)}%</span>
             </div>
           ))}
 
@@ -551,7 +551,7 @@ function SyncTab({ addServerLog, selectedJobId, fileJobs, selectJob }) {
             <div style={{ fontSize:12, fontWeight:600, color:"var(--text-primary)", marginBottom:4 }}>
               {result.show?.name}
             </div>
-            <div style={{ fontSize:10, color:"var(--text-secondary)", lineHeight:1.6 }}>
+            <div style={{ fontSize:11, color:"var(--text-secondary)", lineHeight:1.6 }}>
               {result.show?.notes}
             </div>
             <div style={{ display:"flex", gap:6, marginTop:6, flexWrap:"wrap" }}>
@@ -600,19 +600,19 @@ function PlayerTab() {
     <div style={{ padding:12 }}>
       <SectionLabel>Audio Files</SectionLabel>
       {files.length === 0 ? (
-        <div style={{ fontSize:10, color:"var(--text-muted)", textAlign:"center", padding:"20px 0" }}>
+        <div style={{ fontSize:11, color:"var(--text-muted)", textAlign:"center", padding:"20px 0" }}>
           No audio files. Upload one in the Upload tab.
         </div>
       ) : (
         files.map((f,i) => (
           <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", marginBottom:5, background: playing===f.filename ? "rgba(0,212,255,0.06)" : "var(--bg-surface)", border:`1px solid ${playing===f.filename ? "var(--border-accent)" : "var(--border)"}`, borderRadius:"var(--radius-sm)" }}>
             <button onClick={() => playing===f.filename ? stop() : play(f.filename)}
-              style={{ width:24, height:24, borderRadius:"50%", background: playing===f.filename ? "var(--accent)" : "var(--bg-raised)", border:`1px solid ${playing===f.filename ? "var(--accent)" : "var(--border)"}`, color: playing===f.filename ? "var(--bg-void)" : "var(--text-primary)", fontSize:10, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              style={{ width:24, height:24, borderRadius:"50%", background: playing===f.filename ? "var(--accent)" : "var(--bg-raised)", border:`1px solid ${playing===f.filename ? "var(--accent)" : "var(--border)"}`, color: playing===f.filename ? "var(--bg-void)" : "var(--text-primary)", fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
               {playing===f.filename ? "■" : "▶"}
             </button>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:11, color:"var(--text-primary)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.filename}</div>
-              <div style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{f.size_mb} MB</div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{f.size_mb} MB</div>
             </div>
           </div>
         ))
@@ -637,7 +637,7 @@ function EnergyWaveform({ data, bassData }) {
 
 function SectionLabel({ children }) {
   return (
-    <div style={{ fontSize:9, fontWeight:600, fontFamily:"var(--font-mono)", color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:7, marginTop:12, borderBottom:"1px solid var(--border)", paddingBottom:3 }}>
+    <div style={{ fontSize:11, fontWeight:600, fontFamily:"var(--font-mono)", color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:7, marginTop:12, borderBottom:"1px solid var(--border)", paddingBottom:3 }}>
       {children}
     </div>
   );
@@ -645,7 +645,7 @@ function SectionLabel({ children }) {
 
 function Tag({ label, accent }) {
   return (
-    <span style={{ fontSize:9, fontFamily:"var(--font-mono)", padding:"1px 6px", borderRadius:3, background: accent ? "rgba(0,212,255,0.1)" : "var(--bg-raised)", color: accent ? "var(--accent)" : "var(--text-muted)", border:`1px solid ${accent ? "rgba(0,212,255,0.2)" : "var(--border)"}` }}>
+    <span style={{ fontSize:11, fontFamily:"var(--font-mono)", padding:"1px 6px", borderRadius:3, background: accent ? "rgba(0,212,255,0.1)" : "var(--bg-raised)", color: accent ? "var(--accent)" : "var(--text-muted)", border:`1px solid ${accent ? "rgba(0,212,255,0.2)" : "var(--border)"}` }}>
       {label}
     </span>
   );
@@ -657,7 +657,7 @@ function Toggle({ label, value, onChange }) {
       <div style={{ width:28, height:14, borderRadius:7, background: value ? "rgba(0,212,255,0.2)" : "var(--bg-raised)", border:`1px solid ${value ? "var(--accent)" : "var(--border)"}`, position:"relative", transition:"all 0.15s" }}>
         <div style={{ width:8, height:8, borderRadius:"50%", background: value ? "var(--accent)" : "var(--text-muted)", position:"absolute", top:2, left: value ? 16 : 2, transition:"left 0.15s" }} />
       </div>
-      <span style={{ fontSize:10, color: value ? "var(--text-primary)" : "var(--text-muted)" }}>{label}</span>
+      <span style={{ fontSize:11, color: value ? "var(--text-primary)" : "var(--text-muted)" }}>{label}</span>
     </div>
   );
 }

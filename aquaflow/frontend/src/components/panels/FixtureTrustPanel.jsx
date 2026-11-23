@@ -34,27 +34,27 @@ export function ReplacementReport({ report, onAcknowledge }) {
   const flagged = report.footprintChanged || report.affectedItems?.some((a) => a.status === "conflict" || a.status === "unassigned");
   return (
     <div role={flagged ? "alert" : "status"} data-testid="replacement-report"
-      style={{ marginTop: 6, padding: 6, borderRadius: 3, border: `1px solid ${flagged ? "#7a5a00" : "#0a3040"}`, background: flagged ? "#1c1404" : "#06121c" }}>
-      <div style={{ color: flagged ? "#ffcc00" : "#8de0ff", fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>
+      style={{ marginTop: 6, padding: 6, borderRadius: 3, border: `1px solid ${flagged ? "#7a5a00" : "#0a3040"}`, background: flagged ? "var(--bg-base)" : "var(--bg-base)" }}>
+      <div style={{ color: flagged ? "var(--accent)" : "var(--info)", fontSize: 11, fontWeight: "bold", marginBottom: 3 }}>
         {flagged ? "⚠ CONTROL FOOTPRINT CHANGED — REVIEW" : "Control footprint unchanged"}
       </div>
       <div style={small}>{report.fromType} → {report.toType}</div>
       {report.changes?.map((c) => (
-        <div key={c.field} style={{ ...small, color: "#ffcc00" }}>• {c.label}: {String(c.from || "—")} → {String(c.to || "—")}</div>
+        <div key={c.field} style={{ ...small, color: "var(--accent)" }}>• {c.label}: {String(c.from || "—")} → {String(c.to || "—")}</div>
       ))}
-      {report.affectedItems?.length > 0 && <div style={{ ...small, marginTop: 3, color: "#a9c4d6" }}>Affected items:</div>}
+      {report.affectedItems?.length > 0 && <div style={{ ...small, marginTop: 3, color: "var(--info)" }}>Affected items:</div>}
       {report.affectedItems?.map((a, i) => (
-        <div key={`${a.kind}-${i}`} style={{ ...small, color: STATUS_COLOR[a.status] || "#9cc" }}>• [{a.kind}] {a.message}</div>
+        <div key={`${a.kind}-${i}`} style={{ ...small, color: STATUS_COLOR[a.status] || "var(--info)" }}>• [{a.kind}] {a.message}</div>
       ))}
       {report.valueChanges?.length > 0 && (
         <div style={{ ...small, marginTop: 3 }}>Recomputed from new type: {report.valueChanges.map((v) => `${v.field} ${v.from ?? "—"}→${v.to ?? "—"}`).join(", ")}</div>
       )}
       {report.recompute?.length > 0 && <div style={small}>Dependent calculations: {report.recompute.join(", ")}</div>}
-      {report.warnings?.map((w, i) => <div key={i} style={{ ...small, color: "#ffb86b" }}>• {w}</div>)}
+      {report.warnings?.map((w, i) => <div key={i} style={{ ...small, color: "var(--brand-gold-pale)" }}>• {w}</div>)}
       <div style={{ ...small, marginTop: 3 }}>Addresses are kept as-is and never auto-reassigned.</div>
       {onAcknowledge && (
         <button type="button" onClick={onAcknowledge}
-          style={{ marginTop: 4, width: "100%", padding: 4, background: "#2a2006", color: "#ffcc00", border: "1px solid #7a5a00", borderRadius: 3, cursor: "pointer", fontSize: 8 }}>
+          style={{ marginTop: 4, width: "100%", padding: 4, background: "var(--bg-base)", color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--warn) 40%, var(--border))", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>
           MARK CONTROL MAPPING REVIEWED
         </button>
       )}
@@ -131,7 +131,7 @@ export default function FixtureTrustPanel({
   return (
     <div style={box} data-testid="fixture-trust-panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginBottom: 4 }}>
-        <span style={{ color: "#8de0ff", fontSize: 9, fontWeight: "bold" }}>EQUIPMENT DATA</span>
+        <span style={{ color: "var(--info)", fontSize: 11, fontWeight: "bold" }}>EQUIPMENT DATA</span>
         <ProvenanceBadge provenance={provenance} />
       </div>
       <div style={small}>
@@ -140,12 +140,12 @@ export default function FixtureTrustPanel({
       </div>
       <div style={small}>Units: {unitsText(citation.units) || "—"}</div>
       {provenance.downgradeReason && (
-        <div style={{ ...small, color: "#ffb86b" }}>Claimed {provenance.downgradedFrom} but incomplete ({provenance.downgradeReason}) — treated as generic.</div>
+        <div style={{ ...small, color: "var(--brand-gold-pale)" }}>Claimed {provenance.downgradedFrom} but incomplete ({provenance.downgradeReason}) — treated as generic.</div>
       )}
 
       {physics && (
         <div style={{ marginTop: 5 }}>
-          <div style={{ ...small, color: "#a9c4d6" }}>
+          <div style={{ ...small, color: "var(--info)" }}>
             Solved: {physics.flowLpm != null ? `${Number(physics.flowLpm).toFixed(1)} L/min` : "—"}
             {physics.jetHeightM != null ? ` · jet ${Number(physics.jetHeightM).toFixed(2)} m (${physics.basis || "ESTIMATED"})` : ""}
           </div>
@@ -160,15 +160,15 @@ export default function FixtureTrustPanel({
         <ReplacementReport report={{ ...pendingReview, footprintChanged: true }} onAcknowledge={acknowledge} />
       )}
 
-      <div style={{ marginTop: 6, ...small, color: "#a9c4d6" }}>Replace fixture type</div>
+      <div style={{ marginTop: 6, ...small, color: "var(--info)" }}>Replace fixture type</div>
       <div style={{ display: "flex", gap: 4 }}>
         <select aria-label="Replacement fixture type" value={newType} onChange={(e) => { setNewType(e.target.value); setPreview(null); }}
-          style={{ flex: 1, minWidth: 0, padding: 3, background: "#06121c", color: "#cce8ff", border: "1px solid #16415a", borderRadius: 3, fontSize: 9 }}>
+          style={{ flex: 1, minWidth: 0, padding: 3, background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 3, fontSize: 11 }}>
           <option value="">— choose type —</option>
           {options.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
         </select>
         <button type="button" disabled={!newType} onClick={doPreview}
-          style={{ padding: "3px 6px", background: "#072b40", color: "#8de0ff", border: "1px solid #176181", borderRadius: 3, cursor: newType ? "pointer" : "default", fontSize: 8 }}>
+          style={{ padding: "3px 6px", background: "var(--bg-panel)", color: "var(--info)", border: "1px solid var(--info)", borderRadius: 3, cursor: newType ? "pointer" : "default", fontSize: 11 }}>
           PREVIEW
         </button>
       </div>
@@ -176,13 +176,13 @@ export default function FixtureTrustPanel({
         <>
           <ReplacementReport report={preview} />
           <button type="button" onClick={apply}
-            style={{ marginTop: 4, width: "100%", padding: 4, background: "#0b2512", color: "#b8f59e", border: "1px solid #37612b", borderRadius: 3, cursor: "pointer", fontSize: 8 }}>
+            style={{ marginTop: 4, width: "100%", padding: 4, background: "var(--bg-base)", color: "var(--ok)", border: "1px solid var(--ok)", borderRadius: 3, cursor: "pointer", fontSize: 11 }}>
             APPLY TYPE REPLACEMENT
           </button>
         </>
       )}
       {lastReport && <ReplacementReport report={lastReport} onAcknowledge={lastReport.footprintChanged || pendingReview ? acknowledge : undefined} />}
-      {status && <div role="status" style={{ ...small, color: "#8de0ff", marginTop: 3 }}>{status}</div>}
+      {status && <div role="status" style={{ ...small, color: "var(--info)", marginTop: 3 }}>{status}</div>}
     </div>
   );
 }

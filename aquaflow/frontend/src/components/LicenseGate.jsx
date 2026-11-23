@@ -29,7 +29,7 @@ export default function LicenseGate({ feature, children, silent = false, fallbac
     return (
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
                     height:"100%", gap:8 }}>
-        <span style={{ fontSize:8, color:"var(--accent)" }}>●</span>
+        <span style={{ fontSize:11, color:"var(--accent)" }}>●</span>
         <span style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>
           Verifying license…
         </span>
@@ -60,7 +60,7 @@ export default function LicenseGate({ feature, children, silent = false, fallbac
           Not included in your beta license
         </div>
         <div style={{ width:"100%", height:1, background:"var(--border)" }} />
-        <div style={{ fontSize:10, color:"var(--text-muted)", lineHeight:1.6 }}>
+        <div style={{ fontSize:11, color:"var(--text-muted)", lineHeight:1.6 }}>
           Contact LuxuryCon Fountain Systems to upgrade.
         </div>
         <div style={{ fontSize:11, color:"var(--accent)", fontFamily:"var(--font-mono)",

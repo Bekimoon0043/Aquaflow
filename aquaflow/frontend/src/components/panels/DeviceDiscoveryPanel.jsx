@@ -55,7 +55,7 @@ export default function DeviceDiscoveryPanel() {
         <span style={{ fontFamily: "var(--font-display)", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Device Discovery
         </span>
-        <span style={{ marginLeft: "auto", fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--green)" }}>
+        <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--green)" }}>
           {devices.filter((d) => d.status === "online").length}/{devices.length} online
         </span>
       </div>
@@ -66,7 +66,7 @@ export default function DeviceDiscoveryPanel() {
             flex: 1, padding: "7px 0", background: "transparent", border: "none",
             borderBottom: tab === key ? "2px solid var(--accent)" : "2px solid transparent",
             color: tab === key ? "var(--text-accent)" : "var(--text-muted)",
-            fontFamily: "var(--font-body)", fontSize: 10, fontWeight: tab === key ? 600 : 400,
+            fontFamily: "var(--font-body)", fontSize: 11, fontWeight: tab === key ? 600 : 400,
             textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer",
           }}>
             {label}
@@ -186,7 +186,7 @@ function ControllersTab({ addServerLog }) {
 
   return (
     <div style={{ padding: 10 }}>
-      <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
         Protocol-level, read-only identification. Network Scan shows hosts; this tab proves protocols. Nothing here connects, arms or writes.
       </div>
 
@@ -205,17 +205,17 @@ function ControllersTab({ addServerLog }) {
           placeholder="or an explicit CIDR, e.g. 192.168.5.0/24 (scans ONLY that range)" style={{ ...input, flex: 2 }} />
         <input value={unitIds} onChange={e => setUnitIds(e.target.value)} disabled={scanning} title="Modbus unit ids to try (max 8)"
           placeholder="unit ids" style={{ ...input, width: 70 }} />
-        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--text-muted)" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--text-muted)" }}>
           <input type="checkbox" checked={includeIcan} onChange={e => setIncludeIcan(e.target.checked)} disabled={scanning} /> I-CAN probe
         </label>
         {scanning ? (
-          <button onClick={cancel} style={{ fontSize: 10, padding: "5px 12px", background: "var(--red)", color: "#fff", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>CANCEL</button>
+          <button onClick={cancel} style={{ fontSize: 11, padding: "5px 12px", background: "var(--red)", color: "var(--text-primary)", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>CANCEL</button>
         ) : (
-          <button onClick={runDiscover} style={{ fontSize: 10, padding: "5px 12px", background: "var(--accent)", color: "#000", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>DETECT</button>
+          <button onClick={runDiscover} style={{ fontSize: 11, padding: "5px 12px", background: "var(--accent)", color: "var(--text-on-accent)", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600 }}>DETECT</button>
         )}
       </div>
 
-      <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6, ...mono }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, ...mono }}>
         target: {selectedTarget ? `${selectedTarget.subnet} via ${selectedTarget.adapter}` : "no eligible adapter — pick one or type a CIDR"}
       </div>
 
@@ -224,7 +224,7 @@ function ControllersTab({ addServerLog }) {
           <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden", marginBottom: 3 }}>
             <div style={{ width: `${(job.progress || 0) * 100}%`, height: "100%", background: "var(--accent)", transition: "width 0.3s" }} />
           </div>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", ...mono }}>{Math.round((job.progress || 0) * 100)}% · {job.message}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", ...mono }}>{Math.round((job.progress || 0) * 100)}% · {job.message}</div>
         </div>
       )}
 
@@ -234,9 +234,9 @@ function ControllersTab({ addServerLog }) {
 
       {result && (
         <>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6, ...mono }}>{discoveryStatusLine(result)}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, ...mono }}>{discoveryStatusLine(result)}</div>
           {(result.warnings || []).map((w, i) => (
-            <div key={i} style={{ ...row, color: "#f59e0b", borderColor: "#f59e0b55" }}>⚠ {w}</div>
+            <div key={i} style={{ ...row, color: "var(--warn)", borderColor: "color-mix(in srgb, var(--warn) 33%, transparent)" }}>⚠ {w}</div>
           ))}
           {(result.detected || []).length === 0 && (
             <div style={{ ...row, color: "var(--text-muted)", textAlign: "center" }}>
@@ -252,8 +252,8 @@ function ControllersTab({ addServerLog }) {
             return (
               <div key={d.discovery_id} style={row}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : d.discovery_id)}>
-                  <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
-                  <span title={d.verification_summary} style={{ color: verification.color, fontWeight: 600, fontSize: 9, ...mono }}>{verification.label}</span>
+                  <span style={{ color: badge.color, fontWeight: 600, fontSize: 11, ...mono }}>{badge.label}</span>
+                  <span title={d.verification_summary} style={{ color: verification.color, fontWeight: 600, fontSize: 11, ...mono }}>{verification.label}</span>
                   <span style={{ color: "var(--text-primary)", flex: 1 }}>{d.label}</span>
                   <span style={{ color: "var(--text-muted)", ...mono }}>
                     {d.ip ? `${d.ip}${d.port ? `:${d.port}` : ""}` : "no IP configured"}
@@ -267,20 +267,20 @@ function ControllersTab({ addServerLog }) {
                   {d.adapter && ` · via ${d.adapter}`}
                 </div>
                 {d.verification_summary && (
-                  <div style={{ marginTop: 3, color: verification.color, fontSize: 9.5 }}>
+                  <div style={{ marginTop: 3, color: verification.color, fontSize: 11 }}>
                     Evidence: {d.verification_summary}
                   </div>
                 )}
                 {ican && (
-                  <div style={{ marginTop: 3, color: "var(--green)", fontSize: 9.5 }}>
+                  <div style={{ marginTop: 3, color: "var(--green)", fontSize: 11 }}>
                     ✓ Validated I-CAN gateway reply on {d.ip} (interface {d.identity?.interface || d.adapter || "?"}) — configure and operate it in Fountain Control; nothing was armed or connected here.
                   </div>
                 )}
                 {(d.warnings || []).map((w, i) => (
-                  <div key={i} style={{ color: "#f59e0b", fontSize: 9, marginTop: 2 }}>⚠ {w}</div>
+                  <div key={i} style={{ color: "var(--warn)", fontSize: 11, marginTop: 2 }}>⚠ {w}</div>
                 ))}
                 {isOpen && (
-                  <div style={{ marginTop: 4, color: "var(--text-secondary)", fontSize: 9.5, ...mono, background: "var(--bg-panel)", padding: 6, borderRadius: "var(--radius-sm)" }}>
+                  <div style={{ marginTop: 4, color: "var(--text-secondary)", fontSize: 11, ...mono, background: "var(--bg-panel)", padding: 6, borderRadius: "var(--radius-sm)" }}>
                     <div style={{ color: "var(--text-muted)", marginBottom: 2 }}>evidence:</div>
                     {(d.evidence || []).map((e, i) => <div key={i}>• {e}</div>)}
                     <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
@@ -290,17 +290,17 @@ function ControllersTab({ addServerLog }) {
                 )}
                 <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
                   {prefill && (
-                    <button className="btn primary" style={{ fontSize: 9, padding: "2px 8px" }} onClick={() => configurePlc(d)}>
+                    <button className="btn primary" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => configurePlc(d)}>
                       Configure PLC →
                     </button>
                   )}
                   {ican && (
-                    <button className="btn" style={{ fontSize: 9, padding: "2px 8px" }} onClick={openFountainControl}>
+                    <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }} onClick={openFountainControl}>
                       Open Fountain Control →
                     </button>
                   )}
                   {!prefill && !ican && (
-                    <span style={{ fontSize: 9, color: "var(--text-muted)" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                       {d.tier === "REAL" ? `configure in: ${d.configure_in}` : "identify-only — no AquaFlow driver"}
                     </span>
                   )}
@@ -311,7 +311,7 @@ function ControllersTab({ addServerLog }) {
         </>
       )}
 
-      <div style={{ fontSize: 9, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", margin: "12px 0 6px", borderBottom: "1px solid var(--border)", paddingBottom: 3, ...mono }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", margin: "12px 0 6px", borderBottom: "1px solid var(--border)", paddingBottom: 3, ...mono }}>
         Controller catalog ({catalog.length})
       </div>
       {catalog.map(e => {
@@ -321,13 +321,13 @@ function ControllersTab({ addServerLog }) {
         return (
           <div key={e.id} style={{ ...row, cursor: "pointer" }} onClick={() => setOpen(isOpen ? null : e.id)}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ color: badge.color, fontWeight: 600, fontSize: 9, ...mono }}>{badge.label}</span>
-              <span title={e.verification_summary} style={{ color: verification.color, fontWeight: 600, fontSize: 9, ...mono }}>{verification.label}</span>
+              <span style={{ color: badge.color, fontWeight: 600, fontSize: 11, ...mono }}>{badge.label}</span>
+              <span title={e.verification_summary} style={{ color: verification.color, fontWeight: 600, fontSize: 11, ...mono }}>{verification.label}</span>
               <span style={{ color: "var(--text-primary)", flex: 1 }}>{e.vendor} — {e.model}</span>
-              <span style={{ color: "var(--text-muted)", fontSize: 9, ...mono }}>{e.category}</span>
+              <span style={{ color: "var(--text-muted)", fontSize: 11, ...mono }}>{e.category}</span>
             </div>
             {isOpen && (
-              <div style={{ marginTop: 6, color: "var(--text-secondary)", fontSize: 9.5 }}>
+              <div style={{ marginTop: 6, color: "var(--text-secondary)", fontSize: 11 }}>
                 <div style={{ marginBottom: 4, color: verification.color }}>
                   Evidence: {verification.label} — {e.verification_summary}
                 </div>
@@ -438,14 +438,14 @@ function ScanTab({ addServerLog }) {
           <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden", marginBottom: 4 }}>
             <div style={{ width: `${progress * 100}%`, height: "100%", background: "var(--accent)", borderRadius: 2, transition: "width 0.3s" }} />
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{statusMsg}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{statusMsg}</div>
         </div>
       )}
 
       {discovered.length > 0 && (
         <div>
           <SectionLabel>Discovered ({discovered.length})</SectionLabel>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
             Network visibility only — an open port does not prove a PLC or fountain controller. Use the Controllers tab for protocol-level identification.
           </div>
           {discovered.map((d, i) => (
@@ -457,11 +457,11 @@ function ScanTab({ addServerLog }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--text-muted)" }} title="seen on the network — unverified" />
                 <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)", flex: 1 }}>{d.label}</span>
-                <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, fontFamily: "var(--font-mono)", background: `${PROTOCOL_COLORS[d.protocol] || "#888"}22`, color: PROTOCOL_COLORS[d.protocol] || "#888", border: `1px solid ${PROTOCOL_COLORS[d.protocol] || "#888"}44` }}>
+                <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 3, fontFamily: "var(--font-mono)", background: `${PROTOCOL_COLORS[d.protocol] || "#888"}22`, color: PROTOCOL_COLORS[d.protocol] || "var(--text-muted)", border: `1px solid ${PROTOCOL_COLORS[d.protocol] || "#888"}44` }}>
                   {d.protocol?.toUpperCase()}
                 </span>
               </div>
-              <div style={{ display: "flex", gap: 10, fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+              <div style={{ display: "flex", gap: 10, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                 <span>{d.ip}:{d.port}</span>
                 {d.universe !== undefined && <span>Universe {d.universe}</span>}
                 {d.channels && <span>{d.channels}ch</span>}
@@ -469,7 +469,7 @@ function ScanTab({ addServerLog }) {
                   {TYPE_ICONS[d.device_type]} {d.device_type}
                 </span>
               </div>
-              <button className="btn" style={{ marginTop: 6, fontSize: 10, padding: "2px 8px" }}
+              <button className="btn" style={{ marginTop: 6, fontSize: 11, padding: "2px 8px" }}
                 onClick={() => {
                   updateDevicesFromServer([{ ...discoveredDeviceProjection(d), type: d.device_type || "unknown" }]);
                   addServerLog({ level: "info", msg: `Added ${d.label} to project (unverified — identify it in Controllers)` });
@@ -516,7 +516,7 @@ function DMXMonitorTab() {
   return (
     <div style={{ padding: 12 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>UNIVERSE</span>
+        <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>UNIVERSE</span>
         <select className="select" value={universe} onChange={(e) => setUniverse(parseInt(e.target.value))}
           style={{ fontSize: 11, flex: 1 }}>
           {[0, 1, 2, 3].map((u) => <option key={u} value={u}>Universe {u}</option>)}
@@ -524,13 +524,13 @@ function DMXMonitorTab() {
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-        <button className="btn danger" onClick={blackout} style={{ flex: 1, justifyContent: "center", fontSize: 10 }}>⬛ Blackout</button>
-        <button className="btn" onClick={fullOn} style={{ flex: 1, justifyContent: "center", fontSize: 10 }}>⬜ Full On</button>
+        <button className="btn danger" onClick={blackout} style={{ flex: 1, justifyContent: "center", fontSize: 11 }}>⬛ Blackout</button>
+        <button className="btn" onClick={fullOn} style={{ flex: 1, justifyContent: "center", fontSize: 11 }}>⬜ Full On</button>
       </div>
 
       {selectedCh !== null && (
         <div style={{ padding: "8px 10px", background: "rgba(0,212,255,0.05)", border: "1px solid var(--border-accent)", borderRadius: "var(--radius-sm)", marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4, fontFamily: "var(--font-mono)" }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, fontFamily: "var(--font-mono)" }}>
             CH {selectedCh + 1} · Universe {universe}
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -562,7 +562,7 @@ function DMXMonitorTab() {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textAlign: "center" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textAlign: "center" }}>
         Click a channel to control it · {channels.filter((v) => v > 0).length} active channels
       </div>
     </div>
@@ -622,9 +622,9 @@ function HardwareTestTab({ devices, addServerLog }) {
 
       <div style={{ padding: "10px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00d4ff" }} />
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--info)" }} />
           <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>Pump Speed Control</span>
-          <span style={{ marginLeft: "auto", fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--orange)" }}>MODBUS</span>
+          <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--orange)" }}>MODBUS</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input type="range" min={0} max={100} value={pumpSpeed}
@@ -633,16 +633,16 @@ function HardwareTestTab({ devices, addServerLog }) {
           <span style={{ fontSize: 13, fontFamily: "var(--font-mono)", color: "var(--text-accent)", width: 40 }}>{pumpSpeed}%</span>
         </div>
         <button className="btn danger" onClick={() => { setPumpSpeed(0); sendPumpSpeed(0); }}
-          style={{ marginTop: 6, fontSize: 10, padding: "2px 8px" }}>
+          style={{ marginTop: 6, fontSize: 11, padding: "2px 8px" }}>
           Stop Pump
         </button>
       </div>
 
       <div style={{ padding: "10px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--warn)" }} />
           <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>DMX Light Intensity</span>
-          <span style={{ marginLeft: "auto", fontSize: 9, fontFamily: "var(--font-mono)", color: "#00d4ff" }}>DMX CH1</span>
+          <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--info)" }}>DMX CH1</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input type="range" min={0} max={255} value={lightValue}
@@ -661,7 +661,7 @@ function HardwareTestTab({ devices, addServerLog }) {
         }} onClick={() => setSelectedDevice(device)}>
           <div style={{ width: 5, height: 5, borderRadius: "50%", background: device.status === "online" ? "var(--green)" : "var(--red)" }} />
           <span style={{ flex: 1, fontSize: 11, color: "var(--text-primary)" }}>{device.label}</span>
-          <button className="btn" style={{ padding: "2px 8px", fontSize: 9 }}
+          <button className="btn" style={{ padding: "2px 8px", fontSize: 11 }}
             onClick={(e) => { e.stopPropagation(); runTest(device); }}>
             {testing && selectedDevice?.id === device.id ? "..." : "Test"}
           </button>
@@ -702,7 +702,7 @@ function ConfigTab({ devices }) {
             ["Status",   device.status],
           ].map(([label, value]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-muted)", width: 70, textAlign: "right" }}>{label}</span>
+              <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", width: 70, textAlign: "right" }}>{label}</span>
               <input className="input" defaultValue={String(value)} style={{ flex: 1, fontSize: 11 }} />
             </div>
           ))}
@@ -718,7 +718,7 @@ function ConfigTab({ devices }) {
 
 function SectionLabel({ children }) {
   return (
-    <div style={{ fontSize: 9, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7, marginTop: 10, borderBottom: "1px solid var(--border)", paddingBottom: 3 }}>
+    <div style={{ fontSize: 11, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7, marginTop: 10, borderBottom: "1px solid var(--border)", paddingBottom: 3 }}>
       {children}
     </div>
   );
@@ -730,7 +730,7 @@ function Toggle({ label, value, onChange }) {
       <div style={{ width: 32, height: 16, borderRadius: 8, background: value ? "rgba(0,212,255,0.2)" : "var(--bg-raised)", border: `1px solid ${value ? "var(--accent)" : "var(--border)"}`, position: "relative", transition: "all 0.15s" }}>
         <div style={{ width: 10, height: 10, borderRadius: "50%", background: value ? "var(--accent)" : "var(--text-muted)", position: "absolute", top: 2, left: value ? 18 : 2, transition: "left 0.15s" }} />
       </div>
-      <span style={{ fontSize: 10, color: value ? "var(--text-primary)" : "var(--text-muted)" }}>{label}</span>
+      <span style={{ fontSize: 11, color: value ? "var(--text-primary)" : "var(--text-muted)" }}>{label}</span>
     </div>
   );
 }

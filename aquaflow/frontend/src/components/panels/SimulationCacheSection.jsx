@@ -148,7 +148,7 @@ export default function SimulationCacheSection({ fixtures, name, design = null }
     <div style={{ ...box, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
       <div>
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Whole simulation for 3D software</div>
-        <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.45 }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.45 }}>
           The water of the show, frame by frame, from the same emitters, physics and RGB lighting as the 3D
           preview. {show.plan
             ? <>Source: {show.source} ({duration.toFixed(1)} s).</>
@@ -162,7 +162,7 @@ export default function SimulationCacheSection({ fixtures, name, design = null }
             ...box, padding: 8, textAlign: "left", cursor: "pointer",
             borderColor: target === t.id ? "var(--accent)" : "var(--border)", outline: target === t.id ? "1px solid var(--accent)" : "none" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)" }}>{t.label}</div>
-            <div style={{ fontSize: 9.5, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.35 }}>{t.hint}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.35 }}>{t.hint}</div>
           </button>
         ))}
       </div>
@@ -212,21 +212,21 @@ export default function SimulationCacheSection({ fixtures, name, design = null }
         {!job ? (
           <button onClick={run} disabled={!fixtures.length || !frames || (!opts.vdb && !opts.ply && !opts.alembic)} style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", background: "var(--accent)",
-            color: "#04121a", fontWeight: 700, fontSize: 12 }}>
+            color: "var(--text-on-accent)", fontWeight: 700, fontSize: 12 }}>
             ⬇ Export {frames} frames
           </button>
         ) : (
           <button onClick={() => abort.current?.abort()} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid var(--border)",
             background: "var(--bg-panel)", color: "var(--text-primary)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
         )}
-        <span style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
           {job
             ? `Frame ${job.frame}/${job.total} · ${(job.bytes / 1e6).toFixed(1)} MB · ${job.particles?.toLocaleString?.() ?? 0} droplets`
             : `${opts.alembic ? `${safeBaseName(name)}_water.abc` : ""}${opts.alembic && opts.vdb ? " + " : ""}${opts.vdb ? `${safeBaseName(name)}.0001.vdb … (${preset.label.split(" — ")[1]})` : ""}`}
         </span>
       </div>
-      {status && <div style={{ fontSize: 11, color: "#22c55e" }}>{status}</div>}
-      {error && <div style={{ fontSize: 11, color: "#ef4444" }}>{error}</div>}
+      {status && <div style={{ fontSize: 11, color: "var(--ok)" }}>{status}</div>}
+      {error && <div style={{ fontSize: 11, color: "var(--error)" }}>{error}</div>}
     </div>
   );
 }

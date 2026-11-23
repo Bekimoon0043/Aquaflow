@@ -45,12 +45,12 @@ export default function PipePropertiesPanel({
   const color = PIPE_COLORS[pipe.type] || PIPE_COLORS.supply;
 
   return (
-    <div style={{ padding:"8px 10px", borderBottom:"1px solid #0a2030", background:"#050d14" }}>
-      <div style={{ color:"#ffcc00", fontSize:10, marginBottom:4, fontWeight:"bold" }}>
+    <div style={{ padding:"8px 10px", borderBottom:"1px solid var(--border)", background:"var(--bg-void)" }}>
+      <div style={{ color:"var(--accent)", fontSize:11, marginBottom:4, fontWeight:"bold" }}>
   PIPE PROPERTIES
 </div>
 
-<div style={{ color, fontSize:9, marginBottom:8, fontWeight:"bold" }}>
+<div style={{ color, fontSize:11, marginBottom:8, fontWeight:"bold" }}>
   ═ {pipe.label || `Pipe DN${pipe.diameterMm}`}
 </div>
 
@@ -62,9 +62,9 @@ export default function PipePropertiesPanel({
           ["DN",     `${pipe.diameterMm} mm`],
           ["Segments", `${pipe.points.length - 1}`],
         ].map(([k,v]) => (
-          <div key={k} style={{ padding:"3px 5px", background:"#0a1520", borderRadius:3 }}>
-            <div style={{ fontSize:8, color:"#334455" }}>{k}</div>
-            <div style={{ fontSize:10, color, fontWeight:"bold" }}>{v}</div>
+          <div key={k} style={{ padding:"3px 5px", background:"var(--bg-base)", borderRadius:3 }}>
+            <div style={{ fontSize:11, color:"var(--info)" }}>{k}</div>
+            <div style={{ fontSize:11, color, fontWeight:"bold" }}>{v}</div>
           </div>
         ))}
       </div>
@@ -73,7 +73,7 @@ export default function PipePropertiesPanel({
       <div style={{ marginBottom:6 }}>
         <div style={s}>Pipe Diameter (DN)</div>
         <select value={pipe.diameterMm} onChange={e=>onUpdateDiameter(pipe.id, parseInt(e.target.value))}
-          style={{ ...input, color:"#ffcc00" }}>
+          style={{ ...input, color:"var(--accent)" }}>
           {PIPE_SIZES_DN.map(dn => (
             <option key={dn} value={dn}>DN{dn}</option>
           ))}
@@ -87,10 +87,10 @@ export default function PipePropertiesPanel({
           {PIPE_TYPES.map(t => (
             <button key={t.key} onClick={()=>onUpdateType(pipe.id, t.key)} style={{
               padding:"3px 6px", textAlign:"left", cursor:"pointer",
-              background: pipe.type===t.key ? `${t.color}22` : "#0a1825",
-              color: pipe.type===t.key ? t.color : "#556677",
+              background: pipe.type===t.key ? `${t.color}22` : "var(--bg-base)",
+              color: pipe.type===t.key ? t.color : "var(--text-muted)",
               border:`1px solid ${pipe.type===t.key ? t.color+"55" : "#0a2030"}`,
-              borderRadius:3, fontFamily:"monospace", fontSize:9,
+              borderRadius:3, fontFamily:"monospace", fontSize:11,
             }}>
               <span style={{ color:t.color }}>█ </span>{t.label}
             </button>
@@ -128,8 +128,8 @@ export default function PipePropertiesPanel({
   </select>
 </div>
 {/* Hydraulic Design */}
-<div style={{ marginBottom:8, padding:"5px", background:"#06111a", border:"1px solid #0a3040", borderRadius:3 }}>
-  <div style={{ color:"#ffcc00", fontSize:9, marginBottom:6, fontWeight:"bold" }}>
+<div style={{ marginBottom:8, padding:"5px", background:"var(--bg-base)", border:"1px solid var(--border)", borderRadius:3 }}>
+  <div style={{ color:"var(--accent)", fontSize:11, marginBottom:6, fontWeight:"bold" }}>
     HYDRAULIC DESIGN
   </div>
 
@@ -171,8 +171,8 @@ export default function PipePropertiesPanel({
 </div>
 {/* Segment actions */}
 {selectedSegment && selectedSegment.pipeId === pipe.id && (
-  <div style={{ marginBottom:6, padding:"5px", background:"#120808", border:"1px solid #ff444422", borderRadius:3 }}>
-    <div style={{ color:"#ff6666", fontSize:9, marginBottom:4 }}>
+  <div style={{ marginBottom:6, padding:"5px", background:"var(--bg-void)", border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3 }}>
+    <div style={{ color:"var(--error)", fontSize:11, marginBottom:4 }}>
       Segment {selectedSegment.segmentIndex + 1} selected
     </div>
 
@@ -192,12 +192,12 @@ export default function PipePropertiesPanel({
       style={{
         width:"100%",
         padding:"3px",
-        background:"#06121c",
-        color:"#00ccaa",
-        border:"1px solid #00ccaa44",
+        background:"var(--bg-base)",
+        color:"var(--info)",
+        border:"1px solid color-mix(in srgb, var(--info) 27%, transparent)",
         borderRadius:3,
         cursor:"pointer",
-        fontSize:9,
+        fontSize:11,
         marginBottom:4
       }}
     >
@@ -205,27 +205,27 @@ export default function PipePropertiesPanel({
     </button>
 
     <button onClick={onDeleteSegment} style={{
-      width:"100%", padding:"3px", background:"#1a0808", color:"#ff8888",
-      border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontSize:9,
+      width:"100%", padding:"3px", background:"var(--bg-base)", color:"var(--error)",
+      border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3, cursor:"pointer", fontSize:11,
     }}>✕ Delete selected segment</button>
   </div>
 )}
 
       {/* Node actions */}
       {selectedNode && selectedNode.pipeId === pipe.id && (
-        <div style={{ marginBottom:6, padding:"5px", background:"#081520", border:"1px solid #0a3040", borderRadius:3 }}>
-          <div style={{ color:"#ffcc00", fontSize:9, marginBottom:4 }}>
+        <div style={{ marginBottom:6, padding:"5px", background:"var(--bg-base)", border:"1px solid var(--border)", borderRadius:3 }}>
+          <div style={{ color:"var(--accent)", fontSize:11, marginBottom:4 }}>
             Node {selectedNode.nodeIndex + 1} of {pipe.points.length}
           </div>
-          <div style={{ color:"#7ab", fontSize:9, marginBottom:4 }}>
+          <div style={{ color:"var(--info)", fontSize:11, marginBottom:4 }}>
             X: {pipe.points[selectedNode.nodeIndex]?.x.toFixed(3)} m
             &nbsp;·&nbsp;
             Y: {pipe.points[selectedNode.nodeIndex]?.y.toFixed(3)} m
           </div>
           {pipe.points.length > 2 && (
             <button onClick={()=>onRemoveNode(pipe.id, selectedNode.nodeIndex)} style={{
-              width:"100%", padding:"3px", background:"#1a0808", color:"#ff8888",
-              border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontSize:9,
+              width:"100%", padding:"3px", background:"var(--bg-base)", color:"var(--error)",
+              border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3, cursor:"pointer", fontSize:11,
             }}>✕ Remove this node</button>
           )}
         </div>
@@ -233,8 +233,8 @@ export default function PipePropertiesPanel({
 
       {/* Delete */}
       <button onClick={onDeletePipe} style={{
-        width:"100%", padding:"4px", background:"#1a0808", color:"#ff4444",
-        border:"1px solid #ff444422", borderRadius:3, cursor:"pointer", fontSize:9,
+        width:"100%", padding:"4px", background:"var(--bg-base)", color:"var(--error)",
+        border:"1px solid color-mix(in srgb, var(--error) 13%, transparent)", borderRadius:3, cursor:"pointer", fontSize:11,
       }}>✕ Delete pipe</button>
     </div>
   );

@@ -575,7 +575,7 @@ export default function PatternDesignerPanel() {
         <span style={{ fontFamily:"var(--font-display)", fontSize:11, fontWeight:600, letterSpacing:"0.12em", color:"var(--text-secondary)", textTransform:"uppercase" }}>
           Pattern Designer
         </span>
-        {isPlaying && <span style={{ marginLeft:"auto", fontSize:9, fontFamily:"var(--font-mono)", color:"var(--green)", animation:"pulse 1s infinite" }}>● LIVE</span>}
+        {isPlaying && <span style={{ marginLeft:"auto", fontSize:11, fontFamily:"var(--font-mono)", color:"var(--green)", animation:"pulse 1s infinite" }}>● LIVE</span>}
       </div>
 
       {/* tab bar (new) */}
@@ -595,12 +595,12 @@ export default function PatternDesignerPanel() {
               <div style={{ fontSize:11, color: manualPriority?"var(--accent)":"var(--purple)", fontWeight:600 }}>
                 {manualPriority ? "● Manual Priority ACTIVE" : "○ AI Choreography Active"}
               </div>
-              <div style={{ fontSize:9, color:"var(--text-muted)" }}>
+              <div style={{ fontSize:11, color:"var(--text-muted)" }}>
                 {manualPriority ? "Manual patterns override AI completely" : "Enable to override AI with manual patterns"}
               </div>
             </div>
             <button onClick={() => { setManualPriority(!manualPriority); if(isPlaying&&manualPriority) handleStop(); }}
-              style={{ ...s.btn(manualPriority), fontSize:9 }}>
+              style={{ ...s.btn(manualPriority), fontSize:11 }}>
               {manualPriority ? "Disable" : "Enable"}
             </button>
           </div>
@@ -610,15 +610,15 @@ export default function PatternDesignerPanel() {
           {groups.map(g => (
             <div key={g.id} style={s.group(selectedGroup===g.id)} onClick={() => setSelectedGroup(g.id)}>
               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <div style={{ width:8, height:8, borderRadius:"50%", background:DEVICE_COLORS[g.type]||"#94a3b8", flexShrink:0 }}/>
+                <div style={{ width:8, height:8, borderRadius:"50%", background:DEVICE_COLORS[g.type]||"var(--info)", flexShrink:0 }}/>
                 <span style={{ fontSize:11, color:"var(--text-primary)", flex:1 }}>{g.label}</span>
-                <span style={{ fontSize:9, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{g.nozzles.length} nozzles</span>
-                <span style={{ fontSize:9, fontFamily:"var(--font-mono)", color:"var(--text-muted)", marginLeft:4 }}>{g.deviceId}</span>
+                <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)" }}>{g.nozzles.length} nozzles</span>
+                <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-muted)", marginLeft:4 }}>{g.deviceId}</span>
               </div>
             </div>
           ))}
           {!groups.length && (
-            <div style={{ fontSize:10, color:"var(--text-muted)", padding:"8px 0", lineHeight:1.5 }}>
+            <div style={{ fontSize:11, color:"var(--text-muted)", padding:"8px 0", lineHeight:1.5 }}>
               Open Engineering Designer, place fixtures and click Push to Devices to populate groups here.
             </div>
           )}
@@ -629,7 +629,7 @@ export default function PatternDesignerPanel() {
             {PATTERNS.map(p => (
               <button key={p.key} onClick={() => setActivePattern(p.key)} style={s.patternBtn(activePattern===p.key)}>
                 <span style={{ fontSize:14 }}>{p.icon}</span>
-                <span style={{ fontSize:8 }}>{p.label}</span>
+                <span style={{ fontSize:11 }}>{p.label}</span>
               </button>
             ))}
           </div>
@@ -648,16 +648,16 @@ export default function PatternDesignerPanel() {
                         handleStepChange(idx, Math.max(0, Math.min(1, v)));
                       }}>
                       <div style={{ position:"absolute", bottom:0, left:0, right:0, background: currentStep===idx&&isPlaying?"var(--accent)":"var(--purple)", height:`${val*100}%`, opacity:0.8, transition:"height 0.05s" }}/>
-                      <span style={{ position:"absolute", top:2, left:0, right:0, textAlign:"center", fontSize:7, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{idx+1}</span>
+                      <span style={{ position:"absolute", top:2, left:0, right:0, textAlign:"center", fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{idx+1}</span>
                     </div>
                   </div>
                 ))}
               </div>
               <div style={{ display:"flex", gap:6, marginBottom:10 }}>
-                <button onClick={() => setSteps(Array(16).fill(0))}          style={{ ...s.btn(false), flex:1, fontSize:9 }}>Clear</button>
-                <button onClick={() => setSteps(Array(16).fill(1))}          style={{ ...s.btn(false), flex:1, fontSize:9 }}>Full</button>
-                <button onClick={() => setSteps(steps.map((_,i)=>i%2===0?1:0))} style={{ ...s.btn(false), flex:1, fontSize:9 }}>Alt</button>
-                <button onClick={() => setSteps(steps.map((_,i)=>i/15))}    style={{ ...s.btn(false), flex:1, fontSize:9 }}>Ramp</button>
+                <button onClick={() => setSteps(Array(16).fill(0))}          style={{ ...s.btn(false), flex:1, fontSize:11 }}>Clear</button>
+                <button onClick={() => setSteps(Array(16).fill(1))}          style={{ ...s.btn(false), flex:1, fontSize:11 }}>Full</button>
+                <button onClick={() => setSteps(steps.map((_,i)=>i%2===0?1:0))} style={{ ...s.btn(false), flex:1, fontSize:11 }}>Alt</button>
+                <button onClick={() => setSteps(steps.map((_,i)=>i/15))}    style={{ ...s.btn(false), flex:1, fontSize:11 }}>Ramp</button>
               </div>
             </>
           )}
@@ -671,8 +671,8 @@ export default function PatternDesignerPanel() {
           ].map(([label, val, setter, min, max, step, display, color]) => (
             <div key={label} style={{ marginBottom:8 }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}>
-                <span style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{label}</span>
-                <span style={{ fontSize:9, color, fontFamily:"var(--font-mono)" }}>{display}</span>
+                <span style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>{label}</span>
+                <span style={{ fontSize:11, color, fontFamily:"var(--font-mono)" }}>{display}</span>
               </div>
               <input type="range" min={min} max={max} step={step} value={val}
                 onChange={e => setter(parseFloat(e.target.value))}
@@ -681,8 +681,8 @@ export default function PatternDesignerPanel() {
           ))}
 	          <div style={{ marginBottom:10 }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-              <span style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>RGB Light Color</span>
-              <span style={{ fontSize:9, color:lightColor, fontFamily:"var(--font-mono)" }}>{lightColor}</span>
+              <span style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)" }}>RGB Light Color</span>
+              <span style={{ fontSize:11, color:lightColor, fontFamily:"var(--font-mono)" }}>{lightColor}</span>
             </div>
             <input
               type="color"
@@ -705,7 +705,7 @@ export default function PatternDesignerPanel() {
               setBeatSync(e.target.checked);
               if (e.target.checked) setStepLength(60/bpmRef.current/2);
             }} id="beatSync"/>
-            <label htmlFor="beatSync" style={{ fontSize:10, color:"var(--text-secondary)", cursor:"pointer" }}>
+            <label htmlFor="beatSync" style={{ fontSize:11, color:"var(--text-secondary)", cursor:"pointer" }}>
               Sync to audio BPM ({currentShow?.bpm||128} BPM)
             </label>
           </div>
@@ -745,17 +745,17 @@ export default function PatternDesignerPanel() {
                 <span style={{ padding:"3px 7px", cursor:"pointer", color:"var(--red)", borderLeft:"1px solid var(--border)" }} onClick={() => handleDeletePattern(p.name)}>×</span>
               </span>
             ))}
-            {!savedPatterns.length && <span style={{ fontSize:9, color:"var(--text-muted)" }}>No saved patterns</span>}
+            {!savedPatterns.length && <span style={{ fontSize:11, color:"var(--text-muted)" }}>No saved patterns</span>}
           </div>
-          <button style={{ ...s.btn(false), fontSize:9 }} onClick={() => setSaveDialogOpen(true)}>Save Current Pattern…</button>
+          <button style={{ ...s.btn(false), fontSize:11 }} onClick={() => setSaveDialogOpen(true)}>Save Current Pattern…</button>
 
           {saveDialogOpen && (
             <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6, background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:4, padding:"10px 12px" }}>
-              <span style={{ fontSize:10, color:"var(--text-secondary)" }}>Pattern name:</span>
+              <span style={{ fontSize:11, color:"var(--text-secondary)" }}>Pattern name:</span>
               <input style={s.input} value={saveName} onChange={e => setSaveName(e.target.value)}
                 onKeyDown={e => { if(e.key==="Enter") handleSave(); }}
                 placeholder="e.g. Opening Ceremony Wave" autoFocus/>
-              {saveError && <span style={{ fontSize:9, color:"var(--red)" }}>{saveError}</span>}
+              {saveError && <span style={{ fontSize:11, color:"var(--red)" }}>{saveError}</span>}
               <div style={{ display:"flex", gap:6 }}>
                 <button style={{ ...s.btn(true,"#00aaff"), flex:1 }} onClick={handleSave}>Save</button>
                 <button style={{ ...s.btn(false), flex:1 }} onClick={() => { setSaveDialogOpen(false); setSaveError(""); }}>Cancel</button>
@@ -764,7 +764,7 @@ export default function PatternDesignerPanel() {
           )}
 
           {/* Info box (original) */}
-          <div style={{ marginTop:12, padding:"8px 10px", background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:4, fontSize:9, color:"var(--text-muted)", lineHeight:1.6 }}>
+          <div style={{ marginTop:12, padding:"8px 10px", background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:4, fontSize:11, color:"var(--text-muted)", lineHeight:1.6 }}>
             Pattern → showStore → 3D Preview (60fps)<br/>
             Pattern → Protocol Bus → PLC/DMX hardware<br/>
             Manual priority = AI choreography paused
@@ -789,22 +789,22 @@ export default function PatternDesignerPanel() {
 
           {selectedNozzles.size > 0 && (
             <div style={{ marginTop:8, padding:"8px 10px", background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:4 }}>
-              <div style={{ fontSize:9, color:"var(--text-muted)", marginBottom:6 }}>Solo intensity for selected nozzles (overrides pattern)</div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginBottom:6 }}>Solo intensity for selected nozzles (overrides pattern)</div>
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:9, color:"var(--text-muted)", fontFamily:"var(--font-mono)", width:32 }}>Solo</span>
+                <span style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"var(--font-mono)", width:32 }}>Solo</span>
                 <input type="range" min={0} max={1} step={0.01}
                   value={nozzleOverride ? (Array.from(selectedNozzles).reduce((s,i) => s+(nozzleOverride[i]??0),0)/selectedNozzles.size) : 0}
                   onChange={e => handleSoloIntensity(parseFloat(e.target.value))}
                   style={{ flex:1, accentColor:"var(--accent)" }}/>
-                <span style={{ fontSize:9, color:"var(--accent)", fontFamily:"var(--font-mono)", width:32, textAlign:"right" }}>
+                <span style={{ fontSize:11, color:"var(--accent)", fontFamily:"var(--font-mono)", width:32, textAlign:"right" }}>
                   {Math.round((nozzleOverride ? (Array.from(selectedNozzles).reduce((s,i) => s+(nozzleOverride[i]??0),0)/selectedNozzles.size) : 0)*100)}%
                 </span>
               </div>
-              <button style={{ ...s.btn(false), marginTop:6, fontSize:9 }} onClick={() => { setSelectedNozzles(new Set()); setNozzleOverride(null); }}>Clear selection</button>
+              <button style={{ ...s.btn(false), marginTop:6, fontSize:11 }} onClick={() => { setSelectedNozzles(new Set()); setNozzleOverride(null); }}>Clear selection</button>
             </div>
           )}
 
-          <div style={{ marginTop:6, fontSize:9, color:"var(--text-muted)", textAlign:"center" }}>
+          <div style={{ marginTop:6, fontSize:11, color:"var(--text-muted)", textAlign:"center" }}>
             Click to select · Ctrl+click for multi-select · Color = live intensity
           </div>
         </div>
@@ -818,7 +818,7 @@ export default function PatternDesignerPanel() {
           {/* Universe legend */}
           <div style={{ display:"flex", gap:10, marginBottom:8, flexWrap:"wrap" }}>
             {[1,2,3,4,5].map(u => (
-              <span key={u} style={{ display:"flex", alignItems:"center", gap:4, fontSize:9, color:"var(--text-muted)" }}>
+              <span key={u} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"var(--text-muted)" }}>
                 <span style={{ width:8, height:8, borderRadius:2, background:UNIVERSE_COLORS[u-1] }}/>
                 Univ {u}
               </span>
@@ -828,7 +828,7 @@ export default function PatternDesignerPanel() {
           {/* Header row */}
           <div style={{ ...s.dmxRow(false), borderBottom:"1px solid var(--border)", background:"var(--bg-surface)" }}>
             {["Fixture","Type","Universe","Channel",""].map((h,i) => (
-              <span key={i} style={{ ...s.dmxCell, fontSize:8, color:"var(--text-muted)", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.08em" }}>{h}</span>
+              <span key={i} style={{ ...s.dmxCell, fontSize:11, color:"var(--text-muted)", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.08em" }}>{h}</span>
             ))}
           </div>
 
@@ -843,14 +843,14 @@ export default function PatternDesignerPanel() {
                   <>
                     <span style={s.dmxCell}>
                       <select value={dmxDraft.universe} onChange={e => setDmxDraft(d=>({...d,universe:Number(e.target.value)}))}
-                        style={{ ...s.input, padding:"2px 4px", fontSize:10 }}>
+                        style={{ ...s.input, padding:"2px 4px", fontSize:11 }}>
                         {[1,2,3,4,5].map(u => <option key={u} value={u}>Universe {u}</option>)}
                       </select>
                     </span>
                     <span style={s.dmxCell}>
                       <input type="number" min={1} max={512} value={dmxDraft.channel}
                         onChange={e => setDmxDraft(d=>({...d,channel:Number(e.target.value)}))}
-                        style={{ ...s.input, width:60, padding:"2px 6px", fontSize:10 }}/>
+                        style={{ ...s.input, width:60, padding:"2px 6px", fontSize:11 }}/>
                     </span>
                     <span style={{ ...s.dmxCell, gap:4 }}>
                       <button style={s.actionBtn} onClick={saveDmxEdit}>✓</button>
@@ -888,15 +888,15 @@ export default function PatternDesignerPanel() {
         <div style={s.body}>
           <div style={s.sectionLabel}>Capture to Timeline</div>
 
-          <div style={{ fontSize:10, color:"var(--text-muted)", lineHeight:1.6, marginBottom:12 }}>
+          <div style={{ fontSize:11, color:"var(--text-muted)", lineHeight:1.6, marginBottom:12 }}>
             Record a live pattern session and export it as timeline clips.
             Captured keyframes appear in the Timeline panel for fine-tuning.
           </div>
 
           {/* Status indicator */}
           <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", background:"var(--bg-surface)", border:"1px solid var(--border)", borderRadius:4, marginBottom:12 }}>
-            <span style={{ width:8, height:8, borderRadius:"50%", background: recording?"#ef4444":"var(--text-muted)", boxShadow: recording?"0 0 6px #ef4444":"none", flexShrink:0 }}/>
-            <span style={{ fontSize:10, fontFamily:"var(--font-mono)", color:"var(--text-secondary)" }}>
+            <span style={{ width:8, height:8, borderRadius:"50%", background: recording?"var(--error)":"var(--text-muted)", boxShadow: recording?"0 0 6px var(--error)":"none", flexShrink:0 }}/>
+            <span style={{ fontSize:11, fontFamily:"var(--font-mono)", color:"var(--text-secondary)" }}>
               {recording
                 ? `Recording… ${Math.round((performance.now()-recordStart)/1000)}s · ${recordBuffer.length} frames`
                 : "Ready"}
@@ -911,7 +911,7 @@ export default function PatternDesignerPanel() {
           </div>
 
           {exportMsg && (
-            <div style={{ padding:"6px 10px", background:"rgba(0,212,100,0.08)", border:"1px solid rgba(0,212,100,0.25)", borderRadius:4, fontSize:10, color:"var(--green)", marginBottom:10 }}>
+            <div style={{ padding:"6px 10px", background:"rgba(0,212,100,0.08)", border:"1px solid rgba(0,212,100,0.25)", borderRadius:4, fontSize:11, color:"var(--green)", marginBottom:10 }}>
               {exportMsg}
             </div>
           )}
@@ -926,7 +926,7 @@ export default function PatternDesignerPanel() {
 
           <div style={{ marginTop:16 }}>
             <div style={s.sectionLabel}>How it works</div>
-            <ol style={{ margin:"4px 0 0 14px", padding:0, fontSize:9, color:"var(--text-muted)", lineHeight:2 }}>
+            <ol style={{ margin:"4px 0 0 14px", padding:0, fontSize:11, color:"var(--text-muted)", lineHeight:2 }}>
               <li>Choose a pattern type in the Pattern tab</li>
               <li>Click Start Recording — playback starts automatically</li>
               <li>Adjust intensity / speed or paint nozzles live</li>

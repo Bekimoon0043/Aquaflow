@@ -49,15 +49,15 @@ export default function VerifiedModelsTool() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
         Verified equipment set · <code>GET/POST /equipment/models</code>. AquaFlow ships no manufacturer data; add your own
         measurements, or datasheet values you have permission to use. Everything else stays a generic estimate.
       </div>
-      <div><button onClick={load} style={{ ...box, padding: "5px 10px", fontSize: 10, color: "var(--text-primary)", cursor: "pointer" }}>Load verified models</button></div>
+      <div><button onClick={load} style={{ ...box, padding: "5px 10px", fontSize: 11, color: "var(--text-primary)", cursor: "pointer" }}>Load verified models</button></div>
       {models && (models.length === 0
-        ? <div style={{ fontSize: 10, color: "#fbbf24" }}>No verified models yet — all calculations use generic estimates.</div>
+        ? <div style={{ fontSize: 11, color: "var(--warn)" }}>No verified models yet — all calculations use generic estimates.</div>
         : (
-          <table style={{ fontSize: 10, borderCollapse: "collapse", color: "var(--text-primary)" }}>
+          <table style={{ fontSize: 11, borderCollapse: "collapse", color: "var(--text-primary)" }}>
             <thead><tr>{["Kind", "Model", "Source", "Revision / date", "Origin", ""].map((h) => <th key={h} style={{ textAlign: "left", padding: 3, color: "var(--text-muted)" }}>{h}</th>)}</tr></thead>
             <tbody>
               {models.map((m) => (
@@ -67,7 +67,7 @@ export default function VerifiedModelsTool() {
                   <td style={{ padding: 3 }}><ProvenanceBadge provenance={m.provenance} /></td>
                   <td style={{ padding: 3 }}>{m.provenance.revision || "—"} · {m.provenance.date || "—"}</td>
                   <td style={{ padding: 3 }}>{m.origin}</td>
-                  <td style={{ padding: 3 }}>{m.origin === "user" && <button onClick={() => remove(m)} style={{ fontSize: 9, cursor: "pointer" }}>Delete</button>}</td>
+                  <td style={{ padding: 3 }}>{m.origin === "user" && <button onClick={() => remove(m)} style={{ fontSize: 11, cursor: "pointer" }}>Delete</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -113,9 +113,9 @@ export default function VerifiedModelsTool() {
         {form.kind === "valve" && <div style={{ display: "flex", gap: 6 }}>{F("kv", "Kv (m3/h/sqrt(bar)) *")}{F("size", "Size (e.g. DN80)")}</div>}
         {form.kind === "light" && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{F("powerW", "Power W *")}{F("dmxChannels", "DMX channels *")}{F("voltageV", "Voltage V")}{F("beamAngleDeg", "Beam angle °")}</div>}
         {F("notes", "Notes")}
-        {errors.length > 0 && <div role="alert" style={{ color: "#ef4444", fontSize: 10 }}>{errors.map((e) => <div key={e}>• {e}</div>)}</div>}
-        <div><button onClick={submit} style={{ background: "var(--accent)", color: "#04140a", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save model ▶</button></div>
-        {msg && <div role="status" style={{ fontSize: 10, color: "var(--text-muted)" }}>{msg}</div>}
+        {errors.length > 0 && <div role="alert" style={{ color: "var(--error)", fontSize: 11 }}>{errors.map((e) => <div key={e}>• {e}</div>)}</div>}
+        <div><button onClick={submit} style={{ background: "var(--accent)", color: "var(--text-on-accent)", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save model ▶</button></div>
+        {msg && <div role="status" style={{ fontSize: 11, color: "var(--text-muted)" }}>{msg}</div>}
       </div>
     </div>
   );

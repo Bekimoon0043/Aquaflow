@@ -1,6 +1,6 @@
 # AquaFlow Studio — Current Status
 
-**2026-11-23 — Professional UI overhaul (In Progress)**
+**2026-11-23 — Professional UI overhaul (Done, on branch ui-pro-overhaul)**
 
 - **Continuation (Claude Code, after GPT Astra ran out of tokens mid-phase 6):**
   - **Rejected and stashed** Astra's automated phase 6 migration (`git stash list`: "astra-phase6-automated-migration"). It turned every red/amber/green status colour grey (Safety, PLC, E-stop panels), clamped all font sizes to 11–13 px and added about 3,000 generated `pro-static-N` classes.
@@ -10,13 +10,22 @@
   - Status bar rebuilt with CSS classes. Fake static labels removed ("48kHz / 32-bit", "DMX · Art-Net · Modbus", "v0.1"); the version comes from the desktop app. The Preferences/About dialog shell uses CSS classes.
   - **Phase 6 ratchet:** `src/ui/styleAudit.js`, `styleAudit.test.js` and `styleBaseline.json`. No component may gain inline styles or hard-coded hex colours; after migrating a panel, lower the baseline with `node scripts/update-style-baseline.mjs`. Before the overhaul: 3,681 inline styles and 2,658 hex colours. Now: 3,661 and 2,654.
   - **Verified:** 219 test files / 2,086 tests pass, the production build passes, and the after screenshot is `docs/evidence/ui-pro-after-program.png` (Coffee_Fountain).
-  - **Still In Progress:**
-    - Panel-by-panel migration of the remaining inline styles. Largest first: ShowProgrammerPanel, PreviewPanel_v5, EasyFountainPanel; plus ShowStudio's own header/toolbar, which still looks website-like.
-    - Keyframe diamonds on pattern properties (needs a real animation action to wire to).
-    - Moving calibration into the Commission workspace.
-    - Heat-map shading and Easy/Studio-look viewport parity (phase 3).
-    - Full-workspace dock layouts (phase 2).
-    - A headless capture of the Focus Preview (software rendering stalls on its 3D scene).
+  - **Remaining items, finished in the same session (all Done):**
+    - **Design tokens on every screen:** a semantic colour migration of JSX style attributes and component CSS. It keeps each colour's meaning by hue: reds → `--error`, ambers → `--warn`, greens → `--ok`, cyans/blues → `--info`, purples → `--violet`, golds → `--accent`, near-black text on bright fills → `--text-on-accent`, and greys → the background/border/text scale by property.
+      - Canvas, SVG-attribute, three.js and function-argument colours are untouched, because CSS variables do not work there.
+      - Tiny 8–10 px text was raised to the 11 px minimum.
+      - Hard-coded hex colours in components went from 2,654 to 920; the rest are drawing or data colours. The ratchet baseline is lowered so they cannot come back.
+    - **Show Studio:** the website-style header (eyebrow, large title, separate bar) is merged into one 36 px toolbar with icon transport, undo/redo, loop and commands. The inspector heading is a 13 px panel title, not the 22 px slogan. The toolbar fits at 1440 px.
+    - **Keyframe diamonds:** next to a pattern's Level field, a diamond adds or removes a level-envelope key at the playhead (Curve effect), holding the curve's current value (`studio/keyframes.js`, tested).
+    - **Calibration in Commission:** "Nozzle timing from video" is part of Commission → Calibration and writes `programmer.studio.site.calibration`, the same data Show Programming reads. The Pattern Builder button links there.
+    - **Signal heat-map shading:** a viewport Shading option colours each fixture body by its live output, blue → red, refreshed at 10 Hz (`heatColor`, tested).
+    - **Full-workspace docking:** the Engineering sidebar and Easy Design properties/asset tray can resize, collapse and swap side, and are saved per workspace (`ui/dock/panelLayout.js`, tested). Show Studio can swap Explorer and Inspector sides. View → Reset layout resets the open workspace without navigating away.
+    - **Dock UX:** panels move by dragging a tab or right-clicking it (Move to …). The per-panel "Dock ▾" row is gone.
+    - **Timeline track headers:** Mute/Solo stay visible; move up/down and add-clip show on hover; long names are truncated instead of overlapping the buttons.
+    - Engineering and Calibration panels use the UI font instead of an all-monospace terminal look. The Engineering TOOL/DRAW badges no longer cover the canvas toolbar.
+    - Stale help text "Your fountain → AI director" now reads "File → Preferences → AI director".
+    - **Focus Preview verified in the real app:** selecting group arc-g (30 jets) in Show Studio opened "Focus Preview · 30" with transport and views, and the clock was running. Headless software rendering cannot take a screenshot of two live WebGL views.
+    - **Verified:** 222 test files / 2,095 tests pass and the production build passes. Screenshots: `docs/evidence/ui-pro-after-studio-toolbar.png`, `ui-pro-after-engineering.png`, `ui-pro-after-commission-calibration.png`.
 - Phase 0: neutral tokens, offline SVG icons, reusable UI controls and usage guide. Numeric scrubbing tests added. Full suite: 2,071 passed; production build passed. Isolated worktree protects concurrent renderer work.
 
 **2026-11-23: AquaFlow Studio 1.2.89 - Odaa · 3Obsa second pass: Vario mushrooms, a tall dancing circle, rainbow arcs into the centre**

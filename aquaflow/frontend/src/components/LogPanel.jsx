@@ -40,9 +40,9 @@ export default function LogPanel({ onClose }) {
         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Console
         </span>
-        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{serverLogs.length} entries</span>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{serverLogs.length} entries</span>
         <div style={{ flex: 1 }} />
-        <button className="btn" style={{ padding: "2px 8px", fontSize: 10 }} onClick={clearLogs}>Clear</button>
+        <button className="btn" style={{ padding: "2px 8px", fontSize: 11 }} onClick={clearLogs}>Clear</button>
         <button className="btn" style={{ padding: "2px 6px", fontSize: 12 }} onClick={onClose}>✕</button>
       </div>
 
@@ -63,13 +63,13 @@ export default function LogPanel({ onClose }) {
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-surface)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
               >
-                <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: 10 }}>
+                <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: 11 }}>
                   {formatTime(log.ts)}
                 </span>
                 <span style={{ color: style.color, flexShrink: 0 }}>{style.icon}</span>
                 <span style={{ color: style.color, flex: 1, wordBreak: "break-word" }}>{log.msg}</span>
                 {log.deviceId && (
-                  <span style={{ color: "var(--text-muted)", fontSize: 10, flexShrink: 0 }}>
+                  <span style={{ color: "var(--text-muted)", fontSize: 11, flexShrink: 0 }}>
                     [{log.deviceId}]
                   </span>
                 )}

@@ -65,7 +65,7 @@ export default function SiemensPlcMonitor({ site }) {
         const active = fb && (fb.open || fb.running || fb.applied_percent > 0 || fb.rgb?.some(Boolean));
         return <tr key={channel.id}><td>{channel.name}</td><td className="s7-mono">{channel.tag || ""}</td>
           <td className="s7-mono">{commandText(channel, live.values?.[channel.id])}</td>
-          <td className="s7-mono" style={{ color: active ? "#4cc38a" : undefined }}>{feedbackText(channel, fb)}</td></tr>;
+          <td className="s7-mono" style={{ color: active ? "var(--ok)" : undefined }}>{feedbackText(channel, fb)}</td></tr>;
       })}</tbody>
     </table>
     <p>{live.running ? "Values update with every frame AquaFlow sends." : "Read-only: AquaFlow is only reading. In TIA Portal, open DB" + site.plc.db + " and click Monitor all to see the same values."}</p>

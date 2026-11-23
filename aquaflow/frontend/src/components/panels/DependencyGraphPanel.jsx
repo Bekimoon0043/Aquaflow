@@ -35,7 +35,7 @@ export default function DependencyGraphPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Equipment Dependencies
         </span>
-        <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-muted)" }}>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
           {laid.stats.fixtureCount} fixtures · {laid.stats.controllerCount} controllers ·{" "}
           <span style={{ color: laid.stats.conflictCount ? SEVERITY_COLOR.critical : "var(--text-muted)" }}>
             {laid.stats.conflictCount} conflict{laid.stats.conflictCount === 1 ? "" : "s"}
@@ -89,7 +89,7 @@ export default function DependencyGraphPanel() {
         padding: "8px 12px", flexShrink: 0, maxHeight: "38%", overflow: "auto" }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
           {Object.entries(KIND_STYLE).map(([k, s]) => (
-            <span key={k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9,
+            <span key={k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11,
               color: "var(--text-muted)" }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: s.fill,
                 border: `1.5px solid ${s.stroke}` }} />
@@ -98,11 +98,11 @@ export default function DependencyGraphPanel() {
           ))}
         </div>
         {laid.conflicts.length === 0 ? (
-          <div style={{ fontSize: 10, color: "#22c55e" }}>✓ No dependency conflicts.</div>
+          <div style={{ fontSize: 11, color: "var(--ok)" }}>✓ No dependency conflicts.</div>
         ) : (
           laid.conflicts.map((c, i) => (
-            <div key={i} style={{ fontSize: 10, color: "var(--text-secondary)", padding: "2px 0" }}>
-              <span style={{ color: SEVERITY_COLOR[c.severity] || "#aaa", fontWeight: 600 }}>
+            <div key={i} style={{ fontSize: 11, color: "var(--text-secondary)", padding: "2px 0" }}>
+              <span style={{ color: SEVERITY_COLOR[c.severity] || "var(--text-secondary)", fontWeight: 600 }}>
                 {c.severity === "critical" ? "⛔" : "⚠"} {c.type.replace(/_/g, " ")}
               </span>{" "}
               — {c.message}

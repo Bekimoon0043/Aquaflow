@@ -65,13 +65,13 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
   const verifiedCount = filtered.filter((fixture) => isVerifiedProvenance(fixture.provenance)).length;
 
   return (
-    <div style={{ padding: "8px 10px", borderBottom: "1px solid #0a2030" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", color: "#7a96aa", fontSize: 10, marginBottom: 6 }}>
+    <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--info)", fontSize: 11, marginBottom: 6 }}>
         <span>{tool === "laser" ? "LASER CATALOGUE" : tool === "fireworks" ? "FIREWORKS CATALOGUE" : "FIXTURE LIBRARY"}</span><span>{filtered.length}/{toolFixtures.length}</span>
       </div>
-      <div style={{ color: "#65d9d0", fontSize: 9, marginBottom: 6, lineHeight: 1.4 }}>Drag a model onto the plan, or click it and then click the plan. Select the placed part to edit its properties.</div>
+      <div style={{ color: "var(--info)", fontSize: 11, marginBottom: 6, lineHeight: 1.4 }}>Drag a model onto the plan, or click it and then click the plan. Select the placed part to edit its properties.</div>
       {filtered.length > verifiedCount && (
-        <div data-testid="library-generic-note" style={{ color: "#fbbf24", fontSize: 9, marginBottom: 5, lineHeight: 1.4 }}>
+        <div data-testid="library-generic-note" style={{ color: "var(--warn)", fontSize: 11, marginBottom: 5, lineHeight: 1.4 }}>
           {verifiedCount === 0 ? "All items: " : `${filtered.length - verifiedCount} item(s): `}{GENERIC_LABEL}
         </div>
       )}
@@ -80,13 +80,13 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
         value={query}
         onChange={(event) => { setQuery(event.target.value); setLimit(PAGE_SIZE); }}
         placeholder="Search model, type, manufacturer…"
-        style={{ width: "100%", padding: "6px 7px", marginBottom: 5, background: "#06121c", color: "#cce8ff", border: "1px solid #16415a", borderRadius: 4, fontSize: 11 }}
+        style={{ width: "100%", padding: "6px 7px", marginBottom: 5, background: "var(--bg-base)", color: "var(--text-primary)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 4, fontSize: 11 }}
       />
       <select
         aria-label="Fixture category"
         value={category}
         onChange={(event) => { setCategory(event.target.value); setLimit(PAGE_SIZE); }}
-        style={{ width: "100%", padding: 5, marginBottom: 6, background: "#06121c", color: "#a9c4d6", border: "1px solid #16415a", borderRadius: 4, fontSize: 10 }}
+        style={{ width: "100%", padding: 5, marginBottom: 6, background: "var(--bg-base)", color: "var(--info)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 4, fontSize: 11 }}
       >
         <option value="all">{byFamily ? "All families" : "All categories"}</option>
         {categories.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
@@ -94,7 +94,7 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
       <div style={{ display: "flex", flexDirection: "column", gap: 3, maxHeight: 240, overflowY: "auto" }}>
         {visible.map((fixture, index) => (<div key={fixture.key} style={{ display: "contents" }}>
           {byFamily && (index === 0 || groupOf(visible[index - 1], tool) !== groupOf(fixture, tool)) && (
-            <div role="heading" aria-level={4} style={{ color: tool === "laser" ? "#ff6a9a" : "#ffaa66", fontSize: 9, fontWeight: 800, letterSpacing: 0.5, margin: "4px 0 1px" }}>
+            <div role="heading" aria-level={4} style={{ color: tool === "laser" ? "var(--violet)" : "var(--warn)", fontSize: 11, fontWeight: 800, letterSpacing: 0.5, margin: "4px 0 1px" }}>
               {groupOf(fixture, tool).toUpperCase()}
             </div>
           )}
@@ -114,16 +114,16 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
             style={{
               display: "grid", gridTemplateColumns: "20px 1fr", gap: 6, alignItems: "center",
               width: "100%", padding: "6px 7px", textAlign: "left", cursor: "pointer",
-              background: selectedKey === fixture.key ? "#073146" : "#0a1825",
-              color: selectedKey === fixture.key ? fixture.color : "#8aa4b5",
+              background: selectedKey === fixture.key ? "var(--bg-surface)" : "var(--bg-base)",
+              color: selectedKey === fixture.key ? fixture.color : "var(--info)",
               border: `1px solid ${selectedKey === fixture.key ? fixture.color + "77" : "#123044"}`,
-              borderRadius: 4, fontFamily: "monospace", fontSize: 10,
+              borderRadius: 4, fontFamily: "monospace", fontSize: 11,
             }}
           >
             <span aria-hidden="true" style={{ color: fixture.color, fontSize: 13 }}>{fixture.icon}</span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fixture.label}</span>
-              <span style={{ display: "flex", justifyContent: "space-between", gap: 4, color: "#587286", fontSize: 9 }}>
+              <span style={{ display: "flex", justifyContent: "space-between", gap: 4, color: "var(--info)", fontSize: 11 }}>
                 <span>{byFamily ? (fixture.summary || fixture.category || "Other") : (fixture.category || "Other")}</span>
                 <ProvenanceBadge provenance={fixture.provenance} compact />
               </span>
@@ -133,11 +133,11 @@ export default function FixtureLibraryBrowser({ fixtures, tool, selectedKey, onS
             </span>
           </button>
         </div>))}
-        {!visible.length && <div style={{ padding: 12, color: "#7890a0", textAlign: "center", fontSize: 10 }}>No matching fixtures.</div>}
+        {!visible.length && <div style={{ padding: 12, color: "var(--text-muted)", textAlign: "center", fontSize: 11 }}>No matching fixtures.</div>}
       </div>
       {filtered.length > visible.length && (
         <button type="button" onClick={() => setLimit((value) => value + PAGE_SIZE)}
-          style={{ width: "100%", marginTop: 5, padding: 5, background: "#0a2535", color: "#8fc4dd", border: "1px solid #16415a", borderRadius: 4, fontSize: 10, cursor: "pointer" }}>
+          style={{ width: "100%", marginTop: 5, padding: 5, background: "var(--bg-panel)", color: "var(--info)", border: "1px solid color-mix(in srgb, var(--info) 40%, var(--border))", borderRadius: 4, fontSize: 11, cursor: "pointer" }}>
           Show more ({filtered.length - visible.length} remaining)
         </button>
       )}

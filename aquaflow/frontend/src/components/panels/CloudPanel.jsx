@@ -80,22 +80,22 @@ export default function CloudPanel() {
         </span>
         <select value={cid} onChange={(e) => setCid(e.target.value)} style={{ marginLeft: "auto",
           background: "var(--bg-panel)", color: "var(--text-primary)", border: "1px solid var(--border)",
-          borderRadius: 6, fontSize: 10, padding: "3px 6px" }}>
+          borderRadius: 6, fontSize: 11, padding: "3px 6px" }}>
           {companies.length === 0 && <option value="">— no companies —</option>}
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.plan})</option>)}
         </select>
         <button onClick={seedDemo} style={{ background: "transparent", border: "1px solid var(--border)",
-          borderRadius: 6, color: "var(--text-muted)", fontSize: 10, padding: "3px 8px", cursor: "pointer" }}>
+          borderRadius: 6, color: "var(--text-muted)", fontSize: 11, padding: "3px 8px", cursor: "pointer" }}>
           + Demo data
         </button>
       </div>
 
-      {error && <div style={{ ...box, margin: 8, padding: 8, color: "#ef4444", fontSize: 10 }}>⛔ {error}</div>}
+      {error && <div style={{ ...box, margin: 8, padding: 8, color: "var(--error)", fontSize: 11 }}>⛔ {error}</div>}
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* backups */}
         <div style={{ flex: 1, overflow: "auto", padding: 10, borderRight: "1px solid var(--border)" }}>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
             CLOUD BACKUPS ({backups.length})
           </div>
           {backups.length === 0 ? (
@@ -108,9 +108,9 @@ export default function CloudPanel() {
                 </span>
                 <button onClick={() => restore(b.backup_id)} style={{ background: "transparent",
                   border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)",
-                  fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>Restore</button>
+                  fontSize: 11, padding: "2px 7px", cursor: "pointer" }}>Restore</button>
               </div>
-              <div style={{ fontSize: 8.5, color: "var(--text-muted)", marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
                 {b.asset_type}{b.label ? ` · ${b.label}` : ""} · {b.size_bytes} B · ✓ {b.checksum.slice(0, 12)}…
               </div>
             </div>
@@ -119,7 +119,7 @@ export default function CloudPanel() {
 
         {/* remote diagnostics */}
         <div style={{ width: 320, overflow: "auto", padding: 10, flexShrink: 0 }}>
-          <div style={{ fontSize: 9, color: "var(--text-muted)", marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
             REMOTE DIAGNOSTICS ({sites.length})
           </div>
           {sites.length === 0 ? (
@@ -130,9 +130,9 @@ export default function CloudPanel() {
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH[s.health] }} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>{s.site_name}</span>
-                <span style={{ fontSize: 9, color: HEALTH[s.health], textTransform: "uppercase" }}>{s.health}</span>
+                <span style={{ fontSize: 11, color: HEALTH[s.health], textTransform: "uppercase" }}>{s.health}</span>
               </div>
-              <div style={{ fontSize: 8.5, color: "var(--text-muted)", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                 {s.reachable ? "reachable" : "unreachable"}{s.alert_count ? ` · ${s.alert_count} alerts` : ""} · run ▸
               </div>
             </div>
@@ -140,18 +140,18 @@ export default function CloudPanel() {
 
           {diag && (
             <div style={{ ...box, padding: 9, marginTop: 8, borderTop: `2px solid ${HEALTH[diag.health]}` }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--text-primary)" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)" }}>
                 {diag.site_name} — <span style={{ color: HEALTH[diag.health] }}>{diag.health}</span>
               </div>
-              <div style={{ fontSize: 8.5, color: "var(--text-muted)", margin: "2px 0 6px" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 6px" }}>
                 {diag.reachable ? "reachable" : "UNREACHABLE"} · backup {diag.has_backup ? `v${diag.last_backup_version}` : "none"}
               </div>
               {diag.alerts.map((a, i) => (
-                <div key={i} style={{ fontSize: 9.5, color: SEV[a.severity], marginBottom: 2 }}>• {a.message}</div>
+                <div key={i} style={{ fontSize: 11, color: SEV[a.severity], marginBottom: 2 }}>• {a.message}</div>
               ))}
-              <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 5, marginBottom: 2 }}>RECOMMENDATIONS</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5, marginBottom: 2 }}>RECOMMENDATIONS</div>
               {diag.recommendations.map((r, i) => (
-                <div key={i} style={{ fontSize: 9.5, color: "var(--text-secondary)", marginBottom: 2 }}>→ {r}</div>
+                <div key={i} style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>→ {r}</div>
               ))}
             </div>
           )}

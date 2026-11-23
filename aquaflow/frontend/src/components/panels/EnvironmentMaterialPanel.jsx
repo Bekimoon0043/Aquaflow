@@ -66,7 +66,7 @@ export default function EnvironmentMaterialPanel() {
   const numField = (k) => {
     const r = ranges[k];
     return (
-      <label key={k} style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 2 }}>
+      <label key={k} style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 2 }}>
         {k.replace(/_/g, " ")} <span style={{ color: "var(--accent)" }}>{Number(getField(k)).toFixed(r.max <= 1 ? 3 : 1)}</span>
         <input type="range" min={r.min} max={r.max} step={(r.max - r.min) / 200}
           value={getField(k)} onChange={(e) => setField(k, Number(e.target.value))} />
@@ -83,7 +83,7 @@ export default function EnvironmentMaterialPanel() {
           letterSpacing: "0.12em", color: "var(--text-secondary)", textTransform: "uppercase" }}>
           Environment & Material Library
         </span>
-        <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-muted)" }}>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
           {customCount}/{limit} custom
         </span>
       </div>
@@ -93,7 +93,7 @@ export default function EnvironmentMaterialPanel() {
           <button key={k} onClick={() => { setTab(k); setSel(null); setDraft(null); }}
             style={{ padding: "7px 14px", background: "transparent", border: "none",
               borderBottom: tab === k ? "2px solid var(--accent)" : "2px solid transparent",
-              color: tab === k ? "var(--text-accent)" : "var(--text-muted)", fontSize: 10,
+              color: tab === k ? "var(--text-accent)" : "var(--text-muted)", fontSize: 11,
               fontWeight: tab === k ? 600 : 400, cursor: "pointer" }}>{label}</button>
         ))}
       </div>
@@ -104,13 +104,13 @@ export default function EnvironmentMaterialPanel() {
           {list.map((item) => (
             <div key={item.id} onClick={() => pick(item)}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", cursor: "pointer",
-                fontSize: 10.5, borderBottom: "1px solid var(--border)",
+                fontSize: 11, borderBottom: "1px solid var(--border)",
                 background: sel?.id === item.id ? "var(--bg-surface)" : "transparent",
                 color: sel?.id === item.id ? "var(--text-accent)" : "var(--text-primary)" }}>
               {!isEnv && <span style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, ...swatch(item) }} />}
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
               {!item.builtin && <span onClick={(e) => { e.stopPropagation(); remove(item); }}
-                style={{ color: "#ef4444", cursor: "pointer" }}>✕</span>}
+                style={{ color: "var(--error)", cursor: "pointer" }}>✕</span>}
             </div>
           ))}
         </div>
@@ -127,7 +127,7 @@ export default function EnvironmentMaterialPanel() {
                   style={{ ...box, flex: 1, padding: 6, fontSize: 12, color: "var(--text-primary)" }} />
               </div>
               {!isEnv && (
-                <label style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+                <label style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
                   Base colour
                   <input type="color" value={draft.color} onChange={(e) => setField("color", e.target.value)} />
                 </label>
@@ -136,11 +136,11 @@ export default function EnvironmentMaterialPanel() {
                 {fields.filter((k) => k in ranges).map((k) => numField(k))}
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button onClick={save} style={{ background: "var(--accent)", color: "#04140a", border: "none",
+                <button onClick={save} style={{ background: "var(--accent)", color: "var(--text-on-accent)", border: "none",
                   borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                   {draft.builtin ? "Save as custom" : "Update preset"}
                 </button>
-                {msg && <span style={{ fontSize: 10, color: msg.includes("✓") ? "#22c55e" : "#ef4444" }}>{msg}</span>}
+                {msg && <span style={{ fontSize: 11, color: msg.includes("✓") ? "var(--ok)" : "var(--error)" }}>{msg}</span>}
               </div>
             </div>
           )}

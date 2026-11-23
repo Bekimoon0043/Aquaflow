@@ -285,15 +285,15 @@ export default function ICANManualPatternEditor({
           {(layout?.sections || []).map(section => (
             <div key={section.id} style={{ background: C.bg, padding: 6, borderRadius: 3 }}>
               <div style={{ color: C.accent }}>{section.label}</div>
-              <div style={{ fontSize: 9 }}>{section.outputs} output{section.outputs === 1 ? "" : "s"} · {section.pumps} pump{section.pumps === 1 ? "" : "s"}</div>
+              <div style={{ fontSize: 11 }}>{section.outputs} output{section.outputs === 1 ? "" : "s"} · {section.pumps} pump{section.pumps === 1 ? "" : "s"}</div>
             </div>
           ))}
         </div>
-        <div style={{ color: C.warn, fontSize: 9, marginTop: 6, lineHeight: 1.45 }}>
+        <div style={{ color: C.warn, fontSize: 11, marginTop: 6, lineHeight: 1.45 }}>
           The physical model contains all 100 water outlets. Hardware authoring currently exposes the first 64
           capture-mapped running valves; running valves 65-76 and Peacock frequency limits require commissioning.
         </div>
-        <div style={{ color: C.dim, fontSize: 9, marginTop: 5, lineHeight: 1.45 }}>
+        <div style={{ color: C.dim, fontSize: 11, marginTop: 5, lineHeight: 1.45 }}>
           Cabinet photos confirm the I-CAN NETCAN converter, Music Fountain Control System,
           solid-state load relays and separate multi-pole power circuits. Their labels do not reveal
           every I-CAN address translation. Group 17 is therefore locked to
@@ -321,7 +321,7 @@ export default function ICANManualPatternEditor({
       </div>
 
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 7 }}>
-        <span style={{ fontSize: 9, color: C.dim, alignSelf: "center" }}>Start from:</span>
+        <span style={{ fontSize: 11, color: C.dim, alignSelf: "center" }}>Start from:</span>
         <button style={button(false, C.ok)} disabled={!layout} onClick={useOpeningPulseTemplate}>Opening pulse</button>
         <button style={button(false, C.warn)} disabled={!layout} onClick={useBankWaveTemplate}>Four-bank wave candidate</button>
       </div>
@@ -338,18 +338,18 @@ export default function ICANManualPatternEditor({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7 }}>
-        <span style={{ fontSize: 9 }}>Step {activeStep + 1} duration</span>
+        <span style={{ fontSize: 11 }}>Step {activeStep + 1} duration</span>
         <input type="number" min="100" max="60000" step="100" style={{ ...input, width: 75 }}
           value={step.duration_ms}
           onChange={event => updateStep(activeStep, current => ({
             ...current, duration_ms: Math.max(100, Math.min(60000, Number(event.target.value) || 100)),
           }))} />
-        <span style={{ fontSize: 9 }}>ms</span>
+        <span style={{ fontSize: 11 }}>ms</span>
         <button style={button(false, C.warn)} onClick={clearStep}>All groups off</button>
       </div>
 
       <div style={{ marginBottom: 7 }}>
-        <div style={{ fontSize: 9, color: C.dim, marginBottom: 4 }}>
+        <div style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>
           Proven captured state and provisional physical presets
         </div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -383,7 +383,7 @@ export default function ICANManualPatternEditor({
         <button style={button(false)} onClick={clearGroup}>Clear group {activeGroup}</button>
       </div>
       {groupLocked && (
-        <div style={{ color: C.warn, fontSize: 9, marginTop: -6, marginBottom: 10 }}>
+        <div style={{ color: C.warn, fontSize: 11, marginTop: -6, marginBottom: 10 }}>
           {activeGroup === 17
             ? "Group 17 is locked to the exact Captured G17 support state or off."
             : `Group ${activeGroup} may control frequency, pump, or fire equipment and is locked until commissioned.`}
@@ -392,16 +392,16 @@ export default function ICANManualPatternEditor({
 
       <div style={{ marginBottom: 8 }}>
         <button style={button(true, C.ok)} onClick={previewPattern}>PREVIEW THIS PATTERN IN 3D</button>
-        <div style={{ fontSize: 9, color: C.dim, marginTop: 4 }}>Preview uses the current engineering layout and Repeat value. Gateway connection and output arm are not required.</div>
+        <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>Preview uses the current engineering layout and Repeat value. Gateway connection and output arm are not required.</div>
       </div>
       <ICANPreviewControls />
       <div style={{ padding: 8, border: `1px solid ${status?.running ? C.ok : C.line}`, borderRadius: 4 }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <label style={{ fontSize: 9 }}>Repeat</label>
+          <label style={{ fontSize: 11 }}>Repeat</label>
           <input type="number" min="1" max="20" style={{ ...input, width: 48 }} value={repeat}
             onChange={event => setRepeat(Math.max(1, Math.min(20, Number(event.target.value) || 1)))} />
-          <span style={{ fontSize: 9, color: C.dim }}>total {(totalMs / 1000).toFixed(1)}s</span>
-          {audioFile && <span style={{ fontSize: 9, color: C.ok }} title={audioFile.name}>music: {audioFile.name}</span>}
+          <span style={{ fontSize: 11, color: C.dim }}>total {(totalMs / 1000).toFixed(1)}s</span>
+          {audioFile && <span style={{ fontSize: 11, color: C.ok }} title={audioFile.name}>music: {audioFile.name}</span>}
           <input style={{ ...input, width: 175 }} placeholder={`type: ${CONFIRM}`}
             value={confirmText} onChange={event => setConfirmText(event.target.value)} />
           <button style={button(!!status?.running, C.ok)} disabled={!canRun} onClick={runPattern}>
@@ -412,7 +412,7 @@ export default function ICANManualPatternEditor({
         <div style={{ height: 4, background: C.line, marginTop: 7, overflow: "hidden", borderRadius: 2 }}>
           <div style={{ width: `${progress}%`, height: "100%", background: status?.running ? C.ok : C.accent }} />
         </div>
-        <div style={{ fontSize: 9, marginTop: 5, color: status?.error ? C.danger : C.dim }}>
+        <div style={{ fontSize: 11, marginTop: 5, color: status?.error ? C.danger : C.dim }}>
           {status?.running
             ? `${status.pattern_name} · pass ${status.pass_index}/${status.repeat} · step ${status.step_index + 1}/${status.step_count} · ${status.remaining_s}s remaining`
             : status?.outcome && status.outcome !== "idle"
@@ -420,7 +420,7 @@ export default function ICANManualPatternEditor({
               : "Draft and preview states freely. Hardware Run requires Safety, output arm, and the typed phrase."}
         </div>
         {(!connected || !permit || !armed || siteDemoRunning || channelTestRunning) && (
-          <div style={{ color: C.warn, fontSize: 9, marginTop: 4 }}>
+          <div style={{ color: C.warn, fontSize: 11, marginTop: 4 }}>
             {!connected ? "Connect the gateway first."
               : !permit ? "Arm the safety system first."
                 : !armed ? "Arm I-CAN output first."

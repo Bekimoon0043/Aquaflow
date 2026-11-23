@@ -179,7 +179,7 @@ export function ConnectionsEditorView({ fixtures = [], clips = null, onCommit, o
             onClick={() => { setMode(k); setActive(k === "pump" && !design.pumps.has(active) ? pumpIds[0] || null : k === "select" ? null : active); }}>{label}</button>
         ))}
         {mode === "pump" && (
-          <select aria-label="Active pump" value={design.pumps.has(active) ? active : ""} onChange={(e) => setActive(e.target.value || null)} style={{ fontSize: 10 }}>
+          <select aria-label="Active pump" value={design.pumps.has(active) ? active : ""} onChange={(e) => setActive(e.target.value || null)} style={{ fontSize: 11 }}>
             <option value="">— pick a pump —</option>
             {[...design.pumps.values()].map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -188,8 +188,8 @@ export function ConnectionsEditorView({ fixtures = [], clips = null, onCommit, o
         {onUndo && <button type="button" style={btn()} disabled={!canUndo} onClick={onUndo} title={undoLabel || ""}>↶ Undo{undoLabel ? ` ${undoLabel}` : ""}</button>}
       </div>
       <div style={small}>{HINT[mode]}{active && mode !== "select" ? ` · Picked: ${name(itemOf(active))}` : ""}</div>
-      <div style={{ ...small, color: "var(--text-accent, #9fd)" }}>Quick connect: drag a pump onto nozzles or valves, drag a valve onto a nozzle, or drag a light onto a nozzle. Click any part to edit its ratings and connections.</div>
-      {status && <div role="status" style={{ ...small, color: "var(--text-accent, #9fd)" }}>{status}</div>}
+      <div style={{ ...small, color: "var(--text-accent, var(--ok))" }}>Quick connect: drag a pump onto nozzles or valves, drag a valve onto a nozzle, or drag a light onto a nozzle. Click any part to edit its ratings and connections.</div>
+      {status && <div role="status" style={{ ...small, color: "var(--text-accent, var(--ok))" }}>{status}</div>}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ flex: "2 1 420px", minWidth: 300 }}>
@@ -216,7 +216,7 @@ export function ConnectionsEditorView({ fixtures = [], clips = null, onCommit, o
               <input type="checkbox" checked={scopeSelected} onChange={() => setScopeSelected((v) => !v)} /> Selected items only ({selected.length})
             </label>
             {preview && (
-              <div data-testid="auto-preview" style={{ marginTop: 6, padding: 6, border: "1px solid var(--border, #234)", borderRadius: 4 }}>
+              <div data-testid="auto-preview" style={{ marginTop: 6, padding: 6, border: "1px solid var(--border, color-mix(in srgb, var(--info) 40%, var(--border)))", borderRadius: 4 }}>
                 <b>{preview.title}</b> — {preview.lines.length ? `${preview.lines.length} change${preview.lines.length === 1 ? "" : "s"} (${describeChange(fixtures, preview.fixtures)})` : "nothing to do"}
                 <ul style={{ margin: "4px 0", paddingLeft: 16, maxHeight: 120, overflow: "auto" }}>
                   {preview.lines.slice(0, 40).map((l, i) => <li key={i}>{l}</li>)}
@@ -238,7 +238,7 @@ export function ConnectionsEditorView({ fixtures = [], clips = null, onCommit, o
 
       <section>
         <h4 style={{ margin: "4px 0", fontSize: 11 }}>Problems {problems.length ? `(${problems.length})` : ""}</h4>
-        {!problems.length && <div style={{ ...small, color: "#2fd3a2" }}>Everything is connected.</div>}
+        {!problems.length && <div style={{ ...small, color: "var(--ok)" }}>Everything is connected.</div>}
         {groups.map((g) => (
           <div key={g.code} style={{ borderLeft: `3px solid ${SEV[g.severity]}`, paddingLeft: 6, marginBottom: 4 }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -270,18 +270,18 @@ function LoadBar({ load: l, color, onPick, hasShow }) {
       <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
         <button type="button" onClick={onPick} style={{ ...btn(), padding: "1px 6px", borderColor: color, color }}>{l.name}</button>
         <span>{l.ratedLpm ? `rated ${l.ratedLpm} L/min` : "rated flow ? (add Flow on the pump)"}</span>
-        <span style={{ color: l.allOpenOver ? "#f87171" : undefined }}>all {l.jets} open {l.allOpenLpm} L/min{l.allOpenPct ? ` (${l.allOpenPct} %)` : ""}</span>
-        <span style={{ color: l.over ? "#f87171" : undefined }}>
+        <span style={{ color: l.allOpenOver ? "var(--error)" : undefined }}>all {l.jets} open {l.allOpenLpm} L/min{l.allOpenPct ? ` (${l.allOpenPct} %)` : ""}</span>
+        <span style={{ color: l.over ? "var(--error)" : undefined }}>
           {l.peakLpm != null ? `show peak ${l.peakPct ?? "?"} % at ${clockOf(l.peakT)} (${l.peakLpm} L/min)` : hasShow ? "not in the show" : "no compiled show"}
         </span>
-        {l.headOk != null && <span style={{ color: l.headOk ? undefined : "#f87171" }}>head {Math.round(l.headM * 10) / 10} m {l.headOk ? "≥" : "<"} {l.requiredHeadM} m needed</span>}
+        {l.headOk != null && <span style={{ color: l.headOk ? undefined : "var(--error)" }}>head {Math.round(l.headM * 10) / 10} m {l.headOk ? "≥" : "<"} {l.requiredHeadM} m needed</span>}
         <span>{l.vfd ? "VFD" : "no VFD"}</span>
-        {l.missingFlow > 0 && <span style={{ color: "#f59e0b" }}>{l.missingFlow} jets without flow data</span>}
+        {l.missingFlow > 0 && <span style={{ color: "var(--warn)" }}>{l.missingFlow} jets without flow data</span>}
       </div>
-      <div style={{ position: "relative", height: 10, background: "var(--bg-surface, #0b1622)", borderRadius: 3, overflow: "hidden", marginTop: 2 }}
+      <div style={{ position: "relative", height: 10, background: "var(--bg-surface, var(--bg-base))", borderRadius: 3, overflow: "hidden", marginTop: 2 }}
         aria-label={`${l.name} load`}>
-        <div style={{ position: "absolute", left: 0, top: 0, bottom: 5, width: w(l.allOpenPct), background: l.allOpenOver ? "#f87171" : color, opacity: 0.45 }} />
-        <div style={{ position: "absolute", left: 0, top: 5, bottom: 0, width: w(l.peakPct), background: l.over ? "#f87171" : color }} />
+        <div style={{ position: "absolute", left: 0, top: 0, bottom: 5, width: w(l.allOpenPct), background: l.allOpenOver ? "var(--error)" : color, opacity: 0.45 }} />
+        <div style={{ position: "absolute", left: 0, top: 5, bottom: 0, width: w(l.peakPct), background: l.over ? "var(--error)" : color }} />
         <div style={{ position: "absolute", left: `${(100 * 100) / scale}%`, top: 0, bottom: 0, width: 2, background: "#fff" }} title="Rated flow" />
       </div>
     </div>
@@ -291,11 +291,11 @@ function LoadBar({ load: l, color, onPick, hasShow }) {
 function RatingField({ label, unit, min, max, step, value, onChange }) {
   const current = Number(value) || 0;
   return (
-    <label style={{ display: "grid", gridTemplateColumns: "72px 1fr 64px", alignItems: "center", gap: 5, margin: "4px 0", fontSize: 10 }}>
+    <label style={{ display: "grid", gridTemplateColumns: "72px 1fr 64px", alignItems: "center", gap: 5, margin: "4px 0", fontSize: 11 }}>
       <span>{label}</span>
       <input aria-label={label} type="range" min={min} max={max} step={step} value={current} onChange={(event) => onChange(Number(event.target.value))} />
       <span style={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <input aria-label={`${label} value`} type="number" min={min} max={max} step={step} value={current} onChange={(event) => onChange(Number(event.target.value))} style={{ width: 42, fontSize: 10 }} />
+        <input aria-label={`${label} value`} type="number" min={min} max={max} step={step} value={current} onChange={(event) => onChange(Number(event.target.value))} style={{ width: 42, fontSize: 11 }} />
         <span style={small}>{unit}</span>
       </span>
     </label>
@@ -311,7 +311,7 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
   if (!role) return <div style={small}>Select an item on the plan to see its connections.</div>;
   const field = (label, control) => <label style={{ display: "flex", gap: 6, alignItems: "center", margin: "3px 0" }}><span style={{ width: 52 }}>{label}</span>{control}</label>;
   const pumpSelect = (value, onChange) => (
-    <select aria-label="Pump" value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={{ flex: 1, fontSize: 10 }}>
+    <select aria-label="Pump" value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={{ flex: 1, fontSize: 11 }}>
       <option value="">— none —</option>
       {[...design.pumps.values()].map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
     </select>
@@ -326,20 +326,20 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
     return (
       <section data-testid="inspector">
         <h4 style={{ margin: "0 0 4px", fontSize: 11 }}>{name(n.item)} <span style={small}>nozzle · {Math.round(jetFlowLpm(n.item))} L/min · {n.heightM} m</span></h4>
-        <fieldset style={{ border: "1px solid var(--border, #234)", borderRadius: 4, margin: "6px 0", padding: 6 }}>
+        <fieldset style={{ border: "1px solid var(--border, color-mix(in srgb, var(--info) 40%, var(--border)))", borderRadius: 4, margin: "6px 0", padding: 6 }}>
           <legend style={small}>Nozzle design data</legend>
           <RatingField label="Nozzle flow" unit="L/m" min={0} max={5000} step={1} value={n.item.engineering?.flowLpm} onChange={(value) => setNozzleRating("flowLpm", value)} />
           <RatingField label="Pressure" unit="bar" min={0} max={30} step={0.1} value={n.item.engineering?.pressureBar} onChange={(value) => setNozzleRating("pressureBar", value)} />
           <RatingField label="Jet height" unit="m" min={0} max={100} step={0.1} value={n.item.engineering?.jetHeightM} onChange={(value) => setNozzleRating("jetHeightM", value)} />
         </fieldset>
         {field("Valve", (
-          <select aria-label="Valve" value={n.valveId || ""} onChange={(e) => apply(setNozzleValve(fixtures, id, e.target.value || null, design), "Set valve")} style={{ flex: 1, fontSize: 10 }}>
+          <select aria-label="Valve" value={n.valveId || ""} onChange={(e) => apply(setNozzleValve(fixtures, id, e.target.value || null, design), "Set valve")} style={{ flex: 1, fontSize: 11 }}>
             <option value="">— none —</option>
             {valves.map((v) => <option key={v.id} value={v.id}>{name(v.item)}{v.nozzleIds.length && !v.nozzleIds.includes(id) ? " (in use)" : ""}</option>)}
           </select>))}
         {field("Pump", pumpSelect(n.pumpId, (pid) => apply(connectToPump(fixtures, [id], pid, design), "Set pump")))}
         {field("Light", (
-          <select aria-label="Light" value="" onChange={(e) => e.target.value && apply(pairLights(fixtures, [e.target.value], id, design), "Pair light")} style={{ flex: 1, fontSize: 10 }}>
+          <select aria-label="Light" value="" onChange={(e) => e.target.value && apply(pairLights(fixtures, [e.target.value], id, design), "Pair light")} style={{ flex: 1, fontSize: 11 }}>
             <option value="">{paired.length ? `${paired.length} paired — add another…` : "— pair a light —"}</option>
             {free.map((l) => <option key={l.id} value={l.id}>{name(l.item)}</option>)}
           </select>))}
@@ -359,7 +359,7 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
       <section data-testid="inspector">
         <h4 style={{ margin: "0 0 4px", fontSize: 11 }}>{name(v.item)} <span style={small}>solenoid valve</span></h4>
         {field("Nozzle", (
-          <select aria-label="Nozzle" value={v.nozzleIds[0] || ""} onChange={(e) => apply(setValveNozzle(fixtures, id, e.target.value || null, design), "Set nozzle")} style={{ flex: 1, fontSize: 10 }}>
+          <select aria-label="Nozzle" value={v.nozzleIds[0] || ""} onChange={(e) => apply(setValveNozzle(fixtures, id, e.target.value || null, design), "Set nozzle")} style={{ flex: 1, fontSize: 11 }}>
             <option value="">— none —</option>
             {nozzles.map((n) => <option key={n.id} value={n.id}>{name(n.item)}{n.valveId && n.valveId !== id ? " (has a valve)" : ""}</option>)}
           </select>))}
@@ -376,7 +376,7 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
       <section data-testid="inspector">
         <h4 style={{ margin: "0 0 4px", fontSize: 11 }}>{name(l.item)} <span style={small}>light</span></h4>
         {field("Nozzle", (
-          <select aria-label="Nozzle" value={explicit && design.nozzleById.has(explicit) ? explicit : ""} onChange={(e) => apply(pairLights(fixtures, [id], e.target.value || null, design), "Pair light")} style={{ flex: 1, fontSize: 10 }}>
+          <select aria-label="Nozzle" value={explicit && design.nozzleById.has(explicit) ? explicit : ""} onChange={(e) => apply(pairLights(fixtures, [id], e.target.value || null, design), "Pair light")} style={{ flex: 1, fontSize: 11 }}>
             <option value="">— nearest ({l.nozzleId ? name(design.nozzleById.get(l.nozzleId).item) : "none"}) —</option>
             {nozzles.map((n) => <option key={n.id} value={n.id}>{name(n.item)}</option>)}
           </select>))}
@@ -391,7 +391,7 @@ function Inspector({ id, design, fixtures, selected, apply, roleOf, colorOf, loa
     <section data-testid="inspector">
       <h4 style={{ margin: "0 0 4px", fontSize: 11, color: colorOf(id) }}>{p.name} <span style={small}>pump · {load?.vfd ? "VFD" : "fixed speed"}{load?.ratedLpm ? ` · ${load.ratedLpm} L/min` : ""}</span></h4>
       <div style={small}>{p.nozzleIds.length} outlet{p.nozzleIds.length === 1 ? "" : "s"} · {p.valveIds.length} valve{p.valveIds.length === 1 ? "" : "s"}</div>
-      <fieldset style={{ border: "1px solid var(--border, #234)", borderRadius: 4, margin: "6px 0", padding: 6 }}>
+      <fieldset style={{ border: "1px solid var(--border, color-mix(in srgb, var(--info) 40%, var(--border)))", borderRadius: 4, margin: "6px 0", padding: 6 }}>
         <legend style={small}>Design ratings · not motor commands</legend>
         <RatingField label="Rated flow" unit="m³/h" min={0} max={500} step={1} value={p.item.engineering?.flowM3Hr} onChange={(value) => setRating("flowM3Hr", value)} />
         <RatingField label="Rated head" unit="m" min={0} max={200} step={0.5} value={p.item.engineering?.headM} onChange={(value) => setRating("headM", value)} />
@@ -508,7 +508,7 @@ function PlanView({ design, colorOf, flagged, mode, active, selected, show, onIt
   });
   return (
     <svg ref={svgRef} data-testid="connections-plan" viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="xMidYMid meet"
-      style={{ width: "100%", height: 420, background: "#06101a", borderRadius: 4, border: "1px solid var(--border, #234)", touchAction: "none", userSelect: "none" }}
+      style={{ width: "100%", height: 420, background: "var(--bg-base)", borderRadius: 4, border: "1px solid var(--border, color-mix(in srgb, var(--info) 40%, var(--border)))", touchAction: "none", userSelect: "none" }}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={() => setBox(null)}>
       <rect data-bg="1" x={vb.x} y={vb.y} width={vb.w} height={vb.h} fill="transparent" />
       <g>{lines}</g>

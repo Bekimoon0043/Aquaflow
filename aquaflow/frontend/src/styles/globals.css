@@ -3,9 +3,9 @@
   --accent:#c9a227; --accent-dim:#a8841e; --accent-glow:rgba(201,162,39,.15); --accent-pulse:rgba(201,162,39,.08);
   --brand-gold:var(--accent); --brand-gold-light:#d4ac3a; --brand-gold-pale:#e8d5a0;
   --brand-green:var(--bg-panel); --brand-green-mid:var(--bg-raised); --brand-green-light:var(--bg-hover);
-  --ok:#63bd92; --warn:#e8b458; --error:#ed7474; --info:#79afe0;
-  --green:var(--ok); --amber:var(--warn); --amber-dim:var(--warn); --red:var(--error); --purple:var(--info); --orange:var(--warn); --emerald:var(--ok); --emerald-light:var(--ok);
-  --text-primary:#e4e5e7; --text-secondary:#b8bbc2; --text-muted:#9398a3; --text-accent:var(--accent);
+  --ok:#63bd92; --warn:#e8b458; --error:#ed7474; --info:#79afe0; --violet:#a48be8;
+  --green:var(--ok); --amber:var(--warn); --amber-dim:var(--warn); --red:var(--error); --purple:var(--violet); --orange:var(--warn); --emerald:var(--ok); --emerald-light:var(--ok);
+  --text-on-accent:#161104; --text-primary:#e4e5e7; --text-secondary:#b8bbc2; --text-muted:#9398a3; --text-accent:var(--accent);
   --text-button:var(--text-primary); --text-button-hover:var(--text-primary); --text-button-muted:var(--text-secondary); --text-button-disabled:var(--text-muted);
   --border:#35383e; --border-mid:#444851; --border-bright:#606671; --border-accent:var(--accent);
   --font-display:'Segoe UI',sans-serif; --font-body:'Segoe UI',Arial,sans-serif; --font-mono:'Cascadia Mono',Consolas,monospace;
@@ -51,7 +51,7 @@ html, body, #root {
 .engineering-workspace {
   min-width: 0;
   min-height: 0;
-  background: #020810;
+  background: var(--bg-void);
 }
 
 .engineering-workspace-content {
@@ -212,7 +212,7 @@ button:not(:disabled)[style*="#334455" i],
 button:not(:disabled)[style*="#445566" i],
 button:not(:disabled)[style*="#556677" i],
 button:not(:disabled)[style*="#667788" i] {
-  color: #aec0ca !important;
+  color: var(--text-secondary) !important;
 }
 button:disabled,
 .btn:disabled {
