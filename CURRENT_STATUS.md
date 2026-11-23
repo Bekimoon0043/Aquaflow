@@ -3095,3 +3095,6 @@ Defined in [CLAUDE.md](CLAUDE.md): update `CURRENT_STATUS.md`, write
 
 - UI overhaul phase 1: compact menu/workspace row and context row; status detail popovers, collapsible checklist, recent desktop projects, global Ctrl+Shift+P palette. Existing panel reachability test updated; 2,071 tests and production build pass. Before screenshots captured in docs/evidence.
 
+
+- UI overhaul phase 2: persistent per-workspace dock model and four-zone layout, movable/tabbed panels, keyboard/pointer splitters and collapse/reset. Standard workspace integrated; specialized full-workspace layouts remain to migrate. 2,074 tests and production build pass.
+

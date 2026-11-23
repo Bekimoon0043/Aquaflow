@@ -1,3 +1,4 @@
+import DockLayout from './ui/dock/DockLayout';
 import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { Component } from "react";
 import { WebSocketProvider } from "./hooks/WebSocketContext";
@@ -173,22 +174,9 @@ function StudioApp() {
           </div>
         )}
         <div className="standard-workspace-content" hidden={FULL_WORKSPACE_PANELS.has(activePanel)} aria-hidden={FULL_WORKSPACE_PANELS.has(activePanel)}>
-        {/* The 3D preview carries its own inspector sidebar, so the device list and the
-            general inspector are hidden there to give the viewport the room. */}
-        {activePanel !== "preview" && <DevicePanel width={layout.leftWidth} />}
-        {activePanel !== "preview" && <ResizeHandle
-          axis="x"
-          title="Drag to resize the device panel · double-click to reset"
-          onStart={() => beginDrag("leftWidth")}
-          onEnd={endDrag}
-          onReset={() => resetPanel("leftWidth")}
-          onResize={(d) => resize("leftWidth", d, {
-            containerPx: workspacePx(), otherPanelsPx: layout.rightWidth,
-          })}
-        />}
-        <div className="center-stack" ref={centerRef}>
-          <div className="editor-area">
-           <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
+        <DockLayout workspace={guided.workspace} panels={[
+          {id:'explorer',label:guided.workspace==='commission'?'Devices':'Outliner',zone:'left',content:<DevicePanel width="100%"/>},
+          {id:'viewport',label:'Workspace',zone:'center',content:<div className="editor-area">           <Suspense fallback={<div style={{ padding: 24, color: "var(--text-muted)", fontSize: 12 }}>Loading…</div>}>
             {keepAlivePanel("nodes", <NodeEditor />)}
             {keepAlivePanel("preview", <PreviewPanel />)}
             {keepAlivePanel("ai", <AIPanel />)}
@@ -221,38 +209,11 @@ function StudioApp() {
             {keepAlivePanel("keyframes", <KeyframeEditor durationMs={8000} />)}
             {keepAlivePanel("patterns", <PatternDesignerPanel />)}
             {keepAlivePanel("export3d", <Export3DPanel />)}
-           </Suspense>
-          </div>
-          <div className="workspace-timeline-slot" hidden={activePanel === "show_programmer"} aria-hidden={activePanel === "show_programmer"}>
-          <ResizeHandle
-            axis="y"
-            title="Drag to resize the timeline · double-click to reset"
-            onStart={() => beginDrag("timelineHeight")}
-            onEnd={endDrag}
-            onReset={() => resetPanel("timelineHeight")}
-            // Inverted: the handle sits on the timeline's TOP edge, so dragging down
-            // must make it shorter, not taller.
-            onResize={(d) => resize("timelineHeight", d, {
-              invert: true, containerPx: centerHeightPx(), otherPanelsPx: 0,
-            })}
-          />
-          {activePanel === "preview"
-            ? <Suspense fallback={<div style={{ height: layout.timelineHeight, padding: 16 }}>Loading show timeline…</div>}><PreviewShowTimeline height={layout.timelineHeight} /></Suspense>
-            : <Timeline height={layout.timelineHeight} />}
-          </div>
-        </div>
-        {activePanel !== "preview" && <ResizeHandle
-          axis="x"
-          title="Drag to resize the inspector · double-click to reset"
-          onStart={() => beginDrag("rightWidth")}
-          onEnd={endDrag}
-          onReset={() => resetPanel("rightWidth")}
-          // Inverted: this handle is on the inspector's LEFT edge.
-          onResize={(d) => resize("rightWidth", d, {
-            invert: true, containerPx: workspacePx(), otherPanelsPx: layout.leftWidth,
-          })}
-        />}
-        {activePanel !== "preview" && <InspectorPanel width={layout.rightWidth} />}
+           </Suspense></div>},
+          {id:'properties',label:'Properties',zone:'right',content:<InspectorPanel width="100%"/>},
+          {id:'timeline',label:'Timeline',zone:'bottom',content:activePanel==='preview'?<Suspense fallback={<p>Loading timeline…</p>}><PreviewShowTimeline height={220}/></Suspense>:<Timeline height={220}/>},
+        ]}/>
+
         </div>
       </div>
       </div>

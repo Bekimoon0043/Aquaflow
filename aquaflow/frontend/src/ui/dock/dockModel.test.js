@@ -1,0 +1,5 @@
+import {it,expect} from 'vitest';import {defaultDock,loadDock,saveDock,validateDock} from './dockModel';
+const panels=[{id:'view',zone:'center'},{id:'properties',zone:'right'}];
+it('repairs corrupt layouts and clamps dimensions',()=>{const x=validateDock({sizes:{right:9000},zones:{view:'invalid'},active:{right:'missing'}},panels);expect(x.sizes.right).toBe(700);expect(x.zones.view).toBe('center');expect(x.active.right).toBe('properties');});
+it('persists independent workspace layouts without project data',()=>{const map=new Map(),storage={getItem:k=>map.get(k),setItem:(k,v)=>map.set(k,v)};const x=defaultDock(panels);x.zones.properties='left';x.collapsed.left=true;saveDock('design',x,storage);expect(loadDock('design',panels,storage).zones.properties).toBe('left');expect(loadDock('program',panels,storage).zones.properties).toBe('right');expect(loadDock('design',panels,storage).collapsed.left).toBe(true);});
+it('survives storage errors',()=>expect(loadDock('design',panels,{getItem(){throw Error();}})).toEqual(defaultDock(panels)));

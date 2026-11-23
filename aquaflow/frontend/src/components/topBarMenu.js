@@ -212,6 +212,7 @@ export function createMenuActionHandlers(deps) {
     "Toggle Grid": () => d.toggleShowGrid(),
     "Toggle Snap": () => d.toggleSnapToGrid(),
     "Reset Layout": () => {
+      d.emit("aquaflow:reset-layout");
       d.setActivePanel("nodes");
       d.emit("aquaflow:reset-node-editor");
     },
