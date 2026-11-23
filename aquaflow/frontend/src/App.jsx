@@ -213,6 +213,7 @@ function StudioApp() {
             {keepAlivePanel("patterns", <PatternDesignerPanel />)}
             {keepAlivePanel("export3d", <Export3DPanel />)}
            </Suspense></div>},
+          {id:'pattern-editor',label:'Pattern',zone:'right',content:<div id="pattern-editor-dock"/>},
           {id:'properties',label:'Properties',zone:'right',content:<InspectorPanel width="100%"/>},
           {id:'timeline',label:'Timeline',zone:'bottom',content:activePanel==='preview'?<Suspense fallback={<p>Loading timeline…</p>}><PreviewShowTimeline height={220}/></Suspense>:<Timeline height={220}/>},
         ]}/>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FIELD_CONTROLS, FIELD_KINDS, ORIGINS, fieldKind } from './wavePatterns';
 import { builderGroups } from './patternPresets';
-import PatternCreator from './PatternCreator';
+import PatternCreator from './PatternEditor';
 import { motionAxesOf, motionPatternRecipes } from './motionPatterns';
 import MusicLanes, { MUSIC_LANE_H, useMusicLanes } from './MusicLanes';
 import PlanStrip, { PLAN_STRIP_H } from './PlanStrip';
@@ -440,7 +440,7 @@ export default function PreviewSequence({ studio, items, definitions, time, play
         </div>
       </aside>}
     </div>
-    {creator && <PatternCreator key={creator.block?.id || creator.asset?.id || 'new'} studio={studio} items={items} start={creator.block ? creator.block.start : nextStart()}
+    {creator && <PatternCreator dock initialMode={creator.block?.motion?"motion":"curve"} key={creator.block?.id || creator.asset?.id || 'new'} studio={studio} items={items} start={creator.block ? creator.block.start : nextStart()}
       editBlock={creator.block} asset={creator.asset} onChange={onChange} onAdded={unitId => setSelectedId(`unit:${unitId}`)}
       onClose={() => setCreator(null)} onExportFile={onExportFile} />}
     {context && (() => { const b = blocks.find(x => x.id === context.id); if (!b) return null; const close = () => setContext(null);

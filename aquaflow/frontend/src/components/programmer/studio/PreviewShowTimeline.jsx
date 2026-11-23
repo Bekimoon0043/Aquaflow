@@ -6,7 +6,7 @@ import { poolCenter } from '../../../engineering/geometryContract';
 import { createFullShowPreview } from '../../../utils/fullShowPreview';
 import StudioTimeline from './StudioTimeline';
 import PreviewSequence from './PreviewSequence';
-import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
+import PatternBuilder, { VisibilityBadge } from './PatternEditor';
 import { useProgrammerSong } from './musicSync';
 import { usePreviewSongPlayback } from './previewAudio';
 import {
@@ -199,7 +199,7 @@ export default function PreviewShowTimeline({ height = 300 }) {
       onMarker={position => change(s => ({ ...s, markers: [...s.markers, { id: uid('marker'), name: `Cue ${s.markers.length + 1}`, time: position }] }))}
     />
     </>}
-    {builder && <PatternBuilder key={builder.key} editRecipeId={builder.editId} studio={studio} items={items} params={params} showLength={showLength}
+    {builder && <PatternBuilder dock key={builder.key} editRecipeId={builder.editId} studio={studio} items={items} params={params} showLength={showLength}
       onChange={next => change(next)} onUndo={undo} onClose={() => setBuilder(null)} />}
   </div>;
 }

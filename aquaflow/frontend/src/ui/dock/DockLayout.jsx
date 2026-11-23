@@ -9,6 +9,7 @@ export default function DockLayout({workspace,panels}) {
  const update=fn=>setState(s=>({workspace,layout:fn(s.workspace===workspace?s.layout:layout)}));
  useEffect(()=>{if(state.workspace!==workspace)return;const t=setTimeout(()=>saveDock(workspace,state.layout),180);return()=>clearTimeout(t);},[state,workspace]);
  useEffect(()=>{const reset=()=>update(()=>defaultDock(panels));window.addEventListener('aquaflow:reset-layout',reset);return()=>window.removeEventListener('aquaflow:reset-layout',reset);},[workspace,panels]);
+ useEffect(()=>{const activate=e=>{const id=e.detail?.id;if(panels.some(p=>p.id===id))update(s=>{const z=s.zones[id];return {...s,active:{...s.active,[z]:id},collapsed:{...s.collapsed,[z]:false}};});};window.addEventListener('aquaflow:activate-dock',activate);return()=>window.removeEventListener('aquaflow:activate-dock',activate);},[workspace,panels]);
  const move=(id,zone)=>update(s=>({...s,zones:{...s.zones,[id]:zone},active:{...s.active,[zone]:id},collapsed:{...s.collapsed,[zone]:false}}));
  const size=z=>panels.some(p=>layout.zones[p.id]===z)?layout.collapsed[z]?28:layout.sizes[z]:0;
  const resize=(z,d)=>update(s=>({...s,sizes:{...s.sizes,[z]:Math.max(120,Math.min(700,s.sizes[z]+d))}}));

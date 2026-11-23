@@ -24,7 +24,7 @@ import PyroRecipeFields from './PyroRecipeFields';
 import SpatialPlan from './SpatialPlan';
 import StudioTimeline from './StudioTimeline';
 import EnvelopeEditor from './EnvelopeEditor';
-import PatternBuilder, { VisibilityBadge } from './PatternBuilder';
+import PatternBuilder, { VisibilityBadge } from './PatternEditor';
 import { readFountainDesign } from './fountainDesign';
 import { conflictSummary, groupConflicts } from './groupAdvisor';
 import { useMusicLanes } from './MusicLanes';
@@ -167,7 +167,7 @@ export default function ShowStudio() {
     setPlcPlaying(running ? { elapsed: Number(status.elapsed) || 0, mode: status.mode } : null);
     if (running) { const t = Number(status.elapsed) || 0; timeRef.current = t; setTime(t); }
   }, []);
-  const selectItems = (ids, add = false) => { setSelection(old => add ? [...new Set([...old, ...ids])] : ids); setSelectedId(null); setGroupId(null); };
+  const selectItems = (ids, add = false) => { setSelection(old => add ? [...old.filter(id=>!ids.includes(id)),...ids.filter(id=>!old.includes(id))] : ids); setSelectedId(null); setGroupId(null); };
   // Tick boxes: add/remove items without Ctrl/Shift. A group's box ticks or clears all its members.
   const toggleItems = (ids, on) => { setSelection(old => on ? [...new Set([...old, ...ids])] : old.filter(id => !ids.includes(id))); setSelectedId(null); setGroupId(null); };
   const chooseGroup = g => { setGroupId(g.id); setSelection(resolveMembers(g, items)); setSelectedId(null); setTab('group'); };
@@ -366,7 +366,8 @@ export default function ShowStudio() {
         <div className="sp-strip sp-stage-footer"><span>{ghost ? 'PROPOSAL PREVIEW' : 'DESIGN PREVIEW'}</span><span className="sp-grow" /><span>Click to select · Shift to add · drag to box select</span></div>
       </main>
       <div className="sp-resizer" role="separator" aria-label="Resize Inspector" onPointerDown={e => resize('right', e)} />
-      <aside className="sp-inspector"><div className="sp-tabs">{['pattern', 'group', 'ai', 'compile', 'music'].map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t === 'ai' ? 'AI' : t}</button>)}</div>
+      <aside className="sp-inspector">    {builder && <PatternBuilder key={builder.key} editRecipeId={builder.editId} studio={studio} items={items} params={params} showLength={Math.round(Math.max(30, end) * 10) / 10}
+      onChange={next => change(next)} onUndo={doc.undo} onClose={() => setBuilder(false)} />}<div className="sp-tabs">{['pattern', 'group', 'ai', 'compile', 'music'].map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t === 'ai' ? 'AI' : t}</button>)}</div>
         <div className="sp-inspector-body">
           {tab === 'pattern' && <>{recipe ? <>
             {issueNotes}
@@ -452,8 +453,7 @@ export default function ShowStudio() {
       onChangeRecipe={patchRecipe} onChangeLegacy={patchLegacy} onSeek={seek} onDropGroup={addPattern} onGroupPatch={patchGroup}
       onMarker={position => change(s => ({ ...s, markers: [...s.markers, { id: uid('marker'), name: `Cue ${s.markers.length + 1}`, time: position }] }))}
       onPatternBuilder={() => setBuilder(true)} onEditPattern={id => setBuilder(true, id)} stripExtras={<VisibilityBadge studio={studio} items={items} params={params} />} />
-    {builder && <PatternBuilder key={builder.key} editRecipeId={builder.editId} studio={studio} items={items} params={params} showLength={Math.round(Math.max(30, end) * 10) / 10}
-      onChange={next => change(next)} onUndo={doc.undo} onClose={() => setBuilder(false)} />}
+
     <footer className="sp-footer" role="status"><span>{message || (issues.length ? `${issues.length} programming issue(s) — open Compile to review` : 'Engineering linked · Space play/pause · Ctrl+G group · Ctrl+D duplicate · Ctrl+K commands')}</span>{message && <button onClick={() => setMessage('')}>×</button>}<span className="sp-grow" /><span>{items.filter(i => i.tracks.length).length} programmable · {studio.groups.length} show groups</span></footer>
     {palette && <div className="sp-modal" onClick={() => setPalette(false)}><div role="dialog" aria-label="Show commands" onClick={e => e.stopPropagation()}><div className="sp-strip"><strong>Commands</strong><button onClick={() => setPalette(false)}>Close</button></div><input autoFocus aria-label="Find command" placeholder="Find a command…" value={commandSearch} onChange={e => setCommandSearch(e.target.value)} />{commands.filter(([label]) => label.toLowerCase().includes(commandSearch.toLowerCase())).map(([label, run, key]) => <button key={label} onClick={() => { setPalette(false); run(); }}>{label}<kbd>{key}</kbd></button>)}</div></div>}
   </div>;

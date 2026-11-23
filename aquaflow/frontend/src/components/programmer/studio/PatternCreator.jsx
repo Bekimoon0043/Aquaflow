@@ -58,8 +58,8 @@ export function creatorTypeFromAsset(asset) {
     low: 0, high: water?.intensity || 100, ease: 0 }, light: { color: lights?.color || asset.color } });
 }
 
-export default function PatternCreator({ studio, items, start = 0, editBlock = null, asset = null, onChange, onAdded, onClose, onExportFile }) {
-  const initial = editBlock ? creatorTypeFromBlock(editBlock) : asset ? creatorTypeFromAsset(asset) : cleanType({ name: 'My pattern', field: { shape: 'sine', path: 'around' } });
+export default function PatternCreator({ studio, items, start = 0, editBlock = null, asset = null, onChange, onAdded, onClose, onExportFile, initialMode, active = true }) {
+  const initial = editBlock ? creatorTypeFromBlock(editBlock) : asset ? creatorTypeFromAsset(asset) : cleanType({ name: 'My pattern', patternKind:initialMode==='motion'?'motion':'water', motion:initialMode==='motion'?cleanMotion({},1):undefined, field: { shape:'sine', path: 'around' } });
   const [type, setType] = useState(initial);
   const [farEnd, setFarEnd] = useState(initial.field.lowFar !== undefined && (initial.field.lowFar !== initial.field.low || initial.field.highFar !== initial.field.high));
   const [note, setNote] = useState('');
@@ -82,7 +82,7 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
   const targetGroup = allGroups.find(g => g.id === groupId);
   const targetMembers = membersOf(targetGroup);
   const draftKey=JSON.stringify({type,effective,groupId,lightGroupId,duration,includeLights});
-  useEffect(()=>{const timer=setTimeout(()=>{if(!targetGroup)return;try{const lightGroup=includeLights?allGroups.find(g=>g.id===lightGroupId):null;const order=targetGroup.order||'selection';const made=type.patternKind==='motion'?motionPatternRecipes({start:0,duration,name:type.name,groupId,lightGroupId:lightGroup?.id,field:effective,motion:type.motion,light:L,order}):fieldUnitRecipes({kind:'custom',start:0,duration,name:type.name,field:effective,waterGroupId:groupId,lightGroupId:lightGroup?.id,light:L,order});const temporary={...studio,groups:[...studio.groups,...[targetGroup,lightGroup].filter(g=>g&&!studio.groups.some(x=>x.id===g.id))],recipes:made.recipes,legacyClips:[]};useFocusPreviewStore.getState().publish({selectionIds:targetMembers.map(m=>m.id),draftClips:compileStudio(temporary,items).clips});}catch(e){useFocusPreviewStore.getState().publish({selectionIds:targetMembers.map(m=>m.id),error:e.message});}},80);return()=>clearTimeout(timer);},[draftKey,items]);
+  useEffect(()=>{if(!active)return;const timer=setTimeout(()=>{if(!targetGroup)return;try{const lightGroup=includeLights?allGroups.find(g=>g.id===lightGroupId):null;const order=targetGroup.order||'selection';const made=type.patternKind==='motion'?motionPatternRecipes({start:0,duration,name:type.name,groupId,lightGroupId:lightGroup?.id,field:effective,motion:type.motion,light:L,order}):fieldUnitRecipes({kind:'custom',start:0,duration,name:type.name,field:effective,waterGroupId:groupId,lightGroupId:lightGroup?.id,light:L,order});const temporary={...studio,groups:[...studio.groups,...[targetGroup,lightGroup].filter(g=>g&&!studio.groups.some(x=>x.id===g.id))],recipes:made.recipes,legacyClips:[]};useFocusPreviewStore.getState().publish({selectionIds:targetMembers.map(m=>m.id),draftClips:compileStudio(temporary,items).clips});}catch(e){useFocusPreviewStore.getState().publish({selectionIds:targetMembers.map(m=>m.id),error:e.message});}},80);return()=>clearTimeout(timer);},[draftKey,items,active]);
   useEffect(()=>()=>useFocusPreviewStore.getState().clearDraft(),[]);
 
   const setMode = id => {

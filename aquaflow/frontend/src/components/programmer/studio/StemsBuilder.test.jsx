@@ -32,7 +32,8 @@ describe('Stems in the pattern builder', () => {
     useICANPreviewStore.setState({ replace: vi.fn(), playback: 'stopped', position: 0 });
     render(<PreviewShowTimeline height={320} />);
     fireEvent.click(screen.getByRole('button', { name: /Pattern builder/ }));
-    const dialog = screen.getByRole('dialog', { name: 'Pattern builder' });
+    const dialog = screen.getByRole('dialog', { name: 'Pattern builder' }).closest('.pattern-editor');
+    fireEvent.click(within(dialog).getByRole('tab',{name:'Music',exact:true}));
     const box = within(dialog).getByLabelText('Stems');
     expect(within(box).getByText('Drums.wav')).toBeTruthy();
     expect(within(box).getByText('Vocals.wav')).toBeTruthy();
@@ -74,7 +75,8 @@ describe('Water follows its stem', () => {
     useICANPreviewStore.setState({ replace: vi.fn(), playback: 'stopped', position: 0 });
     render(<PreviewShowTimeline height={320} />);
     fireEvent.click(screen.getByRole('button', { name: /Pattern builder/ }));
-    const dialog = screen.getByRole('dialog', { name: 'Pattern builder' });
+    const dialog = screen.getByRole('dialog', { name: 'Pattern builder' }).closest('.pattern-editor');
+    fireEvent.click(within(dialog).getByRole('tab',{name:'Music',exact:true}));
     await within(dialog).findByText(/120 BPM/);
     const box = within(dialog).getByLabelText('Stems');
     // The whole song is a part too.

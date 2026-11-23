@@ -149,7 +149,9 @@ describe('music sync in the builder', () => {
     liveAssetFiles.set('audio:programmer', song);
     setup({ musicCache: { [hash]: { ...analysis, hash, cachedAt: 1 } } });
     const dialog = openBuilder();
-    await within(dialog).findByText(/120 BPM/);
+    fireEvent.click(screen.getByRole('tab',{name:'Music',exact:true}));
+    await screen.findByText(/120 BPM/);
+    fireEvent.click(screen.getByRole('tab',{name:'Preset',exact:true}));
     return { song, dialog };
   }
 
@@ -158,7 +160,9 @@ describe('music sync in the builder', () => {
     fireEvent.click(within(dialog).getByRole('radio', { name: /Chase/ }));
     fireEvent.change(within(dialog).getByLabelText('Start'), { target: { value: '1' } });
     fireEvent.change(within(dialog).getByLabelText('Length'), { target: { value: '17' } });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Sync to music' }));
+    fireEvent.click(screen.getByRole('tab',{name:'Music',exact:true}));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sync to music' }));
+    fireEvent.click(screen.getByRole('tab',{name:'Preset',exact:true}));
     await within(dialog).findByText(/♩ 120 BPM · .*step 2 beats/);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Apply' }));
     const [r] = studio().recipes;
@@ -172,7 +176,9 @@ describe('music sync in the builder', () => {
     const { song } = await withSong();
     const dialog = screen.getByRole('dialog', { name: 'Pattern builder' });
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Lights match the water/ }));
-    fireEvent.click(within(dialog).getByRole('button', { name: /Fill the song/ }));
+    fireEvent.click(screen.getByRole('tab',{name:'Music',exact:true}));
+    fireEvent.click(screen.getByRole('button', { name: /Fill the song/ }));
+    fireEvent.click(screen.getByRole('tab',{name:'Preset',exact:true}));
     await waitFor(() => expect(studio().markers.length).toBe(5));
     expect(studio().markers.map(m => m.name)).toEqual(['Intro', 'Verse', 'Chorus', 'Verse', 'Outro']);
     const filled = studio().recipes;

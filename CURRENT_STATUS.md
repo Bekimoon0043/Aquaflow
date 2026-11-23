@@ -3104,3 +3104,6 @@ Defined in [CLAUDE.md](CLAUDE.md): update `CURRENT_STATUS.md`, write
 
 - UI overhaul phase 4: app-level lazy Focus Preview, low-quality independent scene at 30 fps and 20% particle budget, persisted/snapping window, transport and main-view handoff. Builder/Creator publish debounced temporary draft clips; synthetic triangle removed. Selection integration covers Show Studio and Easy Design. 2,080 tests pass; production build passes. Browser startup import-order defect corrected.
 
+
+- UI overhaul phase 5: unified docked Pattern Editor modes (Preset, Curve, Path, Motion, Array, Designer, Manual), visual group targeting, preset search, shared property sliders, and separate Music tab with preserved state/Undo. Studio/preview builder and creator entry points use the new container. Tests updated to exercise Music navigation; 2,080 tests and build pass. Remaining legacy routes, Preferences/calibration relocation and keyframe controls remain In Progress.
+
