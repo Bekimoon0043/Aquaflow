@@ -37,7 +37,7 @@
     - colour-band chases round the ∞;
     - the green portrait follows the voice and fades after the hard stop.
   - **Size:** 736 patterns, 34,103 clips, 66.1 MB. The fastest swing is 75°/s, under the 88°/s drives. Notes are in `reports/Odaa 3Obsa dance show.md`.
-  - **Video:** `Desktop/Odaa_3Obsa_Dance_1080p.mp4`.
+  - **Video:** not rendered; the user is reviewing the show in the 3D Preview.
 - **Verified:**
   - Headless GPU frames of both shows were reviewed and tuned.
   - Full frontend tests passed: 2,069 of 2,069, plus 792 of 792 in the panel and preview subsets after the last renderer change.
