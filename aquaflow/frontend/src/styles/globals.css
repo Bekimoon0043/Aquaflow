@@ -1,73 +1,18 @@
-:root {
-  /* ── LuxuryCon Brand Colors ─────────────────────────────── */
-  --brand-green:      #0a3320;
-  --brand-green-mid:  #0f4a2e;
-  --brand-green-light:#145a38;
-  --brand-gold:       #b8960c;
-  --brand-gold-light: #d4ac3a;
-  --brand-gold-pale:  #e8d5a0;
-
-  /* Core palette — deep engineering dark (keeping black bg) */
-  --bg-void:     #050807;
-  --bg-base:     #080e0a;
-  --bg-panel:    #0c1410;
-  --bg-surface:  #101a13;
-  --bg-raised:   #162019;
-  --bg-hover:    #1c2a20;
-  --bg-active:   #223228;
-
-  /* Accent — LuxuryCon gold (replaces cyan) */
-  --accent:      #c9a227;
-  --accent-dim:  #a8841e;
-  --accent-glow: rgba(201,162,39,0.15);
-  --accent-pulse: rgba(201,162,39,0.08);
-
-  /* Secondary accent — emerald green */
-  --emerald:     #1a6b3a;
-  --emerald-light:#22884a;
-
-  /* Keep functional colors */
-  --amber:       #f59e0b;
-  --amber-dim:   #d97706;
-  --green:       #10b981;
-  --red:         #ef4444;
-  --purple:      #8b5cf6;
-  --orange:      #f97316;
-
-  /* Text */
-  --text-primary:   #f2ead7;
-  --text-secondary: #bdcbb9;
-  --text-muted:     #7f907b;
-  --text-accent:    #e2bd4f;
-  --text-button:    #f7f0df;
-  --text-button-hover: #fffaf0;
-  --text-button-muted: #adbcaa;
-  --text-button-disabled: #879483;
-
-  /* Borders — green-tinted */
-  --border:        rgba(26,107,58,0.15);
-  --border-mid:    rgba(26,107,58,0.22);
-  --border-bright: rgba(26,107,58,0.35);
-  --border-accent: rgba(201,162,39,0.30);
-
-  /* Typography */
-  /* Release builds must start fully offline. Use fonts included with Windows
-     instead of fetching Google Fonts at runtime. */
-  --font-display: 'Bahnschrift', 'Segoe UI Semibold', 'Segoe UI', sans-serif;
-  --font-mono:    'Cascadia Mono', 'Consolas', 'Courier New', monospace;
-  --font-body:    'Segoe UI', 'Arial', sans-serif;
-
-  /* Layout */
-  --topbar-h: 36px;
-  --statusbar-h: 24px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-
-  /* Shadows */
-  --shadow-panel:  0 0 0 1px var(--border), 0 4px 24px rgba(0,0,0,0.5);
-  --shadow-accent: 0 0 12px rgba(201,162,39,0.25), 0 0 24px rgba(201,162,39,0.1);
-  --shadow-node:   0 2px 16px rgba(0,0,0,0.5), 0 0 0 1px var(--border-mid);
+ :root {
+  --bg-void:#17181a; --bg-base:#1d1e21; --bg-panel:#232529; --bg-surface:#292b30; --bg-raised:#303238; --bg-hover:#393c43; --bg-active:#44474f;
+  --accent:#c9a227; --accent-dim:#a8841e; --accent-glow:rgba(201,162,39,.15); --accent-pulse:rgba(201,162,39,.08);
+  --brand-gold:var(--accent); --brand-gold-light:#d4ac3a; --brand-gold-pale:#e8d5a0;
+  --brand-green:var(--bg-panel); --brand-green-mid:var(--bg-raised); --brand-green-light:var(--bg-hover);
+  --ok:#63bd92; --warn:#e8b458; --error:#ed7474; --info:#79afe0;
+  --green:var(--ok); --amber:var(--warn); --amber-dim:var(--warn); --red:var(--error); --purple:var(--info); --orange:var(--warn); --emerald:var(--ok); --emerald-light:var(--ok);
+  --text-primary:#e4e5e7; --text-secondary:#b8bbc2; --text-muted:#9398a3; --text-accent:var(--accent);
+  --text-button:var(--text-primary); --text-button-hover:var(--text-primary); --text-button-muted:var(--text-secondary); --text-button-disabled:var(--text-muted);
+  --border:#35383e; --border-mid:#444851; --border-bright:#606671; --border-accent:var(--accent);
+  --font-display:'Segoe UI',sans-serif; --font-body:'Segoe UI',Arial,sans-serif; --font-mono:'Cascadia Mono',Consolas,monospace;
+  --text-xs:11px; --text-sm:12px; --text-md:13px;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-6:24px;
+  --topbar-h:36px; --statusbar-h:24px; --radius-sm:3px; --radius-md:3px; --radius-lg:3px;
+  --shadow-panel:0 2px 12px rgba(0,0,0,.4); --shadow-accent:0 0 0 1px var(--accent); --shadow-node:var(--shadow-panel);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -237,12 +182,12 @@ html, body, #root {
 .btn:hover { background: var(--bg-hover); border-color: var(--border-bright); color: var(--text-button-hover); }
 .btn:active { background: var(--bg-active); transform: scale(0.98); }
 .btn.primary {
-  background: rgba(0,212,255,0.1);
+  background: rgba(201,162,39,0.1);
   border-color: var(--border-accent);
   color: var(--text-accent);
 }
 .btn.primary:hover {
-  background: rgba(0,212,255,0.18);
+  background: rgba(201,162,39,0.18);
   box-shadow: var(--shadow-accent);
 }
 .btn.icon-btn {
@@ -334,7 +279,7 @@ button:focus-visible {
   font-family: var(--font-mono);
   letter-spacing: 0.05em;
 }
-.badge.dmx   { background: rgba(0,212,255,0.1);  color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+.badge.dmx   { background: rgba(201,162,39,0.1);  color: var(--accent); border: 1px solid rgba(201,162,39,0.2); }
 .badge.artnet{ background: rgba(139,92,246,0.1); color: var(--purple); border: 1px solid rgba(139,92,246,0.2); }
 .badge.sacn  { background: rgba(16,185,129,0.1); color: var(--green);  border: 1px solid rgba(16,185,129,0.2); }
 .badge.modbus{ background: rgba(249,115,22,0.1); color: var(--orange); border: 1px solid rgba(249,115,22,0.2); }

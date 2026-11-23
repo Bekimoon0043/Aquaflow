@@ -59,6 +59,7 @@ import ProjectRecoveryHost from "./components/ProjectRecoveryHost"; // AF-NEXT-0
 import { useShowStore } from "./store/showStore";
 import useProjectStore from "./store/projectStore";
 import "./styles/globals.css";
+import "./ui/ui.css";
 import PanelErrorBoundary from "./components/PanelErrorBoundary";
 // AF-NEXT-014 — guided Design / Program / Commission / Operate workspaces over the same panels.
 import WorkspaceSwitcher from "./components/workspace/DesktopWorkspaces";

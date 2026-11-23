@@ -1,5 +1,9 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-23 — Professional UI overhaul (In Progress)**
+
+- Phase 0: neutral tokens, offline SVG icons, reusable UI controls and usage guide. Numeric scrubbing tests added. Full suite: 2,071 passed; production build passed. Isolated worktree protects concurrent renderer work.
+
 **2026-11-23: AquaFlow Studio 1.2.89 - Odaa · 3Obsa second pass: Vario mushrooms, a tall dancing circle, rainbow arcs into the centre**
 
 - **User feedback:** the Varios were wrong, the circle's 1D nozzles needed tall front/back/left/right dances, and the diagonal rainbows should flow into the centre. The patterns come from the two reference renders (`Downloads/qXsjNI.mp4`, `BgQpGF.mp4`).
