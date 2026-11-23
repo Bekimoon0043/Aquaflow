@@ -1,3 +1,4 @@
+import CommandPalette from '../ui/CommandPalette';
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useShowStore } from "../store/showStore";
 import { useICANPreviewStore } from "../store/icanPreviewStore";
@@ -309,14 +310,15 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
   const activeGroup = PANEL_TO_GROUP[activePanel];
   // AF-NEXT-014: with workspaces, the panel menus live in one "All tools" menu.
   const topMenus = workspaceSwitcher ? WORKSPACE_TOP_MENUS : Object.keys(MENU_ITEMS);
-  const menuEntries = (menu) => (menu === ALL_TOOLS_MENU ? allToolsEntries() : MENU_ITEMS[menu]);
+  const menuEntries = (menu) => (menu === ALL_TOOLS_MENU || menu === "View" ? allToolsEntries() : menu === "Tools" ? allToolsEntries().filter(e => e[1] !== "panel") : MENU_ITEMS[menu]);
 
   return (
     <>
+    <CommandPalette onRun={handleMenuItem} />
     <div className="desktop-menubar"
       style={{
         height: "var(--topbar-h)",
-        background: "linear-gradient(180deg,#0c1a10 0%,#080e0a 100%)",
+        background: "var(--bg-panel)",
         borderBottom: "1px solid var(--border-accent)",
         display: "flex",
         alignItems: "center",
@@ -384,7 +386,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
                     zIndex: 700,
                     boxShadow: "0 10px 34px rgba(0,0,0,0.55)",
                     padding: "5px 0",
-                    ...(menu === ALL_TOOLS_MENU ? { maxHeight: "calc(100vh - var(--topbar-h) - 16px)", overflowY: "auto" } : {}),
+                    ...((menu === ALL_TOOLS_MENU || menu === "View") ? { maxHeight: "calc(100vh - var(--topbar-h) - 16px)", overflowY: "auto" } : {}),
                   }}
                   role="menu"
                   aria-label={menu}
@@ -447,6 +449,8 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
         ))}
       </div>
 
+      {workspaceSwitcher && <div className="pro-workspace-tabs">{workspaceSwitcher}</div>}
+      </div><div className="pro-context-toolbar">
       {/* Show name */}
       <div style={{ padding: "0 8px", borderLeft: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
         <span style={{ color: "var(--text-secondary)", fontSize: 11, maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentShow.name}</span>
@@ -552,7 +556,7 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
         </ModalShell>
       )}
     </div>
-    {workspaceSwitcher && <div className="desktop-workspace-bar">{workspaceSwitcher}</div>}
+
     </>
   );
 }

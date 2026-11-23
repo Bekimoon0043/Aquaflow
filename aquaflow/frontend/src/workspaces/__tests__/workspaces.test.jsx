@@ -268,16 +268,16 @@ describe("AF-NEXT-014 panel-side requests", () => {
 });
 
 describe("AF-NEXT-014 top bar", () => {
-  it("shows the workspace switcher and an All tools menu that opens every existing panel", () => {
+  it("shows the workspace switcher and a View menu that opens every existing panel", () => {
     const opened = [];
     render(<TopBar activePanel="nodes" setActivePanel={(p) => opened.push(p)} onToggleLogs={() => {}} onOpenBrowser={() => {}} isDirty={false}
       workspaceSwitcher={<WorkspaceSwitcher workspace="design" onSelect={() => {}} />} />);
     expect(screen.getAllByRole("tab").map(t => t.textContent)).toEqual(["Design", "Program", "Commission", "Operate"]);
-    const menus = ["File", "Edit", "All tools", "Help"];
+    const menus = ["File", "Edit", "View", "Tools", "Help"];
     menus.forEach(name => expect(screen.getByRole("button", { name })).toBeTruthy());
     const panelCount = allToolsEntries().filter(e => e[1] === "panel").length;
     for (let i = 0; i < panelCount; i++) {
-      fireEvent.click(screen.getByRole("button", { name: "All tools" }));
+      fireEvent.click(screen.getByRole("button", { name: "View" }));
       const panelItems = allToolsEntries().filter(e => e[1] !== "header");
       const entry = allToolsEntries().filter(e => e[1] === "panel")[i];
       const items = screen.getAllByRole("menuitem");
@@ -287,3 +287,4 @@ describe("AF-NEXT-014 top bar", () => {
     expect(new Set(opened)).toEqual(appPanels());
   });
 });
+

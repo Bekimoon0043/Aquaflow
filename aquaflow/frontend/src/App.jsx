@@ -123,8 +123,7 @@ function StudioApp() {
   return (
     <div className="app-shell">
       {/* AF-HUB-000C — persistent "simulated output only" banner until hardware is commissioned. */}
-      <CommissioningBanner />
-      <ConnectionBanner />
+
       <TopBar
         activePanel={activePanel}
         setActivePanel={setActivePanel}
@@ -134,7 +133,7 @@ function StudioApp() {
         lastSaved={lastSaved}
         workspaceSwitcher={<WorkspaceSwitcher workspace={guided.workspace} activePanel={activePanel} onSelect={guided.selectWorkspace} onOpen={guided.open} onStart={() => guided.setStartOpen(true)} />}
       />
-      <GuidanceStrip
+      <details className="pro-checklist"><summary>Checklist</summary><GuidanceStrip
         workspace={guided.workspace}
         steps={guided.steps}
         diagnostics={guided.diagnostics}
@@ -144,6 +143,7 @@ function StudioApp() {
         preflightBusy={guided.preflightBusy}
         preflightError={guided.preflightError}
       />
+      </details>
       <div className="workspace-frame">
       <div className={`workspace${activePanel === "geometry" || activePanel === "easybuilder" ? " engineering-workspace" : ""}`} ref={workspaceRef}>
         {visitedPanelsRef.current.has("geometry") && (
@@ -258,7 +258,8 @@ function StudioApp() {
       </div>
       {showLogs && <LogPanel onClose={() => setShowLogs(false)} />}
       {showBrowser && <ShowBrowser mode={showBrowser} onClose={() => setShowBrowser(null)} />}
-      <StatusBar onToggleLogs={() => setShowLogs((v) => !v)} lastSaved={lastSaved} />
+      <div className="pro-status"><details><summary>Hardware status</summary><CommissioningBanner /></details><details><summary>Connection</summary><ConnectionBanner /></details>
+      <StatusBar onToggleLogs={() => setShowLogs((v) => !v)} lastSaved={lastSaved} /></div>
       {guided.startOpen && (
         <StartCard
           onImportCad={() => { guided.setStartOpen(false); guided.selectWorkspace("design"); guided.open({ panel: "geometry", action: "cad-import" }); }}

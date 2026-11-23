@@ -98,7 +98,7 @@ export const MENU_ITEMS = {
 // stays reachable (nothing is removed). File, Edit and Help stay as menus of their own.
 export const ALL_TOOLS_MENU = "All tools";
 export const ALL_TOOLS_GROUPS = ["Design", "Devices", "Runtime", "AI", "Help"];
-export const WORKSPACE_TOP_MENUS = ["File", "Edit", ALL_TOOLS_MENU, "Help"];
+export const WORKSPACE_TOP_MENUS = ["File", "Edit", "View", "Tools", "Help"];
 
 /** "All tools" entries: a ["<group>", "header"] row, then that group's entries. */
 export function allToolsEntries(menu = MENU_ITEMS) {

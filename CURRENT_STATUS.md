@@ -3092,3 +3092,6 @@ Also still open in Stage 1: **AQ-S1-002 — Automatic DMX address assignment** (
 ## Standing workflow
 Defined in [CLAUDE.md](CLAUDE.md): update `CURRENT_STATUS.md`, write
 `session-report.json` (in the hub's bridge folder), commit, push — every session end.
+
+- UI overhaul phase 1: compact menu/workspace row and context row; status detail popovers, collapsible checklist, recent desktop projects, global Ctrl+Shift+P palette. Existing panel reachability test updated; 2,071 tests and production build pass. Before screenshots captured in docs/evidence.
+

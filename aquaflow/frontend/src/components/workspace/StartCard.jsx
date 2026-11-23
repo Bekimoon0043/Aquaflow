@@ -1,9 +1,12 @@
+import {listRecentProjectFiles, openProjectPath} from '../../utils/projectPersistence';
 // AF-NEXT-014 — Start card: import a CAD drawing, open a project file, or continue.
 // Project-specific pilots stay in the test fixtures rather than the production product.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "./workspace.css";
 
 export default function StartCard({ onImportCad, onOpenProject, onClose }) {
+  const [recent,setRecent]=useState([]),[error,setError]=useState('');
+  useEffect(()=>{listRecentProjectFiles().then(setRecent).catch(e=>setError(e.message));},[]);
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
     window.addEventListener("keydown", onKey);
@@ -32,6 +35,7 @@ export default function StartCard({ onImportCad, onOpenProject, onClose }) {
             <button type="button" className="btn" onClick={onOpenProject}>Open project…</button>
           </div>
         </div>
+        <section className="pro-recent"><h3>Recent projects</h3>{recent.map(f=><button className="btn" key={f.path} disabled={f.exists===false} onClick={async()=>{try{await openProjectPath(f.path);onClose();}catch(e){setError(e.message);}}}>{f.name}</button>)}{!recent.length && <p>No recent desktop projects.</p>}{error && <p role="alert">{error}</p>}</section>
         <div className="ws-start-foot">
           <button type="button" className="btn" onClick={onClose}>Continue with the current project</button>
         </div>
