@@ -1,3 +1,4 @@
+import {useFocusPreviewStore} from '../../preview/focus/focusPreviewStore';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useEngineeringStore from '../../../store/engineeringStore';
 import useProjectStore from '../../../store/projectStore';
@@ -92,6 +93,7 @@ export default function ShowStudio() {
     setClipIds(old => old.every(id => valid.has(id)) ? old : old.filter(id => valid.has(id)));
     setFocusedId(old => valid.has(old) ? old : null);
   }, [studio.recipes, studio.legacyClips]);
+  useEffect(()=>{if(active)useFocusPreviewStore.getState().select(selection);},[selection,active]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const tracks = useMemo(() => items.flatMap(i => i.tracks), [items]);
   const end = Math.max(1, ...clips.map(c => c.startTime + c.duration), ...studio.recipes.map(r => r.start + r.duration));

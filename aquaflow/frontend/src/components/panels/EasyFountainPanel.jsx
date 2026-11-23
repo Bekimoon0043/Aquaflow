@@ -1,3 +1,4 @@
+import {useFocusPreviewStore} from '../preview/focus/focusPreviewStore';
 // Easy Fountain Design — drag equipment from the asset tray into a big 3D space, see it connect
 // itself (pump → valve → nozzle, light → nozzle), re-plug any line by dragging its plug, and edit
 // every property with the water reacting live. The design is the Engineering project itself
@@ -56,6 +57,7 @@ export default function EasyFountainPanel() {
   const setHaze = (v) => useProjectStore.getState().updateRender({ laserHaze: v });
 
   const [selectedId, setSelectedId] = useState(null);
+  useEffect(()=>{useFocusPreviewStore.getState().select(selectedId?[selectedId]:[]);},[selectedId]);
   const [selectedLinkId, setSelectedLinkId] = useState(null);
   const [live, setLive] = useState({});
   const [tab, setTab] = useState("nozzles");

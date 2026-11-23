@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import {useFocusPreviewStore} from '../../preview/focus/focusPreviewStore';
+import {buildDraftClips} from '../../preview/focus/draftPreview';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useEngineeringStore from '../../../store/engineeringStore';
 import { resolveMembers } from './showModel';
 import {
@@ -140,6 +142,9 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
   const minLevel = controls.minLevel ? Math.min(options.minLevel, options.maxLevel) : 0;
   const synced = syncOn && analysis ? syncPatternOptions(preset, { ...options, minLevel }, analysis, { members: members.length }) : null;
   const finalOptions = synced?.info ? synced.options : { ...options, minLevel };
+  const draftKey=JSON.stringify({preset,finalOptions,groupId,lights});
+  useEffect(()=>{const timer=setTimeout(()=>{if(!group)return;try{const clips=buildDraftClips(studio,{preset,options:finalOptions,group,lights:lights.enabled&&lightGroup?{group:lightGroup,color:lights.color,level:lights.level}:null},items);useFocusPreviewStore.getState().publish({selectionIds:resolveMembers(group,items),draftClips:clips});}catch(e){useFocusPreviewStore.getState().publish({selectionIds:resolveMembers(group,items),error:e.message});}},80);return()=>clearTimeout(timer);},[draftKey,items]);
+  useEffect(()=>()=>useFocusPreviewStore.getState().clearDraft(),[]);
   const timing = snapCycles(finalOptions.duration, finalOptions.lapSeconds);
   const visibility = visibilityCheck({ members, params, minLevel, maxLevel: options.maxLevel });
   const songLength = analysis ? Math.min(600, Math.round(analysis.duration * 10) / 10) : null;

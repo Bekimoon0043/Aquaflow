@@ -1193,6 +1193,7 @@ export class FountainScene {
     this.canvas       = canvas;
     this.environment  = options.environment  || ENVIRONMENTS.NIGHT;
     this.maxFps = options.maxFps || 0;
+    this.particleBudgetScale = Math.max(.1,Math.min(1,options.particleBudgetScale || 1));
     this.renderVisible = true;
     this._selectionIds = [];
     this._hiddenFixtureIds = new Set();
@@ -1295,8 +1296,8 @@ export class FountainScene {
     };
 
     // GPU particle systems — share the light-field uniforms
-    this.waterSys = new GPUParticleSystem(T, MAX_WATER, PR, "scatter",  this._particleTex.droplet);
-    this.spraySys = new GPUParticleSystem(T, MAX_SPRAY, PR, "scatter",  this._particleTex.mist);
+    this.waterSys = new GPUParticleSystem(T, Math.ceil(MAX_WATER*this.particleBudgetScale), PR, "scatter",  this._particleTex.droplet);
+    this.spraySys = new GPUParticleSystem(T, Math.ceil(MAX_SPRAY*this.particleBudgetScale), PR, "scatter",  this._particleTex.mist);
     this.foamSys  = new GPUParticleSystem(T, MAX_FOAM,  PR, "scatter",  this._particleTex.foam);
     this.flameSys = new GPUParticleSystem(T, MAX_FLAME, PR, "emissive", this._particleTex.flame);
     [this.waterSys, this.spraySys, this.foamSys].forEach(ps => {
@@ -1324,12 +1325,12 @@ export class FountainScene {
       try {
         const shared = { maxEmitters: MAX_GPU_EMITTERS };
         this._gpuWater = new GPUParticleField(T, this.renderer, {
-          ...shared, count: q.gpuWater, map: this._particleTex.droplet,
+          ...shared, count: Math.ceil(q.gpuWater*this.particleBudgetScale), map: this._particleTex.droplet,
           gravity: -9.5, drag: 0.018, turbulence: 0.35,
           sizeScale: 0.44, alpha: 0.14,
         });
         this._gpuSpray = new GPUParticleField(T, this.renderer, {
-          ...shared, count: q.gpuSpray, map: this._particleTex.mist,
+          ...shared, count: Math.ceil(q.gpuSpray*this.particleBudgetScale), map: this._particleTex.mist,
           gravity: -7.0, drag: 0.024, turbulence: 0.55,
           sizeScale: 0.58, alpha: 0.11,
         });
@@ -3235,7 +3236,7 @@ export class FountainScene {
   snapView(view) {
     if(view==='camera'){this.resumeCameraTrack();return;}
     this._takeOverCamera();this.orbitAuto=false;
-    const target=this._orbitTarget || {x:0,y:2,z:0};const radius=Math.max(2,this.orbitRadius || 15);
+    const target=this.orbitTarget || {x:0,y:2,z:0};const radius=Math.max(2,this.orbitRadius || 15);
     const angle=view==='front'?Math.PI/2:view==='side'?0:-Math.PI/4;
     this._flyTo({target:{...target},radius:view==='top'?.01:radius,height:view==='top'?target.y+radius*1.5:view==='front'||view==='side'?target.y:target.y+radius*.65,angle});
   }

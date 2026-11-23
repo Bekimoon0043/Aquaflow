@@ -1,3 +1,5 @@
+import {useFocusPreviewStore} from '../../preview/focus/focusPreviewStore';
+import {compileStudio} from './showModel';
 // Guided water / 1D / 2D / 3D creator with editable temporal curves, spatial paths,
 // group timing, water and light layers. Assets open as independent remixes; custom types
 // stay in the project and computer library and use the existing portable type format.
@@ -11,55 +13,13 @@ import CurveGraph from './CurveGraph';
 import { Choice, Slider } from './patternControls';
 import { builderGroups, isLightItem, isWaterItem } from './patternPresets';
 
-const PREVIEW_JETS = 48;
 const DRAW_POINTS = 9;
-
-// A small triangle of jets (tip at the top) so every path previews like the real basin.
-const previewMembers = (() => {
-  const corners = [[0, -1], [1, 0.75], [-1, 0.75]];
-  const out = [];
-  for (let i = 0; i < PREVIEW_JETS; i++) {
-    const u = (i / PREVIEW_JETS) * 3, k = Math.floor(u), t = u - k;
-    const a = corners[k], b = corners[(k + 1) % 3];
-    out.push({ id: `p${i}`, x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t });
-  }
-  return out;
-})();
 
 function resample(points) {
   return Array.from({ length: DRAW_POINTS }, (_, i) => {
     const time = i / (DRAW_POINTS - 1);
     return { time, value: Math.round(shapeValue({ shape: 'drawn', points }, time) * 100) / 100 };
   });
-}
-
-function Preview({ field, light }) {
-  const [t, setT] = useState(1.2);
-  useEffect(() => {
-    let alive = true, last = performance.now(), handle;
-    const raf = globalThis.requestAnimationFrame || (fn => setTimeout(() => fn(performance.now()), 50));
-    const cancel = globalThis.cancelAnimationFrame || clearTimeout;
-    const tick = now => { if (!alive) return; setT(v => (v + (now - last) / 1000) % 600); last = now; handle = raf(tick); };
-    handle = raf(tick);
-    return () => { alive = false; cancel(handle); };
-  }, []);
-  const geo = useMemo(() => memberGeometry(previewMembers, { origin: field.origin || 'tip' }), [field.origin]);
-  const span = Math.max(4, field.period * 2);
-  const local = 1.2 + (t % span); // stay clear of the soft start
-  const levels = geo.map(g => fieldLevel({ ...field, ease: 0 }, g, local, local + 100));
-  const W = 300, H = 120;
-  const colour = i => light.colorMode === 'sequence' && light.colors?.length ? light.colors[Math.min(light.colors.length - 1, Math.floor(((t % 12) / 12) * light.colors.length))]
-    : light.colorMode === 'rainbow' ? `hsl(${Math.round(((i / PREVIEW_JETS - local / 10) % 1 + 1) % 1 * 360)} 90% 60%)` : light.color;
-  return <div className="pc-preview">
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Live preview of the jets">
-      {previewMembers.map((m, i) => {
-        const cx = W / 2 + m.x * 120, cy = 58 + m.y * 46, h = levels[i] / 100 * 34;
-        return <g key={m.id}><line x1={cx} x2={cx} y1={cy} y2={cy - h} stroke={colour(i)} strokeWidth="3" strokeLinecap="round" opacity={0.35 + levels[i] / 160} />
-          <circle cx={cx} cy={cy} r="1.6" fill="#7f95a8" /></g>;
-      })}
-    </svg>
-    <small>Live preview: {PREVIEW_JETS} jets around a triangle (tip at the top) — taller line = higher water</small>
-  </div>;
 }
 
 const EXAMPLE_FOR_KIND = { rolling: 'Rolling wave', travelling: 'Travelling wave', seesaw: 'See-saw', swell: 'Grand swell',
@@ -121,6 +81,10 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
   const motionGroups = waterGroups.filter(g => { const m = membersOf(g); return m.every(item => motionAxesOf(item) >= axes); });
   const targetGroup = allGroups.find(g => g.id === groupId);
   const targetMembers = membersOf(targetGroup);
+  const draftKey=JSON.stringify({type,effective,groupId,lightGroupId,duration,includeLights});
+  useEffect(()=>{const timer=setTimeout(()=>{if(!targetGroup)return;try{const lightGroup=includeLights?allGroups.find(g=>g.id===lightGroupId):null;const order=targetGroup.order||'selection';const made=type.patternKind==='motion'?motionPatternRecipes({start:0,duration,name:type.name,groupId,lightGroupId:lightGroup?.id,field:effective,motion:type.motion,light:L,order}):fieldUnitRecipes({kind:'custom',start:0,duration,name:type.name,field:effective,waterGroupId:groupId,lightGroupId:lightGroup?.id,light:L,order});const temporary={...studio,groups:[...studio.groups,...[targetGroup,lightGroup].filter(g=>g&&!studio.groups.some(x=>x.id===g.id))],recipes:made.recipes,legacyClips:[]};useFocusPreviewStore.getState().publish({selectionIds:targetMembers.map(m=>m.id),draftClips:compileStudio(temporary,items).clips});}catch(e){useFocusPreviewStore.getState().publish({selectionIds:targetMembers.map(m=>m.id),error:e.message});}},80);return()=>clearTimeout(timer);},[draftKey,items]);
+  useEffect(()=>()=>useFocusPreviewStore.getState().clearDraft(),[]);
+
   const setMode = id => {
     if (id === 'water') { setType(t => cleanType({ ...t, patternKind: 'water', motion: undefined })); return; }
     const nextAxes = MOTION_MODES.find(m => m.id === id)?.axes || 1;
@@ -269,7 +233,7 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
         </section>
       </div>
       <aside className="pc-side">
-        <Preview field={effective} light={L} />
+        <button type="button" onClick={()=>useFocusPreviewStore.setState({open:true})}>Open real fountain Focus Preview</button>
         <div className="pc-actions">
           <button className="sp-primary" onClick={add}>{editBlock ? 'Update pattern' : '+ Add to timeline'}</button>
           <button onClick={save} title="Keep this pattern type in this project and on this computer">★ Save as my pattern</button>

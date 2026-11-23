@@ -3101,3 +3101,6 @@ Defined in [CLAUDE.md](CLAUDE.md): update `CURRENT_STATUS.md`, write
 
 - UI overhaul phase 3: scene selection bounds, isolation/visibility APIs, body outlines, hover, axis snapping, scoped navigation shortcuts, Studio viewport header and Plan | 3D split. 2,076 tests and production build pass. Full parity in Easy/Studio-look renderers and heat-map remains In Progress.
 
+
+- UI overhaul phase 4: app-level lazy Focus Preview, low-quality independent scene at 30 fps and 20% particle budget, persisted/snapping window, transport and main-view handoff. Builder/Creator publish debounced temporary draft clips; synthetic triangle removed. Selection integration covers Show Studio and Easy Design. 2,080 tests pass; production build passes. Browser startup import-order defect corrected.
+

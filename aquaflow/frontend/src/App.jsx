@@ -1,3 +1,4 @@
+import {useFocusPreviewStore} from './components/preview/focus/focusPreviewStore';
 import DockLayout from './ui/dock/DockLayout';
 import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { Component } from "react";
@@ -14,6 +15,7 @@ import InspectorPanel from "./components/panels/InspectorPanel";
 // only when its panel is first opened, so heavy panels (preview/three.js,
 // geometry designer, show programmer, fixture library) stay out of the initial
 // bundle. The switch below is wrapped in a single <Suspense> boundary.
+const FocusPreview = lazy(()=>import('./components/preview/focus/FocusPreview'));
 const PreviewPanel = lazy(() => import("./components/preview/PreviewPanel_v5"));
 const EasyFountainPanel = lazy(() => import("./components/panels/EasyFountainPanel"));
 const AIPanel = lazy(() => import("./components/panels/AIPanel"));
@@ -73,6 +75,7 @@ const FULL_WORKSPACE_PANELS = new Set(["geometry", "show_programmer", "easybuild
 
 function StudioApp() {
   useICANPreviewClock();
+  const focusOpen = useFocusPreviewStore(s=>s.open);
   // Panel sizes are now draggable and persisted, rather than the frozen literal this
   // used to be. Defaults are unchanged (260 / 300 / 280), so a first run looks identical.
   const { layout, resize, beginDrag, endDrag, resetPanel } = useResizableLayout();
@@ -228,6 +231,7 @@ function StudioApp() {
           onClose={() => guided.setStartOpen(false)}
         />
       )}
+      {focusOpen && <Suspense fallback={null}><FocusPreview/></Suspense>}
       <ProjectRecoveryHost />
     </div>
   );
