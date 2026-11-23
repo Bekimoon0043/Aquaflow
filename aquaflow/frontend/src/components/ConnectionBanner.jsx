@@ -1,3 +1,4 @@
+import React from "react";
 import { useShowStore } from "../store/showStore";
 import { BACKEND_ORIGIN, HEALTH_URL } from "../config";
 
@@ -9,12 +10,33 @@ const STATES = {
   failed:       { color: "#ef4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", icon: "✕", msg: "Cannot reach backend. Confirm the Python server is running on port 8000." },
 };
 
-export default function ConnectionBanner() {
+export default function ConnectionBanner({ compact = false }) {
   const { connectionState } = useShowStore();
   const cfg = STATES[connectionState];
   if (!cfg) return null;
 
   const showHints = connectionState === "failed" || connectionState === "error";
+
+  // Compact form for the status bar: always visible while the engine is not connected.
+  if (compact) {
+    const level = showHints ? "is-error" : "is-warn";
+    const label = showHints ? "Engine offline" : "Engine connecting…";
+    return (
+      <details className={`pro-status-chip ${level}`}>
+        <summary role="status" aria-live="polite" title={cfg.msg}>{cfg.icon} {label}</summary>
+        <div className="pro-status-pop">
+          <p>{cfg.msg}</p>
+          {showHints && (
+            <>
+              <p>Backend: <code>{BACKEND_ORIGIN}</code></p>
+              <p>Health: <code>{HEALTH_URL}</code></p>
+              <p>Windows: <code>cd backend &amp;&amp; py -m uvicorn main:app --reload --host 0.0.0.0 --port 8000</code></p>
+            </>
+          )}
+        </div>
+      </details>
+    );
+  }
 
   return (
     <div style={{

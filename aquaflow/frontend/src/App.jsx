@@ -223,7 +223,7 @@ function StudioApp() {
       </div>
       {showLogs && <LogPanel onClose={() => setShowLogs(false)} />}
       {showBrowser && <ShowBrowser mode={showBrowser} onClose={() => setShowBrowser(null)} />}
-      <div className="pro-status"><details><summary>Hardware status</summary><CommissioningBanner /></details><details><summary>Connection</summary><ConnectionBanner /></details>
+      <div className="pro-status"><CommissioningBanner compact /><ConnectionBanner compact />
       <StatusBar onToggleLogs={() => setShowLogs((v) => !v)} lastSaved={lastSaved} /></div>
       {guided.startOpen && (
         <StartCard

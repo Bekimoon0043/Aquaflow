@@ -9,12 +9,12 @@
 // unreachable, we assume NOT commissioned and keep the banner up — the honest
 // default. It can never be permanently dismissed while the flag is FALSE, so the
 // "simulated output" claim can't silently disappear.
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { apiGet } from "../utils/apiClient";
 
 const DEFAULT_TEXT = "Hardware not commissioned — simulated output only";
 
-export default function CommissioningBanner() {
+export default function CommissioningBanner({ compact = false }) {
   const [status, setStatus] = useState(null); // null = unknown → show (fail-safe)
 
   useEffect(() => {
@@ -36,6 +36,16 @@ export default function CommissioningBanner() {
   if (status && status.hardware_commissioned === true) return null;
 
   const text = (status && status.banner) || DEFAULT_TEXT;
+  // Compact form for the status bar: the warning stays visible at all times (it is not
+  // hidden behind a click); only the longer explanation folds away.
+  if (compact) {
+    return (
+      <details className="pro-status-chip is-warn">
+        <summary role="status" aria-live="polite" title={text}>⚠ Simulated output</summary>
+        <div className="pro-status-pop">{text}</div>
+      </details>
+    );
+  }
   return (
     <div
       role="status"

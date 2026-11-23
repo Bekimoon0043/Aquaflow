@@ -2,6 +2,21 @@
 
 **2026-11-23 — Professional UI overhaul (In Progress)**
 
+- **Continuation (Claude Code, after GPT Astra ran out of tokens mid-phase 6):**
+  - **Rejected and stashed** Astra's automated phase 6 migration (`git stash list`: "astra-phase6-automated-migration"). It turned every red/amber/green status colour grey (Safety, PLC, E-stop panels), clamped all font sizes to 11–13 px and added about 3,000 generated `pro-static-N` classes.
+  - **Safety fix:** the AF-HUB-000C "simulated output only" banner and the backend connection banner had been folded inside closed `<details>`. They are now always-visible status-bar chips (⚠ Simulated output / Engine offline) with the same fail-safe rule. Tests: `components/__tests__/statusChips.test.jsx`.
+  - **Safety fix:** the Pattern Editor's Designer and Manual tabs mounted second copies of Pattern Designer and Fountain Control (duplicate I-CAN/safety polling, a second set of arm/connect controls, a possible second device-command loop). They are now launchers that open the single real panel.
+  - The music section was duplicated (about 140 identical lines in Pattern Builder); it is merged into one. The AI director key moved to File → Preferences (`components/AiDirectorSettings.jsx`, event `aquaflow:open-preferences`). Calibration stays under "Your fountain" because it writes the show's site data.
+  - Status bar rebuilt with CSS classes. Fake static labels removed ("48kHz / 32-bit", "DMX · Art-Net · Modbus", "v0.1"); the version comes from the desktop app. The Preferences/About dialog shell uses CSS classes.
+  - **Phase 6 ratchet:** `src/ui/styleAudit.js`, `styleAudit.test.js` and `styleBaseline.json`. No component may gain inline styles or hard-coded hex colours; after migrating a panel, lower the baseline with `node scripts/update-style-baseline.mjs`. Before the overhaul: 3,681 inline styles and 2,658 hex colours. Now: 3,661 and 2,654.
+  - **Verified:** 219 test files / 2,086 tests pass, the production build passes, and the after screenshot is `docs/evidence/ui-pro-after-program.png` (Coffee_Fountain).
+  - **Still In Progress:**
+    - Panel-by-panel migration of the remaining inline styles. Largest first: ShowProgrammerPanel, PreviewPanel_v5, EasyFountainPanel; plus ShowStudio's own header/toolbar, which still looks website-like.
+    - Keyframe diamonds on pattern properties (needs a real animation action to wire to).
+    - Moving calibration into the Commission workspace.
+    - Heat-map shading and Easy/Studio-look viewport parity (phase 3).
+    - Full-workspace dock layouts (phase 2).
+    - A headless capture of the Focus Preview (software rendering stalls on its 3D scene).
 - Phase 0: neutral tokens, offline SVG icons, reusable UI controls and usage guide. Numeric scrubbing tests added. Full suite: 2,071 passed; production build passed. Isolated worktree protects concurrent renderer work.
 
 **2026-11-23: AquaFlow Studio 1.2.89 - Odaa · 3Obsa second pass: Vario mushrooms, a tall dancing circle, rainbow arcs into the centre**

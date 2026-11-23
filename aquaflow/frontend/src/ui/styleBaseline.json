@@ -1,0 +1,484 @@
+{
+ "totals": {
+  "inline": 3661,
+  "hex": 2654
+ },
+ "files": {
+  "AppLicenseGate.jsx": {
+   "inline": 2,
+   "hex": 31
+  },
+  "CommissioningBanner.jsx": {
+   "inline": 1,
+   "hex": 6
+  },
+  "ConnectionBanner.jsx": {
+   "inline": 8,
+   "hex": 4
+  },
+  "layout/ResizeHandle.jsx": {
+   "inline": 1,
+   "hex": 0
+  },
+  "LicenseGate.jsx": {
+   "inline": 11,
+   "hex": 0
+  },
+  "LicenseScreen.jsx": {
+   "inline": 1,
+   "hex": 0
+  },
+  "LogPanel.jsx": {
+   "inline": 14,
+   "hex": 0
+  },
+  "MemoryBanner.jsx": {
+   "inline": 8,
+   "hex": 4
+  },
+  "nodes/NodeEditor.jsx": {
+   "inline": 24,
+   "hex": 26
+  },
+  "PanelErrorBoundary.jsx": {
+   "inline": 5,
+   "hex": 2
+  },
+  "panels/AdaptationPanel.jsx": {
+   "inline": 31,
+   "hex": 11
+  },
+  "panels/AiCommissioningHelp.jsx": {
+   "inline": 10,
+   "hex": 12
+  },
+  "panels/AiDesignReview.jsx": {
+   "inline": 19,
+   "hex": 5
+  },
+  "panels/AIPanel.jsx": {
+   "inline": 146,
+   "hex": 8
+  },
+  "panels/AudioPanel.jsx": {
+   "inline": 76,
+   "hex": 6
+  },
+  "panels/BasinListPanel.jsx": {
+   "inline": 8,
+   "hex": 11
+  },
+  "panels/CADImportDialog.jsx": {
+   "inline": 122,
+   "hex": 90
+  },
+  "panels/CalibrationPanel.jsx": {
+   "inline": 53,
+   "hex": 67
+  },
+  "panels/CloudPanel.jsx": {
+   "inline": 33,
+   "hex": 12
+  },
+  "panels/CollaborationPanel.jsx": {
+   "inline": 26,
+   "hex": 2
+  },
+  "panels/CompilePanel.jsx": {
+   "inline": 48,
+   "hex": 65
+  },
+  "panels/connections/ConnectionsEditor.jsx": {
+   "inline": 61,
+   "hex": 43
+  },
+  "panels/connections/FixtureConnectionsSection.jsx": {
+   "inline": 7,
+   "hex": 11
+  },
+  "panels/DependencyGraphPanel.jsx": {
+   "inline": 17,
+   "hex": 17
+  },
+  "panels/designer/DesignerSidebar.jsx": {
+   "inline": 216,
+   "hex": 344
+  },
+  "panels/designer/FixturePropertiesPanel.jsx": {
+   "inline": 29,
+   "hex": 52
+  },
+  "panels/designer/PyroExportButton.jsx": {
+   "inline": 2,
+   "hex": 4
+  },
+  "panels/DeviceDiscoveryPanel.jsx": {
+   "inline": 126,
+   "hex": 17
+  },
+  "panels/DevicePanel.jsx": {
+   "inline": 26,
+   "hex": 0
+  },
+  "panels/DiagnosticsPanel.jsx": {
+   "inline": 22,
+   "hex": 51
+  },
+  "panels/DigitalTwinPanel.jsx": {
+   "inline": 29,
+   "hex": 15
+  },
+  "panels/DocumentationPanel.jsx": {
+   "inline": 32,
+   "hex": 1
+  },
+  "panels/EasyFountainPanel.jsx": {
+   "inline": 117,
+   "hex": 19
+  },
+  "panels/EngineeringToolsPanel.jsx": {
+   "inline": 48,
+   "hex": 7
+  },
+  "panels/EnvironmentMaterialPanel.jsx": {
+   "inline": 26,
+   "hex": 4
+  },
+  "panels/Export3DPanel.jsx": {
+   "inline": 25,
+   "hex": 4
+  },
+  "panels/FixtureLibraryBrowser.jsx": {
+   "inline": 17,
+   "hex": 21
+  },
+  "panels/FixtureTrustPanel.jsx": {
+   "inline": 20,
+   "hex": 35
+  },
+  "panels/FleetPanel.jsx": {
+   "inline": 29,
+   "hex": 20
+  },
+  "panels/FountainControlPanel.jsx": {
+   "inline": 76,
+   "hex": 10
+  },
+  "panels/GenerativeDesignerPanel.jsx": {
+   "inline": 38,
+   "hex": 2
+  },
+  "panels/ICANManualPatternEditor.jsx": {
+   "inline": 40,
+   "hex": 9
+  },
+  "panels/ICANSiteDesignStudio.jsx": {
+   "inline": 30,
+   "hex": 8
+  },
+  "panels/InspectorPanel.jsx": {
+   "inline": 91,
+   "hex": 8
+  },
+  "panels/MobileMonitorPanel.jsx": {
+   "inline": 18,
+   "hex": 16
+  },
+  "panels/NozzleMap.jsx": {
+   "inline": 3,
+   "hex": 15
+  },
+  "panels/OperatorPanel.jsx": {
+   "inline": 58,
+   "hex": 99
+  },
+  "panels/OptimizationPanel.jsx": {
+   "inline": 24,
+   "hex": 7
+  },
+  "panels/PatternDesignerPanel.jsx": {
+   "inline": 90,
+   "hex": 25
+  },
+  "panels/PipePropertiesPanel.jsx": {
+   "inline": 28,
+   "hex": 35
+  },
+  "panels/PLCPanel.jsx": {
+   "inline": 118,
+   "hex": 26
+  },
+  "panels/PoolGeometryDesigner.jsx": {
+   "inline": 34,
+   "hex": 53
+  },
+  "panels/PreflightPanel.jsx": {
+   "inline": 19,
+   "hex": 25
+  },
+  "panels/PresetBrowser.jsx": {
+   "inline": 31,
+   "hex": 45
+  },
+  "panels/ProvenanceBadge.jsx": {
+   "inline": 3,
+   "hex": 10
+  },
+  "panels/RealtimeValidationPanel.jsx": {
+   "inline": 19,
+   "hex": 8
+  },
+  "panels/SafetyMonitorPanel.jsx": {
+   "inline": 47,
+   "hex": 81
+  },
+  "panels/SchedulerPanel.jsx": {
+   "inline": 152,
+   "hex": 17
+  },
+  "panels/siemens/SiemensAcceptance.jsx": {
+   "inline": 3,
+   "hex": 0
+  },
+  "panels/siemens/SiemensFixtureLink.jsx": {
+   "inline": 2,
+   "hex": 5
+  },
+  "panels/siemens/SiemensHardwarePicker.jsx": {
+   "inline": 7,
+   "hex": 1
+  },
+  "panels/siemens/SiemensIOMap.jsx": {
+   "inline": 5,
+   "hex": 0
+  },
+  "panels/siemens/SiemensIOMapTab.jsx": {
+   "inline": 1,
+   "hex": 0
+  },
+  "panels/siemens/SiemensPlcMonitor.jsx": {
+   "inline": 4,
+   "hex": 1
+  },
+  "panels/siemens/SiemensSetupWizard.jsx": {
+   "inline": 14,
+   "hex": 3
+  },
+  "panels/siemens/SiemensTagImport.jsx": {
+   "inline": 5,
+   "hex": 0
+  },
+  "panels/siemens/SiemensTerm.jsx": {
+   "inline": 1,
+   "hex": 0
+  },
+  "panels/SiemensEasyWorkflow.jsx": {
+   "inline": 16,
+   "hex": 15
+  },
+  "panels/SiemensReadiness.jsx": {
+   "inline": 11,
+   "hex": 15
+  },
+  "panels/SiemensSitePanel.jsx": {
+   "inline": 56,
+   "hex": 16
+  },
+  "panels/SimulationCacheSection.jsx": {
+   "inline": 23,
+   "hex": 3
+  },
+  "panels/TrainingAcademyPanel.jsx": {
+   "inline": 34,
+   "hex": 13
+  },
+  "panels/VerifiedModelsTool.jsx": {
+   "inline": 24,
+   "hex": 3
+  },
+  "panels/WindDriftPanel.jsx": {
+   "inline": 21,
+   "hex": 13
+  },
+  "preview/camera/CameraLane.jsx": {
+   "inline": 17,
+   "hex": 18
+  },
+  "preview/editor/ui/workspaceUI.jsx": {
+   "inline": 52,
+   "hex": 17
+  },
+  "preview/focus/FocusPreview.jsx": {
+   "inline": 1,
+   "hex": 0
+  },
+  "preview/HydraulicPreviewPanel.jsx": {
+   "inline": 27,
+   "hex": 21
+  },
+  "preview/ICANPreviewControls.jsx": {
+   "inline": 10,
+   "hex": 11
+  },
+  "preview/PreviewPanel_v5.jsx": {
+   "inline": 142,
+   "hex": 176
+  },
+  "preview/RealismReport.jsx": {
+   "inline": 9,
+   "hex": 11
+  },
+  "preview/studio/StudioShowView.jsx": {
+   "inline": 6,
+   "hex": 6
+  },
+  "programmer/AIChoreographyPanel.jsx": {
+   "inline": 4,
+   "hex": 36
+  },
+  "programmer/ArrayNozzleSelector.jsx": {
+   "inline": 10,
+   "hex": 14
+  },
+  "programmer/ArrayPatternBuilder.jsx": {
+   "inline": 46,
+   "hex": 43
+  },
+  "programmer/AudioWaveform.jsx": {
+   "inline": 2,
+   "hex": 8
+  },
+  "programmer/BeatMarkerLane.jsx": {
+   "inline": 2,
+   "hex": 11
+  },
+  "programmer/ClipInspector.jsx": {
+   "inline": 7,
+   "hex": 40
+  },
+  "programmer/PatternBlocks.jsx": {
+   "inline": 30,
+   "hex": 26
+  },
+  "programmer/ShowChoreographyAssistant.jsx": {
+   "inline": 8,
+   "hex": 9
+  },
+  "programmer/ShowProgrammerPanel.jsx": {
+   "inline": 301,
+   "hex": 420
+  },
+  "programmer/ShowSectionEditor.jsx": {
+   "inline": 17,
+   "hex": 10
+  },
+  "programmer/SiemensShowControls.jsx": {
+   "inline": 11,
+   "hex": 8
+  },
+  "programmer/SiteShowActions.jsx": {
+   "inline": 11,
+   "hex": 14
+  },
+  "programmer/studio/CalibrationDialog.jsx": {
+   "inline": 3,
+   "hex": 3
+  },
+  "programmer/studio/EnvelopeEditor.jsx": {
+   "inline": 0,
+   "hex": 4
+  },
+  "programmer/studio/MotionDesigner.jsx": {
+   "inline": 0,
+   "hex": 4
+  },
+  "programmer/studio/MusicLanes.jsx": {
+   "inline": 2,
+   "hex": 8
+  },
+  "programmer/studio/PatternAssetBrowser.jsx": {
+   "inline": 1,
+   "hex": 1
+  },
+  "programmer/studio/PatternBuilder.jsx": {
+   "inline": 3,
+   "hex": 7
+  },
+  "programmer/studio/PatternCreator.jsx": {
+   "inline": 0,
+   "hex": 1
+  },
+  "programmer/studio/PlanStrip.jsx": {
+   "inline": 3,
+   "hex": 1
+  },
+  "programmer/studio/PreviewSequence.jsx": {
+   "inline": 6,
+   "hex": 2
+  },
+  "programmer/studio/PreviewShowTimeline.jsx": {
+   "inline": 1,
+   "hex": 0
+  },
+  "programmer/studio/ProjectPatternBrowser.jsx": {
+   "inline": 1,
+   "hex": 1
+  },
+  "programmer/studio/ShowStudio.jsx": {
+   "inline": 1,
+   "hex": 3
+  },
+  "programmer/studio/SiteSyncDialog.jsx": {
+   "inline": 2,
+   "hex": 0
+  },
+  "programmer/studio/SpatialPlan.jsx": {
+   "inline": 0,
+   "hex": 15
+  },
+  "programmer/studio/StudioPlcPanel.jsx": {
+   "inline": 4,
+   "hex": 2
+  },
+  "programmer/studio/StudioPreview.jsx": {
+   "inline": 1,
+   "hex": 4
+  },
+  "programmer/studio/StudioTimeline.jsx": {
+   "inline": 13,
+   "hex": 3
+  },
+  "programmer/studio/VirtualList.jsx": {
+   "inline": 2,
+   "hex": 0
+  },
+  "ProjectRecoveryHost.jsx": {
+   "inline": 22,
+   "hex": 18
+  },
+  "ShowBrowser.jsx": {
+   "inline": 85,
+   "hex": 0
+  },
+  "timeline/AudioWaveformTrack.jsx": {
+   "inline": 13,
+   "hex": 15
+  },
+  "timeline/KeyframeEditor.jsx": {
+   "inline": 23,
+   "hex": 42
+  },
+  "timeline/Timeline.jsx": {
+   "inline": 64,
+   "hex": 6
+  },
+  "TopBar.jsx": {
+   "inline": 55,
+   "hex": 1
+  },
+  "workspace/DesktopWorkspaces.jsx": {
+   "inline": 1,
+   "hex": 0
+  }
+ }
+}

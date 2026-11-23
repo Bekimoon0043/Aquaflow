@@ -10,6 +10,7 @@ import { apiGet } from "../utils/apiClient";
 import { downloadShowFile } from "../utils/showFile";
 import { saveProject, packageProject, openProjectFile } from "../utils/projectPersistence"; // AF-NEXT-006
 import { setHelpContext } from "../docs/helpContext";
+import AiDirectorSettings from "./AiDirectorSettings";
 import { version as FRONTEND_VERSION } from "../../package.json";
 import {
   MENU_ITEMS,
@@ -114,6 +115,11 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
   const [bpm, setBpm] = useState(currentShow.bpm);
 
   useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+  useEffect(() => {
+    const open = () => { setAnalyticsOn(hasConsent()); setShowPrefs(true); };
+    window.addEventListener("aquaflow:open-preferences", open);
+    return () => window.removeEventListener("aquaflow:open-preferences", open);
+  }, []);
 
   const showNotice = (text, level = "warn") => {
     setNotice({ text, level });
@@ -543,15 +549,16 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
       {showAbout && <AboutDialog onClose={() => setShowAbout(false)} connOk={connOk} />}
       {showPrefs && (
         <ModalShell label="Preferences" title="Preferences" subtitle="Changes apply immediately." onClose={() => setShowPrefs(false)}>
-          <div style={{ display:"flex", flexDirection:"column", gap:10, padding:16 }}>
+          <div className="pro-modal-body">
             <PrefToggle label="Show grid" hint="Grid in the node editor and timeline." checked={!!showGrid} onChange={() => toggleShowGrid()} />
             <PrefToggle label="Snap to grid" hint="Snap moved nodes and timeline clips to the grid / beat." checked={!!snapToGrid} onChange={() => toggleSnapToGrid()} />
-            <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:12, color:"var(--text-primary)" }}>
-              <span style={{ flex:1 }}>Timeline zoom<div style={{ color:"var(--text-muted)", fontSize:10 }}>Pixels per second in the timeline (1–20).</div></span>
+            <label className="pro-pref-row">
+              <span>Timeline zoom<div className="pro-pref-hint">Pixels per second in the timeline (1–20).</div></span>
               <input type="range" min={1} max={20} step={1} value={timelineZoom ?? 4} onChange={(e) => setTimelineZoom(Number(e.target.value))} aria-label="Timeline zoom" />
-              <span style={{ width:24, textAlign:"right", fontFamily:"var(--font-mono)", fontSize:11 }}>{timelineZoom}</span>
+              <span className="pro-pref-value">{timelineZoom}</span>
             </label>
             <PrefToggle label="Anonymous usage analytics" hint="Share anonymous feature usage to improve AquaFlow. No personal data." checked={analyticsOn} onChange={() => setAnalyticsOn(setConsent(!analyticsOn))} />
+            <AiDirectorSettings />
           </div>
         </ModalShell>
       )}
@@ -563,11 +570,11 @@ export default function TopBar({ activePanel, setActivePanel, onToggleLogs, onOp
 
 function ModalShell({ label, title, subtitle, onClose, children }) {
   return (
-    <div role="dialog" aria-modal="true" aria-label={label} onMouseDown={onClose} style={{ position:"fixed", inset:0, zIndex:1200, display:"grid", placeItems:"center", background:"rgba(0,0,0,0.68)", backdropFilter:"blur(3px)" }}>
-      <div onMouseDown={(event) => event.stopPropagation()} style={{ width:"min(460px, calc(100vw - 48px))", maxHeight:"calc(100vh - 70px)", overflow:"auto", background:"var(--bg-raised)", border:"1px solid var(--border-accent)", borderRadius:10, boxShadow:"0 24px 80px rgba(0,0,0,0.7)" }}>
-        <div style={{ display:"flex", alignItems:"center", padding:"14px 18px", borderBottom:"1px solid var(--border)" }}>
-          <div><div style={{ color:"var(--text-accent)", fontSize:14, fontWeight:700 }}>{title}</div>{subtitle && <div style={{ color:"var(--text-muted)", fontSize:10, marginTop:2 }}>{subtitle}</div>}</div>
-          <button className="btn" onClick={onClose} style={{ marginLeft:"auto" }}>Close · Esc</button>
+    <div role="dialog" aria-modal="true" aria-label={label} onMouseDown={onClose} className="pro-modal">
+      <div onMouseDown={(event) => event.stopPropagation()} className="pro-modal-window">
+        <div className="pro-modal-head">
+          <div><div className="pro-modal-title">{title}</div>{subtitle && <div className="pro-modal-subtitle">{subtitle}</div>}</div>
+          <button className="btn pro-modal-close" onClick={onClose}>Close · Esc</button>
         </div>
         {children}
       </div>
@@ -577,8 +584,8 @@ function ModalShell({ label, title, subtitle, onClose, children }) {
 
 function PrefToggle({ label, hint, checked, onChange }) {
   return (
-    <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:12, color:"var(--text-primary)", cursor:"pointer" }}>
-      <span style={{ flex:1 }}>{label}{hint && <div style={{ color:"var(--text-muted)", fontSize:10 }}>{hint}</div>}</span>
+    <label className="pro-pref-row is-toggle">
+      <span>{label}{hint && <div className="pro-pref-hint">{hint}</div>}</span>
       <input type="checkbox" checked={checked} onChange={onChange} aria-label={label} />
     </label>
   );

@@ -28,7 +28,6 @@ import { DEFAULT_METER, METER_CHOICES, tapTempo } from './musicMeter';
 import { buildSiteModel } from './siteCapability';
 import { groupConflicts } from './groupAdvisor';
 import CalibrationDialog from './CalibrationDialog';
-import { apiGet, apiPost } from '../../../utils/apiClient';
 import './patternBuilder.css';
 
 // Per-preset bar animation delays (5 bars) for the small card icons.
@@ -122,11 +121,6 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
   };
   const site = studio.site || {};
   const [calibrating, setCalibrating] = useState(false);
-  // Optional AI director: the key is stored by the engine on this machine, never in the project.
-  const [director, setDirector] = useState({ checked: false, configured: false, sdk: false, key: '' });
-  const checkDirector = () => apiGet('/director/status').then(s => setDirector(d => ({ ...d, checked: true, ...s }))).catch(() => setDirector(d => ({ ...d, checked: true, sdk: false })));
-  const saveDirectorKey = () => apiPost('/director/key', { key: director.key }).then(() => { setDirector(d => ({ ...d, key: '', configured: true })); setNote('AI director key saved on this computer'); })
-    .catch(e => setNote(`Could not save the key: ${e.message}`));
   const nozzleTypes = [...new Map(design.nozzles.map(n => [n.item.type, { id: n.item.type, label: `${n.kindLabel} · ${n.item.type}` }])).values()];
   const setSite = patch => onChange({ ...studio, site: { ...site, ...patch } });
   const [stemRows, setStemRows] = useState(null);   // null = follow the suggestion
@@ -337,6 +331,147 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
     </optgroup>);
   };
 
+  // One music section, shown in the editor's Music tab when it exists, else folded in here.
+  const musicSection = <><div className="pb-music">
+      <div className="pb-row">
+        {beats.file
+          ? <span className="pb-song" title={beats.file.name}>♪ {beats.file.name}</span>
+          : <span className="pb-song pb-muted">♪ No song</span>}
+        <span className="sp-grow" />
+        {beats.file && (analysis
+          ? <output className="pb-bpm" title={`${analysis.sections.length} sections · ${Math.round(analysis.duration)} s · tempo from ${analysis.source === 'backend' ? 'the beat engine' : 'the browser'}`}>♩ {Math.round(analysis.bpm)} BPM</output>
+          : <button onClick={() => beats.analyze()} disabled={beats.status === 'working'} title="Find tempo, bars and sections in the song">{beats.status === 'working' ? 'Listening…' : 'Find beats'}</button>)}
+        {analysis && <button onClick={runDeep} disabled={deep.status === 'working'} aria-pressed={!!analysis.deep}
+          title="Deep analysis in the AquaFlow engine (licence-clean, about a second per song): song structure with repeats, build-ups, drops, mood and key, vocal phrases. The show plan then lands drops, builds up to them and picks colours from the mood.">
+          {deep.status === 'working' ? `Deep… ${Math.round(100 * deep.progress)}%` : analysis.deep ? 'Deep ✓' : 'Deep analysis'}</button>}
+        <label className="pb-file" title="Choose the show's music">{beats.file ? 'Change' : 'Load song'}
+          <input type="file" accept="audio/*" hidden aria-label="Load song" onChange={e => { loadSong(e.target.files?.[0]); e.target.value = ''; }} /></label>
+      </div>
+      {beats.error && <small className="pb-error" role="alert">{beats.error}</small>}
+      {analysis && <div className="pb-row pb-meter" aria-label="Meter" title="Correct the beat grid when the detector is unsure — e.g. 6/8 songs felt in two">
+        <span>Meter</span>
+        <select aria-label="Beats per bar" value={String(meter.beatsPerBar)} onChange={e => setMeter({ beatsPerBar: e.target.value === 'auto' ? 'auto' : Number(e.target.value), pulse: [6, 12].includes(Number(e.target.value)) ? 'dotted' : 'beat' })}>
+          {METER_CHOICES.map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}</select>
+        <select aria-label="Accent" value={meter.accent} onChange={e => setMeter({ accent: e.target.value })} title="Rise: the water jumps up on the beat. Bend: it dips on the beat and rises between (like bending the knee).">
+          <option value="rise">Rise on the beat</option><option value="bend">Bend on the beat</option></select>
+        <button onClick={() => setMeter({ downbeat: (meter.downbeat || 0) + 1 })} title="Move the bar start one beat later">Bar +1</button>
+        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) - 0.02) * 1000) / 1000 })} title="Beats 20 ms earlier">◀</button>
+        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) + 0.02) * 1000) / 1000 })} title="Beats 20 ms later">▶</button>
+        <button onClick={tap} title="Tap along with the beat (4+ taps) to set the tempo">Tap{meter.bpm ? ` · ${Math.round(meter.bpm)}` : ''}</button>
+      </div>}
+      {analysis?.sections?.length > 0 && <div className="pb-sections" aria-label="Song sections">
+        {analysis.sections.map((s, i) => <span key={i} style={{ flexGrow: Math.max(.1, s.end - s.start), background: SECTION_COLORS[s.label] || '#35d0c0', opacity: .35 + .65 * (s.energy || 0) }}
+          title={`${s.label} · ${mmss(s.start)}–${mmss(s.end)}`} />)}
+      </div>}
+      <div className="pb-row">
+        <label className="pb-check" title="Snap start and length to bars, laps to whole beats; chase, sparkle and pulse hit on the beat">
+          <input type="checkbox" aria-label="Sync to music" checked={syncOn} disabled={!beats.file} onChange={e => toggleSync(e.target.checked)} />Sync to music</label>
+        <span className="sp-grow" />
+        <button onClick={fill} disabled={!beats.file || !group || beats.status === 'working'}
+          title="Lay patterns over the whole song for this group: calm intro, waves in verses, chase and mirror in choruses, ripple accents, fade-out ending. Levels follow the music. Lights follow if ticked below. Replaces an earlier fill; one Undo removes it.">♫ Fill the song</button>
+      </div>
+    </div>
+
+    <div className="pb-stems" aria-label="Stems">
+      <div className="pb-row">
+        <strong title="Separate tracks of the song (drums, bass, vocals, other…) from the producer, a DAW or a stem splitter">Stems</strong>
+        <span className="sp-grow" />
+        {stemsApi.status === 'working' && <small role="status">{stemsApi.total === 100 ? `Splitting… ${stemsApi.done}%` : `Listening… ${stemsApi.done}/${stemsApi.total}`}</small>}
+        <button onClick={() => stemsApi.split(beats.file)} disabled={!beats.file || stemsApi.status === 'working'}
+          title="No stems? Estimate drums (kick, hats), bass and the lead melody straight from the show's song. Clean stems from the producer give a better result.">Split the song</button>
+        <label className="pb-file" title="Load one or more stem files (WAV/MP3). The part is guessed from the file name: drums, bass, vocals, piano, guitar, other.">Load stems
+          <input type="file" accept="audio/*" multiple hidden aria-label="Load stems" onChange={e => { stemsApi.add(e.target.files); e.target.value = ''; }} /></label>
+      </div>
+      {stemsApi.error && <small className="pb-error" role="alert">{stemsApi.error}</small>}
+      {stemsApi.stems.map(st => (
+        <div className="pb-row pb-stem" key={st.id}>
+          <span className="pb-stem-dot" style={{ background: STEM_ROLES[st.role]?.color }} />
+          <select aria-label={`Part of ${st.name}`} value={st.role} onChange={e => stemsApi.setRole(st.id, e.target.value)}>
+            {Object.entries(STEM_ROLES).map(([id, r]) => <option key={id} value={id}>{r.label}</option>)}
+          </select>
+          <span className="pb-song" title={st.name}>{st.name}</span>
+          <small>{Math.round(st.analysis.duration)} s · {(st.analysis.kicks || st.analysis.hits || []).length} hits</small>
+          <button onClick={() => stemsApi.remove(st.id)} title="Remove this stem" aria-label={`Remove ${st.name}`}>×</button>
+        </div>
+      ))}
+      {design.areas.length > 0 && (
+        <details className="pb-design" aria-label="Your fountain">
+          <summary title="What AquaFlow read from the Engineering design: each area, its nozzles, how they switch and which pump feeds them. Patterns from the music use this.">
+            Your fountain · {design.summary}</summary>
+          <ul>{design.areas.map(a => <li key={a.id}><strong>{a.name}</strong> <small>{a.summary}</small></li>)}</ul>
+          <div className="pb-row" title="Which way the audience looks at the fountain: front rows get the low, close effects, the back gets the tall ones">
+            <span>Audience</span>
+            <select aria-label="Audience side" value={site.front?.vector ? site.front.vector.join(',') : 'auto'}
+              onChange={e => setSite({ front: e.target.value === 'auto' ? undefined : { vector: e.target.value.split(',').map(Number) } })}>
+              <option value="auto">Auto · {scm.front.source === 'user' ? 'set' : `${scm.front.source}`}</option>
+              <option value="0,1">Plan bottom (+y)</option><option value="0,-1">Plan top (−y)</option>
+              <option value="1,0">Plan right (+x)</option><option value="-1,0">Plan left (−x)</option>
+            </select>
+            <span>Wind</span>
+            <input aria-label="Wind speed" type="number" min={0} max={30} step={0.5} value={site.windMs ?? 0} onChange={e => setSite({ windMs: Math.max(0, Number(e.target.value) || 0) })} />
+            <small>m/s</small>
+            <span>Splash</span>
+            <input aria-label="Allowed splash" title="Share of each jet's water allowed to land outside the basin" type="number" min={0} max={50} step={1}
+              value={Math.round(100 * (site.splashLimit ?? 0.05))} onChange={e => setSite({ splashLimit: Math.min(0.5, Math.max(0, (Number(e.target.value) || 0) / 100)) })} />
+            <small>%</small>
+          </div>
+          {scm.tips.map(t => <p key={t} className="pb-design-tip">💡 {t}</p>)}
+          <div className="pb-row">
+            <small>{Object.keys(site.calibration || {}).length ? `${Object.keys(site.calibration).length} nozzle type(s) calibrated from video` : 'Timing from physics (not measured yet)'}</small>
+            <span className="sp-grow" />
+            <button onClick={() => setCalibrating(true)} title="Film a jet side-on and mark its tip: AquaFlow measures its delay and rise so the show fires it exactly early enough">Calibrate from video…</button>
+          </div>
+          <div className="pb-row" title="Optional: Claude (Anthropic) directs the show's arc. The key is kept by the AquaFlow engine on this computer.">
+            <small>AI director key is set in File → Preferences</small>
+            <span className="sp-grow" />
+            <button onClick={() => window.dispatchEvent(new CustomEvent('aquaflow:open-preferences'))}>Preferences…</button>
+          </div>
+        </details>
+      )}
+      {design.areas.length > 0 && <div className="pb-row">
+        {followCheck}
+        <span className="sp-grow" />
+        <button className="sp-primary" onClick={musicPatterns} disabled={!beats.file || (followStems && !!analysis && !rowsNow.some(r => r.kind !== 'lights'))}
+          title={musicTip || "Plan the whole show from the music and your fountain: an arc (intro → build → climax → ending) from the song's energy, each area cast as an instrument (melody, rhythm, bass, accents), one look per phrase chosen from the library incl. world-famous looks, a colour story, a dip before the climax — then the real valves and pumps follow within their limits. Works with or without stems (stems make it follow each instrument). Replaces earlier music patterns; one Undo removes it. Variants and phrase locks are on the plan strip in the timeline."}>♫ Create patterns from the music</button>
+      </div>}
+      {stemSources.length > 0 && <Advanced on={design.areas.length > 0} open={followStems} note={stemConflicts.length ? `${stemConflicts.length} pair${stemConflicts.length === 1 ? '' : 's'} of linked groups share jets or pumps` : ''}>
+        {rowsNow.map((row, i) => (
+          <div className="pb-stem-map" key={i}>
+            <div className="pb-row">
+              <select aria-label="Music part" value={row.sourceId} onChange={e => editRow(i, { sourceId: e.target.value })}>
+                {stemSources.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+              <span className="pb-stem-arrow">→</span>
+              <select aria-label="Drives group" value={`${row.kind || 'water'}|${row.groupId}`} onChange={e => { const [kind, id] = e.target.value.split('|'); editRow(i, { kind, groupId: id }); }}>
+                <optgroup label="Water">{waterGroups.map(g => <option key={g.id} value={`water|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>
+                {lightGroups.length > 0 && <optgroup label="Lights">{lightGroups.map(g => <option key={g.id} value={`lights|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>}
+              </select>
+            </div>
+            <div className="pb-row pb-stem-levels">
+              <span>Level</span>
+              <input aria-label="Lowest level" title="Level when the part is quiet / between hits" type="number" min={0} max={100} value={row.min} onChange={e => editRow(i, { min: Number(e.target.value) || 0 })} />
+              <small>to</small>
+              <input aria-label="Highest level" title="Level at the loudest note / strongest hit" type="number" min={0} max={100} value={row.max} onChange={e => editRow(i, { max: Number(e.target.value) || 0 })} />
+              <small>%</small>
+              <span className="sp-grow" />
+              <button onClick={() => setStemRows(rowsNow.filter((_, k) => k !== i))} aria-label="Remove this link" title="Remove">×</button>
+            </div>
+          </div>
+        ))}
+        {stemConflicts.map(c => <p key={`${c.a}|${c.b}`} className="pb-design-tip pb-group-warn">⚠ {c.text} {c.fix}</p>)}
+        <div className="pb-row">
+          <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
+          {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
+          <span className="sp-grow" />
+          {!design.areas.length && followCheck}
+          {!design.areas.length && <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
+            title={musicTip || "Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards."}>♫ Create patterns from the music</button>}
+          <button onClick={programStems} disabled={!rowsNow.length}
+            title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>Follow exactly</button>
+        </div>
+      </Advanced>}
+  </div></>;
+
   return <>{calibrating && <CalibrationDialog types={nozzleTypes} calibration={site.calibration || {}} onClose={() => setCalibrating(false)}
     onSave={(type, cal) => { setSite({ calibration: { ...(site.calibration || {}), [type]: cal } }); setCalibrating(false); setNote(`Calibrated ${type}: delay ${cal.delayS} s, apex ${cal.apexM} m`); }} />}
   <div className="pattern-builder" role="dialog" aria-label="Pattern builder">
@@ -416,287 +551,7 @@ export default function PatternBuilder({ studio, items, params = {}, showLength 
       </div>
     </div>
 
-    {musicTarget ? createPortal(<><div className="pb-music">
-      <div className="pb-row">
-        {beats.file
-          ? <span className="pb-song" title={beats.file.name}>♪ {beats.file.name}</span>
-          : <span className="pb-song pb-muted">♪ No song</span>}
-        <span className="sp-grow" />
-        {beats.file && (analysis
-          ? <output className="pb-bpm" title={`${analysis.sections.length} sections · ${Math.round(analysis.duration)} s · tempo from ${analysis.source === 'backend' ? 'the beat engine' : 'the browser'}`}>♩ {Math.round(analysis.bpm)} BPM</output>
-          : <button onClick={() => beats.analyze()} disabled={beats.status === 'working'} title="Find tempo, bars and sections in the song">{beats.status === 'working' ? 'Listening…' : 'Find beats'}</button>)}
-        {analysis && <button onClick={runDeep} disabled={deep.status === 'working'} aria-pressed={!!analysis.deep}
-          title="Deep analysis in the AquaFlow engine (licence-clean, about a second per song): song structure with repeats, build-ups, drops, mood and key, vocal phrases. The show plan then lands drops, builds up to them and picks colours from the mood.">
-          {deep.status === 'working' ? `Deep… ${Math.round(100 * deep.progress)}%` : analysis.deep ? 'Deep ✓' : 'Deep analysis'}</button>}
-        <label className="pb-file" title="Choose the show's music">{beats.file ? 'Change' : 'Load song'}
-          <input type="file" accept="audio/*" hidden aria-label="Load song" onChange={e => { loadSong(e.target.files?.[0]); e.target.value = ''; }} /></label>
-      </div>
-      {beats.error && <small className="pb-error" role="alert">{beats.error}</small>}
-      {analysis && <div className="pb-row pb-meter" aria-label="Meter" title="Correct the beat grid when the detector is unsure — e.g. 6/8 songs felt in two">
-        <span>Meter</span>
-        <select aria-label="Beats per bar" value={String(meter.beatsPerBar)} onChange={e => setMeter({ beatsPerBar: e.target.value === 'auto' ? 'auto' : Number(e.target.value), pulse: [6, 12].includes(Number(e.target.value)) ? 'dotted' : 'beat' })}>
-          {METER_CHOICES.map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}</select>
-        <select aria-label="Accent" value={meter.accent} onChange={e => setMeter({ accent: e.target.value })} title="Rise: the water jumps up on the beat. Bend: it dips on the beat and rises between (like bending the knee).">
-          <option value="rise">Rise on the beat</option><option value="bend">Bend on the beat</option></select>
-        <button onClick={() => setMeter({ downbeat: (meter.downbeat || 0) + 1 })} title="Move the bar start one beat later">Bar +1</button>
-        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) - 0.02) * 1000) / 1000 })} title="Beats 20 ms earlier">◀</button>
-        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) + 0.02) * 1000) / 1000 })} title="Beats 20 ms later">▶</button>
-        <button onClick={tap} title="Tap along with the beat (4+ taps) to set the tempo">Tap{meter.bpm ? ` · ${Math.round(meter.bpm)}` : ''}</button>
-      </div>}
-      {analysis?.sections?.length > 0 && <div className="pb-sections" aria-label="Song sections">
-        {analysis.sections.map((s, i) => <span key={i} style={{ flexGrow: Math.max(.1, s.end - s.start), background: SECTION_COLORS[s.label] || '#35d0c0', opacity: .35 + .65 * (s.energy || 0) }}
-          title={`${s.label} · ${mmss(s.start)}–${mmss(s.end)}`} />)}
-      </div>}
-      <div className="pb-row">
-        <label className="pb-check" title="Snap start and length to bars, laps to whole beats; chase, sparkle and pulse hit on the beat">
-          <input type="checkbox" aria-label="Sync to music" checked={syncOn} disabled={!beats.file} onChange={e => toggleSync(e.target.checked)} />Sync to music</label>
-        <span className="sp-grow" />
-        <button onClick={fill} disabled={!beats.file || !group || beats.status === 'working'}
-          title="Lay patterns over the whole song for this group: calm intro, waves in verses, chase and mirror in choruses, ripple accents, fade-out ending. Levels follow the music. Lights follow if ticked below. Replaces an earlier fill; one Undo removes it.">♫ Fill the song</button>
-      </div>
-    </div>
-
-    <div className="pb-stems" aria-label="Stems">
-      <div className="pb-row">
-        <strong title="Separate tracks of the song (drums, bass, vocals, other…) from the producer, a DAW or a stem splitter">Stems</strong>
-        <span className="sp-grow" />
-        {stemsApi.status === 'working' && <small role="status">{stemsApi.total === 100 ? `Splitting… ${stemsApi.done}%` : `Listening… ${stemsApi.done}/${stemsApi.total}`}</small>}
-        <button onClick={() => stemsApi.split(beats.file)} disabled={!beats.file || stemsApi.status === 'working'}
-          title="No stems? Estimate drums (kick, hats), bass and the lead melody straight from the show's song. Clean stems from the producer give a better result.">Split the song</button>
-        <label className="pb-file" title="Load one or more stem files (WAV/MP3). The part is guessed from the file name: drums, bass, vocals, piano, guitar, other.">Load stems
-          <input type="file" accept="audio/*" multiple hidden aria-label="Load stems" onChange={e => { stemsApi.add(e.target.files); e.target.value = ''; }} /></label>
-      </div>
-      {stemsApi.error && <small className="pb-error" role="alert">{stemsApi.error}</small>}
-      {stemsApi.stems.map(st => (
-        <div className="pb-row pb-stem" key={st.id}>
-          <span className="pb-stem-dot" style={{ background: STEM_ROLES[st.role]?.color }} />
-          <select aria-label={`Part of ${st.name}`} value={st.role} onChange={e => stemsApi.setRole(st.id, e.target.value)}>
-            {Object.entries(STEM_ROLES).map(([id, r]) => <option key={id} value={id}>{r.label}</option>)}
-          </select>
-          <span className="pb-song" title={st.name}>{st.name}</span>
-          <small>{Math.round(st.analysis.duration)} s · {(st.analysis.kicks || st.analysis.hits || []).length} hits</small>
-          <button onClick={() => stemsApi.remove(st.id)} title="Remove this stem" aria-label={`Remove ${st.name}`}>×</button>
-        </div>
-      ))}
-      {design.areas.length > 0 && (
-        <details className="pb-design" aria-label="Your fountain">
-          <summary title="What AquaFlow read from the Engineering design: each area, its nozzles, how they switch and which pump feeds them. Patterns from the music use this.">
-            Your fountain · {design.summary}</summary>
-          <ul>{design.areas.map(a => <li key={a.id}><strong>{a.name}</strong> <small>{a.summary}</small></li>)}</ul>
-          <div className="pb-row" title="Which way the audience looks at the fountain: front rows get the low, close effects, the back gets the tall ones">
-            <span>Audience</span>
-            <select aria-label="Audience side" value={site.front?.vector ? site.front.vector.join(',') : 'auto'}
-              onChange={e => setSite({ front: e.target.value === 'auto' ? undefined : { vector: e.target.value.split(',').map(Number) } })}>
-              <option value="auto">Auto · {scm.front.source === 'user' ? 'set' : `${scm.front.source}`}</option>
-              <option value="0,1">Plan bottom (+y)</option><option value="0,-1">Plan top (−y)</option>
-              <option value="1,0">Plan right (+x)</option><option value="-1,0">Plan left (−x)</option>
-            </select>
-            <span>Wind</span>
-            <input aria-label="Wind speed" type="number" min={0} max={30} step={0.5} value={site.windMs ?? 0} onChange={e => setSite({ windMs: Math.max(0, Number(e.target.value) || 0) })} />
-            <small>m/s</small>
-            <span>Splash</span>
-            <input aria-label="Allowed splash" title="Share of each jet's water allowed to land outside the basin" type="number" min={0} max={50} step={1}
-              value={Math.round(100 * (site.splashLimit ?? 0.05))} onChange={e => setSite({ splashLimit: Math.min(0.5, Math.max(0, (Number(e.target.value) || 0) / 100)) })} />
-            <small>%</small>
-          </div>
-          {scm.tips.map(t => <p key={t} className="pb-design-tip">💡 {t}</p>)}
-          <div className="pb-row">
-            <small>{Object.keys(site.calibration || {}).length ? `${Object.keys(site.calibration).length} nozzle type(s) calibrated from video` : 'Timing from physics (not measured yet)'}</small>
-            <span className="sp-grow" />
-            <button onClick={() => setCalibrating(true)} title="Film a jet side-on and mark its tip: AquaFlow measures its delay and rise so the show fires it exactly early enough">Calibrate from video…</button>
-          </div>
-          <div className="pb-row" title="Optional: Claude (Anthropic) directs the show's arc from a text description of the song and your fountain. Your key is kept by the AquaFlow engine on this computer.">
-            <small>AI director · {!director.checked ? <button onClick={checkDirector}>Check</button> : !director.sdk ? 'not available in this engine' : director.configured ? 'ready (✦ AI director on the plan strip)' : 'needs an Anthropic API key'}</small>
-            <span className="sp-grow" />
-            {director.checked && director.sdk && <>
-              <input aria-label="Anthropic API key" type="password" placeholder={director.configured ? 'Replace key…' : 'sk-ant-…'} value={director.key} onChange={e => setDirector(d => ({ ...d, key: e.target.value }))} />
-              <button onClick={saveDirectorKey} disabled={director.key.length < 10}>Save key</button></>}
-          </div>
-        </details>
-      )}
-      {design.areas.length > 0 && <div className="pb-row">
-        {followCheck}
-        <span className="sp-grow" />
-        <button className="sp-primary" onClick={musicPatterns} disabled={!beats.file || (followStems && !!analysis && !rowsNow.some(r => r.kind !== 'lights'))}
-          title={musicTip || "Plan the whole show from the music and your fountain: an arc (intro → build → climax → ending) from the song's energy, each area cast as an instrument (melody, rhythm, bass, accents), one look per phrase chosen from the library incl. world-famous looks, a colour story, a dip before the climax — then the real valves and pumps follow within their limits. Works with or without stems (stems make it follow each instrument). Replaces earlier music patterns; one Undo removes it. Variants and phrase locks are on the plan strip in the timeline."}>♫ Create patterns from the music</button>
-      </div>}
-      {stemSources.length > 0 && <Advanced on={design.areas.length > 0} open={followStems} note={stemConflicts.length ? `${stemConflicts.length} pair${stemConflicts.length === 1 ? '' : 's'} of linked groups share jets or pumps` : ''}>
-        {rowsNow.map((row, i) => (
-          <div className="pb-stem-map" key={i}>
-            <div className="pb-row">
-              <select aria-label="Music part" value={row.sourceId} onChange={e => editRow(i, { sourceId: e.target.value })}>
-                {stemSources.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-              <span className="pb-stem-arrow">→</span>
-              <select aria-label="Drives group" value={`${row.kind || 'water'}|${row.groupId}`} onChange={e => { const [kind, id] = e.target.value.split('|'); editRow(i, { kind, groupId: id }); }}>
-                <optgroup label="Water">{waterGroups.map(g => <option key={g.id} value={`water|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>
-                {lightGroups.length > 0 && <optgroup label="Lights">{lightGroups.map(g => <option key={g.id} value={`lights|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>}
-              </select>
-            </div>
-            <div className="pb-row pb-stem-levels">
-              <span>Level</span>
-              <input aria-label="Lowest level" title="Level when the part is quiet / between hits" type="number" min={0} max={100} value={row.min} onChange={e => editRow(i, { min: Number(e.target.value) || 0 })} />
-              <small>to</small>
-              <input aria-label="Highest level" title="Level at the loudest note / strongest hit" type="number" min={0} max={100} value={row.max} onChange={e => editRow(i, { max: Number(e.target.value) || 0 })} />
-              <small>%</small>
-              <span className="sp-grow" />
-              <button onClick={() => setStemRows(rowsNow.filter((_, k) => k !== i))} aria-label="Remove this link" title="Remove">×</button>
-            </div>
-          </div>
-        ))}
-        {stemConflicts.map(c => <p key={`${c.a}|${c.b}`} className="pb-design-tip pb-group-warn">⚠ {c.text} {c.fix}</p>)}
-        <div className="pb-row">
-          <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
-          {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
-          <span className="sp-grow" />
-          {!design.areas.length && followCheck}
-          {!design.areas.length && <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
-            title={musicTip || "Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards."}>♫ Create patterns from the music</button>}
-          <button onClick={programStems} disabled={!rowsNow.length}
-            title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>Follow exactly</button>
-        </div>
-      </Advanced>}
-    </div></>,musicTarget) : <details className="pb-music-panel"><summary>Music panel</summary><div className="pb-music">
-      <div className="pb-row">
-        {beats.file
-          ? <span className="pb-song" title={beats.file.name}>♪ {beats.file.name}</span>
-          : <span className="pb-song pb-muted">♪ No song</span>}
-        <span className="sp-grow" />
-        {beats.file && (analysis
-          ? <output className="pb-bpm" title={`${analysis.sections.length} sections · ${Math.round(analysis.duration)} s · tempo from ${analysis.source === 'backend' ? 'the beat engine' : 'the browser'}`}>♩ {Math.round(analysis.bpm)} BPM</output>
-          : <button onClick={() => beats.analyze()} disabled={beats.status === 'working'} title="Find tempo, bars and sections in the song">{beats.status === 'working' ? 'Listening…' : 'Find beats'}</button>)}
-        {analysis && <button onClick={runDeep} disabled={deep.status === 'working'} aria-pressed={!!analysis.deep}
-          title="Deep analysis in the AquaFlow engine (licence-clean, about a second per song): song structure with repeats, build-ups, drops, mood and key, vocal phrases. The show plan then lands drops, builds up to them and picks colours from the mood.">
-          {deep.status === 'working' ? `Deep… ${Math.round(100 * deep.progress)}%` : analysis.deep ? 'Deep ✓' : 'Deep analysis'}</button>}
-        <label className="pb-file" title="Choose the show's music">{beats.file ? 'Change' : 'Load song'}
-          <input type="file" accept="audio/*" hidden aria-label="Load song" onChange={e => { loadSong(e.target.files?.[0]); e.target.value = ''; }} /></label>
-      </div>
-      {beats.error && <small className="pb-error" role="alert">{beats.error}</small>}
-      {analysis && <div className="pb-row pb-meter" aria-label="Meter" title="Correct the beat grid when the detector is unsure — e.g. 6/8 songs felt in two">
-        <span>Meter</span>
-        <select aria-label="Beats per bar" value={String(meter.beatsPerBar)} onChange={e => setMeter({ beatsPerBar: e.target.value === 'auto' ? 'auto' : Number(e.target.value), pulse: [6, 12].includes(Number(e.target.value)) ? 'dotted' : 'beat' })}>
-          {METER_CHOICES.map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}</select>
-        <select aria-label="Accent" value={meter.accent} onChange={e => setMeter({ accent: e.target.value })} title="Rise: the water jumps up on the beat. Bend: it dips on the beat and rises between (like bending the knee).">
-          <option value="rise">Rise on the beat</option><option value="bend">Bend on the beat</option></select>
-        <button onClick={() => setMeter({ downbeat: (meter.downbeat || 0) + 1 })} title="Move the bar start one beat later">Bar +1</button>
-        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) - 0.02) * 1000) / 1000 })} title="Beats 20 ms earlier">◀</button>
-        <button onClick={() => setMeter({ nudgeS: Math.round(((meter.nudgeS || 0) + 0.02) * 1000) / 1000 })} title="Beats 20 ms later">▶</button>
-        <button onClick={tap} title="Tap along with the beat (4+ taps) to set the tempo">Tap{meter.bpm ? ` · ${Math.round(meter.bpm)}` : ''}</button>
-      </div>}
-      {analysis?.sections?.length > 0 && <div className="pb-sections" aria-label="Song sections">
-        {analysis.sections.map((s, i) => <span key={i} style={{ flexGrow: Math.max(.1, s.end - s.start), background: SECTION_COLORS[s.label] || '#35d0c0', opacity: .35 + .65 * (s.energy || 0) }}
-          title={`${s.label} · ${mmss(s.start)}–${mmss(s.end)}`} />)}
-      </div>}
-      <div className="pb-row">
-        <label className="pb-check" title="Snap start and length to bars, laps to whole beats; chase, sparkle and pulse hit on the beat">
-          <input type="checkbox" aria-label="Sync to music" checked={syncOn} disabled={!beats.file} onChange={e => toggleSync(e.target.checked)} />Sync to music</label>
-        <span className="sp-grow" />
-        <button onClick={fill} disabled={!beats.file || !group || beats.status === 'working'}
-          title="Lay patterns over the whole song for this group: calm intro, waves in verses, chase and mirror in choruses, ripple accents, fade-out ending. Levels follow the music. Lights follow if ticked below. Replaces an earlier fill; one Undo removes it.">♫ Fill the song</button>
-      </div>
-    </div>
-
-    <div className="pb-stems" aria-label="Stems">
-      <div className="pb-row">
-        <strong title="Separate tracks of the song (drums, bass, vocals, other…) from the producer, a DAW or a stem splitter">Stems</strong>
-        <span className="sp-grow" />
-        {stemsApi.status === 'working' && <small role="status">{stemsApi.total === 100 ? `Splitting… ${stemsApi.done}%` : `Listening… ${stemsApi.done}/${stemsApi.total}`}</small>}
-        <button onClick={() => stemsApi.split(beats.file)} disabled={!beats.file || stemsApi.status === 'working'}
-          title="No stems? Estimate drums (kick, hats), bass and the lead melody straight from the show's song. Clean stems from the producer give a better result.">Split the song</button>
-        <label className="pb-file" title="Load one or more stem files (WAV/MP3). The part is guessed from the file name: drums, bass, vocals, piano, guitar, other.">Load stems
-          <input type="file" accept="audio/*" multiple hidden aria-label="Load stems" onChange={e => { stemsApi.add(e.target.files); e.target.value = ''; }} /></label>
-      </div>
-      {stemsApi.error && <small className="pb-error" role="alert">{stemsApi.error}</small>}
-      {stemsApi.stems.map(st => (
-        <div className="pb-row pb-stem" key={st.id}>
-          <span className="pb-stem-dot" style={{ background: STEM_ROLES[st.role]?.color }} />
-          <select aria-label={`Part of ${st.name}`} value={st.role} onChange={e => stemsApi.setRole(st.id, e.target.value)}>
-            {Object.entries(STEM_ROLES).map(([id, r]) => <option key={id} value={id}>{r.label}</option>)}
-          </select>
-          <span className="pb-song" title={st.name}>{st.name}</span>
-          <small>{Math.round(st.analysis.duration)} s · {(st.analysis.kicks || st.analysis.hits || []).length} hits</small>
-          <button onClick={() => stemsApi.remove(st.id)} title="Remove this stem" aria-label={`Remove ${st.name}`}>×</button>
-        </div>
-      ))}
-      {design.areas.length > 0 && (
-        <details className="pb-design" aria-label="Your fountain">
-          <summary title="What AquaFlow read from the Engineering design: each area, its nozzles, how they switch and which pump feeds them. Patterns from the music use this.">
-            Your fountain · {design.summary}</summary>
-          <ul>{design.areas.map(a => <li key={a.id}><strong>{a.name}</strong> <small>{a.summary}</small></li>)}</ul>
-          <div className="pb-row" title="Which way the audience looks at the fountain: front rows get the low, close effects, the back gets the tall ones">
-            <span>Audience</span>
-            <select aria-label="Audience side" value={site.front?.vector ? site.front.vector.join(',') : 'auto'}
-              onChange={e => setSite({ front: e.target.value === 'auto' ? undefined : { vector: e.target.value.split(',').map(Number) } })}>
-              <option value="auto">Auto · {scm.front.source === 'user' ? 'set' : `${scm.front.source}`}</option>
-              <option value="0,1">Plan bottom (+y)</option><option value="0,-1">Plan top (−y)</option>
-              <option value="1,0">Plan right (+x)</option><option value="-1,0">Plan left (−x)</option>
-            </select>
-            <span>Wind</span>
-            <input aria-label="Wind speed" type="number" min={0} max={30} step={0.5} value={site.windMs ?? 0} onChange={e => setSite({ windMs: Math.max(0, Number(e.target.value) || 0) })} />
-            <small>m/s</small>
-            <span>Splash</span>
-            <input aria-label="Allowed splash" title="Share of each jet's water allowed to land outside the basin" type="number" min={0} max={50} step={1}
-              value={Math.round(100 * (site.splashLimit ?? 0.05))} onChange={e => setSite({ splashLimit: Math.min(0.5, Math.max(0, (Number(e.target.value) || 0) / 100)) })} />
-            <small>%</small>
-          </div>
-          {scm.tips.map(t => <p key={t} className="pb-design-tip">💡 {t}</p>)}
-          <div className="pb-row">
-            <small>{Object.keys(site.calibration || {}).length ? `${Object.keys(site.calibration).length} nozzle type(s) calibrated from video` : 'Timing from physics (not measured yet)'}</small>
-            <span className="sp-grow" />
-            <button onClick={() => setCalibrating(true)} title="Film a jet side-on and mark its tip: AquaFlow measures its delay and rise so the show fires it exactly early enough">Calibrate from video…</button>
-          </div>
-          <div className="pb-row" title="Optional: Claude (Anthropic) directs the show's arc from a text description of the song and your fountain. Your key is kept by the AquaFlow engine on this computer.">
-            <small>AI director · {!director.checked ? <button onClick={checkDirector}>Check</button> : !director.sdk ? 'not available in this engine' : director.configured ? 'ready (✦ AI director on the plan strip)' : 'needs an Anthropic API key'}</small>
-            <span className="sp-grow" />
-            {director.checked && director.sdk && <>
-              <input aria-label="Anthropic API key" type="password" placeholder={director.configured ? 'Replace key…' : 'sk-ant-…'} value={director.key} onChange={e => setDirector(d => ({ ...d, key: e.target.value }))} />
-              <button onClick={saveDirectorKey} disabled={director.key.length < 10}>Save key</button></>}
-          </div>
-        </details>
-      )}
-      {design.areas.length > 0 && <div className="pb-row">
-        {followCheck}
-        <span className="sp-grow" />
-        <button className="sp-primary" onClick={musicPatterns} disabled={!beats.file || (followStems && !!analysis && !rowsNow.some(r => r.kind !== 'lights'))}
-          title={musicTip || "Plan the whole show from the music and your fountain: an arc (intro → build → climax → ending) from the song's energy, each area cast as an instrument (melody, rhythm, bass, accents), one look per phrase chosen from the library incl. world-famous looks, a colour story, a dip before the climax — then the real valves and pumps follow within their limits. Works with or without stems (stems make it follow each instrument). Replaces earlier music patterns; one Undo removes it. Variants and phrase locks are on the plan strip in the timeline."}>♫ Create patterns from the music</button>
-      </div>}
-      {stemSources.length > 0 && <Advanced on={design.areas.length > 0} open={followStems} note={stemConflicts.length ? `${stemConflicts.length} pair${stemConflicts.length === 1 ? '' : 's'} of linked groups share jets or pumps` : ''}>
-        {rowsNow.map((row, i) => (
-          <div className="pb-stem-map" key={i}>
-            <div className="pb-row">
-              <select aria-label="Music part" value={row.sourceId} onChange={e => editRow(i, { sourceId: e.target.value })}>
-                {stemSources.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-              <span className="pb-stem-arrow">→</span>
-              <select aria-label="Drives group" value={`${row.kind || 'water'}|${row.groupId}`} onChange={e => { const [kind, id] = e.target.value.split('|'); editRow(i, { kind, groupId: id }); }}>
-                <optgroup label="Water">{waterGroups.map(g => <option key={g.id} value={`water|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>
-                {lightGroups.length > 0 && <optgroup label="Lights">{lightGroups.map(g => <option key={g.id} value={`lights|${g.id}`}>{groupLabel(g, membersOf(g).length)}</option>)}</optgroup>}
-              </select>
-            </div>
-            <div className="pb-row pb-stem-levels">
-              <span>Level</span>
-              <input aria-label="Lowest level" title="Level when the part is quiet / between hits" type="number" min={0} max={100} value={row.min} onChange={e => editRow(i, { min: Number(e.target.value) || 0 })} />
-              <small>to</small>
-              <input aria-label="Highest level" title="Level at the loudest note / strongest hit" type="number" min={0} max={100} value={row.max} onChange={e => editRow(i, { max: Number(e.target.value) || 0 })} />
-              <small>%</small>
-              <span className="sp-grow" />
-              <button onClick={() => setStemRows(rowsNow.filter((_, k) => k !== i))} aria-label="Remove this link" title="Remove">×</button>
-            </div>
-          </div>
-        ))}
-        {stemConflicts.map(c => <p key={`${c.a}|${c.b}`} className="pb-design-tip pb-group-warn">⚠ {c.text} {c.fix}</p>)}
-        <div className="pb-row">
-          <button onClick={addRow} title="Link another part of the music to a group">+ Link</button>
-          {stemRows && <button onClick={() => setStemRows(null)} title="Back to the suggested links">Suggest</button>}
-          <span className="sp-grow" />
-          {!design.areas.length && followCheck}
-          {!design.areas.length && <button className="sp-primary" onClick={musicPatterns} disabled={!rowsNow.length || !beats.file}
-            title={musicTip || "Lay real patterns over the song for each linked area, chosen phrase by phrase from that part's frequencies: kicks → pulse / chase / ripple on the beat, hats → sparkle / chase, bass → slow breathing or wave, melody → wave / mirror while singing. Every other phrase is a world-famous look (shooter salvo, stadium wave, swaying arcs, peacock fan …) and the last chorus builds to a grand finale. Each area only gets what its nozzles, solenoids and pumps can really do, and the patterns drive the real valves and pumps. Every pattern starts early by its jets' rise time. Replaces earlier music patterns; one Undo removes it. Every pattern can be edited afterwards."}>♫ Create patterns from the music</button>}
-          <button onClick={programStems} disabled={!rowsNow.length}
-            title={`Each linked part drives its group: ${rowsNow.map(r => `${sourceById(r.sourceId)?.label} → ${groups.find(g => g.id === r.groupId)?.name || '?'}`).join('; ')}. Kicks and hats lift the jets on every hit, bass and other parts follow their loudness, a melody moves the jets with the notes and rests when nobody sings. Replaces earlier stem programming; one Undo removes it.`}>Follow exactly</button>
-        </div>
-      </Advanced>}
-    </div></details>}
+    {musicTarget ? createPortal(musicSection, musicTarget) : <details className="pb-music-panel"><summary>Music panel</summary>{musicSection}</details>}
 
     <div className="pb-lights">
       <label className="pb-check" title="Adds a light pattern with the same order, laps and spread"><input type="checkbox" checked={lights.enabled} disabled={!lightGroups.length} onChange={e => setLights(l => ({ ...l, enabled: e.target.checked }))} />
