@@ -3,7 +3,8 @@ import { showJets } from "../sceneData";
 
 describe("show jets for the Studio renderer", () => {
   const fixtures = [
-    { id: "vario", type: "nozzle_solenoid_variodrop_oase", x: 0, y: 0, engineering: { jetHeightM: 7 } },
+    { id: "vario", type: "nozzle_solenoid_variodrop_oase", x: 0, y: 0, engineering: { jetHeightM: 7, nozzleStyle: "mushroom bell (Vario)" } },
+    { id: "rainbow", type: "nozzle_straight_dn15", x: 9, y: 0, rotation: 180, engineering: { jetHeightM: 12, aimTiltDeg: 45 } },
     { id: "jet", type: "nozzle_straight_dn15", x: 2, y: 0, engineering: { jetHeightM: 3 } },
     { id: "lamp", type: "light_uw_rgb_36w", x: 2, y: 0, engineering: { pairedNozzleId: "jet" } },
   ];
@@ -14,5 +15,11 @@ describe("show jets for the Studio renderer", () => {
   });
   it("pairs a jet with its own light", () => {
     expect(showJets(fixtures).find((j) => j.id === "jet").lightId).toBe("lamp");
+  });
+  it("marks mushroom heads as bells and keeps a fixed jet's aim", () => {
+    const jets = showJets(fixtures);
+    expect(jets.find((j) => j.id === "vario").bell).toBe(true);
+    expect(jets.find((j) => j.id === "jet").bell).toBe(false);
+    expect(jets.find((j) => j.id === "rainbow").aimTiltDeg).toBe(45);
   });
 });

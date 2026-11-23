@@ -43,6 +43,28 @@ const A20L = CMP.filter((f) => /20m-left/.test(f.id)), A20R = CMP.filter((f) => 
 const LAMPS = fixtures.filter((f) => String(f.type).startsWith("light"));
 const lampOf = new Map(LAMPS.filter((l) => l.engineering?.pairedNozzleId).map((l) => [l.engineering.pairedNozzleId, l.id]));
 const portrait = (g) => LAMPS.filter((l) => l.groupId === g).map((l) => l.id);
+// Details read from the client's reference renders of this design (Downloads/qXsjNI.mp4, BgQpGF.mp4):
+//   · the Vario ring heads throw mushroom bells (~2.5 m), not straight jets;
+//   · the portrait circle's 1D jets are tall (they open into a wide crown and close into a funnel
+//     meeting above the portrait);
+//   · the six diagonal "rainbow" nozzles shoot long arcs from the front row that cross over the
+//     centre (the outer pair highest, the inner pair lowest).
+const CENTRE = { x: 35.06, y: 13.2 };
+for (const f of RING) f.engineering = { ...f.engineering, nozzleStyle: "mushroom bell (Vario)", jetHeightM: 2.6 };
+for (const f of PC) f.engineering = { ...f.engineering, jetHeightM: 9 };
+/** Jet height (vertical equivalent) that lands a 45° arc just past the centre, with air drag. */
+const arcHeight = (dist) => {
+  const reach = (H) => { const v = Math.sqrt(2 * 9.81 * H), vy = v * Math.SQRT1_2, T = (vy + Math.sqrt(vy * vy + 2 * 9.81 * 0.15)) / 9.81;
+    return v * Math.SQRT1_2 * (1 - Math.exp(-0.35 * T)) / 0.35; };
+  let lo = 0.5, hi = 120;
+  for (let k = 0; k < 50; k++) { const mid = (lo + hi) / 2; if (reach(mid) < dist + 1.2) lo = mid; else hi = mid; }
+  return r2(lo);
+};
+for (const f of DIAG) {
+  const dx = CENTRE.x - f.x, dy = CENTRE.y - f.y;
+  f.rotation = r2((Math.atan2(dy, dx) * 180) / Math.PI);
+  f.engineering = { ...f.engineering, aimTiltDeg: 45, jetHeightM: arcHeight(Math.hypot(dx, dy)) };
+}
 const census = { infinity: INF.length, circle1D: PC.length, vario: RING.length, rays: RAYS.length, pillars: PL.length + PR.length, diagonal: DIAG.length,
   air20: A20L.length + A20R.length, air50: A50.length, lights: LAMPS.length };
 if (INF.length !== 240 || PC.length !== 22 || RING.length !== 22 || RAYS.length !== 130 || A50.length !== 5 || A20L.length !== 5 || A20R.length !== 5)
@@ -71,7 +93,21 @@ group("pillarL", "Left pillar · 128", PL);
 group("pillarR", "Right pillar · 128", PR);
 group("pillars", "Both pillars", [...PL, ...PR]);
 group("pillarsBeat", "Both pillars · every second jet (beat stabs)", [...odd(PL), ...odd(PR)]);
-group("diag", "Front diagonal jets · 6", DIAG);
+group("diag", "Front diagonal rainbow jets · 6", DIAG);
+const DIAG_X = DIAG.slice().sort((a, b) => a.x - b.x);
+group("diagOuter", "Diagonal rainbows · outer pair", [DIAG_X[0], DIAG_X[5]]);
+group("diagMid", "Diagonal rainbows · middle pair", [DIAG_X[1], DIAG_X[4]]);
+group("diagInner", "Diagonal rainbows · inner pair", [DIAG_X[2], DIAG_X[3]]);
+const PCC = { x: PC.reduce((a, f) => a + f.x, 0) / PC.length, y: PC.reduce((a, f) => a + f.y, 0) / PC.length };
+group("pcFrontSwing", "Portrait circle · front half (swing)", PC.filter((f) => f.y < PCC.y));
+group("pcBackSwing", "Portrait circle · back half (swing)", PC.filter((f) => f.y >= PCC.y));
+group("pcLeftSwing", "Portrait circle · left half (swing)", PC.filter((f) => f.x < PCC.x));
+group("pcRightSwing", "Portrait circle · right half (swing)", PC.filter((f) => f.x >= PCC.x));
+const RC = { x: RING.reduce((a, f) => a + f.x, 0) / RING.length };
+group("ringL", "Vario ring · left half", RING.filter((f) => f.x < RC.x));
+group("ringR", "Vario ring · right half", RING.filter((f) => f.x >= RC.x));
+group("ringOdd", "Vario ring · odd", odd(RING));
+group("ringEven", "Vario ring · even", even(RING));
 A20L.forEach((f, i) => group(`a20L${i + 1}`, `Left 20 m air cannon ${i + 1}`, [f]));
 A20R.forEach((f, i) => group(`a20R${i + 1}`, `Right 20 m air cannon ${i + 1}`, [f]));
 A50.forEach((f, i) => group(`a50${i + 1}`, `Centre 50 m air cannon ${i + 1}`, [f]));
@@ -332,6 +368,101 @@ for (const p of MUSIC.phrases) {
 if (voice.at(-1).time < 1) voice.push({ time: 1, value: 0 });
 R.push(base("face", "The Elder's face glows with the voice", S1, r2(STOP - S1), { effect: "curve", envelope: voice, intensity: 100, sampleRate: 1.3, ease: 0, color: C.green }));
 
+// ─── the portrait circle, the Vario mushrooms and the diagonal rainbows ──────
+// (their own choreography, after the reference renders; earlier generic patterns on them removed)
+for (let i = R.length - 1; i >= 0; i--) if (/^(pc|ring|diag)/.test(R[i].groupId)) R.splice(i, 1);
+// Tall water on the circle through the music, rests on the breaks.
+for (const [a, b] of [[15.4, 44.2], [46, S8a], [S8, S14a], [S14b, STOP]]) R.push(hold("pc", "Circle · tall jets", a, b - a, 100));
+const env = (pts) => pts.map(([time, deg]) => ({ time, value: A(deg) / 100 }));
+const motion = (g, name, s, d, cycles, envelope) => base(g, name, s, d, { effect: "curve", attribute: "motion_angle", cycles, spread: 0, intensity: 100, ease: 0,
+  sampleRate: swingRate(d / cycles), envelope });
+/** Crown → upright → funnel (all jets meet above the portrait) → upright → crown. */
+const funnel = (name, s, d, period, amp = 40) => motion("pcSwing", name, s, d, cyclesFor(d, period), env([[0, -amp], [0.5, amp], [1, -amp]]));
+/** The crown tilts round the circle (front → right → back → left): each jet's phase follows its angle. */
+const wobble = (name, s, d, period, amp) => swing("pcSwing", name, s, d, cyclesFor(d, period), amp, 1);
+/** The whole crown sways front ↔ back (or left ↔ right): opposite halves lean in mirror image. */
+const sway = (axis, name, s, d, period, amp) => axis === "fb"
+  ? [swing("pcFrontSwing", `${name} (front half)`, s, d, cyclesFor(d, period), amp, 0), swing("pcBackSwing", `${name} (back half)`, s, d, cyclesFor(d, period), -amp, 0)]
+  : [swing("pcLeftSwing", `${name} (left half)`, s, d, cyclesFor(d, period), amp, 0), swing("pcRightSwing", `${name} (right half)`, s, d, cyclesFor(d, period), -amp, 0)];
+const pcCross = (name, s, d, period, amp) => [swing("pcOddSwing", `${name} (odd)`, s, d, cyclesFor(d, period), amp, 0), swing("pcEvenSwing", `${name} (even)`, s, d, cyclesFor(d, period), -amp, 0)];
+sec(lean("pcSwing", "Circle rises upright", 15.4, S2 - 15.4, 0),
+  funnel("Horn drop · crown opens and closes into a funnel", S2, S2e - S2, 2 * BAR),
+  wobble("Verse · the crown tilts round the circle", S3, S4 - S3, 2 * BAR, 30),
+  ...sway("fb", "Build · the crown sways front and back", S4, S5 - S4, BAR, 35));
+for (let k = 0, t = S5; t < S6 - 0.5; k++, t = r2(t + 2 * BAR)) {
+  const d = Math.min(2 * BAR, S6 - t), tilt = k % 2 ? -32 : 32;               // calls lean the crown left, responses right
+  const what = `${k % 2 ? "Response" : "Call"} · the crown leans ${k % 2 ? "right" : "left"}`;
+  sec(motion("pcLeftSwing", what, t, d, 1, env([[0, 0], [0.25, tilt], [0.75, tilt], [1, 0]])),
+    motion("pcRightSwing", `${what} (right half)`, t, d, 1, env([[0, 0], [0.25, -tilt], [0.75, -tilt], [1, 0]])));
+}
+sec(lean("pcSwing", "Crown · the circle opens wide", S6, 120 - S6, -40), funnel("Crown · closes into a funnel and opens again", 120, S7 - 120, 2 * BAR),
+  ...pcCross("Weave · odd and even cross", S7, S8a - S7, 2 * BAR, 25),
+  wobble("Verse 2 · the crown spins its tilt", S8, S9 - S8, BAR, 35),
+  ...sway("fb", "Gallop · front and back on two beats", S9, 178.7 - S9, 2 * BEAT, 28),
+  ...sway("lr", "Gallop · left and right on two beats", 178.7, S10 - 178.7, 2 * BEAT, 28),
+  funnel("Geerarsa · dome and crown breathe", S10, 222.7 - S10, 2 * BAR, 42),
+  wobble("Geerarsa · the crown spins its tilt", 222.7, S11 - 222.7, BAR, 38),
+  wobble("Bulloo · slow tilt round the circle", S11, S12 - S11, 2 * BAR, 35),
+  lean("pcSwing", "Canopy · the circle opens wide", S12, S13 - S12, -42),
+  ...pcCross("Finale · odd and even cross on two beats", S13, S14a - S13, 2 * BEAT, 30),
+  funnel("Last climb · crown and funnel", S14b, STOP - S14b, BAR, 40));
+
+// Vario mushrooms: chases, blooms on the beat, answers, pops. A Vario head is a solenoid nozzle
+// (it switches on and off up to 20 × a second), so it is driven by keyed on/off curves — wave
+// patterns only drive proportional jets. `spread` makes a curve travel round the ring.
+const vcurve = (g, name, s, d, period, pts, spread = 0, high = 100) => {
+  // A curve pattern holds at most 32 cycles: longer runs continue in consecutive parts.
+  const n = cyclesFor(d, period), parts = Math.ceil(n / 32);
+  return Array.from({ length: parts }, (_, k) => {
+    const c = Math.round(n / parts), ps = r2(s + (k * d) / parts), pd = r2(k === parts - 1 ? s + d - ps : d / parts);
+    return base(g, parts > 1 ? `${name} (${k + 1}/${parts})` : name, ps, pd, { effect: "curve", cycles: Math.max(1, Math.min(32, c)), spread,
+      intensity: high, ease: 0, order: "counter-clockwise", sampleRate: Math.min(25, Math.max(4, Math.round(16 / period))),
+      envelope: pts.map(([time, value]) => ({ time, value })) });
+  });
+};
+const V_POP = [[0, 0], [0.04, 1], [0.42, 1], [0.48, 0], [1, 0]];            // switch on, hold, off
+const V_BEAT = [[0, 1], [0.38, 1], [0.44, 0.2], [0.96, 0.2], [1, 1]];      // bloom on the beat over a low bell
+const V_CHASE = [[0, 0], [0.04, 1], [0.26, 1], [0.3, 0], [1, 0]];          // a lit block running round
+const V_BREATHE = [[0, 0.25], [0.5, 0.9], [1, 0.25]];
+/** n lit blocks evenly round the ring (with spread 1 they all travel round together). */
+const vBlocks = (n) => { const out = [[0, 0]]; for (let k = 0; k < n; k++) { const o = k / n, w = 0.26 / n;
+  out.push([r2(o + 0.01), 1], [Math.round((o + w) * 1000) / 1000, 1], [Math.round((o + w + 0.04 / n) * 1000) / 1000, 0]); } out.push([1, 0]); return out; };
+const V_A = [[0, 1], [0.46, 1], [0.5, 0.1], [0.96, 0.1], [1, 1]], V_B = [[0, 0.1], [0.46, 0.1], [0.5, 1], [0.96, 1], [1, 0.1]];
+sec(vcurve("ring", "Mushrooms bloom round the ring", bt(14.6), S2 - bt(14.6), BAR, V_CHASE, 1),
+  vcurve("ring", "Horn drop · every mushroom blooms on the beat", S2, S2e - S2, BEAT, V_BEAT),
+  vcurve("ring", "Verse · the mushrooms breathe", S3, S4 - S3, 2 * BAR, V_BREATHE),
+  vcurve("ring", "Build · bloom chase", S4, 78 - S4, BAR, V_CHASE, 1), vcurve("ring", "Build · bloom chase faster", 78, 86 - 78, 2 * BEAT, V_CHASE, 1),
+  vcurve("ring", "Build · bloom chase fastest", 86, S5 - 86, 2 * BEAT, vBlocks(2), 1));
+for (let k = 0, t = S5; t < S6 - 0.5; k++, t = r2(t + 2 * BAR)) {
+  const d = Math.min(2 * BAR, S6 - t);
+  sec(vcurve(k % 2 ? "ringR" : "ringL", `${k % 2 ? "Response" : "Call"} · that side's mushrooms bloom on the beat`, t, d, BEAT, V_BEAT));
+}
+sec(hold("ring", "Crown · every mushroom full", S6, S7 - S6, 100),
+  vcurve("ringOdd", "Weave · odd mushrooms", S7, S8a - S7, 2 * BEAT, V_A), vcurve("ringEven", "Weave · even mushrooms answer", S7, S8a - S7, 2 * BEAT, V_B),
+  vcurve("ring", "Verse 2 · mushrooms pop on the eighths", S8, S9 - S8, BEAT / 2, V_POP),
+  vcurve("ring", "Gallop · three blooms gallop round", S9, S10 - S9, 2 * BAR, vBlocks(3), 1),
+  vcurve("ringOdd", "Geerarsa · odd mushrooms on the beat", S10, S11 - S10, 2 * BEAT, V_A), vcurve("ringEven", "Geerarsa · even mushrooms answer", S10, S11 - S10, 2 * BEAT, V_B),
+  vcurve("ring", "Bulloo · a bloom flows round the ring", S11, S12 - S11, 2 * BAR, V_CHASE, 1),
+  hold("ring", "Canopy · mushrooms full", S12, S13 - S12, 100),
+  vcurve("ring", "Finale · mushrooms pop on the eighths", S13, S14a - S13, BEAT / 2, V_POP),
+  vcurve("ring", "Last climb · two blooms race round", S14b, STOP - S14b, BAR, vBlocks(2), 1));
+
+// Diagonal rainbows: arcs flow into the centre — outer pair, then middle, then inner, each bar —
+// and all six cross over the portrait on the big moments.
+const flow = (name, s, d, period) => [["diagOuter", 0], ["diagMid", 0.35], ["diagInner", 0.7]].map(([g, delay]) => base(g, `${name} · ${g.replace("diag", "").toLowerCase()} pair`, s, d,
+  { effect: "field", field: { kind: "custom", shape: "drawn", path: "together", motion: "repeat", period, spread: 0, offset: -delay,
+    points: [{ time: 0, value: 0 }, { time: 0.05, value: 1 }, { time: 0.6, value: 1 }, { time: 0.7, value: 0 }, { time: 1, value: 0 }], low: 0, high: 100, ease: 0 } }));
+sec(...flow("First pulse · rainbows flow into the centre", bt(15.4), S2 - bt(15.4), BAR),
+  hold("diag", "Horn drop · all six rainbows cross over the portrait", S2, S2e - S2, 100),
+  ...flow("Build · rainbows flow in on every bar", S4, S5 - S4, BAR),
+  hold("diag", "Crown · rainbows cross", S6, S7 - S6, 100),
+  ...flow("Verse 2 · rainbows flow in", S8, S9 - S8, BAR),
+  ...flow("Gallop · rainbows flow in on two beats", S9, S10 - S9, 2 * BEAT),
+  hold("diag", "Geerarsa · rainbows cross", S10, S11 - S10, 100),
+  ...flow("Bulloo · rainbows flow in slowly", S11, S12 - S11, 2 * BAR),
+  hold("diag", "Canopy and finale · rainbows cross", S12, S14a - S12, 100),
+  hold("diag", "Last climb · rainbows cross", S14b, STOP - S14b, 100));
+
 // ─── lighting ────────────────────────────────────────────────────────────────
 // Under water every lamp burns only while its own jet runs (plus the time its water is still in
 // the air), in the colour of the section; cannon lamps blast white. Light-dance windows above
@@ -349,7 +480,18 @@ const HOUSE = [[0, 85], [S2, 100], [S3, 70], [S4, 85], [S5, 95], [S6, 100], [S7,
 const family = new Map();
 INF.forEach((f, i) => family.set(f.id, i < 120 ? "infR" : "infL"));
 for (const [list, fam] of [[PC, "pc"], [RING, "ring"], [RAYS, "rays"], [PL, "pillarL"], [PR, "pillarR"], [DIAG, "diag"], [CMP, "air"]]) list.forEach((f) => family.set(f.id, fam));
-const colourAt = (t, fam) => { let p = PALETTE[0][1]; for (const [s, v] of PALETTE) if (t >= s - 0.01) p = v; return fam === "air" ? C.white : p[fam] || p.all; };
+DIAG_X.forEach((f, i) => family.set(f.id, `diag${i}`));
+const RAINBOW = [C.red, C.orange, C.gold, C.green, C.cyan, C.purple];
+// Colour that changes on the music (as in the reference renders): [from, to, families, colours, bars per colour].
+const CYCLES = [[S2, S2e, ["ring"], [C.blue, C.magenta, C.cyan, C.purple], 1], [S8, S9, ["ring", "rays"], [C.gold, C.green, C.cyan, C.orange], 2],
+  [S9, S10, ["ring", "pillarL", "pillarR", "rays"], [C.red, C.gold, C.blue, C.orange, C.green, C.magenta], 2],
+  [S10, S11, ["ring"], [C.blue, C.purple, C.magenta, C.cyan], 1], [S13, STOP, ["ring", "pillarL", "pillarR", "rays"], [C.magenta, C.gold, C.blue, C.orange, C.green, C.red], 2]];
+const colourAt = (t, fam) => {
+  if (fam === "air") return C.white;
+  if (fam.startsWith("diag")) return RAINBOW[Number(fam.slice(4))];
+  for (const [a, b, fams, cols, bars] of CYCLES) if (t >= a && t < b && fams.includes(fam)) return cols[Math.floor((t - a) / (bars * BAR)) % cols.length];
+  let p = PALETTE[0][1]; for (const [s, v] of PALETTE) if (t >= s - 0.01) p = v; return p[fam] || p.all;
+};
 const houseAt = (t) => { let h = 85; for (const [s, v] of HOUSE) if (t >= s - 0.01) h = v; return h; };
 const items = inventory(fixtures);
 const STEP = 0.1, NS = Math.ceil(END / STEP) + 1;

@@ -70,6 +70,44 @@ Measured from the audio:
 - The crown is shot from a low angle looking up at the 50 m blast.
 - The light dances are shot from above.
 
+
+## Second pass: Vario mushrooms, the tall circle and the rainbows (from the client's reference renders)
+
+The client sent two Luxury Con renders of this design (`Downloads/qXsjNI.mp4`, 35 s, and `BgQpGF.mp4`, 17 s).
+
+**What they show:**
+- the Vario heads throw short mushroom bells on the ring and bloom on the beat;
+- the portrait circle's 1D jets are tall, open into a wide crown, close into a funnel above the portrait and tilt round the circle;
+- the six diagonal "rainbow" nozzles shoot long arcs from the front row that cross over the centre;
+- the lights change strong colours on the music.
+
+**Why the Varios looked wrong:** AquaFlow drives solenoid devices with keyed curves, not wave patterns. Every Vario wave in the first build was dropped, so each head ran only twice.
+
+**Changes:**
+- **Vario:**
+  - Drawn as mushroom bells: 20 short outlets falling outward, at 2.6 m.
+  - Programmed as on/off curves: chases round the ring (one, two or three blooms), blooms on the beat, odd/even answers, left/right halves in call and response, and pops on the eighth notes.
+  - Each head now has 19 clips instead of 2.
+- **Portrait circle:**
+  - 9 m jets at full height.
+  - A dance repertoire:
+    - crown → funnel → crown;
+    - a rotating tilt (front → right → back → left);
+    - front/back and left/right sways, made by mirror-image halves;
+    - odd/even crossing;
+    - a lean toward whoever calls in call and response.
+  - All of it stays under the 88°/s drives.
+- **Diagonal rainbows:**
+  - Each nozzle aims 45° at the portrait centre, with the jet height worked out so its arc lands just past the centre, drag included. That's about 24 m for the outer pair and 3–4 m for the inner pair.
+  - They flow inward on the bars (outer, then middle, then inner) and all six cross on the big moments.
+  - Each arc has its own rainbow colour: red, orange, gold, green, cyan, purple.
+- **Lights:** the Vario lamps, swords and rays cycle colours every bar or two bars during the horn drop, verse 2, the gallop, Geerarsa and the finale.
+- **Renderer:**
+  - fixed nozzles can be tilted toward a direction (`engineering.aimTiltDeg` plus the rotation);
+  - mushroom heads (`nozzleStyle` "mushroom/bell/umbrella") draw as bells;
+  - long arcs and bells get a larger share of drops.
+- **Size:** 1,737 patterns, 38,533 clips, 70.8 MB.
+
 ## Checks
 
 - **Air cannons:** 64 blasts. No 20 m cannon fires again within 6 s, and no 50 m cannon within 25 s (0 violations).

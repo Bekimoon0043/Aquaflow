@@ -334,6 +334,9 @@ function outletsOf(jet, t, rot) {
   } else if (kind === "basket") {
     const n = Math.max(2, jet.outlets || 3);
     for (let i = 0; i < n; i += 1) out.push({ basket: true, th: 0.32, ph0: (i * Math.PI * 2) / n, spread: 0.03 });
+  } else if (jet.bell) {
+    // Mushroom / bell head: a ring of short jets thrown outward and falling into a dome.
+    for (let i = 0; i < 20; i += 1) out.push({ th: 0.85, ph: (i * Math.PI * 2) / 20, spread: 0.02 });
   } else if (kind === "ring") {
     const n = 12;
     for (let i = 0; i < n; i += 1) out.push({ th: 0.42, ph: (i * Math.PI * 2) / n, spread: 0.03 });
@@ -351,6 +354,9 @@ function outletsOf(jet, t, rot) {
     out.push({ th: 0.45 * Math.sin(t * 1.3), ph: rot, spread: 0.03 });
   } else if (kind === "geyser") {
     out.push({ th: 0, ph: 0, spread: 0.11, foam: true });
+  } else if (jet.aimTiltDeg > 0) {
+    // A fixed nozzle set at an angle (e.g. a diagonal "rainbow" jet): tilted toward its rotation.
+    out.push({ th: (Math.min(80, jet.aimTiltDeg) * Math.PI) / 180, ph: rot, spread: 0.015 });
   } else {
     out.push({ th: 0, ph: 0, spread: kind === "shooter" ? 0.015 : 0.025 });
   }
@@ -1093,7 +1099,11 @@ export class EasyScene {
       this.jetState.set(j.id, (j.nominalHeightM || 0) * src.level(j.id, t));
       if (L > 0.01) active.push(j);
     }
-    const per = active.length ? Math.min(2600, Math.floor(max / active.length)) : 0;
+    // Drops are shared by weight: a long arc or a bell head needs more drops than a short jet to
+    // read as a continuous stream.
+    const weightOf = (j) => Math.min(6, Math.max(1, (j.nominalHeightM || 2) / 8)) * (j.bell ? 2.5 : 1);
+    const totalW = active.reduce((a, j) => a + weightOf(j), 0);
+    const per = active.length ? Math.min(2600, Math.floor(max / totalW)) : 0;
     let n = 0, q = 0, ns = 0;
     const sGeo = this.streaks.geometry, sp6 = sGeo.attributes.position.array, sc6 = sGeo.attributes.color.array;
     const pose = (pan, tilt, rot, roll = 0) => showPose(pan, tilt, rot, roll);
@@ -1129,7 +1139,7 @@ export class EasyScene {
       const outletCount = jet.axes >= 3 ? Math.max(1, jet.outlets || 1) : 1;
       const outlets = jet.swing ? Array.from({ length: outletCount }, (_, k) => ({ swing: true, k, n: outletCount,
         splay: (jet.splayDeg * Math.PI) / 180, spread: 0.02 })) : outletsOf({ ...jet, motion: null }, t, rot);
-      const each = Math.max(8, Math.floor(per / outlets.length));
+      const each = Math.max(8, Math.floor((per * weightOf(jet)) / outlets.length));
       for (const out of outlets) {
         let sdx = 0, sdy = 1, sdz = 0;
         if (!out.swing && !out.basket) {

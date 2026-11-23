@@ -133,7 +133,7 @@ const addRecipe = (...list) => recipes.push(...list);
 const base = (groupId, name, start, duration, extra = {}) => ({ ...newRecipe(groupId, start), name, start: r3(start), duration: r3(duration), cycles: 1, spread: 1,
   intensity: 100, order: studioGroups.find(g => g.id === groupId)?.orderMode || 'engineering', color: studioGroups.find(g => g.id === groupId)?.color || GREEN, ...extra });
 for (const [groupId, fixtureId] of rainbowAims) addRecipe(base(groupId, `${fixtureId} · 45° high arc toward Odaa`, 0, END,
-  { effect: 'static', attribute: 'motion_angle', intensity: 45 }));
+  { effect: 'curve', attribute: 'motion_angle', intensity: 100, envelope: [{ time: 0, value: 1 }, { time: 1, value: 1 }] }));
 const hold = (g, name, s, d, level) => base(g, name, s, d, { effect: 'static', intensity: level });
 const wave = (g, name, s, d, field, order = 'engineering') => base(g, name, s, d, { effect: 'field', order, field: { ease: 0.2, ...field } });
 const light = (g, name, s, d, color, level = 30) => wave(g, name, s, d, { kind: 'custom', shape: 'drawn', path: 'together', motion: 'repeat', period: Math.max(0.2, d * 2),
@@ -145,7 +145,7 @@ const waterLight = (g, l, name, s, d, field, colors, lightHigh = 22, orderOverri
 };
 const rainbowFlow = (name, s, d, colors = [PINK, GREEN], lightHigh = 26) => waterLight('diagonalRainbow', 'diagonalRainbowLight', name, s, d,
   { kind: 'custom', shape: 'pulse', path: 'around', motion: 'there-and-back', period: d, crests: 1, direction: 1, offset: d / 2, low: 6, high: 90, ease: 0.1 },
-  colors, lightHigh, 'center-out');
+  colors, Math.max(lightHigh, 36), 'center-out');
 const varioBloom = (name, s, d, colors = [GOLD, '#0019ff'], lightHigh = 24, period = 6.4) => {
   const points = [{ time: 0, value: 0.12 }, { time: 0.16, value: 1 }, { time: 0.32, value: 1 }, { time: 0.58, value: 0.18 }, { time: 0.76, value: 0.28 }, { time: 1, value: 0.12 }];
   addRecipe(
@@ -252,8 +252,8 @@ motion('portraitCircle', 'portraitCircleLight', '04b · Circular whip and mist v
 
 // 05 · Call and Response — bright inner calls, crimson/green infinity answers.
 for (const [i, t] of [90, 96, 102].entries()) {
-  motion('portraitCircle', 'portraitCircleLight', `05 · Lead call ${i + 1} · white/gold`, t, 3,
-    { amplitude: 26, centre: -12, period: 3, path: 'together', low: 55, high: 82, colors: [WHITE], lightHigh: 30, order: 'clockwise' });
+  motion('portraitCircle', 'portraitCircleLight', `05 · Lead call ${i + 1} · ${i % 2 ? 'left-to-right' : 'right-to-left'} white/gold`, t, 3,
+    { amplitude: 32, centre: -8, period: 2.4, direction: i % 2 ? -1 : 1, low: 55, high: 82, colors: [WHITE, GOLD], lightHigh: 30, order: 'clockwise' });
   shot('air20', t + 3, `05 · Both 20 m rings answer ${i + 1}`);
   rainbowFlow(`05 · Rainbow center-flow answer ${i + 1}`, t + 3, 3, [RED, GREEN]);
 }
@@ -306,6 +306,10 @@ for (const [cycle, t] of [158, 163.4, 168.8].entries()) {
 }
 rainbowFlow('09 · Rainbow gallop center-flow A', 179.6, 8, [GREEN, WHITE]);
 rainbowFlow('09 · Rainbow gallop center-flow B', 190.4, 8, [BLUE, GOLD]);
+motion('portraitCircle', 'portraitCircleLight', '09 · Circle 1D right-to-left gallop swing', 179.6, 8,
+  { amplitude: 44, centre: 0, period: 1.6, direction: 1, low: 32, high: 82, colors: [GREEN, WHITE], lightHigh: 24, order: 'clockwise' });
+motion('portraitCircle', 'portraitCircleLight', '09 · Circle 1D front-back return swing', 187.6, 8,
+  { amplitude: 44, centre: -12, period: 1.6, path: 'together', low: 32, high: 84, colors: [BLUE, GOLD], lightHigh: 24, order: 'clockwise' });
 varioBloom('09 · Vario gallop wide bloom and soft close', 158, 40, [GREEN, GOLD], 24, 5.4);
 shot('air20', 201, '09 · Gallop finale · all twenty');
 
@@ -413,7 +417,7 @@ source.render = { ...source.render, environment: 'night', cameraMode: 'animated'
     { id: 'top', name: 'Top · portrait and DWG plan', position: { x: 0, y: 62, z: -0.01 }, target: { x: 0, y: 0, z: 0 }, fov: 46 }] };
 source.workspace = { activePanel: 'preview' };
 source.savedAt = now;
-const notes = `${name}\n\nCINEMATIC MUSIC-PROGRAMMED 5:28 SHOW\nTrack: Yosan Getahun - 3Obsa. Audio duration ${END} s; measured grid ${BPM} BPM. Source: https://youtu.be/8zlm6JVbi2U. Ten master groups plus left/center/right infinity, six Diagonal Rainbow manifolds, two ten-cannon 20 m rings and one ten-cannon 50 m decagon are editable in the timeline. Portrait/nozzle-wash DMX remain separate. Infinity 1D nozzles perform repeated inward/outward dances; rainbows flow from both sides to the center and back. VarioDrop rings open to 9 m and partially close to 2–3 m in traveling blooms. Blast pulses last 2.4 s at 20 m and 3.8 s at 50 m. Bellagio-inspired camera work combines low audience shots, side tracking, orbital moves, drone views and musical cuts.\n\nThe 12 sections follow the supplied timecode plan: first pulse 00:07.59, horn/drop 00:23, portrait verse 00:46, Vario build 01:07, call/response 01:30, central 50 m crown 01:49, guitar weave 02:07, Verse 2 02:19, gallop 02:38, Geerarsa 03:19, Bulloo 04:06, Obsa canopy 04:41, finale 04:48 and hard freeze 05:21 followed by portrait fade.\n\nAir-blast scheduling enforces >=6 s between shots on each 20 m nozzle and >=25 s on each 50 m nozzle. Maximum compiled 1D speed is ${r3(maxMotionSpeed)} degrees/second. This 1,846-fixture show includes 1,140 DMX lights and 706 nozzles, including 30 air blasts. This is a simulated musical concept, not commissioned hardware. Audio is embedded in the package; no external asset is needed for playback.\n`;
+const notes = `${name}\n\nCINEMATIC MUSIC-PROGRAMMED 5:28 SHOW\nTrack: Yosan Getahun - 3Obsa. Audio duration ${END} s; measured grid ${BPM} BPM. Source: https://youtu.be/8zlm6JVbi2U. Ten master groups plus left/center/right infinity, six Diagonal Rainbow manifolds, two ten-cannon 20 m rings and one ten-cannon 50 m decagon are editable in the timeline. Portrait/nozzle-wash DMX remain separate. Infinity and circular 1D nozzles perform inward/outward, right-to-left, left-to-right, front-back, scissor and vortex dances. Six rainbows fire high 45-degree arcs toward the Odaa portrait, with activation flowing from both sides to the center and back. Vario fixtures are true fan jets with 4.8 m wide fan crowns and partial-close blooms. Reference videos qXsjNI.mp4 and BgQpGF.mp4 guide the white fan, green/yellow arch, blue combination and magenta/gold lighting looks. Blast pulses last 2.4 s at 20 m and 3.8 s at 50 m. Bellagio-inspired camera work combines low audience shots, side tracking, orbital moves, drone views and musical cuts.\n\nThe 12 sections follow the supplied timecode plan: first pulse 00:07.59, horn/drop 00:23, portrait verse 00:46, Vario build 01:07, call/response 01:30, central 50 m crown 01:49, guitar weave 02:07, Verse 2 02:19, gallop 02:38, Geerarsa 03:19, Bulloo 04:06, Obsa canopy 04:41, finale 04:48 and hard freeze 05:21 followed by portrait fade.\n\nAir-blast scheduling enforces >=6 s between shots on each 20 m nozzle and >=25 s on each 50 m nozzle. Maximum compiled 1D speed is ${r3(maxMotionSpeed)} degrees/second. This 1,846-fixture show includes 1,140 DMX lights and 706 nozzles, including 30 air blasts. This is a simulated musical concept, not commissioned hardware. Audio is embedded in the package; no external asset is needed for playback.\n`;
 fs.writeFileSync(out, createZip([{ name: 'project.aqua', data: JSON.stringify(source) }, { name: 'manifest.json', data: JSON.stringify(source.assetManifest, null, 2) },
   { name: 'design-notes.txt', data: notes }, { name: 'music-analysis.json', data: JSON.stringify(analysis) }, { name: packaged, data: audioBytes }]));
 console.log(JSON.stringify({ out, fixtures: fixtures.length, dmx: allLightIds.length, nozzles: allNozzleIds.length, groups: studioGroups.length,

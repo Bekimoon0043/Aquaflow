@@ -1,5 +1,15 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-23: AquaFlow Studio 1.2.89 - Odaa · 3Obsa second pass: Vario mushrooms, a tall dancing circle, rainbow arcs into the centre**
+
+- **User feedback:** the Varios were wrong, the circle's 1D nozzles needed tall front/back/left/right dances, and the diagonal rainbows should flow into the centre. The patterns come from the two reference renders (`Downloads/qXsjNI.mp4`, `BgQpGF.mp4`).
+- **Cause of the Vario problem:** the compiler drops wave patterns on solenoid devices, so each Vario ran only twice. The Varios are now keyed on/off curves (chases, blooms, answers, pops), each head has 19 clips, and they render as mushroom bells.
+- **Circle:** 9 m jets doing crown↔funnel, a rotating tilt, front/back and left/right sways, odd/even crossing, and leaning toward the caller.
+- **Rainbows:** aimed 45° at the centre with calculated reach. They flow outer→middle→inner and cross on the big moments, each in its own rainbow colour.
+- **Lights:** colours cycle on the bar.
+- **Renderer:** tilted fixed jets, bell heads, and a weighted drop budget.
+- **Show:** `Desktop/Odaa_3Obsa_Dance_Show.aquapkg` with 1,737 patterns, 38,533 clips, 70.8 MB. The fastest swing is 75°/s and there are no refill violations. The user reviews it in the 3D Preview; no video was rendered.
+
 **2026-11-23: AquaFlow Studio 1.2.88 - Bellagio light play and film cameras, no fog; new Odaa · 3Obsa water, light and air dance**
 
 - **Bellagio (user request: no fog, light-only patterns, a camera that went under the water, better shots):**
@@ -43,13 +53,13 @@
   - Full frontend tests passed: 2,069 of 2,069, plus 792 of 792 in the panel and preview subsets after the last renderer change.
   - In browser dev mode, autosave reports the 65 MB+ projects as too large for IndexedDB (133 MB limit). The desktop app writes its snapshots to files, so it is not affected.
 
-**2026-11-23: Cinematic 3Obsa show with expanded blasts, 1D dances and Vario blooms**
+**2026-11-23: Reference-corrected 3Obsa fan sprays, Odaa diagonal arcs and circular 1D dances**
 
 - **Music and timing:** Yosan Getahun – 3Obsa, **328.144 seconds**, measured **77.1 BPM**. The extracted audio is embedded and verified in the package. Twelve editable sections cover the intro, horn stabs, portrait verse, Vario build, call/response, central 50 m crown, guitar weave, Vario blooms, gallop, Geerarsa, Obsa canopy, and finale/hard freeze.
-- **Editable show:** **422 source patterns and 48,920 resolved clips** across **1,846 fixtures / 1,140 DMX lights / 706 nozzles**. All three air-blast circles now contain ten cannons each: **20 × 20 m + 10 × 50 m**, with 2.4 s and 3.8 s full-height pulses. Infinity 1D nozzles perform repeated inward/outward dances; six rainbows sequence sides → center → sides. VarioDrop pump curves open to **9 m** and partially close to **2–3 m** in traveling blooms. The finale retains its 0.12 s white strobe and warm mist. All refill gaps pass; maximum 1D speed is **88.571°/s**.
-- **Cinematic camera:** **38 music-timed keys** adapt the Bellagio package's low audience views, side tracking, orbital moves, drone portraits and accent cuts to the 70 m Odaa site. Framing was checked and adjusted so the basin and full-height crowns remain visible.
-- **Files:** `Desktop/Odaa_3Obsa_Show.aquapkg` is the direct musical show. The same upgraded show is also written to `Desktop/Odaa_Elder_Infinity_Design.aquapkg`. `Desktop/Odaa_3Obsa_Preview.png` contains twelve verified cinematic frames. Audio SHA-256 `9b7e39d7e1915364588e77e27d43745b8ae1016f53916f7b3fc80e9a3c0178e9`.
-- **Verified:** real package import and compilation passed with no issues; embedded audio reports `ok` via package. Render checks cover the 1D arcs, Vario blooms, 20 m and 50 m blasts, portrait, canopy, finale and mist. Rainbow levels confirm outer-side activation followed by the center pair; Vario levels confirm full opening and partial closing. Existing installed product **1.2.87.0** opens the show; no application rebuild was needed. Programming script: `frontend/scripts/program-odaa-music.mjs`.
+- **Editable show:** **445 source patterns and 49,718 resolved clips** across **1,846 fixtures / 1,140 DMX lights / 706 nozzles**. The 22 Vario fixtures are now real **fan jets** with broad **4.8 m** crowns and partial-close blooms, not vertical columns. Each of the six Diagonal Rainbow nozzles has its own inward azimuth and a true **45° high arc** toward the Odaa portrait, with distance-scaled height and sides → center → sides activation. The 22 circular 1D nozzles perform right-to-left, left-to-right, front-back, scissor, vortex and return swings. All refill gaps pass; maximum 1D speed is **88.973°/s**.
+- **Reference looks:** `Downloads/qXsjNI.mp4` and `Downloads/BgQpGF.mp4` were reviewed frame by frame. Their white fan crowns, green/yellow arches over red, blue combinations and magenta/gold finale inform the new lighting. The 30 air blasts retain their 2.4 s and 3.8 s full-height pulses, and the 38-key Bellagio-inspired camera path is retained.
+- **Files:** `Desktop/Odaa_3Obsa_Show.aquapkg` is the direct musical show. The same corrected show is also written to `Desktop/Odaa_Elder_Infinity_Design.aquapkg`. `Desktop/Odaa_3Obsa_Preview.png` contains twelve verified reference-corrected frames. Audio SHA-256 `9b7e39d7e1915364588e77e27d43745b8ae1016f53916f7b3fc80e9a3c0178e9`.
+- **Verified:** real package import and compilation passed with no issues; embedded audio reports `ok` via package. All six rainbows have actual 45° motion clips. Vario water curves, circular swing ranges, high inward arcs, blasts and finale were rendered and inspected. No application rebuild was needed for this show-data update. Programming script: `frontend/scripts/program-odaa-music.mjs`.
 
 **2026-11-20: DWG-corrected design-only Odaa / Elder infinity fountain**
 
