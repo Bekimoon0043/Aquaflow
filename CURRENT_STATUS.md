@@ -3098,3 +3098,6 @@ Defined in [CLAUDE.md](CLAUDE.md): update `CURRENT_STATUS.md`, write
 
 - UI overhaul phase 2: persistent per-workspace dock model and four-zone layout, movable/tabbed panels, keyboard/pointer splitters and collapse/reset. Standard workspace integrated; specialized full-workspace layouts remain to migrate. 2,074 tests and production build pass.
 
+
+- UI overhaul phase 3: scene selection bounds, isolation/visibility APIs, body outlines, hover, axis snapping, scoped navigation shortcuts, Studio viewport header and Plan | 3D split. 2,076 tests and production build pass. Full parity in Easy/Studio-look renderers and heat-map remains In Progress.
+

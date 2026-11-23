@@ -1,3 +1,4 @@
+import ViewportHeader from '../../../ui/ViewportHeader';
 import { useEffect, useRef, useState } from 'react';
 import { Vector3 } from 'three';
 import { FountainScene } from '../../preview/FountainScene_v6';
@@ -31,7 +32,7 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
   useEffect(() => {
     let scene, resize, animation;
     try {
-      scene = new FountainScene(canvas.current, { environment: 'night', quality: 'medium', cameraMode: 'orbit', lightColor: '#65d9d0' });
+      scene = new FountainScene(canvas.current, { environment: 'night', quality: 'low', maxFps:30, cameraMode: 'orbit', lightColor: '#65d9d0' });
       scene.init(); scene.stopPattern(); scene.setReviewOverlays(false); scene.orbitAuto = false;
       sceneRef.current = scene;
       scene.onLeaveCameraTrack = () => setFreeLook(true);
@@ -52,7 +53,7 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
           const point = new Vector3((Number(f.x) || 0) - center.cx, Number(f.z) || .1, (Number(f.y) || 0) - center.cy).project(scene.camera);
           return { id: f.id, x: (point.x + 1) * rect.width / 2, y: (1 - point.y) * rect.height / 2, z: point.z };
         }).filter(p => p.z > -1 && p.z < 1);
-        hitPoints.current.forEach(p => { if (!selection.has(p.id)) return; ctx.strokeStyle = '#ffe39b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.stroke(); });
+
         animation = requestAnimationFrame(draw);
       };
       draw();
@@ -69,6 +70,7 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
     setFreeLook(false);
   }, [viewThrough, hasKeys]);
   useEngineeringSync(sceneRef);
+  useEffect(()=>{sceneRef.current?.setSelectionOutline(selected);},[selected]);
   useEffect(() => {
     if (!sceneRef.current) return;
     const engine = useEngineeringStore.getState();
@@ -104,7 +106,8 @@ export default function StudioPreview({ clips, time, selected, onSelect, frame }
     {viewThrough && hasKeys && freeLook && <button type="button" className="sp-free-view-chip" onClick={() => { sceneRef.current?.resumeCameraTrack(); setFreeLook(false); }}
       style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: '#0f3346', color: '#33d6ff', border: '1px solid #33d6ff', borderRadius: 12, padding: '3px 12px', fontSize: 11, cursor: 'pointer' }}>
       Free view · Back to camera</button>}
-    <canvas ref={canvas} onPointerDown={e => { start.current = [e.clientX, e.clientY]; }} onPointerUp={e => {
+    <div className="studio-viewport-header"><ViewportHeader sceneRef={sceneRef} selected={selected}/></div>
+    <canvas ref={canvas} onPointerMove={e=>{const r=wrapper.current?.getBoundingClientRect();if(r)sceneRef.current?.setHoverFixture(hitPoints.current.find(p=>Math.hypot(p.x-e.clientX+r.left,p.y-e.clientY+r.top)<12)?.id);}} onPointerDown={e => { start.current = [e.clientX, e.clientY]; }} onPointerUp={e => {
       if (!start.current || Math.hypot(e.clientX - start.current[0], e.clientY - start.current[1]) > 4) return;
       if (!wrapper.current) return;
       const rect = wrapper.current.getBoundingClientRect();

@@ -1,3 +1,4 @@
+import {fixtureBounds, isolationWeight} from './selectionView';
 /**
  * FountainScene_v6.js — AquaFlow Phase 13C (Phase 1 + Phase 2 integrated)
  *
@@ -1191,6 +1192,10 @@ export class FountainScene {
   constructor(canvas, options={}) {
     this.canvas       = canvas;
     this.environment  = options.environment  || ENVIRONMENTS.NIGHT;
+    this.maxFps = options.maxFps || 0;
+    this.renderVisible = true;
+    this._selectionIds = [];
+    this._hiddenFixtureIds = new Set();
     this.quality      = options.quality      || RENDER_QUALITY.MEDIUM;
     this.cameraMode   = options.cameraMode   || CAMERA_MODES.ORBIT;
     this.lightColor   = options.lightColor   || '#0066ff';
@@ -2596,6 +2601,7 @@ export class FountainScene {
       for (let i = 0; i < this._engLights.length; i++) this._lightMarkers?.setLevel(i, runtimeColor);
     }
 
+    for (const light of this._engLights || []) light.intensity *= this._fixtureWeight(light.id);
     this._uploadLightField();
 
     // ─── Update pattern (delta-driven, replaces setInterval) ────────────
@@ -2673,6 +2679,9 @@ export class FountainScene {
       nz.setIntensity(finalI);
       this._applyPairedLights(nz);
       nz.update(delta, elapsed, this.wind, this._lightField.uGlobalLight.value);
+      const visibility = this._fixtureWeight(nz.config.id);
+      for (const mesh of [nz.dot,nz.core,nz.glow]) if(mesh) { mesh.visible = visibility > 0; if(mesh.material && visibility !== 1) mesh.material.opacity *= visibility; }
+
 
       if (gpuOn) {
         const descs = describeNozzleEmitters(
@@ -2681,6 +2690,8 @@ export class FountainScene {
           (demand, fallback) => nz._launchSpeed(demand, fallback),
         );
         for (const d of descs) {
+          d.alphaGain = (d.alphaGain ?? 1) * visibility;
+          if (visibility === 0) d.density = 0;
           const bucket = d.cls === EMIT_CLASS.SPRAY ? emitSpray : emitWater;
           // The parameter texture is MAX_GPU_EMITTERS wide; a particle assigned past
           // its edge would sample garbage, so a very large design simply drops its
@@ -2904,6 +2915,10 @@ export class FountainScene {
   _animate() {
     if (!this._initialized) return;
     this._rafId = requestAnimationFrame(() => this._animate());
+    const now = performance.now();
+    if (!this.renderVisible || (typeof document !== 'undefined' && document.hidden)) { this.clock.getDelta(); return; }
+    if (this.maxFps && now - (this._lastVisibleFrame || 0) < 1000 / this.maxFps) return;
+    this._lastVisibleFrame = now;
     // A baked render owns the simulation and the canvas; the live loop stands down
     // so wall-clock time can never leak into the exported frames.
     if (this._baking) { this.clock.getDelta(); return; }
@@ -3017,7 +3032,7 @@ export class FountainScene {
     };
     this._onContextMenu = e => { if (!this._editorMode) e.preventDefault(); };
     this._onKey = e => {
-      if (this._editorMode || !this._hover || e.metaKey || e.altKey) return;
+      if (this._editorMode || !this._hover || e.metaKey) return;
       const tag = document.activeElement?.tagName;
       if (tag && /^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
       // Saved views (Depence-style): Ctrl+1..9 stores the current view, 1..9 flies to it.
@@ -3031,8 +3046,13 @@ export class FountainScene {
       if (e.ctrlKey) return;
       if (e.key === "+" || e.key === "=") { this._takeOverCamera(); this._zoomBy(zoomStep(-1), null); }
       else if (e.key === "-" || e.key === "_") { this._takeOverCamera(); this._zoomBy(zoomStep(1), null); }
-      else if (e.key === "f" || e.key === "F") this.frameAll();
-      else if (e.key === "Home") this.resetView();
+      else if (e.key.toLowerCase() === 'f') { if(!this.frameFixtures(this._selectionIds))this.frameAll(); }
+      else if (e.key === 'Home' || e.key.toLowerCase() === 'a') this.frameAll();
+      else if (e.code === 'Numpad1') this.snapView('front');
+      else if (e.code === 'Numpad3') this.snapView('side');
+      else if (e.code === 'Numpad7') this.snapView('top');
+      else if (e.key.toLowerCase() === 'h') { if(e.altKey)this.unhideFixtures();else this.hideFixtures(this._selectionIds); }
+      else if (e.key === '/') this.setIsolation(this._isolationIds?.size?[]:this._selectionIds);
       else return;
       e.preventDefault();
     };
@@ -3184,6 +3204,46 @@ export class FountainScene {
     this._flyTo({ target: { x: p.x, y: p.y, z: p.z }, radius: Math.max(0.05, Math.hypot(dx, dz)), height: cam.position.y, angle: Math.atan2(dz, dx) });
   }
 
+  _fixtureWeight(id) { return isolationWeight(id, this._isolationIds, this._ghostOpacity, this._hiddenFixtureIds); }
+  _selectionConfigs() { return [...(this.userNozzles || []), ...(this._engLights || [])]; }
+  frameFixtures(ids) {
+    const bounds = fixtureBounds(this._selectionConfigs(), ids || []);
+    if (!bounds) return false;
+    this._takeOverCamera();
+    const f = frameBounds(bounds,this.camera?.fov || DEFAULT_FOV,(this.canvas.clientWidth || 16)/(this.canvas.clientHeight || 9));
+    this._flyTo({target:f.target,radius:Math.hypot(f.position.x-f.target.x,f.position.z-f.target.z),height:f.position.y,angle:Math.atan2(f.position.z-f.target.z,f.position.x-f.target.x)});
+    return true;
+  }
+  setIsolation(ids, {ghostOpacity=.15}={}) { this._isolationIds=new Set(ids || []);this._ghostOpacity=ghostOpacity;this._updateFixtureHighlight(); }
+  hideFixtures(ids) { for(const id of ids || []) this._hiddenFixtureIds.add(id);this._updateFixtureHighlight(); }
+  unhideFixtures() { this._hiddenFixtureIds.clear();this._updateFixtureHighlight(); }
+  setSelectionOutline(ids) { this._selectionIds=[...new Set(ids || [])];this._updateFixtureHighlight(); }
+  setHoverFixture(id) { if(this._hoverFixture===id)return;this._hoverFixture=id;this._updateFixtureHighlight(); }
+  _updateFixtureHighlight() {
+    const selected=new Set(this._selectionIds), T=this.THREE;
+    for(const root of [this._fixtureInstances?.group,this._lightMarkers?.bodies?.group]) root?.traverse(mesh=>{
+      if(!mesh.isInstancedMesh || !mesh.userData.nodeIds)return;
+      mesh.userData.nodeIds.forEach((id,i)=>mesh.setColorAt(i,new T.Color(selected.has(id)?0xc9a227:this._hoverFixture===id?0xe4e5e7:0xffffff).multiplyScalar(this._fixtureWeight(id))));
+      if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
+    });
+    if(this._selectionEdges){this.scene.remove(this._selectionEdges);this._selectionEdges.geometry.dispose();this._selectionEdges.material.dispose();}
+    const vertices=[],edges=[[0,1],[1,3],[3,2],[2,0],[4,5],[5,7],[7,6],[6,4],[0,4],[1,5],[2,6],[3,7]];
+    for(const f of this._selectionConfigs().filter(f=>selected.has(f.id))) {const y=Number(f.y)||.15;const pts=Array.from({length:8},(_,i)=>[f.x+(i&1?.25:-.25),y+(i&2?.35:-.1),f.z+(i&4?.25:-.25)]);for(const [a,b] of edges)vertices.push(...pts[a],...pts[b]);}
+    const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(vertices,3));
+    this._selectionEdges=new T.LineSegments(geo,new T.LineBasicMaterial({color:0xc9a227,depthTest:false,transparent:true,opacity:1}));this._selectionEdges.renderOrder=100;this.scene.add(this._selectionEdges);
+  }
+  snapView(view) {
+    if(view==='camera'){this.resumeCameraTrack();return;}
+    this._takeOverCamera();this.orbitAuto=false;
+    const target=this._orbitTarget || {x:0,y:2,z:0};const radius=Math.max(2,this.orbitRadius || 15);
+    const angle=view==='front'?Math.PI/2:view==='side'?0:-Math.PI/4;
+    this._flyTo({target:{...target},radius:view==='top'?.01:radius,height:view==='top'?target.y+radius*1.5:view==='front'||view==='side'?target.y:target.y+radius*.65,angle});
+  }
+  setViewportShading(mode) {
+    this._viewportShading=mode;
+    for(const root of [this._fixtureInstances?.group,this._lightMarkers?.group])root?.traverse(o=>{for(const m of (Array.isArray(o.material)?o.material:[o.material]).filter(Boolean)){m.wireframe=mode==='wire';m.needsUpdate=true;}});
+    if(mode==='solid')this.setEnvironment('day');else if(mode==='realistic')this.setEnvironment('night');
+  }
   /** Animate to a view that fits the whole site (basin and every fixture). */
   frameAll() {
     this._takeOverCamera();
@@ -3873,6 +3933,7 @@ export class FountainScene {
     setCadUnderlay(this, null);
     this._modelLayer?.dispose?.();
     this._modelLayer = null;
+    if(this._selectionEdges){this._selectionEdges.geometry.dispose();this._selectionEdges.material.dispose();this._selectionEdges=null;}
     this._fixtureInstances?.dispose?.();
     this._fixtureInstances = null;
     this._steelFrames?.dispose?.();

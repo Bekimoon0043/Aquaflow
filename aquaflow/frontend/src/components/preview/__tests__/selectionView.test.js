@@ -1,0 +1,3 @@
+import {it,expect} from 'vitest';import {fixtureBounds,isolationWeight} from '../selectionView';
+it('frames a subset independently of the pool and distant fixtures',()=>{const b=fixtureBounds([{id:'a',x:10,z:-5,designHeightM:8},{id:'b',x:100,z:100}],['a']);expect(b.center.x).toBe(10);expect(b.max.y).toBe(8);expect(b.radius).toBeLessThan(5);expect(fixtureBounds([],['missing'])).toBeNull();});
+it('ghosts other fixtures, restores all on empty selection and prioritizes hidden items',()=>{expect(isolationWeight('b',new Set(['a']),.15)).toBe(.15);expect(isolationWeight('a',new Set(['a']),.15)).toBe(1);expect(isolationWeight('b',new Set(),.15)).toBe(1);expect(isolationWeight('a',new Set(['a']),.15,new Set(['a']))).toBe(0);});
