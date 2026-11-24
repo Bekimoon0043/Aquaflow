@@ -570,28 +570,74 @@ const camShot = (t0, t1, frames) => frames.forEach(([pos, tgt, fov], i) => {
   const t = r2(t0 + ((t1 - t0 - 0.04) * i) / Math.max(1, frames.length - 1));
   cameraKeys.push({ id: `cam-${cameraKeys.length + 1}`, t, position: pos, target: tgt, fov, roll: 0, ease: i === frames.length - 1 && t1 < END ? "cut" : "smooth" });
 });
-const FRONT_SHOT = (d0, d1) => [[W(AX, -d0, 5), W(AX, 8, 11), 40], [W(AX, -d1, 5), W(AX, 8, 11), 40]];
 // Pattern 9: 27° above the horizon, orbiting across the front.
 const at27 = (deg, D = 44) => { const a = (deg * Math.PI) / 180; return [W(35 + D * Math.sin(a), 13 - D * Math.cos(a), r2(D * Math.tan((27 * Math.PI) / 180))), W(35, 13, 0), 50]; };
-camShot(0, S1, [[W(35, -8, 34), W(35, 14, 0), 50], [W(35, -2, 26), W(35, 14, 0), 50]]);                         // P1: the portrait lights from above
-camShot(S1, P2, [[W(20, 0, 22), W(35, 14, 0), 50], [W(50, 0, 22), W(35, 14, 0), 50]]);                           // P1: slow arc over the sun
-camShot(P2, BRK1, FRONT_SHOT(40, 30));                                                                             // P2: front · the rainbow sketch
-camShot(BRK1, P3, [[W(35, 13.6, 46), W(35, 13, 0), 55], [W(35, 13.4, 42), W(35, 13, 0), 55]]);                    // break from above
-camShot(P3, P4, [[W(58, -8, 10), W(35, 14, 3), 55], [W(12, -8, 10), W(35, 14, 3), 55]]);                         // P3: three-quarter glide
-camShot(P4, P5, [[W(8, -18, 26), W(35, 13, 0), 55], [W(62, -18, 26), W(35, 13, 0), 55]]);                        // P4: high over the ∞
-camShot(P5, P6, [[W(20, -14, 12), W(35, 13, 3), 55], [W(50, -14, 12), W(35, 13, 3), 55]]);                       // P5: the ∞ and the circle
-camShot(P6, P6c, [[W(35, -10, 3), W(35, 13, 18), 66], [W(18, -18, 10), W(35, 13, 4), 58]]);                      // P6: up at the blasts, then the wave
-camShot(P6c, P7, [[W(35, 14, 44), W(35, 13, 0), 55], [W(46, 2, 34), W(35, 13, 0), 55]]);                         // P6 weave + break: lights from above
-camShot(P7, P8, [[W(35, -3, 24), W(35, 14, 0), 52], [W(43, 2, 19), W(35, 14, 0), 52]]);                          // P7: the ∞ round Odaa and Gadaa
-camShot(P8, P8b, [[W(72, 6, 9), W(48, 12, 3), 55], [W(62, -12, 7), W(40, 12, 3), 55]]);                          // P8: round the right lobe
-camShot(P8b, P9, [[W(-2, 6, 9), W(22, 12, 3), 55], [W(8, -12, 7), W(30, 12, 3), 55]]);                          // P8: round the left lobe
-camShot(P9, P10, [-30, -15, 0, 15, 30].map((d) => at27(d)));                                                     // P9: 27°
-camShot(P10, 268.4, [[W(35, -4, 30), W(35, 14, 0), 52], [W(35, 3, 24), W(35, 14, 0), 52]]);                     // P10: the sun, Odaa, Gadaa, bokku
-camShot(268.4, CANOPY, FRONT_SHOT(38, 30));                                                                        // P10: front · the rainbow sketch
-camShot(CANOPY, FIN, [[W(35, 0, 16), W(35, 14, 0), 55], [W(35, 3, 12), W(35, 14, 0), 55]]);                       // canopy over the portrait
-camShot(FIN, BRK3, [[W(8, -25, 9), W(35, 12, 5), 58], [W(62, -25, 9), W(35, 12, 5), 58]]);                        // finale sweep
-camShot(BRK3, LAST, [[W(35, 13.6, 55), W(35, 13, 0), 55], [W(35, 13.6, 50), W(35, 13, 0), 55]]);                   // strobe from above
-camShot(LAST, STOP, FRONT_SHOT(42, 32));                                                                           // last climb · front
+// The shot list, as a camera operator would plan it: every shot is built around what that pattern
+// shows, the cuts land on the bars, a 50 m blast always gets a wide frame that holds its full height,
+// and the eye-level front axis is used only while the rainbows draw the sketch.
+//   · floor light (the sun, Odaa, Gadaa) reads from above, so those shots are high and look down;
+//   · the ∞ waves read as travelling shapes, so they are shot high and wide or tracked from the side;
+//   · the 1D circle and the Varios are shot low and close, at the height of the water;
+//   · the bokku run front to back, so they are shot from three-quarter angles, never head-on.
+const BLAST_WIDE = (x0, x1) => [[W(x0, -26, 4), W(35, 13, 21), 60], [W(x1, -32, 6), W(35, 13, 22), 60]];   // full 50 m in frame
+// Pattern 1 · light only: a slow descent onto the portrait, the sun opening out, then a drift across it.
+camShot(0, S1, [[W(35, 14.2, 52), W(35, 14, 0), 48], [W(35, 9, 36), W(35, 14, 0), 48]]);                         // straight down: the sun, Odaa, Gadaa as one mandala
+camShot(S1, bt(15.4), [[W(35, -3, 20), W(35, 14, 0), 50], [W(35, 1, 14), W(35, 14.5, 0), 48]]);                 // tilt down and push in as the rays ripple
+camShot(bt(15.4), P2, [[W(52, 2, 16), W(35, 14, 0), 50], [W(47, -2, 12), W(35, 14, 0), 50]]);                   // three-quarter drift on the sunbursts
+// Pattern 2 · the rainbow sketch, front axis only: a wide frame for the all-30 blast, a push in on the
+// sketch, then a low crane rising.
+camShot(P2, 29.4, [[W(AX, -54, 5), W(AX, 8, 17), 48], [W(AX, -47, 5), W(AX, 8, 14), 46]]);
+camShot(29.4, 37.0, [[W(AX, -42, 5), W(AX, 8, 11), 40], [W(AX, -33, 5), W(AX, 8, 11), 40]]);
+camShot(37.0, BRK1, [[W(AX, -27, 3.5), W(AX, 8, 12), 48], [W(AX, -31, 9), W(AX, 8, 12), 46]]);
+camShot(BRK1, P3, [[W(35, 13.6, 48), W(35, 13, 0), 55], [W(35, 13.4, 44), W(35, 13, 0), 55]]);                   // the break from above: the white comet
+// Pattern 3 · the circle crossing (low, beside it), all 30 at 0:48 (wide), the low Varios (a glide at
+// their height), then each bokku from three-quarters.
+camShot(P3, 48.6, [[W(27, -1, 4), W(35, 14, 7), 52], [W(28, 0, 4), W(35, 14, 7), 52]]);
+camShot(48.6, 52.4, BLAST_WIDE(62, 64));
+camShot(52.4, 58.8, [[W(21, 3, 3), W(35, 12, 1.5), 56], [W(49, 3, 3), W(35, 12, 1.5), 56]]);                    // along the Varios at 3 m, the crossing circle behind
+camShot(58.8, 62.0, [[W(3, -6, 12), W(20, 12, 3), 55], [W(7, -9, 10), W(21, 12, 3), 55]]);                       // left bokku, three-quarter
+camShot(62.0, P4, [[W(67, -6, 12), W(50, 12, 3), 55], [W(63, -9, 10), W(49, 12, 3), 55]]);                       // right bokku answers
+// Pattern 4 · the ∞ alone: high enough to read the travelling waves as shapes, the all-30 blast wide,
+// then a tracking shot along the front with the pyramid waves.
+camShot(P4, 74.2, [[W(10, -10, 30), W(35, 13, 0), 54], [W(26, -14, 27), W(35, 13, 0), 54]]);
+camShot(74.2, 78.0, BLAST_WIDE(60, 63));
+camShot(78.0, P5, [[W(10, -9, 6), W(24, 12, 3), 56], [W(60, -9, 6), W(46, 12, 3), 56]]);
+// Pattern 5 · the ∞ swinging waves with the circle: cut side to side on the blasts, then over the spiral.
+camShot(P5, 96.4, [[W(8, -7, 8), W(30, 13, 5), 55], [W(12, -9, 8), W(31, 13, 5), 55]]);
+camShot(96.4, 102.8, [[W(62, -7, 8), W(40, 13, 5), 55], [W(58, -9, 8), W(39, 13, 5), 55]]);
+camShot(102.8, P6, [[W(35, -1, 22), W(35, 14, 3), 55], [W(45, 4, 19), W(35, 14, 3), 55]]);
+// Pattern 6 · up from the water into the all-30 blast, a wide sweep with the rainbow ∞ and the bokku,
+// the strobe weave from straight above, then the 2:14 blast wide.
+camShot(P6, 115.4, [[W(30, -7, 3), W(35, 13, 24), 72], [W(26, -12, 5), W(35, 13, 16), 64]]);
+camShot(115.4, P6c, [[W(4, -16, 18), W(35, 12, 2), 52], [W(66, -16, 18), W(35, 12, 2), 52]]);
+camShot(P6c, 134.6, [[W(35, 14, 44), W(35, 13, 0), 55], [W(42, 8, 38), W(35, 13, 0), 55]]);
+camShot(134.6, P7, BLAST_WIDE(8, 6));
+// Pattern 7 · Odaa and Gadaa are floor light: high over the portrait, closer on the face as it sings,
+// then rising away as the two answer each other.
+camShot(P7, 145.4, [[W(35, -6, 26), W(35, 14, 0), 52], [W(35, -1, 24), W(35, 14, 0), 52]]);
+camShot(145.4, 151.8, [[W(35, 4, 17), W(35, 15, 0), 46], [W(38, 6, 14), W(35, 15, 0), 46]]);
+camShot(151.8, P8, [[W(44, 2, 18), W(35, 14, 0), 52], [W(48, -4, 24), W(35, 14, 0), 52]]);
+// Pattern 8 · the warm ∞: a short lead-in, the all-30 blast wide, round each lobe, then a high finish.
+camShot(P8, 160.2, [[W(20, -10, 10), W(35, 12, 3), 55], [W(22, -11, 10), W(35, 12, 3), 55]]);
+camShot(160.2, 166.6, BLAST_WIDE(10, 8));
+camShot(166.6, P8b, [[W(72, 6, 9), W(48, 12, 3), 55], [W(62, -12, 7), W(42, 12, 3), 55]]);
+camShot(P8b, 188.3, [[W(-2, 6, 9), W(22, 12, 3), 55], [W(8, -12, 7), W(28, 12, 3), 55]]);
+camShot(188.3, P9, [[W(14, -14, 24), W(35, 13, 0), 54], [W(56, -14, 20), W(35, 13, 0), 54]]);
+// Pattern 9 · 27° throughout (the client's angle): a wide orbit, then a closer one the other way.
+camShot(P9, P9b, [-35, -20, -5, 10].map((d) => at27(d, 46)));
+camShot(P9b, P10, [25, 12, 0, -12, -25].map((d) => at27(d, 36)));
+// Pattern 10 · the all-30 blast wide, high over the sun, Odaa and Gadaa, the sketch from the front,
+// down onto the canopy, then each bokku from three-quarters with the sun beyond.
+camShot(P10, 252.4, BLAST_WIDE(62, 64));
+camShot(252.4, 268.4, [[W(35, -6, 30), W(35, 14, 0), 52], [W(35, 3, 24), W(35, 14, 0), 52]]);
+camShot(268.4, CANOPY, [[W(AX, -40, 5), W(AX, 8, 11), 40], [W(AX, -31, 5), W(AX, 8, 11), 40]]);
+camShot(CANOPY, FIN, [[W(30, -16, 8), W(35, 13, 18), 60], [W(35, 2, 14), W(35, 14, 0), 55]]);
+camShot(FIN, 296.0, [[W(4, -9, 10), W(28, 12, 3), 55], [W(10, -13, 9), W(30, 12, 3), 55]]);
+camShot(296.0, BRK3, [[W(66, -9, 10), W(42, 12, 3), 55], [W(60, -13, 9), W(40, 12, 3), 55]]);
+camShot(BRK3, LAST, [[W(35, 13.6, 55), W(35, 13, 0), 55], [W(35, 13.6, 50), W(35, 13, 0), 55]]);                  // the strobe from above
+// Last climb · front axis: push in on the sketch, then pull back wide so the final all-30 blast shows whole.
+camShot(LAST, 313.9, [[W(AX, -36, 5), W(AX, 8, 11), 42], [W(AX, -31, 5), W(AX, 8, 11), 42]]);
+camShot(313.9, STOP, [[W(AX, -46, 5), W(AX, 8, 16), 46], [W(AX, -64, 7), W(AX, 8, 21), 48]]);
 camShot(STOP, END, [[W(AX, -30, 6), W(AX, 10, 6), 45], [W(35, -6, 26), W(35, 14, 0), 52]]);                       // rise over the portrait
 if (cameraKeys.some((k) => k.position.y < 3)) throw new Error("camera key below 3 m");
 proj.render = { ...proj.render, environment: "night", cameraMode: "animated", activeCameraView: null, studioLook: true, studioMist: false,

@@ -210,3 +210,12 @@ The client's feedback: learn the Vario from `Downloads/wNNrBx.mp4`. Make the rai
 - **∞:** the whole ∞ is never up at once. It runs travelling stadium waves, pyramid waves and comets, so only the jets inside a crest are up.
 - **Air:** no single cannons and no one-by-one spins. Every blast fires both 20 m circles together (20 cannons), and the 50 m circle joins on 10 moments, as often as its 25 s refill allows (all 30 together). That gives 30 blast moments and 740 shots, with 0 refill violations.
 - **Rainbows cross, as in the sketch:** the outer and middle arcs top out over the next nozzle in and fall on past it, through that jet. The inner pair land on each other's nozzle and cross into the tall arch.
+
+**Camera, re-planned as a shot list** (cuts on the bars, 37 shots):
+- **Floor light** (the sun, Odaa and Gadaa) is shot from above: a straight-down mandala that descends and tilts, then three-quarter drifts.
+- **∞ waves** are shot high and wide, so the travelling stadium and pyramid shapes read, or tracked along the front and round each lobe.
+- **The 1D circle and the Varios** are shot low and close, at the height of their water (a 3 m glide along the 1 m Varios).
+- **The bokku** are shot from three-quarter angles, left then right, never head-on.
+- **Every all-30 blast** gets a wide three-quarter frame that holds the full 50 m. In pattern 6 the camera looks up from the water into the blast.
+- **The eye-level front axis** is used only while the rainbows draw the sketch, with three front set-ups: wide for the blast, a push-in, and a low rising crane. The last climb pulls back so the final blast shows whole.
+- **Pattern 9** stays at 27°: a wide orbit, then a closer one the other way.

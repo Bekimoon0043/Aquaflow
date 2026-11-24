@@ -24,6 +24,7 @@
   - Headless frames checked for every pattern.
   - 1,330 tests pass in the panels, preview, programmer, utils and show suites.
 - **Client fixes:** the ∞ only ever runs travelling stadium, pyramid and comet waves (never all at once). Blasts are whole circles only: both 20 m circles together, plus the 50 m circle on 10 moments at least 25 s apart (30 moments, 740 shots). The rainbow arcs now cross each other as in the sketch.
+- **Camera:** re-planned as a 37-shot list. Floor light is shot from above, the ∞ high and wide or tracked, the circle and Varios low and close, the bokku from three-quarters. Every all-30 blast gets a wide frame. The front axis is used only with the rainbow sketch, and pattern 9 stays at 27°.
 - **Installer:** another session's concurrent `npm run dist` collided with mine; its build picked up 1.2.94.
 
 **2026-11-24: AquaFlow Studio 1.2.93 - Odaa · 3Obsa third pass: real Vario jets, low rainbow arcs into the centre, mixed lamp colours, 30 air cannons**
