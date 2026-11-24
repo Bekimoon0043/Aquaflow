@@ -205,3 +205,8 @@ The client's feedback: learn the Vario from `Downloads/wNNrBx.mp4`. Make the rai
 **Heights** in proportion with the unchanged 20 m and 50 m blasts:
 - ∞ 9 m, 1D circle 14 m, Vario 12 m, rays 7 m, bokku 8 m.
 - In pattern 3 the Varios run at 1 m with an 80° V.
+
+**Client fixes (same day):**
+- **∞:** the whole ∞ is never up at once. It runs travelling stadium waves, pyramid waves and comets, so only the jets inside a crest are up.
+- **Air:** no single cannons and no one-by-one spins. Every blast fires both 20 m circles together (20 cannons), and on the six big moments the 50 m circle joins (all 30). That gives 28 blast moments and 620 shots, with 0 refill violations.
+- **Rainbows cross, as in the sketch:** the outer and middle arcs top out over the next nozzle in and fall on past it, through that jet. The inner pair land on each other's nozzle and cross into the tall arch.

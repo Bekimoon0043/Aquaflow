@@ -23,6 +23,7 @@
   - 2,547 patterns, 32,449 clips, 55.2 MB.
   - Headless frames checked for every pattern.
   - 1,330 tests pass in the panels, preview, programmer, utils and show suites.
+- **Client fixes:** the ∞ only ever runs travelling stadium, pyramid and comet waves (never all at once). Blasts are whole circles only: both 20 m circles together, plus the 50 m circle on 6 big moments (28 moments, 620 shots). The rainbow arcs now cross each other as in the sketch.
 - **Installer:** another session's concurrent `npm run dist` collided with mine; its build picked up 1.2.94.
 
 **2026-11-24: AquaFlow Studio 1.2.93 - Odaa · 3Obsa third pass: real Vario jets, low rainbow arcs into the centre, mixed lamp colours, 30 air cannons**

@@ -92,12 +92,14 @@ const solveApex = (D, P, y0 = 0.15) => {
   for (let k = 0; k < 60; k++) { const mid = (lo + hi) / 2; if (apexX(mid).x > D) lo = mid; else hi = mid; }
   return { elev: (lo * 180) / Math.PI, H: apexX(lo).H };
 };
-const MIDX = (DIAG_X[2].x + DIAG_X[3].x) / 2;
+
 const ARCS = [];
 DIAG_X.forEach((f, i) => {
   const left = i < 3, pair = left ? i : 5 - i;                          // 0 outer, 1 middle, 2 inner
-  const to = pair < 2 ? DIAG_X[left ? i + 1 : i - 1] : { x: MIDX };
-  const R = Math.abs(to.x - f.x), { elev, H } = pair < 2 ? solveArc(R, PEAK[pair]) : solveApex(R, PEAK[pair]);
+  // As drawn: the outer and middle arcs top out right over the next nozzle in and fall on past it,
+  // crossing that nozzle's jet; the inner pair land on each other's nozzle, crossing into the tall arch.
+  const to = pair < 2 ? DIAG_X[left ? i + 1 : i - 1] : DIAG_X[left ? 3 : 2];
+  const R = Math.abs(to.x - f.x), { elev, H } = pair < 2 ? solveApex(R, PEAK[pair]) : solveArc(R, PEAK[pair]);
   const az = left ? 0 : 180, tilt = r2(90 - elev);
   f.rotation = az;
   f.engineering = { ...f.engineering, jetHeightM: r2(H), aimTiltDeg: tilt, aimDeg: tilt, aimAzimuthDeg: az, diagonalAngleDeg: tilt,
@@ -177,6 +179,14 @@ const together = (g, name, s, d, period, points, high = 100, low = 0, extra = {}
 const band = (g, name, s, d, period, high, offset = 0, extra = {}, width = 0.22) => base(g, name, s, d, { effect: "field", ...extra,
   field: { kind: "custom", shape: "drawn", path: "around", motion: "repeat", period, crests: 1, direction: 1, offset,
     points: [{ time: 0, value: 0 }, { time: 0.06, value: 1 }, { time: width, value: 1 }, { time: width + 0.08, value: 0 }, { time: 1, value: 0 }], low: 0, high, ease: 0 } });
+/** Waves that travel along the ∞ path: only the nozzles inside a crest are up, the rest are down, so
+ *  the shape reads (never the whole ∞ at once). `crests` = how many waves are on the path together. */
+const pathWave = (g, name, s, d, period, crests, points, high = 100, dir = 1, extra = {}) => base(g, name, s, d, { effect: "field", ...extra,
+  field: { kind: "custom", shape: "drawn", path: "around", motion: "repeat", period, crests, direction: dir,
+    points: points.map(([time, value]) => ({ time, value })), low: 0, high, ease: 0 } });
+const W_STADIUM = [[0, 0], [0.04, 1], [0.22, 1], [0.28, 0], [1, 0]];          // a block of jets up, travelling
+const W_PYRAMID = [[0, 0], [0.18, 1], [0.36, 0], [1, 0]];                     // a pyramid: rising to a peak and down again
+const W_COMET = [[0, 0], [0.03, 1], [0.3, 0.25], [0.4, 0], [1, 0]];          // a tall head with a falling tail
 const rainbowLights = (g, name, s, d, period, points, turn, high = 100, low = 0) => base(g, name, s, d, { effect: "field",
   field: { kind: "custom", shape: "drawn", path: "together", motion: "repeat", period, spread: 0, points, low, high, ease: 0, colorMode: "rainbow", rainbowPeriod: turn } });
 const PULSE = [{ time: 0, value: 1 }, { time: 0.18, value: 1 }, { time: 0.5, value: 0.15 }, { time: 1, value: 0.15 }];
@@ -281,8 +291,7 @@ const rainbowSketch = (s, e, tag) => {
     return [ramp(g, `${tag} · rainbow sketch · ${what} rise`, a, rise, 0, 100), hold(g, `${tag} · rainbow sketch · ${what}`, r2(a + rise), r2(e - a - rise), 100)];
   });
 };
-sec(volley("C", P2), volley("L", P2), volley("R", P2), ...rainbowSketch(P2, BRK1, "P2"));
-hitsIn(27, 44, 3.2).forEach((h, i) => sec(blast(i % 2 ? "R" : "L", h, 90)));
+sec(...rainbowSketch(P2, BRK1, "P2"));
 sec(band("infLight", "Break · light only · a white comet round the dark ∞", BRK1, P3 - BRK1, 1.6, 100, 0, { color: C.white }));
 
 // Pattern 3 · 46 – 67 · the 1D circle crosses, the Varios low (1 m), wide and thick, the bokku waves.
@@ -298,24 +307,23 @@ sec(hold("pc", "P3 · 1D circle tall", P3, P4 - P3, 100),
   field("pillars", "P3 · bokku · waves cross on two beats", 60.4, P4 - 60.4, crossing(2 * BEAT, 10, 100), { order: "front-to-back" }));
 
 // Pattern 4 · 67 – 90 · the ∞ alone, warm colours.
-sec(drawOn("inf", "P4 · the ∞ draws itself from the centre", P4, 3.4, 3.2, 70), field("inf", "P4 · the ∞ climbs", r2(P4 + 3.4), 78 - P4 - 3.4, finale(BAR, 35, 95)),
+sec(pathWave("inf", "P4 · a travelling stadium wave runs round the ∞", P4, 78 - P4, 2 * BAR, 2, W_STADIUM),
   swing("infRSwing", "P4 · right lobe fans", P4, 78 - P4, cyclesFor(78 - P4, BAR), 30, 0), swing("infLSwing", "P4 · left lobe fans the other way", P4, 78 - P4, cyclesFor(78 - P4, BAR), -30, 0),
-  field("inf", "P4 · two crests cross round the ∞", 78, P5 - 78, crossing(BAR, 30, 100)), ...cross("P4 · X lattice", 78, P5 - 78, BAR, 32));
+  pathWave("inf", "P4 · three pyramid waves travel the ∞", 78, P5 - 78, BAR, 3, W_PYRAMID), ...cross("P4 · X lattice", 78, P5 - 78, BAR, 32));
 
 // Pattern 5 · 90 – 109 · the ∞ swinging waves with the 1D circle (the call-and-response spins blast).
-sec(field("inf", "P5 · three crests travel the ∞", P5, P6 - P5, travel(1, 3, 2 * BAR, 30, 100)),
+sec(pathWave("inf", "P5 · three pyramid waves travel the ∞", P5, 99.6 - P5, 2 * BAR, 3, W_PYRAMID),
+  pathWave("inf", "P5 · four pyramid waves, faster", 99.6, P6 - 99.6, BAR, 4, W_PYRAMID),
   swing("infSwing", "P5 · a swinging wave runs round the ∞", P5, 99.6 - P5, cyclesFor(99.6 - P5, BAR), 35, 1),
   swing("infSwing", "P5 · the swinging wave runs faster", 99.6, P6 - 99.6, cyclesFor(P6 - 99.6, 2 * BEAT), 26, 1),
   field("pc", "P5 · a high half travels round the circle", P5, P6 - P5, travel(1, 1, 2 * BAR, 45, 100)),
   funnel("P5 · the circle twists with the ∞ wave (spiral)", P5, 99.6 - P5, BAR, 38, 1),
-  funnel("P5 · the circle spiral faster", 99.6, P6 - 99.6, 2 * BEAT, 26, 1),
-  spin("L", 90.0, 0.32), spin("R", 96.4, 0.32, 100, -1), spin("L", 102.8, 0.32));
+  funnel("P5 · the circle spiral faster", 99.6, P6 - 99.6, 2 * BEAT, 26, 1));
 
 // Pattern 6 · 109 – 136 · the ∞ in another wave, different kinds of lighting, the bokku moving.
-sec(volley("C", P6), volley("L", P6), volley("R", P6),
-  field("inf", "P6 · the ∞ pulses high", P6, P6b - P6, swell(2 * BEAT, 60, 100)), ...cross("P6 · X lattice", P6, P6b - P6, BAR, 38),
-  field("inf", "P6 · a stadium wave runs the ∞", P6b, P6c - P6b, stadium(BAR, 35, 100)), swing("infSwing", "P6 · the swing follows the stadium wave", P6b, P6c - P6b, cyclesFor(P6c - P6b, BAR), 30, 1),
-  hold("inf", "P6 · steady water for the weave", P6c, BRK2 - P6c, 70), ...cross("P6 · odd and even weave along the path", P6c, BRK2 - P6c, 2 * BAR, 28, 1),
+sec(  pathWave("inf", "P6 · two stadium waves run backwards round the ∞", P6, P6b - P6, BAR, 2, W_STADIUM, 100, -1), ...cross("P6 · X lattice", P6, P6b - P6, BAR, 38),
+  pathWave("inf", "P6 · a long stadium wave runs the ∞", P6b, P6c - P6b, BAR, 1, [[0, 0], [0.04, 1], [0.4, 1], [0.46, 0], [1, 0]]), swing("infSwing", "P6 · the swing follows the stadium wave", P6b, P6c - P6b, cyclesFor(P6c - P6b, BAR), 30, 1),
+  pathWave("inf", "P6 · four pyramid waves under the weave", P6c, BRK2 - P6c, 2 * BAR, 4, W_PYRAMID), ...cross("P6 · odd and even weave along the path", P6c, BRK2 - P6c, 2 * BAR, 28, 1),
   together("pillarL", "P6 · bokku gallop · left", P6, P6b - P6, 2 * BEAT, ALT_A, 100, 15), together("pillarR", "P6 · bokku gallop · right answers", P6, P6b - P6, 2 * BEAT, ALT_B, 100, 15),
   field("pillars", "P6 · bokku · two waves cross", P6b, P6c - P6b, crossing(BAR, 15, 100), { order: "front-to-back" }),
   field("pillarL", "P6 · left bokku · three waves run round", P6c, BRK2 - P6c, travel(1, 3, BAR, 10, 100)),
@@ -327,12 +335,12 @@ sec(volley("C", P6), volley("L", P6), volley("R", P6),
   band("infLight", "P6 lights · magenta band chases", P6b, P6c - P6b, 2 * BAR, 100, 4.27, { color: C.magenta }, 0.3),
   together("infOddLight", "P6 lights · odd lamps strobe white", P6c, BRK2 - P6c, BEAT, ALT_A, 100, 10, { color: C.white }),
   together("infEvenLight", "P6 lights · even lamps answer in cyan", P6c, BRK2 - P6c, BEAT, ALT_B, 100, 10, { color: C.cyan }),
-  spin("L", 115.4, 0.16), spin("R", 115.4, 0.16, 100, -1), volley("L", 121.8), volley("R", 121.8),
   band("infLight", "Break · light only · white comet", BRK2, P7 - BRK2, 1.6, 100, 0, { color: C.white }),
   band("pillarsLight", "Break · light only · the bokku light up hilt to tip", BRK2, P7 - BRK2, BEAT, 100, 0, { color: C.gold, order: "front-to-back" }, 0.35));
 
 // Pattern 7 · 139 – 158 · the ∞ with Odaa and Gadaa.
-sec(drawOn("inf", "P7 · the ∞ draws round the portrait", P7, 6.4, 6.4, 80), field("inf", "P7 · waves travel round the ∞", r2(P7 + 6.4), P8 - P7 - 6.4, travel(1, 2, 2 * BAR, 30, 95)),
+sec(pathWave("inf", "P7 · a comet of water runs round the portrait", P7, 6.4, 2 * BAR, 1, W_COMET),
+  pathWave("inf", "P7 · two pyramid waves travel round the ∞", r2(P7 + 6.4), P8 - P7 - 6.4, 2 * BAR, 2, W_PYRAMID),
   swing("infSwing", "P7 · the ∞ sways with the waves", r2(P7 + 6.4), P8 - P7 - 6.4, cyclesFor(P8 - P7 - 6.4, 2 * BAR), 25, 1),
   field("hair", "P7 · Odaa · the tree blooms upward every two bars", P7, 148.6 - P7, travel(1, 1, 2 * BAR, 20, 100), { order: "front-to-back", color: C.green }),
   voiceCurve("face", "P7 · Gadaa · the face sings with the voice", P7, 148.6),
@@ -341,56 +349,56 @@ sec(drawOn("inf", "P7 · the ∞ draws round the portrait", P7, 6.4, 6.4, 80), f
 
 // Pattern 8 · 158 – 199 · the ∞ dancing in warm colours.
 sec(swing("infSwing", "P8 · the whole ∞ rows on two beats", P8, P8b - P8, cyclesFor(P8b - P8, 2 * BEAT), 28, 0),
-  field("inf", "P8 · the ∞ pumps", P8, P8b - P8, swell(2 * BEAT, 55, 100)),
-  together("infL", "P8 · left lobe on the bar", P8b, P9 - P8b, BAR, ALT_A, 100, 35), together("infR", "P8 · right lobe answers", P8b, P9 - P8b, BAR, ALT_B, 100, 35),
+  pathWave("inf", "P8 · two stadium waves travel on the bar", P8, P8b - P8, BAR, 2, W_STADIUM),
+  pathWave("infL", "P8 · a pyramid wave round the left lobe", P8b, P9 - P8b, BAR, 1, W_PYRAMID), pathWave("infR", "P8 · the right lobe mirrors it", P8b, P9 - P8b, BAR, 1, W_PYRAMID, 100, -1),
   ...cross("P8 · a travelling cross", P8b, P9 - P8b, BAR, 32, 1));
 
 // Pattern 9 · 199 – 246 · camera at 27°: the ∞ with Odaa and Gadaa.
-sec(volley("C", P9), volley("L", P9), volley("R", P9),
-  ...cross("P9 · wide X lattice", P9, P9b - P9, BAR, 40), field("inf", "P9 · the ∞ high", P9, P9b - P9, swell(2 * BEAT, 60, 100)),
-  field("inf", "P9 · a comet of water loops the ∞", P9b, P10 - P9b, travel(1, 1, 2 * BAR, 25, 100)), swing("infSwing", "P9 · sweeps travel round", P9b, P10 - P9b, cyclesFor(P10 - P9b, BAR), 35, 1),
+sec(  ...cross("P9 · wide X lattice", P9, P9b - P9, BAR, 40), pathWave("inf", "P9 · two pyramid waves travel the ∞", P9, P9b - P9, BAR, 2, W_PYRAMID),
+  pathWave("inf", "P9 · two comets of water loop the ∞", P9b, P10 - P9b, 2 * BAR, 2, W_COMET), swing("infSwing", "P9 · sweeps travel round", P9b, P10 - P9b, cyclesFor(P10 - P9b, BAR), 35, 1),
   field("hair", "P9 · Odaa · the tree swells", P9, P9b - P9, swell(2 * BEAT, 30, 100), { color: C.green }),
   voiceCurve("face", "P9 · Gadaa · the face sings", P9, P9b),
   field("hair", "P9 · Odaa · the tree climbs on every bar", P9b, P10 - P9b, travel(1, 1, BAR, 25, 100), { order: "front-to-back", color: C.green }),
-  voiceCurve("face", "P9 · Gadaa · the face sings", P9b, P10),
-  spin("L", 222.7, 0.16), spin("R", 222.7, 0.16, 100, -1));
-hitsIn(201, 245, 3.2).forEach((h, i) => sec(blast(i % 2 ? "R" : "L", h, 100)));
+  voiceCurve("face", "P9 · Gadaa · the face sings", P9b, P10));
 
 // Pattern 10 · 246 – 304 · the sun, Gadaa, Odaa and the bokku together.
-sec(volley("C", P10), volley("L", P10), volley("R", P10),
-  field("rays", "P10 · the sun · rays ripple out", P10, P10b - P10, travel(1, 1, BAR, 0, 100), { order: "center-out" }),
+sec(  field("rays", "P10 · the sun · rays ripple out", P10, P10b - P10, travel(1, 1, BAR, 0, 100), { order: "center-out" }),
   together("rays", "P10 · the sun bursts on the beat", P10b, CANOPY - P10b, BEAT, PULSE, 100, 30),
   field("pillarL", "P10 · left bokku · waves run round", P10, P10b - P10, travel(1, 2, 2 * BAR, 10, 100)),
   field("pillarR", "P10 · right bokku · waves the other way", P10, P10b - P10, travel(-1, 2, 2 * BAR, 10, 100)),
   field("pillars", "P10 · bokku · stadium hilt to tip", P10b, CANOPY - P10b, stadium(BAR, 20, 100), { order: "front-to-back" }),
   field("hair", "P10 · Odaa · the tree climbs", P10, CANOPY - P10, travel(1, 1, 2 * BAR, 40, 100), { order: "front-to-back", color: C.green }),
   field("face", "P10 · Gadaa · the face glows", P10, CANOPY - P10, swell(2 * BAR, 45, 100), { color: C.green }),
-  spin("L", 262.0, 0.24), spin("R", 268.4, 0.24, 100, -1), spin("L", 274.8, 0.24),
   // Canopy
-  volley("C", CANOPY), volley("R", CANOPY), spin("L", CANOPY, 0.1),
   hold("rays", "Canopy · the sun full", CANOPY, FIN - CANOPY, 100), hold("pillars", "Canopy · bokku full", CANOPY, FIN - CANOPY, 90),
   field("hair", "Canopy · Odaa blooms", CANOPY, FIN - CANOPY, travel(1, 1, BAR, 50, 100), { order: "front-to-back", color: C.green }), hold("face", "Canopy · Gadaa", CANOPY, FIN - CANOPY, 100, { color: C.green }),
   // Finale of pattern 10
   together("rays", "P10 finale · sunburst on the beat", FIN, BRK3 - FIN, BEAT, PULSE, 100, 40),
   field("pillars", "P10 finale · bokku stadium on two beats", FIN, BRK3 - FIN, stadium(2 * BEAT, 25, 100), { order: "front-to-back" }),
   together("hair", "P10 finale · Odaa on the beat", FIN, BRK3 - FIN, BEAT, PULSE, 100, 40, { color: C.green }),
-  together("face", "P10 finale · Gadaa on the off-beat", FIN, BRK3 - FIN, 2 * BEAT, ALT_B, 100, 40, { color: C.green }),
-  spin("L", 296.0, 0.12), spin("R", 296.0, 0.12, 100, -1));
-hitsIn(248, 280, 3.2).forEach((h, i) => sec(blast(i % 2 ? "R" : "L", h, 95)));
-for (let k = 0, t = bt(289); t < BRK3 - 2; k++, t = r2(t + 2 * BEAT)) sec(blast(k % 2 ? "R" : "L", t, 95));
+  together("face", "P10 finale · Gadaa on the off-beat", FIN, BRK3 - FIN, 2 * BEAT, ALT_B, 100, 40, { color: C.green }));
 sec(together("waterLights", "Break · light only · every lamp strobes on the eighths", BRK3, LAST - BRK3, BEAT / 2, STROBE, 100, 0, { color: C.white }));
 
 // The last climb · 307.5 – 320.3 · everything.
-sec(volley("L", LAST), volley("R", LAST),
-  field("inf", "Last climb · the ∞", LAST, STOP - LAST, finale(BAR, 50, 100)), ...cross("Last climb · X lattice", LAST, STOP - LAST, 2 * BEAT, 28),
+sec(  pathWave("inf", "Last climb · three stadium waves race round the ∞", LAST, STOP - LAST, BAR, 3, W_STADIUM), ...cross("Last climb · X lattice", LAST, STOP - LAST, 2 * BEAT, 28),
   hold("pc", "Last climb · circle", LAST, STOP - LAST, 100), funnel("Last climb · the circle spiral", LAST, STOP - LAST, BAR, 40, 1),
   hold("ring", "Last climb · Varios tall", LAST, STOP - LAST, 100), vfan("ring", "Last climb · Varios bloom on the bar", LAST, STOP - LAST, BAR, F_BLOOM, 0, 50),
   together("rays", "Last climb · sunburst", LAST, STOP - LAST, BEAT, PULSE, 100, 50),
   field("pillars", "Last climb · bokku", LAST, STOP - LAST, swell(2 * BEAT, 60, 100)),
   hold("hair", "Last climb · Odaa", LAST, STOP - LAST, 100, { color: C.green }), hold("face", "Last climb · Gadaa", LAST, STOP - LAST, 100, { color: C.green }),
-  hold("star", "Last climb · the star", LAST, STOP - LAST, 100, { color: C.green }),
-  blast("C", 316.4), spin("L", 318.0, 0.08), spin("R", 318.0, 0.08, 100, -1));
-for (let k = 0, t = bt(310); t < 316; k++, t = r2(t + BAR)) sec(blast(k % 2 ? "R" : "L", t, 95));
+  hold("star", "Last climb · the star", LAST, STOP - LAST, 100, { color: C.green }));
+// Air blasts: never one cannon alone. Every blast fires both 20 m circles together (all 20 cannons);
+// on the big moments the 50 m circle joins, so all 30 fire as one. Two bars apart at least
+// (20 m refill 6 s); the 50 m circle only where it has refilled (25 s).
+const allBlast = (t, withCentre = false) => [...volley("L", t), ...volley("R", t), ...(withCentre ? volley("C", t) : [])];
+const BIG = [P2, P6, P9, P10, CANOPY, 313.9];
+const BLAST_AT = [P2, 29.4, 35.8, 42.2, P5, 96.4, 102.8, P6, 115.4, 121.8,
+  P9, 205.4, 211.8, 218.2, 224.6, 231.0, 237.4, P10, 262.0, 268.4, 274.8, CANOPY, 288.6, 295.0, 301.4, LAST, 313.9, 320.0];
+for (const t of BLAST_AT) {
+  const shots = allBlast(t, BIG.includes(t)).filter(Boolean), want = BIG.includes(t) ? 30 : 20;
+  if (shots.length !== want) throw new Error(`blast at ${t} s fires ${shots.length} of ${want} cannons (refill)`);
+  sec(shots);
+}
 // After the hard stop: the portrait fades, the star last.
 sec(ramp("face", "After the stop · Gadaa fades", STOP, END - STOP - 0.3, 100, 0, { color: C.green }),
   ramp("hair", "After the stop · Odaa fades", STOP, END - STOP - 0.6, 100, 0, { color: C.green }),
