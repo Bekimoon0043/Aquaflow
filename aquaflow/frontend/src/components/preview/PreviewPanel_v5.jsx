@@ -161,6 +161,8 @@ export default function PreviewPanel() {
   const setWindX = setRenderField("windX");
   const laserHaze = Number.isFinite(Number(renderSettings.laserHaze)) ? Number(renderSettings.laserHaze) : 0.35;
   const setLaserHaze = setRenderField("laserHaze");
+  const poolReflection = Number.isFinite(Number(renderSettings.poolReflection)) ? Number(renderSettings.poolReflection) : 1;
+  const setPoolReflection = setRenderField("poolReflection");
   const setWindZ = setRenderField("windZ");
   const setWaveResponse = setRenderField("waveResponse");
   const setWaveDamping = setRenderField("waveDamping");
@@ -722,6 +724,7 @@ if (sitePreview.active && sitePreview.plan) {
   useEffect(() => { sceneRef.current?.setHalfResSpray?.(halfResSpray); }, [halfResSpray]);
   useEffect(() => { sceneRef.current?.setRealWorld?.(realWorld); }, [realWorld, sceneTier]);
   useEffect(() => { sceneRef.current?.setLaserHaze?.(laserHaze); }, [laserHaze, sceneTier]);
+  useEffect(() => { sceneRef.current?.setPoolReflection?.(poolReflection); }, [poolReflection, sceneTier]);
   // Real-world forward scatter is judged from the project's "STAND HERE" view when it has
   // one (realWorldLook.selectLitBeams), else from the live camera.
   const standHere = cameraViews.find(v => /stand[\s_-]*here/i.test(`${v.name} ${v.id}`))?.position || null;
@@ -1213,6 +1216,14 @@ if (sitePreview.active && sitePreview.plan) {
                   style={{ width:"100%", accentColor:"var(--info)" }} />
               </label>
             ))}
+
+            <label title="Strength of the fountain reflected in the pool. 0% disables the reflection; the pool water stays visible." style={{ display:"block", marginBottom:8 }}>
+              <span style={{ display:"flex", justifyContent:"space-between", color:"var(--text-muted)", fontSize:11 }}>
+                <span>Pool water reflection</span><span style={{ color:"var(--info)" }}>{Math.round(poolReflection * 100)}%</span>
+              </span>
+              <input type="range" aria-label="Pool water reflection" min={0} max={1} step={0.05} value={poolReflection}
+                onChange={event => setPoolReflection(Number(event.target.value))} style={{ width:"100%", accentColor:"var(--info)" }} />
+            </label>
 
             <label title="Virtual point-light clusters around illuminated jets. This is a real-time approximation, not path-traced water illumination." style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, color:"var(--text-muted)", fontSize:11 }}>
               <input type="checkbox" aria-label="Fountain indirect lighting" checked={fountainIndirect} onChange={event => setFountainIndirect(event.target.checked)} />

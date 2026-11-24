@@ -26,7 +26,9 @@ export function inventory(fixtures, models = [], center = { cx: 0, cy: 0 }) {
   return [...fixtures.map(f => {
     const info = getFixtureInfo(f.type);
     const water = createSiteWaterTrack(f);
-    const available = water ? [water] : byFixture.get(f.id) || [];
+    const fan = info?.channels?.includes('fan_angle') ? [{ id: `${f.id}-fan-angle`, fixtureId: f.id,
+      type: 'fan_angle', label: `${f.label || f.name || f.type} · Fan angle`, color: '#38bdf8' }] : [];
+    const available = [...(water ? [water] : byFixture.get(f.id) || []), ...fan];
     const unknown = !info || info.deviceType === 'unknown';
     const scenery = info?.category === 'scenery';   // steel frames: structure, no channels
     const readOnly = unknown || scenery || info.category === 'sensor' || info.runtimeType === 'sensor';

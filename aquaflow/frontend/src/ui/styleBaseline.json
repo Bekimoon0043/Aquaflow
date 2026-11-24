@@ -1,6 +1,6 @@
 {
  "totals": {
-  "inline": 3662,
+  "inline": 3669,
   "hex": 920
  },
  "files": {
@@ -133,7 +133,7 @@
    "hex": 0
   },
   "panels/EasyFountainPanel.jsx": {
-   "inline": 118,
+   "inline": 121,
    "hex": 17
   },
   "panels/EngineeringToolsPanel.jsx": {
@@ -321,7 +321,7 @@
    "hex": 2
   },
   "preview/PreviewPanel_v5.jsx": {
-   "inline": 142,
+   "inline": 146,
    "hex": 51
   },
   "preview/RealismReport.jsx": {

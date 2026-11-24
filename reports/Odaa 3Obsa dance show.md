@@ -108,6 +108,66 @@ The client sent two Luxury Con renders of this design (`Downloads/qXsjNI.mp4`, 3
   - long arcs and bells get a larger share of drops.
 - **Size:** 1,737 patterns, 38,533 clips, 70.8 MB.
 
+
+## Third pass: Vario jets, low rainbow arcs, mixed colours, 30 cannons
+
+The client's feedback: learn the Vario from `Downloads/wNNrBx.mp4`. Make the rainbows flow diagonally into the centre, not up into the sky. Give every DMX lamp a different colour. Take more patterns for the rainbows and the 1D circle from `qXsjNI.mp4` and `BgQpGF.mp4`. Use everything on the music, and add more air blasts.
+
+**Vario jets** (wNNrBx is the OASE "Vario jets" demo):
+- **What the demo shows:** each head is one tall column whose spray opens from the base into a flame, then a wide V, then closes back into a thin column. A full cycle takes about 4.4 s, and its light sweeps blue → cyan → green → yellow → orange → red. The mushroom bells of the second pass were wrong.
+- **New fixture type:** the heads are now `nozzle_vario_jet` (8 m) with a `fan_angle` channel for the cone, in degrees: 0 is a thin column, 100 a 40° V. The Studio renderer draws the cone opening and closing.
+- **Patterns:**
+  - bloom on the bar;
+  - a bloom flowing round the ring;
+  - bloom chases that speed up;
+  - two or three blooms racing round;
+  - the caller's side snapping open on the beat in call and response;
+  - odd and even heads opening in turn;
+  - thin columns popping on the eighth notes;
+  - a wide V on the big moments.
+- **Lights:** each head is a different colour, with the rainbow turning round the ring.
+
+**Diagonal rainbows:**
+- **Aim:** a 38° launch for long, low arcs toward the portrait centre. The aim is set for the Studio renderer (`aimTiltDeg`) and the classic renderer (`aimDeg` and `aimAzimuthDeg`), so neither view throws them straight up.
+- **Patterns:**
+  - each arc *grows* from short until it lands in the centre;
+  - pairs flow inward (outer → middle → inner);
+  - the left and right sides answer each other;
+  - the caller's side reaches the centre in call and response;
+  - the arcs bounce on the beat;
+  - all six cross over the portrait.
+
+**1D circle:**
+- **Heights:**
+  - the jets rise one by one;
+  - a high half travels round the circle;
+  - two high points spin round;
+  - odd and even jets alternate;
+  - the circle pumps on two beats, then climbs.
+- **Swings:**
+  - a twisting spiral, where crown and funnel run round the circle;
+  - the crown leans front/back, then left/right;
+  - the whole crown leans across as arcs (Bulloo);
+  - crown ↔ funnel breathing;
+  - odd/even crossing;
+  - a lean toward the caller.
+
+**Mixed colours:**
+- **Water-following lamps:** each lamp has a colour slot (bands of 8 along the ∞, the ray's angle, bands of 16 along each sword, the cannon's place on its circle). Every section has a palette of 3–6 colours, so neighbouring lamps carry different colours. The ray colours also rotate on the bar in the horn drop, Geerarsa and the finale.
+- **Circle and Vario lamps:** turning rainbows, every lamp a different hue, pulsing on the beat.
+- **Arcs and cannons:** each rainbow arc and each cannon has its own colour.
+
+**Air blasts:**
+- **Cannons:** each of the three circles goes from 5 to 10. The five new cannons sit between the originals on the same circle, each with its own light, so there are 30 in all.
+- **Patterns:**
+  - all 30 together at the horn drop, the crown, Geerarsa and Bulloo;
+  - spinning blasts, where a circle fires round in order (the build, call and response, the canopy and the last climb);
+  - circle volleys;
+  - pairs on the hits.
+- **Refill rules:** 440 blasts with no refill violations (20 m cannons at least 6 s apart, 50 m at least 25 s).
+
+**Size:** 2,920 patterns, 38,824 clips, 73.5 MB. A first build at 76.7 MB crashed the headless preview, so three of the five white flashes were dropped and the face and star curves were sampled more coarsely.
+
 ## Checks
 
 - **Air cannons:** 64 blasts. No 20 m cannon fires again within 6 s, and no 50 m cannon within 25 s (0 violations).
@@ -118,3 +178,44 @@ The client sent two Luxury Con renders of this design (`Downloads/qXsjNI.mp4`, 3
 
 - This is a simulated concept, not commissioned hardware. Air plant capacity, splash containment and drive speeds must be confirmed with the suppliers.
 - The tempo, hits and sung phrases are measured from the audio. They are not transcribed from the score or the lyrics.
+
+## Fourth pass: the client's ten-pattern show (`Desktop/Odaa_3Obsa_10_Patterns.aquapkg`)
+
+**Builder:** `aquaflow/frontend/scripts/build-odaa-3obsa-patterns.mjs`. It uses the same site (with 30 cannons) and the same song, and is a new file. The third-pass show is kept.
+
+| Time | Pattern |
+|---|---|
+| 0:00–0:23 | **1.** Light only: the sun (ray lamps), Odaa (the tree) and Gadaa (the face) |
+| 0:23–0:44 | **2.** The rainbow sketch, shot from the front; all 30 cannons fire on the horn drop |
+| 0:46–1:07 | **3.** The 1D circle crosses (odd and even swing through each other); the Varios are 1 m, wide and thick; the bokku run in waves |
+| 1:07–1:30 | **4.** The ∞ alone, in warm colours |
+| 1:30–1:49 | **5.** The ∞ swinging waves, with the 1D circle twisting in a spiral |
+| 1:49–2:19 | **6.** The ∞ in new waves under three kinds of light (a turning rainbow, colour bands, a two-colour strobe); the bokku gallop, cross and run |
+| 2:19–2:38 | **7.** The ∞ with Odaa and Gadaa (the tree blooms, the face sings with the voice, then they answer each other) |
+| 2:38–3:19 | **8.** The ∞ dancing in warm colours |
+| 3:19–4:06 | **9.** The camera at 27°: the ∞ with Odaa and Gadaa |
+| 4:06–5:04 | **10.** The sun, Gadaa, Odaa and the bokku together |
+| 5:07–5:20 | The last climb: everything |
+
+**Rainbow sketch:**
+- **Aim:** each of the six arcs is aimed sideways along the front and jumps to the next nozzle. The outer pair top out at 9 m, the middle pair at 15 m. The inner pair peak at 22 m over the middle and meet there.
+- **Settings:** tilt from vertical 27.9° / 17.1° / 7.6°; jet heights 11.3 / 16.3 / 22.2 m.
+- **When it plays:** every time the camera is at the front.
+
+**Heights** in proportion with the unchanged 20 m and 50 m blasts:
+- ∞ 9 m, 1D circle 14 m, Vario 12 m, rays 7 m, bokku 8 m.
+- In pattern 3 the Varios run at 1 m with an 80° V.
+
+**Client fixes (same day):**
+- **∞:** the whole ∞ is never up at once. It runs travelling stadium waves, pyramid waves and comets, so only the jets inside a crest are up.
+- **Air:** no single cannons and no one-by-one spins. Every blast fires both 20 m circles together (20 cannons), and the 50 m circle joins on 10 moments, as often as its 25 s refill allows (all 30 together). That gives 30 blast moments and 740 shots, with 0 refill violations.
+- **Rainbows cross, as in the sketch:** the outer and middle arcs top out over the next nozzle in and fall on past it, through that jet. The inner pair land on each other's nozzle and cross into the tall arch.
+
+**Camera, re-planned as a shot list** (cuts on the bars, 37 shots):
+- **Floor light** (the sun, Odaa and Gadaa) is shot from above: a straight-down mandala that descends and tilts, then three-quarter drifts.
+- **∞ waves** are shot high and wide, so the travelling stadium and pyramid shapes read, or tracked along the front and round each lobe.
+- **The 1D circle and the Varios** are shot low and close, at the height of their water (a 3 m glide along the 1 m Varios).
+- **The bokku** are shot from three-quarter angles, left then right, never head-on.
+- **Every all-30 blast** gets a wide three-quarter frame that holds the full 50 m. In pattern 6 the camera looks up from the water into the blast.
+- **The eye-level front axis** is used only while the rainbows draw the sketch, with three front set-ups: wide for the blast, a push-in, and a low rising crane. The last climb pulls back so the final blast shows whole.
+- **Pattern 9** stays at 27°: a wide orbit, then a closer one the other way.

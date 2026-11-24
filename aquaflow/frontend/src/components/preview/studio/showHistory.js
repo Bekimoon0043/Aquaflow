@@ -27,13 +27,14 @@ export function createShowHistory(project, { rate = 20, keepS = 12 } = {}) {
     if (s) return s;
     const frame = evaluateShowFrameAt(project, k / rate);
     evaluations++;
-    s = { level: new Float32Array(n), pan: new Float32Array(n), tilt: new Float32Array(n), roll: new Float32Array(n), color: new Array(n).fill(null) };
+    s = { level: new Float32Array(n), pan: new Float32Array(n), tilt: new Float32Array(n), roll: new Float32Array(n), fan: new Float32Array(n).fill(90), color: new Array(n).fill(null) };
     for (const [id, rec] of Object.entries(frame.fixtures || {})) {
       const i = index.get(id);
       if (i === undefined) continue;
       s.level[i] = clamp01(rec.level);
       if (rec.motion) {
         s.pan[i] = Number(rec.motion.pan) || 0; s.tilt[i] = Number(rec.motion.tilt) || 0; s.roll[i] = Number(rec.motion.roll) || 0;
+        if (Number.isFinite(rec.motion.fan)) s.fan[i] = rec.motion.fan;
       }
       if (rec.color?.hex) s.color[i] = rec.color.hex;
     }
@@ -56,6 +57,7 @@ export function createShowHistory(project, { rate = 20, keepS = 12 } = {}) {
     pan: lerpOf("pan"),
     tilt: lerpOf("tilt"),
     roll: lerpOf("roll"),
+    fan: lerpOf("fan"),
     /** Light colour (hex) at τ, or null. */
     color(id, tau) {
       const i = index.get(id);

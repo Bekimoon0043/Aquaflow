@@ -63,6 +63,8 @@ export default function EasyFountainPanel() {
   // Haze is shared with the full 3D preview (render.laserHaze): beams are only seen where it scatters them.
   const haze = useProjectStore((s) => (Number.isFinite(Number(s.render?.laserHaze)) ? Number(s.render.laserHaze) : 0.35));
   const setHaze = (v) => useProjectStore.getState().updateRender({ laserHaze: v });
+  const poolReflection = useProjectStore((s) => (Number.isFinite(Number(s.render?.poolReflection)) ? Number(s.render.poolReflection) : 1));
+  const setPoolReflection = (v) => useProjectStore.getState().updateRender({ poolReflection: v });
 
   const [selectedId, setSelectedId] = useState(null);
   useEffect(()=>{useFocusPreviewStore.getState().select(selectedId?[selectedId]:[]);},[selectedId]);
@@ -211,8 +213,8 @@ export default function EasyFountainPanel() {
       if (kind === "flame") return { id: f.id, kind, ...flameOf(f, on) };
       return { id: f.id, kind, ...fogOf(f, on) };
     });
-    scene.setData({ items, links, jets: water.jets, effects, pool, safetyBasin, haze, selectedId, selectedLinkId, showLinks, showLabels });
-  }, [fixtures, links, water, pool, safetyBasin, haze, center, selectedId, selectedLinkId, showLinks, showLabels, live]);
+    scene.setData({ items, links, jets: water.jets, effects, pool, safetyBasin, haze, poolReflection, selectedId, selectedLinkId, showLinks, showLabels });
+  }, [fixtures, links, water, pool, safetyBasin, haze, poolReflection, center, selectedId, selectedLinkId, showLinks, showLabels, live]);
 
   // Keyboard: Delete, Ctrl+Z, Ctrl+D, Esc — only while this panel is visible and not typing.
   const rootRef = useRef(null);
@@ -270,6 +272,10 @@ export default function EasyFountainPanel() {
         <label title="Haze in the air: laser beams are only visible where haze scatters them (shared with the full 3D preview)" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
           Haze <input type="range" min="0" max="1" step="0.05" value={haze} onChange={(e) => setHaze(Number(e.target.value))} style={{ width: 80 }} />
           <span style={{ width: 30 }}>{Math.round(haze * 100)}%</span>
+        </label>
+        <label title="Fountain reflection in the pool water. 0% disables the reflection; the pool stays visible." style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
+          Reflection <input aria-label="Pool water reflection" type="range" min="0" max="1" step="0.05" value={poolReflection} onChange={(e) => setPoolReflection(Number(e.target.value))} style={{ width: 80 }} />
+          <span style={{ width: 30 }}>{Math.round(poolReflection * 100)}%</span>
         </label>
         <button style={S.btn} onClick={() => sceneRef.current?.frameAll()}>Frame view</button>
         <button style={S.btn} onClick={undo} title="Ctrl+Z">↶ Undo</button>

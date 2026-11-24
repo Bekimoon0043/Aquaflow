@@ -48,7 +48,7 @@ const allLightIds = fixtures.filter(f => f.type.startsWith('light_')).map(f => f
 const portraitIds = ['faceLight', 'hairLight', 'starLight'].flatMap(ids);
 const straightIds = ['rays', 'pillar-left', 'pillar-right'].flatMap(ids);
 const oneDIds = ['infinity', 'portraitCircle'].flatMap(ids);
-const cx = 35.46, portraitCenter = [35.0481, 14.1233], rainbowAims = [];
+const cx = 35.46, portraitCenter = [35.0481, 14.1233];
 const infinitySegments = { Left: [], Center: [], Right: [] };
 for (const id of ids('infinity')) {
   const f = byId.get(id);
@@ -114,54 +114,63 @@ for (const [side, prefix] of [['left', 'air20-left'], ['right', 'air20-right'], 
 for (const f of fixtures) if (f.type === 'motion_nozzle_1d_tilt_motor') f.engineering.speedDegSec = 88;
 for (const f of fixtures) if (f.groupId === 'outerRing') {
   f.type = 'nozzle_fan_large';
-  f.label = f.label.replace('Vario nozzle', 'Vario fan nozzle');
-  Object.assign(f.engineering, { jetHeightM: 4.8, sprayAngleDeg: 90, fanAngleDeg: 90, outletCount: 11, nozzleStyle: 'fan' });
+  f.label = f.label.replace('Vario fan nozzle', 'VarioJet').replace('Vario nozzle', 'VarioJet');
+  Object.assign(f.engineering, { jetHeightM: 9, sprayAngleDeg: 90, fanAngleDeg: 90, outletCount: 11, nozzleStyle: 'fan' });
 }
 for (const f of fixtures) if (f.groupId === 'diagonalRainbow') {
   const dx = portraitCenter[0] - f.x, dy = portraitCenter[1] - f.y, distance = Math.hypot(dx, dy);
-  f.type = 'motion_nozzle_1d_tilt_motor';
+  f.type = 'nozzle_straight_dn15';
   f.rotation = r3(Math.atan2(dy, dx) * 180 / Math.PI);
-  Object.assign(f.engineering, { motionAxis: 'Tilt', axisCount: 1, angleRangeDeg: 120, speedDegSec: 88,
-    jetHeightM: r3(distance + 8), diagonalAngleDeg: 45, aimTarget: 'Odaa and Elder portrait' });
-  const groupId = `rainbowAim-${f.id}`;
-  addGroup(groupId, `${f.label} · fixed high inward aim`, [f.id], BLUE);
-  rainbowAims.push([groupId, f.id]);
+  for (const key of ['motionAxis', 'axisCount', 'angleRangeDeg', 'speedDegSec']) delete f.engineering[key];
+  Object.assign(f.engineering, { jetHeightM: r3(distance + 8), diagonalAngleDeg: 45, aimTiltDeg: 45, aimTarget: 'Odaa and Elder portrait' });
 }
 
 const recipes = [];
 const addRecipe = (...list) => recipes.push(...list);
 const base = (groupId, name, start, duration, extra = {}) => ({ ...newRecipe(groupId, start), name, start: r3(start), duration: r3(duration), cycles: 1, spread: 1,
   intensity: 100, order: studioGroups.find(g => g.id === groupId)?.orderMode || 'engineering', color: studioGroups.find(g => g.id === groupId)?.color || GREEN, ...extra });
-for (const [groupId, fixtureId] of rainbowAims) addRecipe(base(groupId, `${fixtureId} · 45° high arc toward Odaa`, 0, END,
-  { effect: 'curve', attribute: 'motion_angle', intensity: 100, envelope: [{ time: 0, value: 1 }, { time: 1, value: 1 }] }));
 const hold = (g, name, s, d, level) => base(g, name, s, d, { effect: 'static', intensity: level });
 const wave = (g, name, s, d, field, order = 'engineering') => base(g, name, s, d, { effect: 'field', order, field: { ease: 0.2, ...field } });
-const light = (g, name, s, d, color, level = 30) => wave(g, name, s, d, { kind: 'custom', shape: 'drawn', path: 'together', motion: 'repeat', period: Math.max(0.2, d * 2),
-  points: [{ time: 0, value: 1 }, { time: 1, value: 1 }], low: level, high: level, ease: 0, colorMode: 'sequence', colors: [color] });
+const light = (g, name, s, d, color, level = 30) => base(g, name, s, d, { effect: 'static', intensity: level, color });
 const waterLight = (g, l, name, s, d, field, colors, lightHigh = 22, orderOverride = null) => {
   const order = orderOverride || (g === 'infinity' ? 'engineering' : 'clockwise');
-  addRecipe(wave(g, name, s, d, field, order), wave(l, `${name} · DMX`, s, d, { ...field, low: 3, high: lightHigh, lowFar: 3, highFar: lightHigh,
-    colorMode: 'sequence', colors }, order));
+  const solid = colors.length === 1;
+  addRecipe(wave(g, name, s, d, field, order), { ...wave(l, `${name} · DMX`, s, d, { ...field, low: 3, high: lightHigh, lowFar: 3, highFar: lightHigh,
+    colorMode: solid ? 'solid' : 'sequence', colors }, order), ...(solid ? { color: colors[0] } : {}) });
 };
 const rainbowFlow = (name, s, d, colors = [PINK, GREEN], lightHigh = 26) => waterLight('diagonalRainbow', 'diagonalRainbowLight', name, s, d,
   { kind: 'custom', shape: 'pulse', path: 'around', motion: 'there-and-back', period: d, crests: 1, direction: 1, offset: d / 2, low: 6, high: 90, ease: 0.1 },
   colors, Math.max(lightHigh, 36), 'center-out');
-const varioBloom = (name, s, d, colors = [GOLD, '#0019ff'], lightHigh = 24, period = 6.4) => {
-  const points = [{ time: 0, value: 0.12 }, { time: 0.16, value: 1 }, { time: 0.32, value: 1 }, { time: 0.58, value: 0.18 }, { time: 0.76, value: 0.28 }, { time: 1, value: 0.12 }];
-  addRecipe(
-    base('outerRing', name, s, d, { effect: 'curve', attribute: 'level', cycles: Math.max(1, Math.round(d / period)), spread: 0.65, intensity: 100, sampleRate: 10, envelope: points }),
-    wave('outerRingLight', `${name} · DMX`, s, d, { kind: 'custom', shape: 'drawn', path: 'around', motion: 'repeat', period, crests: 1, points,
-      low: 3, high: lightHigh, lowFar: 3, highFar: lightHigh, ease: 0.35, colorMode: 'sequence', colors }, 'clockwise')
-  );
+let varioWidthAdded = false;
+const varioBloom = (name, s, d, _colors = [GOLD, '#0019ff'], lightHigh = 24) => {
+  if (!varioWidthAdded) {
+    for (const [start, cycles] of [[0, 32], [140.8, 32], [281.6, 10]]) addRecipe(base('outerRing', 'VarioJet · wide to thick to wide fan angle', start, cycles * 4.4,
+      { effect: 'curve', attribute: 'fan_angle', cycles, spread: 0, intensity: 90, sampleRate: 20,
+        envelope: [{ time: 0, value: 0.9 }, { time: 0.18, value: 1 }, { time: 0.34, value: 0.2 }, { time: 0.48, value: 0.12 },
+          { time: 0.62, value: 0.85 }, { time: 0.78, value: 1 }, { time: 0.9, value: 0.3 }, { time: 1, value: 0.55 }] }));
+    varioWidthAdded = true;
+  }
+  const period = 4.4, cycles = Math.max(1, Math.floor(d / period)), duration = cycles * period;
+  const height = [{ time: 0, value: 0.82 }, { time: 0.16, value: 1 }, { time: 0.3, value: 0.82 }, { time: 0.46, value: 0.92 },
+    { time: 0.62, value: 0.36 }, { time: 0.78, value: 0.58 }, { time: 0.9, value: 0.22 }, { time: 1, value: 0.42 }];
+  const timeline = [{ time: 0, color: '#0066ff' }, { time: 0.22, color: '#00cfff' }, { time: 0.43, color: '#20ff45' },
+    { time: 0.64, color: '#fff000' }, { time: 0.82, color: '#ff9900' }, { time: 1, color: '#ff2020' }];
+  addRecipe(base('outerRing', name, s, duration, { effect: 'curve', attribute: 'level', cycles, spread: 0, intensity: 100, sampleRate: 20, envelope: height }));
+  addRecipe(base('outerRingLight', `${name} · DMX intensity`, s, duration, { effect: 'curve', attribute: 'lighting_master', cycles, spread: 0,
+    intensity: lightHigh, sampleRate: 20, envelope: [{ time: 0, value: 1 }, { time: 1, value: 1 }] }));
+  for (const [attribute, channel] of [['lighting_red', 1], ['lighting_green', 3], ['lighting_blue', 5]]) {
+    addRecipe(base('outerRingLight', `${name} · ${attribute}`, s, duration, { effect: 'curve', attribute, cycles, spread: 0, intensity: 100, sampleRate: 20,
+      envelope: timeline.map(({ time, color }) => ({ time, value: parseInt(color.slice(channel, channel + 2), 16) / 255 })) }));
+  }
 };
-const ramp = (g, name, s, d, from, to, color = null) => base(g, name, s, d, { effect: 'field', field: { kind: 'custom', shape: 'drawn', path: 'together', motion: 'repeat',
+const ramp = (g, name, s, d, from, to, color = null) => base(g, name, s, d, { effect: 'field', ...(color ? { color } : {}), field: { kind: 'custom', shape: 'drawn', path: 'together', motion: 'repeat',
   period: d * 2, spread: 0, points: [{ time: 0, value: 0 }, { time: 0.5, value: 1 }, { time: 1, value: 1 }], low: from, high: to, ease: 0,
-  ...(color ? { colorMode: 'sequence', colors: [color] } : {}) } });
-const motion = (g, l, name, s, d, { amplitude = 40, centre = 0, period = 4, path = 'around', opposite = false, crests = 1, low = 45, high = 82, colors = [WHITE], lightHigh = 20, offset = 0, direction = 1, order = 'engineering' }) => {
+  ...(color ? { colorMode: 'solid', colors: [color] } : {}) } });
+const motion = (g, l, name, s, d, { amplitude = 40, centre = 0, period = 4, path = 'around', shape = 'sine', opposite = false, bothWays = false, crests = 1, low = 45, high = 82, colors = [WHITE], lightHigh = 20, offset = 0, direction = 1, order = 'engineering' }) => {
   const made = motionPatternRecipes({ start: s, duration: d, name, groupId: g, lightGroupId: l, order,
-    field: { kind: 'custom', shape: 'sine', path, motion: 'repeat', period, crests, opposite, offset, direction, low, high, ease: 0.2 },
+    field: { kind: 'custom', shape, path, motion: 'repeat', period, crests, opposite, bothWays, offset, direction, low, high, ease: 0.2 },
     motion: { axes: 1, path: 'sweep', amplitudeDeg: amplitude, centreDeg: centre, limitSpeed: true },
-    light: { color: colors[0], low: 3, high: lightHigh, colorMode: 'sequence', colors } });
+    light: { color: colors[0], low: 3, high: lightHigh, colorMode: colors.length === 1 ? 'solid' : 'sequence', colors } });
   addRecipe(...made.recipes);
 };
 const shot = (g, t, name) => {
@@ -175,7 +184,6 @@ const cascade20 = (t, name) => {
     shot(`air20-right-${id}`, t + (i - 1) * 0.18, `${name} · right ${i}`);
   }
 };
-const volley50 = (t, name) => { for (let i = 1; i <= 10; i++) shot(`air50-center-${String(i).padStart(2, '0')}`, t, `${name} · ${i}`); };
 const pop20 = (start, name) => {
   for (let i = 0; i < 20; i++) {
     const side = i % 2 === 0 ? 'left' : 'right', number = String(Math.floor(i / 2) + 1).padStart(2, '0');
@@ -198,18 +206,18 @@ const portraitLight = (name, s, d, colors, high = 34) => {
   const [emerald, ivory, amber] = colors;
   const level = Math.min(high, 4);
   for (const [role, color] of [['hairLight', emerald], ['faceLight', ivory], ['starLight', amber || ivory]]) {
-    addRecipe(wave(role, name, s, d, { kind: 'custom', shape: 'sine', path: 'around', motion: 'repeat', period: 5, crests: 1,
-      low: 0.5, high: level, lowFar: 0.5, highFar: level, ease: 0.2, colorMode: 'sequence', colors: [color] }, 'clockwise'));
+    addRecipe({ ...wave(role, name, s, d, { kind: 'custom', shape: 'sine', path: 'around', motion: 'repeat', period: 5, crests: 1,
+      low: 0.5, high: level, lowFar: 0.5, highFar: level, ease: 0.2, colorMode: 'solid', colors: [color] }, 'clockwise'), color });
   }
 };
 
 // 01 · Intro & Drum Ignition — darkness until the first measured dibbe hit.
-razor(7.59, '01 · Razor Blade comet chase');
+motion('infinity', 'infinityLight', '01 · Infinity opening dual tidal wave and crossing 1D swing', 7.59, 14.41,
+  { amplitude: 48, centre: 0, period: 3.2, path: 'around', crests: 2, bothWays: true, low: 0, high: 88,
+    colors: [WHITE, GOLD, BLUE], lightHigh: 28 });
 waterLight('diagonalRainbow', 'diagonalRainbowLight', '01 · Six-rainbow left-right-left sweep', 7.59, 5.6,
   { kind: 'custom', shape: 'drawn', path: 'around', motion: 'there-and-back', period: 5.6, crests: 1,
     points: [{ time: 0, value: 0 }, { time: 0.2, value: 1 }, { time: 0.5, value: 1 }, { time: 0.8, value: 0.4 }, { time: 1, value: 0 }], low: 0, high: 78, ease: 0 }, [PINK, GREEN], 26);
-motion('infinity', 'infinityLight', '01 · Infinity inward embrace and return', 13.6, 8.4,
-  { amplitude: 46, centre: 0, period: 4.2, path: 'together', low: 34, high: 82, colors: [WHITE, GOLD], lightHigh: 24 });
 rainbowFlow('01 · Rainbow sides converge and return', 13.6, 8.4, [GOLD, WHITE]);
 varioBloom('01 · White Vario fan crown', 13.6, 8.4, [WHITE], 22, 4.2);
 
@@ -260,8 +268,8 @@ for (const [i, t] of [90, 96, 102].entries()) {
 motion('infinity', 'infinityLight', '05 · Infinity opens inward on every answer', 90, 18,
   { amplitude: 48, centre: 0, period: 6, path: 'together', low: 42, high: 86, colors: [GREEN, RED], lightHigh: 26 });
 varioBloom('05 · Vario wide-open answer and soft close', 90, 18, [RED, GREEN], 24, 6);
-addRecipe(wave('portraitDMX', '05 · White portrait on each lead call', 90, 18,
-  { kind: 'custom', shape: 'pulse', path: 'together', motion: 'repeat', period: 6, crests: 1, low: 0.5, high: 4, ease: 0.2, colorMode: 'sequence', colors: [WHITE] }));
+addRecipe({ ...wave('portraitDMX', '05 · White portrait on each lead call', 90, 18,
+  { kind: 'custom', shape: 'pulse', path: 'together', motion: 'repeat', period: 6, crests: 1, low: 0.5, high: 4, ease: 0.2, colorMode: 'solid', colors: [WHITE] }), color: WHITE });
 
 // 06 · Chorus 1 Climax — central 50 m crown and opposing infinity waves.
 crown50(109, '06 · Fifty-meter cathedral crown');
@@ -318,7 +326,8 @@ waterLight('allStraight', 'allStraightLight', '10 · Geerarsa towering red/gold 
   { kind: 'custom', shape: 'sine', path: 'around', motion: 'repeat', period: 5, crests: 2, low: 52, high: 86, ease: 0.4 }, [RED, GOLD], 28);
 rainbowFlow('10 · Rainbow heroic center-flow A', 199, 12, [RED, GOLD]);
 rainbowFlow('10 · Rainbow heroic center-flow B', 227, 10, [RED, GOLD]);
-volley50(246, '10 · Bulloo drop · all ten 50 m');
+shot('air50', 246, '10 · Bulloo drop · all ten 50 m simultaneous');
+shot('air20', 246, '10 · Bulloo drop · all twenty 20 m simultaneous');
 addRecipe(light('outerRingLight', '10 · Shadow magenta', 246, 4, '#ff005a', 26));
 
 // 11 · Obsa bridge — quiet portrait, then an inward cathedral canopy.
@@ -331,10 +340,11 @@ rainbowFlow('11 · Rainbow quiet center-flow canopy', 281, 6, ['#0019ff'], 18);
 // 12 · Grand Finale — air volleys, full 1D starbursts, staccato and hard freeze.
 crown50(288, '12 · Grand finale · staggered 50 m crown');
 shot('air20Left', 288, '12 · Left 20 m opening volley');
+shot('air20Right', 288, '12 · Right 20 m simultaneous opening volley');
 shot('air20Right', 294, '12 · Right 20 m answering volley');
 shot('air20Left', 300, '12 · Left 20 m final chase');
 shot('air20Right', 306, '12 · Right 20 m final chase');
-shot('air20', 312, '12 · Final all twenty 20 m cannons');
+shot('compressors', 321, '12 · Final all thirty simultaneous cannons');
 motion('infinity', 'infinityLight', '12 · Full-power infinity starburst', 288, 18,
   { amplitude: 50, period: 2.6, opposite: true, crests: 2, low: 62, high: 92, colors: [GOLD, '#0019ff'], lightHigh: 26 });
 motion('portraitCircle', 'portraitCircleLight', '12 · Full-power inner-ring starburst', 288, 18,
@@ -351,6 +361,32 @@ addRecipe(hold('allNozzles', '12 · Simultaneous vertical burst', 321, 0.25, 100
 addRecipe(light('waterDMX', '12 · Warm-gold hanging mist', 321.12, 5, '#ffa01e', 30),
   ramp('portraitDMX', '12 · Slow portrait fade after hard freeze', 321.4, END - 321.4, 4, 0, GREEN));
 
+// Extra circular-1D dances keep the inner ring visible throughout the musical story.
+for (const [name, start, duration, options] of [
+  ['02 · Circle 1D tidal pendulum welcome', 23, 20, { amplitude: 42, period: 2.8, direction: 1, low: 22, high: 76, colors: [GOLD, BLUE] }],
+  ['03 · Circle 1D soft breathing cradle', 46, 20, { amplitude: 16, centre: -18, period: 5, path: 'together', low: 8, high: 26, colors: [GREEN, WHITE] }],
+  ['04 · Circle 1D opening fan wave', 67, 10, { amplitude: 36, period: 2.6, shape: 'rise-fall', direction: -1, low: 24, high: 74, colors: [WHITE, GOLD] }],
+  ['06 · Circle 1D double-orbit crossing wave', 109, 17, { amplitude: 46, period: 2.4, bothWays: true, crests: 2, low: 38, high: 86, colors: [GOLD, PINK] }],
+  ['07 · Circle 1D snare pendulum chase', 127, 11, { amplitude: 44, period: 1.8, shape: 'triangle', direction: 1, low: 30, high: 84, colors: [BLUE, WHITE] }],
+  ['09 · Circle 1D gallop alternating cradle', 158, 40, { amplitude: 42, period: 2.2, opposite: true, crests: 2, low: 24, high: 80, colors: [GREEN, GOLD] }],
+  ['10 · Circle 1D heroic crown wave', 199, 24, { amplitude: 45, period: 3.2, bothWays: true, low: 32, high: 82, colors: [RED, GOLD] }],
+  ['10 · Circle 1D returning crown wave', 227, 24, { amplitude: 45, period: 3.2, direction: -1, opposite: true, low: 32, high: 82, colors: [GOLD, WHITE] }],
+  ['11 · Circle 1D portrait halo breathing sway', 259, 22, { amplitude: 20, centre: -18, period: 5.5, path: 'together', low: 8, high: 30, colors: [GREEN, WHITE] }],
+  ['12 · Circle 1D finale cross-wave pendulum', 306, 14, { amplitude: 48, period: 2, bothWays: true, crests: 2, low: 40, high: 90, colors: [WHITE, GOLD, PINK] }],
+]) motion('portraitCircle', 'portraitCircleLight', name, start, duration, { order: 'clockwise', lightHigh: 24, ...options });
+
+// New Infinity phrases use different travelling, opposing and returning wave geometries.
+for (const [name, start, duration, options] of [
+  ['04 · Infinity rising double helix wave', 67, 10, { amplitude: 42, period: 3.4, bothWays: true, crests: 2, low: 18, high: 76, colors: [WHITE, GOLD] }],
+  ['04 · Infinity triangular counter-wave', 77, 5, { amplitude: 40, period: 2.5, shape: 'triangle', direction: -1, opposite: true, low: 24, high: 78, colors: [GOLD, BLUE] }],
+  ['07 · Infinity guitar twin-braid wave', 127, 4.4, { amplitude: 48, period: 2.2, bothWays: true, crests: 2, low: 32, high: 88, colors: [BLUE, WHITE] }],
+  ['09 · Infinity gallop release wave', 174, 5.6, { amplitude: 44, period: 2.8, shape: 'rise-fall', bothWays: true, low: 22, high: 82, colors: [GREEN, GOLD] }],
+  ['09 · Infinity returning comet wave', 195.6, 3.4, { amplitude: 46, period: 1.7, shape: 'triangle', direction: -1, crests: 2, low: 26, high: 86, colors: [WHITE, BLUE] }],
+  ['10 · Infinity heroic tidal braid', 199, 24, { amplitude: 50, period: 4.8, bothWays: true, crests: 2, low: 26, high: 84, colors: [RED, GOLD] }],
+  ['10 · Infinity reverse tidal weave', 227, 24, { amplitude: 50, period: 4.2, direction: -1, opposite: true, crests: 2, low: 28, high: 86, colors: [GOLD, WHITE] }],
+  ['11 · Infinity cathedral halo wave', 259, 22, { amplitude: 30, centre: -16, period: 5.5, bothWays: true, low: 12, high: 46, colors: [GREEN, WHITE] }],
+]) motion('infinity', 'infinityLight', name, start, duration, { lightHigh: 26, ...options });
+
 const studio = { ...source.programmer.studio, groups: studioGroups, recipes, tempo: [{ time: 0, bpm: BPM }],
   markers: [[0, 'Intro & Drum Ignition'], [23, 'First Dance Drop & Horn Stabs'], [46, 'Verse 1'], [67, 'Pre-Chorus'], [90, 'Call and Response'], [109, 'Chorus 1 Climax'],
     [127, 'Instrumental Interlude'], [139, 'Verse 2'], [158, 'Horse Gallop'], [199, 'Verse 3 & Geerarsa'], [259, 'Obsa Bridge'], [288, 'Grand Finale'], [321, 'Hard Freeze']]
@@ -361,8 +397,8 @@ if (issues.length) throw new Error(`${issues.length} show compile issues: ${issu
 if (fixtures.length !== 1846 || allLightIds.length !== 1140 || allNozzleIds.length !== 706 || oneDIds.length !== 262) throw new Error('Unexpected DWG fixture counts');
 const lastByFixture = new Map();
 for (const clip of clips.filter(c => /^air-(20m|50m)-/.test(c.fixtureId) && /^(device_intensity|pump_speed|motion_intensity)$/.test(c.type))) {
-  const cycle = clip.fixtureId.startsWith('air-20m') ? 6 : 25, previous = lastByFixture.get(clip.fixtureId);
-  if (previous !== undefined && clip.startTime - previous < cycle - 0.001) throw new Error(`Air-blast refill violation at ${clip.fixtureId} ${clip.startTime}`);
+  const cycle = clip.fixtureId.startsWith('air-20m') ? 6 : 25, previous = lastByFixture.get(clip.fixtureId), gap = previous === undefined ? Infinity : clip.startTime - previous;
+  if (gap > 0.001 && gap < cycle - 0.001) throw new Error(`Air-blast refill violation at ${clip.fixtureId} ${clip.startTime} after ${previous}`);
   lastByFixture.set(clip.fixtureId, clip.startTime);
 }
 let maxMotionSpeed = 0;
@@ -382,12 +418,12 @@ source.timelineTracks = items.flatMap(item => (item.tracks || []).map(track => (
 const audioBytes = fs.readFileSync(audioPath), audioStat = fs.statSync(audioPath), sha256 = crypto.createHash('sha256').update(audioBytes).digest('hex');
 const audioName = 'Yosan_Getahun_3Obsa.m4a', packaged = `assets/audio_programmer--${audioName}`;
 source.programmer = { ...source.programmer, studio, timelineClips: clips, cues: [], audioDuration: END,
-  audioFile: null, audioFileReference: { name: audioName, path: path.resolve(audioPath), size: audioStat.size, type: 'audio/mp4', lastModified: audioStat.mtimeMs },
+  audioFile: null, audioFileReference: { name: audioName, path: null, size: audioStat.size, type: 'audio/mp4', lastModified: audioStat.mtimeMs },
   musicCache: { analysis }, stems: null, patternDefinitions: [{ id: 'odaa-3obsa-328s', name, duration: END }] };
 source.show = { ...source.show, id: 'aquaflow-odaa-3obsa-show', name, bpm: BPM, duration: END, loop: false };
 source.project = { ...source.project, id: 'aquaflow-odaa-3obsa-musical', name, revision: 1, createdAt: now, modifiedAt: now };
 source.assetManifest = { format: 'aquaflow-asset-manifest', version: 1, generatedAt: now, projectPath: out, assets: [{ id: 'audio:programmer', role: 'audio', source: 'file',
-  name: audioName, type: 'audio/mp4', path: path.resolve(audioPath), size: audioStat.size, locator: { field: 'programmer.audioFileReference' }, packaged, sha256 }] };
+  name: audioName, type: 'audio/mp4', path: null, relativePath: null, size: audioStat.size, locator: { field: 'programmer.audioFileReference' }, packaged, sha256 }] };
 const camera = (t, position, target, fov = 42, ease = 'smooth') => ({ id: `camera-${t}`, t, position: { x: position[0], y: position[1], z: position[2] }, target: { x: target[0], y: target[1], z: target[2] }, fov, roll: 0, ease });
 const cameraKeys = [
   camera(0, [34, 32, -46], [0, 4, 0], 46), camera(7.55, [16, 20, -42], [0, 7, 0], 50, 'cut'),
@@ -410,14 +446,14 @@ const cameraKeys = [
   camera(321, [0, 10, -54], [0, 10, 0], 56), camera(END, [0, 14, -50], [0, 8, 0], 54)
 ];
 source.render = { ...source.render, environment: 'night', cameraMode: 'animated', activeCameraView: null, realWorld: true, windX: 0, windZ: 0,
-  cameraTrack: { enabled: true, keys: cameraKeys },
+  includeMusic: true, cameraTrack: { enabled: true, keys: cameraKeys },
   cameraViews: [{ id: 'front', name: 'Audience · Bellagio low front', position: { x: 0, y: 6, z: -50 }, target: { x: 0, y: 20, z: 0 }, fov: 60 },
     { id: 'side', name: 'Side tracking · left', position: { x: -34, y: 5, z: -18 }, target: { x: 0, y: 10, z: 0 }, fov: 54 },
     { id: 'drone', name: 'Drone · south-east', position: { x: 34, y: 32, z: -46 }, target: { x: 0, y: 4, z: 0 }, fov: 46 },
     { id: 'top', name: 'Top · portrait and DWG plan', position: { x: 0, y: 62, z: -0.01 }, target: { x: 0, y: 0, z: 0 }, fov: 46 }] };
 source.workspace = { activePanel: 'preview' };
 source.savedAt = now;
-const notes = `${name}\n\nCINEMATIC MUSIC-PROGRAMMED 5:28 SHOW\nTrack: Yosan Getahun - 3Obsa. Audio duration ${END} s; measured grid ${BPM} BPM. Source: https://youtu.be/8zlm6JVbi2U. Ten master groups plus left/center/right infinity, six Diagonal Rainbow manifolds, two ten-cannon 20 m rings and one ten-cannon 50 m decagon are editable in the timeline. Portrait/nozzle-wash DMX remain separate. Infinity and circular 1D nozzles perform inward/outward, right-to-left, left-to-right, front-back, scissor and vortex dances. Six rainbows fire high 45-degree arcs toward the Odaa portrait, with activation flowing from both sides to the center and back. Vario fixtures are true fan jets with 4.8 m wide fan crowns and partial-close blooms. Reference videos qXsjNI.mp4 and BgQpGF.mp4 guide the white fan, green/yellow arch, blue combination and magenta/gold lighting looks. Blast pulses last 2.4 s at 20 m and 3.8 s at 50 m. Bellagio-inspired camera work combines low audience shots, side tracking, orbital moves, drone views and musical cuts.\n\nThe 12 sections follow the supplied timecode plan: first pulse 00:07.59, horn/drop 00:23, portrait verse 00:46, Vario build 01:07, call/response 01:30, central 50 m crown 01:49, guitar weave 02:07, Verse 2 02:19, gallop 02:38, Geerarsa 03:19, Bulloo 04:06, Obsa canopy 04:41, finale 04:48 and hard freeze 05:21 followed by portrait fade.\n\nAir-blast scheduling enforces >=6 s between shots on each 20 m nozzle and >=25 s on each 50 m nozzle. Maximum compiled 1D speed is ${r3(maxMotionSpeed)} degrees/second. This 1,846-fixture show includes 1,140 DMX lights and 706 nozzles, including 30 air blasts. This is a simulated musical concept, not commissioned hardware. Audio is embedded in the package; no external asset is needed for playback.\n`;
+const notes = `${name}\n\nCINEMATIC MUSIC-PROGRAMMED 5:28 SHOW\nTrack: Yosan Getahun - 3Obsa. Audio duration ${END} s; measured grid ${BPM} BPM. Source: https://youtu.be/8zlm6JVbi2U. Ten master groups plus left/center/right infinity, six Diagonal Rainbow manifolds, two ten-cannon 20 m rings and one ten-cannon 50 m decagon are editable in the timeline. Portrait/nozzle-wash DMX remain separate. Infinity and circular 1D nozzles perform inward/outward, right-to-left, left-to-right, front-back, scissor and vortex dances. Six rainbows fire high 45-degree arcs toward the Odaa portrait, with activation flowing from both sides to the center and back. Vario fixtures produce spindle-shaped fan jets with independent wide-to-thick-to-wide fan-angle modulation, smooth height breathing and blue, cyan, green, yellow, orange and red RGB transitions over 4.4 seconds, matching wNNrBx.mp4. Reference videos qXsjNI.mp4 and BgQpGF.mp4 guide the other water and lighting looks. Blast pulses last 2.4 s at 20 m and 3.8 s at 50 m. Bulloo at 04:06, the finale opening at 04:48 and the final volley at 05:21 fire all 30 cannons together. Bellagio-inspired camera work combines low audience shots, side tracking, orbital moves, drone views and musical cuts.\n\nThe 12 sections follow the supplied timecode plan: first pulse 00:07.59, horn/drop 00:23, portrait verse 00:46, Vario build 01:07, call/response 01:30, central 50 m crown 01:49, guitar weave 02:07, Verse 2 02:19, gallop 02:38, Geerarsa 03:19, Bulloo 04:06, Obsa canopy 04:41, finale 04:48 and hard freeze 05:21 followed by portrait fade.\n\nAir-blast scheduling enforces >=6 s between shots on each 20 m nozzle and >=25 s on each 50 m nozzle. Maximum compiled 1D speed is ${r3(maxMotionSpeed)} degrees/second. This 1,846-fixture show includes 1,140 DMX lights and 706 nozzles, including 30 air blasts. This is a simulated musical concept, not commissioned hardware. Audio is embedded in the package; no external asset is needed for playback.\n`;
 fs.writeFileSync(out, createZip([{ name: 'project.aqua', data: JSON.stringify(source) }, { name: 'manifest.json', data: JSON.stringify(source.assetManifest, null, 2) },
   { name: 'design-notes.txt', data: notes }, { name: 'music-analysis.json', data: JSON.stringify(analysis) }, { name: packaged, data: audioBytes }]));
 console.log(JSON.stringify({ out, fixtures: fixtures.length, dmx: allLightIds.length, nozzles: allNozzleIds.length, groups: studioGroups.length,
