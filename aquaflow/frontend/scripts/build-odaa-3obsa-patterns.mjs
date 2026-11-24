@@ -391,8 +391,8 @@ sec(  pathWave("inf", "Last climb · three stadium waves race round the ∞", LA
 // on the big moments the 50 m circle joins, so all 30 fire as one. Two bars apart at least
 // (20 m refill 6 s); the 50 m circle only where it has refilled (25 s).
 const allBlast = (t, withCentre = false) => [...volley("L", t), ...volley("R", t), ...(withCentre ? volley("C", t) : [])];
-const BIG = [P2, P6, P9, P10, CANOPY, 313.9];
-const BLAST_AT = [P2, 29.4, 35.8, 42.2, P5, 96.4, 102.8, P6, 115.4, 121.8,
+const BIG = [P2, 48.6, 74.2, P6, 134.6, 160.2, P9, P10, CANOPY, 313.9];   // the 50 m circle joins (all 30), >= 25 s apart
+const BLAST_AT = [P2, 29.4, 35.8, 42.2, 48.6, 74.2, P5, 96.4, 102.8, P6, 115.4, 121.8, 134.6, 160.2,
   P9, 205.4, 211.8, 218.2, 224.6, 231.0, 237.4, P10, 262.0, 268.4, 274.8, CANOPY, 288.6, 295.0, 301.4, LAST, 313.9, 320.0];
 for (const t of BLAST_AT) {
   const shots = allBlast(t, BIG.includes(t)).filter(Boolean), want = BIG.includes(t) ? 30 : 20;

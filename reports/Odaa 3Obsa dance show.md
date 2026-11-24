@@ -208,5 +208,5 @@ The client's feedback: learn the Vario from `Downloads/wNNrBx.mp4`. Make the rai
 
 **Client fixes (same day):**
 - **∞:** the whole ∞ is never up at once. It runs travelling stadium waves, pyramid waves and comets, so only the jets inside a crest are up.
-- **Air:** no single cannons and no one-by-one spins. Every blast fires both 20 m circles together (20 cannons), and on the six big moments the 50 m circle joins (all 30). That gives 28 blast moments and 620 shots, with 0 refill violations.
+- **Air:** no single cannons and no one-by-one spins. Every blast fires both 20 m circles together (20 cannons), and the 50 m circle joins on 10 moments, as often as its 25 s refill allows (all 30 together). That gives 30 blast moments and 740 shots, with 0 refill violations.
 - **Rainbows cross, as in the sketch:** the outer and middle arcs top out over the next nozzle in and fall on past it, through that jet. The inner pair land on each other's nozzle and cross into the tall arch.
