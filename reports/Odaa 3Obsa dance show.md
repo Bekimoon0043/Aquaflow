@@ -178,3 +178,30 @@ The client's feedback: learn the Vario from `Downloads/wNNrBx.mp4`. Make the rai
 
 - This is a simulated concept, not commissioned hardware. Air plant capacity, splash containment and drive speeds must be confirmed with the suppliers.
 - The tempo, hits and sung phrases are measured from the audio. They are not transcribed from the score or the lyrics.
+
+## Fourth pass: the client's ten-pattern show (`Desktop/Odaa_3Obsa_10_Patterns.aquapkg`)
+
+**Builder:** `aquaflow/frontend/scripts/build-odaa-3obsa-patterns.mjs`. It uses the same site (with 30 cannons) and the same song, and is a new file. The third-pass show is kept.
+
+| Time | Pattern |
+|---|---|
+| 0:00–0:23 | **1.** Light only: the sun (ray lamps), Odaa (the tree) and Gadaa (the face) |
+| 0:23–0:44 | **2.** The rainbow sketch, shot from the front; all 30 cannons fire on the horn drop |
+| 0:46–1:07 | **3.** The 1D circle crosses (odd and even swing through each other); the Varios are 1 m, wide and thick; the bokku run in waves |
+| 1:07–1:30 | **4.** The ∞ alone, in warm colours |
+| 1:30–1:49 | **5.** The ∞ swinging waves, with the 1D circle twisting in a spiral |
+| 1:49–2:19 | **6.** The ∞ in new waves under three kinds of light (a turning rainbow, colour bands, a two-colour strobe); the bokku gallop, cross and run |
+| 2:19–2:38 | **7.** The ∞ with Odaa and Gadaa (the tree blooms, the face sings with the voice, then they answer each other) |
+| 2:38–3:19 | **8.** The ∞ dancing in warm colours |
+| 3:19–4:06 | **9.** The camera at 27°: the ∞ with Odaa and Gadaa |
+| 4:06–5:04 | **10.** The sun, Gadaa, Odaa and the bokku together |
+| 5:07–5:20 | The last climb: everything |
+
+**Rainbow sketch:**
+- **Aim:** each of the six arcs is aimed sideways along the front and jumps to the next nozzle. The outer pair top out at 9 m, the middle pair at 15 m. The inner pair peak at 22 m over the middle and meet there.
+- **Settings:** tilt from vertical 27.9° / 17.1° / 7.6°; jet heights 11.3 / 16.3 / 22.2 m.
+- **When it plays:** every time the camera is at the front.
+
+**Heights** in proportion with the unchanged 20 m and 50 m blasts:
+- ∞ 9 m, 1D circle 14 m, Vario 12 m, rays 7 m, bokku 8 m.
+- In pattern 3 the Varios run at 1 m with an 80° V.

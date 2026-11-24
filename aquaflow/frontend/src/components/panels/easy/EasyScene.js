@@ -339,12 +339,15 @@ export function outletsOf(jet, t, rot, src = null) {
     // Vario jet: a core column plus two rings of outlets whose cone opens with the fan_angle channel
     // (degrees of full opening; 0 = a thin column) — column → flame → wide V → column.
     const open = src?.fan ? Math.max(0, Math.min(100, src.fan(jet.id, t))) : 0;
-    const half = (open * 0.2 * Math.PI) / 180;            // 100 → a 40° V
+    // engineering.varioSpanDeg: the full V at 100 (default 40°); a wide cone also gets a thick third ring.
+    const span = jet.varioSpanDeg > 0 ? jet.varioSpanDeg : 40;
+    const half = ((open / 100) * (span / 2) * Math.PI) / 180;
     out.push({ th: 0, ph: 0, spread: 0.012 + half * 0.08 });
     if (half > 0.02) {
       for (let i = 0; i < 14; i += 1) out.push({ th: half, ph: (i * Math.PI * 2) / 14, spread: 0.02 + half * 0.1 });
       for (let i = 0; i < 8; i += 1) out.push({ th: half * 0.5, ph: (i * Math.PI * 2) / 8 + 0.2, spread: 0.02 });
     }
+    if (half > 0.4) for (let i = 0; i < 12; i += 1) out.push({ th: half * 0.75, ph: (i * Math.PI * 2) / 12 + 0.1, spread: 0.05 + half * 0.08 });
   } else if (jet.bell) {
     // Mushroom / bell head: a ring of short jets thrown outward and falling into a dome.
     for (let i = 0; i < 20; i += 1) out.push({ th: 0.85, ph: (i * Math.PI * 2) / 20, spread: 0.02 });

@@ -69,7 +69,7 @@ export function showJets(fixtures) {
     const motion = motionOf(f);
     return { id: f.id, kind: nozzleKind(f).id, nominalHeightM: H, swing: !!motion || moving,
       axes: motion?.axes || 0, splayDeg: motion?.splayDeg || 0, aimTiltDeg: Number(e.aimTiltDeg) || Number(e.aimDeg) || 0,
-      vario: /vario_jet/i.test(String(f.type || "")),
+      vario: /vario_jet/i.test(String(f.type || "")), varioSpanDeg: Number(e.varioSpanDeg) > 0 ? Number(e.varioSpanDeg) : 40,
       bell: /mushroom|bell|umbrella/i.test(String(e.nozzleStyle || "")),
       outlets: Math.max(1, Math.round(Number(e.outletCount) || 1)), lightId: pairedTo.get(f.id) || nearestLight(f) };
   });

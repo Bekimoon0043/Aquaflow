@@ -1,5 +1,30 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-24: AquaFlow Studio 1.2.94 - Odaa · 3Obsa ten-pattern show (client running order) + rainbow sketch from the front**
+
+- **New show** `Desktop/Odaa_3Obsa_10_Patterns.aquapkg`, built by `aquaflow/frontend/scripts/build-odaa-3obsa-patterns.mjs` on the same site and song. It follows the client's ten patterns in order:
+  1. light only: the sun, Odaa and Gadaa;
+  2. the rainbow sketch;
+  3. the 1D circle crossing, with the Varios at 1 m, wide and thick, and the bokku waves;
+  4. the ∞ in warm colours;
+  5. the ∞ swinging waves with the 1D circle;
+  6. the ∞ in a new wave under three kinds of lighting (turning rainbow, colour bands, a two-colour strobe), with the bokku moving;
+  7. the ∞ with Odaa and Gadaa;
+  8. the ∞ dancing in warm colours;
+  9. a camera at 27° on the ∞ with Odaa and Gadaa;
+  10. the sun, Gadaa, Odaa and the bokku together.
+
+  It ends with a last climb that uses everything.
+- **Rainbow sketch:** the six diagonal nozzles are aimed sideways, and each arc is solved with the preview's drag model to land on the next nozzle, with tops at 9 / 15 / 22 m. The inner pair peak over the middle, so seen from the front they draw the client's drawing: low shoulders, high shoulders and a tall arch. It plays whenever the camera is at the front (23–44 s, 268–281 s, 307.5–320 s).
+- **Proportion with the blasts:** the blasts are unchanged. The water is raised: ∞ 9 m, circle 14 m, Vario 12 m, rays 7 m, bokku 8 m.
+- **Renderer:** `engineering.varioSpanDeg` sets a Vario's full V (default 40°, so earlier shows are unchanged). This show uses 80°, and wide cones get a thick third ring of spray.
+- **Checks:**
+  - 329 blasts with 0 refill violations; fastest swing 85°/s.
+  - 2,547 patterns, 32,449 clips, 55.2 MB.
+  - Headless frames checked for every pattern.
+  - 1,330 tests pass in the panels, preview, programmer, utils and show suites.
+- **Installer:** another session's concurrent `npm run dist` collided with mine; its build picked up 1.2.94.
+
 **2026-11-24: AquaFlow Studio 1.2.93 - Odaa · 3Obsa third pass: real Vario jets, low rainbow arcs into the centre, mixed lamp colours, 30 air cannons**
 
 - **User feedback:** Varios as in `Downloads/wNNrBx.mp4`; diagonal rainbows flowing diagonally into the centre (not up into the sky); different colours per DMX lamp; more rainbow and 1D-circle patterns from `qXsjNI.mp4` and `BgQpGF.mp4`; more air blasts.

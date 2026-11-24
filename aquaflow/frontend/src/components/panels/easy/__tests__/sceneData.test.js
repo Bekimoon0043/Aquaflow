@@ -30,4 +30,12 @@ describe("show jets for the Studio renderer", () => {
     expect(jets.find((j) => j.id === "v").vario).toBe(true);
     expect(jets.find((j) => j.id === "d").aimTiltDeg).toBe(52);
   });
+  it("reads a Vario's cone span (default 40°)", () => {
+    const jets = showJets([
+      { id: "v", type: "nozzle_vario_jet", x: 0, y: 0, engineering: { jetHeightM: 8 } },
+      { id: "w", type: "nozzle_vario_jet", x: 4, y: 0, engineering: { jetHeightM: 12, varioSpanDeg: 80 } },
+    ]);
+    expect(jets.find((j) => j.id === "v").varioSpanDeg).toBe(40);
+    expect(jets.find((j) => j.id === "w").varioSpanDeg).toBe(80);
+  });
 });
