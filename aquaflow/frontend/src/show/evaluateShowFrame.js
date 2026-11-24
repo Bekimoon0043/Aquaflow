@@ -76,7 +76,7 @@ const CURVE_ALIASES = {
 };
 export const LIGHT_CHANNELS = Object.freeze(["lighting_red", "lighting_green", "lighting_blue"]);
 const MASTER_TYPES = new Set(["lighting_master", "device_intensity"]);
-const MOTION_POSITION = new Set(["motion_pan", "motion_tilt", "motion_angle", "motion_roll"]);
+const MOTION_POSITION = new Set(["motion_pan", "motion_tilt", "motion_angle", "motion_roll", "fan_angle"]);
 const WATER_MOTION_SOURCES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity", "pump_speed"]);
 const DEFAULT_LIGHT = "#ffffff";
 const BUCKET_SECONDS = 1;
@@ -496,10 +496,11 @@ export function evaluateShowFrameAt(project, seconds, opts = {}) {
         const lim = prepared.motionRange?.get(clip.fixtureId) || { pan: 45, tilt: 45 };
         if (WATER_MOTION_SOURCES.has(clip.type)) { pose.pan = clamp(clip.pan, -lim.pan, lim.pan); pose.tilt = clamp(clip.tilt, -lim.tilt, lim.tilt); }
         else if (MOTION_POSITION.has(clip.type)) {
-          const axis = clip.type === "motion_tilt" ? "tilt" : clip.type === "motion_roll" ? "roll" : "pan";
+          const axis = clip.type === "motion_tilt" ? "tilt" : clip.type === "motion_roll" ? "roll" : clip.type === "fan_angle" ? "fan" : "pan";
           // Legacy keyed motion is 0..100 → −45°..+45°. New recipes may declare their exact degree mapping.
-          const deg = clip.keys ? finite(clip.motionOffset, -45) + finite(clip.motionScale, 0.9) * keyedValue(clip.keys, t - clip.start) : clip.value;
-          pose[axis] = axis === "roll" ? deg : clamp(deg, -lim[axis], lim[axis]);
+          const deg = clip.type === "fan_angle" ? (clip.keys ? keyedValue(clip.keys, t - clip.start) : clip.value)
+            : clip.keys ? finite(clip.motionOffset, -45) + finite(clip.motionScale, 0.9) * keyedValue(clip.keys, t - clip.start) : clip.value;
+          pose[axis] = axis === "roll" ? deg : axis === "fan" ? clamp(deg, 0, 180) : clamp(deg, -lim[axis], lim[axis]);
         }
         motion.set(clip.fixtureId, pose);
       }

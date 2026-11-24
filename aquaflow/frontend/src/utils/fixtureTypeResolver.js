@@ -468,6 +468,24 @@ export const FIXTURE_TYPE_MAP = {
     previewCategory: "water_jet",
   },
 
+  // Vario jet: one tall column whose spray cone opens (fan_angle, degrees of full opening; 0 = a
+  // thin column) and closes again while it runs — the OASE "Vario jet" effect.
+  nozzle_vario_jet: {
+    runtimeType: "pump", category: "pump", deviceType: "vario_jet",
+    group: "outer_ring_jets", protocol: "virtual", latencyMs: 15,
+    channels: ["intensity", "enable", "fan_angle"],
+    engineering: { flowLpm: { min: 20, max: 200, default: 80 }, pressureBar: { min: 0.5, max: 4, default: 1.5 }, pumpClass: "class_2", jetHeightM: { min: 1, max: 12, default: 8 } },
+    previewCategory: "water_jet",
+  },
+
+  nozzle_fan_large: {
+    runtimeType: "pump", category: "pump", deviceType: "fan_jet",
+    group: "outer_ring_jets", protocol: "virtual", latencyMs: 15,
+    channels: ["intensity", "enable", "fan_angle"],
+    engineering: { flowLpm: { min: 30, max: 250, default: 100 }, pressureBar: { min: 1, max: 5, default: 2.5 }, pumpClass: "class_2", jetHeightM: { min: 0.5, max: 4, default: 2 } },
+    previewCategory: "water_jet",
+  },
+
   comet_jet: {
     runtimeType: "pump", category: "pump", deviceType: "comet",
     group: "outer_ring_jets", protocol: "virtual", latencyMs: 10,

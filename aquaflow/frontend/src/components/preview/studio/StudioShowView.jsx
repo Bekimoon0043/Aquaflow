@@ -59,9 +59,10 @@ export default function StudioShowView({ cameraTrack, followCamera = true, song 
     const scene = sceneRef.current;
     if (!scene) return;
     scene.setData({ items: sceneItems(fixtures, center), links: [], jets: showJets(fixtures), effects: [], pool,
-      safetyBasin: basinPolygon(pool), haze: Number(render.laserHaze ?? 0.35), selectedId: null, selectedLinkId: null, showLinks: false, showLabels: false });
+      safetyBasin: basinPolygon(pool), haze: Number(render.laserHaze ?? 0.35), poolReflection: Number(render.poolReflection ?? 1),
+      selectedId: null, selectedLinkId: null, showLinks: false, showLabels: false });
     scene.setShowSource(history);
-  }, [fixtures, center, pool, history, render.laserHaze]);
+  }, [fixtures, center, pool, history, render.laserHaze, render.poolReflection]);
 
   useEffect(() => { sceneRef.current?.setMist(render.studioMist === true); }, [render.studioMist]);
 

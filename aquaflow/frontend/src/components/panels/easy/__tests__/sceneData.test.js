@@ -22,4 +22,12 @@ describe("show jets for the Studio renderer", () => {
     expect(jets.find((j) => j.id === "jet").bell).toBe(false);
     expect(jets.find((j) => j.id === "rainbow").aimTiltDeg).toBe(45);
   });
+  it("flags Vario jets and reads the classic renderer's aim field", () => {
+    const jets = showJets([
+      { id: "v", type: "nozzle_vario_jet", x: 0, y: 0, engineering: { jetHeightM: 8 } },
+      { id: "d", type: "nozzle_straight_dn15", x: 4, y: 0, engineering: { jetHeightM: 12, aimDeg: 52 } },
+    ]);
+    expect(jets.find((j) => j.id === "v").vario).toBe(true);
+    expect(jets.find((j) => j.id === "d").aimTiltDeg).toBe(52);
+  });
 });

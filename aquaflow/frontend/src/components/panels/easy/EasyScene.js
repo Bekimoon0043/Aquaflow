@@ -77,14 +77,14 @@ export function showLightExposure(pool, activeLamps) {
  * blend — mirror-like at grazing angles, the dark water body when looking straight down — as in
  * show-visualisation renders where jets, lights and beams reflect in the pool.
  */
-const WATER_SHADER = {
+export const WATER_SHADER = {
   name: "AquaFlowWater",
   uniforms: {
     color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null },
     time: { value: 0 }, waterColor: { value: new THREE.Color(0x041c30) },
     // 0 = a calm mirror (design view); > 0 stretches reflections into vertical glitter streaks,
     // as wind-rippled water does with lit jets on a lake at night.
-    streak: { value: 0 }, waveScale: { value: 1 },
+    streak: { value: 0 }, waveScale: { value: 1 }, reflectionStrength: { value: 1 },
   },
   vertexShader: /* glsl */ `
     uniform mat4 textureMatrix;
@@ -105,6 +105,7 @@ const WATER_SHADER = {
     uniform vec3 waterColor;
     uniform float streak;
     uniform float waveScale;
+    uniform float reflectionStrength;
     varying vec4 vUv;
     varying vec3 vWorld;
     #include <logdepthbuf_pars_fragment>
@@ -139,7 +140,7 @@ const WATER_SHADER = {
         refl = texture2DProj(tDiffuse, uv).rgb;
       }
       vec3 viewDir = normalize(cameraPosition - vWorld);
-      float fres = 0.18 + 0.82 * pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 3.0);
+      float fres = (0.18 + 0.82 * pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 3.0)) * reflectionStrength;
       gl_FragColor = vec4(mix(waterColor, refl * color, fres), 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -325,7 +326,7 @@ function outletDir(st, k, n, splay, out) {
 }
 
 /** Outlets of a jet: fixed directions (th, ph) or `at(τ)` for moving / rotating ones. */
-function outletsOf(jet, t, rot) {
+export function outletsOf(jet, t, rot, src = null) {
   const kind = jet.kind;
   const out = [];
   if (jet.motion) {
@@ -334,6 +335,16 @@ function outletsOf(jet, t, rot) {
   } else if (kind === "basket") {
     const n = Math.max(2, jet.outlets || 3);
     for (let i = 0; i < n; i += 1) out.push({ basket: true, th: 0.32, ph0: (i * Math.PI * 2) / n, spread: 0.03 });
+  } else if (jet.vario) {
+    // Vario jet: a core column plus two rings of outlets whose cone opens with the fan_angle channel
+    // (degrees of full opening; 0 = a thin column) — column → flame → wide V → column.
+    const open = src?.fan ? Math.max(0, Math.min(100, src.fan(jet.id, t))) : 0;
+    const half = (open * 0.2 * Math.PI) / 180;            // 100 → a 40° V
+    out.push({ th: 0, ph: 0, spread: 0.012 + half * 0.08 });
+    if (half > 0.02) {
+      for (let i = 0; i < 14; i += 1) out.push({ th: half, ph: (i * Math.PI * 2) / 14, spread: 0.02 + half * 0.1 });
+      for (let i = 0; i < 8; i += 1) out.push({ th: half * 0.5, ph: (i * Math.PI * 2) / 8 + 0.2, spread: 0.02 });
+    }
   } else if (jet.bell) {
     // Mushroom / bell head: a ring of short jets thrown outward and falling into a dome.
     for (let i = 0; i < 20; i += 1) out.push({ th: 0.85, ph: (i * Math.PI * 2) / 20, spread: 0.02 });
@@ -341,9 +352,9 @@ function outletsOf(jet, t, rot) {
     const n = 12;
     for (let i = 0; i < n; i += 1) out.push({ th: 0.42, ph: (i * Math.PI * 2) / n, spread: 0.03 });
   } else if (kind === "curtain") {
-    const n = 11;
+    const n = 11, fanScale = src?.fan ? Math.max(0.05, src.fan(jet.id, t) / 90) : 1;
     for (let i = 0; i < n; i += 1) {
-      const a = -0.75 + (1.5 * i) / (n - 1);
+      const a = (-0.75 + (1.5 * i) / (n - 1)) * fanScale;
       out.push({ th: Math.abs(a), ph: rot + (a < 0 ? Math.PI : 0), spread: 0.025 });
     }
   } else if (kind === "mist") {
@@ -384,6 +395,7 @@ export class EasyScene {
     this.linkObjects = [];
     this.jetState = new Map();     // id → smoothed height
     this.data = { items: [], links: [], jets: [], pool: null };
+    this.poolReflection = 1;
     this.drag = null;
     this.disposed = false;
     this.time = 0;
@@ -617,6 +629,7 @@ export class EasyScene {
    *           pool: {shape,radius?,rx?,ry?,points?}, selectedId, selectedLinkId, showLinks, showLabels }} data
    */
   setData(data) {
+    if (Object.hasOwn(data, "poolReflection")) this.setPoolReflection(data.poolReflection);
     this.data = { ...this.data, ...data };
     if ("pool" in data) {
       const poolKey = JSON.stringify(data.pool || null);
@@ -822,6 +835,9 @@ export class EasyScene {
         color: 0x9fb8c8, textureWidth: px, textureHeight: Math.round(px * 0.6), clipBias: 0.003, shader: WATER_SHADER,
       });
       this.waterMirror = water;
+      const renderReflection = water.onBeforeRender;
+      water.onBeforeRender = (...args) => { if (this.poolReflection > 0) renderReflection.apply(water, args); };
+      this.setPoolReflection(this.poolReflection);
     } else {
       water = new THREE.Mesh(new THREE.ShapeGeometry(shape, 64),
         new THREE.MeshStandardMaterial({ color: 0x0b4f7a, roughness: 0.15, metalness: 0.2, transparent: true, opacity: 0.88 }));
@@ -1101,7 +1117,7 @@ export class EasyScene {
     }
     // Drops are shared by weight: a long arc or a bell head needs more drops than a short jet to
     // read as a continuous stream.
-    const weightOf = (j) => Math.min(6, Math.max(1, (j.nominalHeightM || 2) / 8)) * (j.bell ? 2.5 : 1);
+    const weightOf = (j) => Math.min(6, Math.max(1, (j.nominalHeightM || 2) / 8)) * (j.bell || j.vario ? 2.5 : 1);
     const totalW = active.reduce((a, j) => a + weightOf(j), 0);
     const per = active.length ? Math.min(2600, Math.floor(max / totalW)) : 0;
     let n = 0, q = 0, ns = 0;
@@ -1138,7 +1154,7 @@ export class EasyScene {
       lit.push({ jet, rec, H, rot, oyBase, lamp });
       const outletCount = jet.axes >= 3 ? Math.max(1, jet.outlets || 1) : 1;
       const outlets = jet.swing ? Array.from({ length: outletCount }, (_, k) => ({ swing: true, k, n: outletCount,
-        splay: (jet.splayDeg * Math.PI) / 180, spread: 0.02 })) : outletsOf({ ...jet, motion: null }, t, rot);
+        splay: (jet.splayDeg * Math.PI) / 180, spread: 0.02 })) : outletsOf({ ...jet, motion: null }, t, rot, src);
       const each = Math.max(8, Math.floor((per * weightOf(jet)) / outlets.length));
       for (const out of outlets) {
         let sdx = 0, sdy = 1, sdz = 0;
@@ -1224,6 +1240,12 @@ export class EasyScene {
     sGeo.setDrawRange(0, ns * 2);
     sGeo.attributes.position.needsUpdate = true;
     sGeo.attributes.color.needsUpdate = true;
+  }
+
+  setPoolReflection(value) {
+    const n = Number(value);
+    this.poolReflection = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 1;
+    if (this.waterMirror?.material?.uniforms?.reflectionStrength) this.waterMirror.material.uniforms.reflectionStrength.value = this.poolReflection;
   }
 
   /** Realistic render (bloom, reflective water, indirect light) on/off — off for slow computers. */

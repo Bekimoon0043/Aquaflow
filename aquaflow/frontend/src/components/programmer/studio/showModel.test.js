@@ -72,6 +72,18 @@ describe('Recipe resolution and persistence', () => {
     expect(compileStudio(s, items).clips).toHaveLength(0);
     expect(compileStudio(s, items).issues[0]).toContain('no compatible');
   });
+  it('keeps Vario fan-angle channels editable and renders their width animation', () => {
+    const fan = { id: 'vario', type: 'nozzle_fan_large', label: 'Vario', engineering: { jetHeightM: 9, fanAngleDeg: 90 } };
+    const source = { ...readStudio(null), groups: [{ ...group, memberFixtureIds: ['vario'] }],
+      recipes: [{ ...newRecipe('outer'), effect: 'curve', attribute: 'fan_angle', spread: 0, intensity: 90,
+        envelope: [{ time: 0, value: 1 }, { time: .5, value: .1 }, { time: 1, value: 1 }] }] };
+    const result = compileStudio(source, inventory([fan]));
+    expect(result.issues).toEqual([]);
+    expect(result.clips[0]).toMatchObject({ fixtureId: 'vario', trackId: 'vario-fan-angle', type: 'fan_angle' });
+    const plan = createFullShowPreview(result.clips, [fan]);
+    expect(plan.skippedClips).toBe(0);
+    expect(plan.visualClips).toHaveLength(1);
+  });
   it('migrates old programs without changing legacy clip values', () => {
     const old = { timelineClips: [{ id: 'original', fixtureId: 'jet-0', value: 73, duration: 2, startTime: 5 }], cues: [{ id: 'cue', time: 4 }] };
     const s = readStudio(old);

@@ -26,6 +26,7 @@ export const DEFAULT_RENDER_SETTINGS = Object.freeze({
   waveResponse: 1,
   waveDamping: 0.985,
   waveBoundaryDamping: 0.82,
+  poolReflection: 1,
   reviewMode: false,
   reviewOverlays: false,
   showPerformance: false,

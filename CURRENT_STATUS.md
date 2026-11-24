@@ -1,5 +1,39 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-24: AquaFlow Studio 1.2.93 - Odaa · 3Obsa third pass: real Vario jets, low rainbow arcs into the centre, mixed lamp colours, 30 air cannons**
+
+- **User feedback:** Varios as in `Downloads/wNNrBx.mp4`; diagonal rainbows flowing diagonally into the centre (not up into the sky); different colours per DMX lamp; more rainbow and 1D-circle patterns from `qXsjNI.mp4` and `BgQpGF.mp4`; more air blasts.
+- **New fixture type** `nozzle_vario_jet` with a `fan_angle` cone channel, built on the uncommitted 1.2.90 `fan_angle` work. The Studio renderer draws a core column plus two rings that open into a V of up to 40°. `aimDeg` is accepted as the Studio tilt, and `fullShowPreview` passes Vario `fan_angle` clips.
+- **Show** `Desktop/Odaa_3Obsa_Dance_Show.aquapkg`:
+  - Varios bloom (column → flame → V → column), chase, race and snap on the beat.
+  - Rainbows launch at 38° and grow into the centre.
+  - The circle does a spiral twist, travelling high halves, sways and lean-across arcs.
+  - Lamp colours come from per-lamp slots per section; the circle and Vario lamps run turning rainbows.
+  - Cannons go from 5 to 10 per circle (30): all-30 volleys, spinning blasts, 440 blasts in all, 0 refill violations.
+  - 2,920 patterns, 38,824 clips, 73.5 MB. Fastest swing 75°/s.
+- **Verified:** headless frames of the full show, plus isolated frames (Vario only; rainbows and circle only) confirming the cone cycle, the low arcs and the circle dances. 1,328 tests in the affected suites pass.
+
+**2026-11-23: AquaFlow Studio 1.2.90 - Vario wide-to-thick-to-wide fan modulation**
+
+- **Reference:** `Downloads/wNNrBx.mp4` was reviewed in 16 frames. The Vario pattern now combines independent fan-angle modulation, smooth height breathing, and blue → cyan → green → yellow → orange → red transitions over **4.4 seconds**. It is not merely a height or color change.
+- **Renderer:** the new `fan_angle` channel flows through show evaluation and Studio history. Curtain outlets scale their spread directly from 0–100°, without the legacy 1D angle offset. The Vario ring visibly opens wide, becomes thick/narrow, and opens again from a straight-on front camera.
+- **Show:** **461 patterns and 49,984 clips**, 1,846 fixtures, 1,140 DMX lights and 706 nozzles. Final package: `Documents/Odaa_3Obsa_Final_Output.aquapkg`; front-view color/width preview: `Documents/Odaa_3Obsa_Final_Preview.png`. Package SHA-256 `11b444a75d96a7c70016dc2589e7be85ebd26bfe0486827916a4c7a11c096fd8`.
+- **Installer:** `Desktop/AquaFlowSetup-1.2.90.exe` and `aquaflow/desktop/dist/AquaFlowSetup-1.2.90.exe` (SHA-256 `1304cae872f173c773c7e225f5bca0cefa1af209da117c8121fc3510839c84c8`). Fresh frontend and backend build passed; packaged-engine simulation and safe stop passed. The unpacked production app confirmed version 1.2.90 and the VarioJet fan-angle pattern. Installer is unsigned; no update feed was published.
+- **Verification:** three focused fan-angle tests pass, plus the four pool-reflection tests. Front-view renders confirm wide, narrow and reopened fans with the color sequence. The unrelated `PoolGeometryDesigner.lineArray` test fails on this branch; its files were not changed by this work, so the full suite is not claimed green.
+
+**2026-11-23: Odaa · 3Obsa simultaneous air blasts corrected**
+
+- **All 30 cannons now fire together** at the Bulloo drop (246 s), the finale opening (288 s), and the hard-freeze volley (321 s). The Bulloo cue uses the correct 3.8 s 50 m and 2.4 s 20 m pulse lengths; the opening includes both 20 m circles at the same timestamp.
+- **Refill validation:** intentional same-time cues are allowed without floating-point false positives; genuine intervals below 6 s at 20 m and 25 s at 50 m are still rejected. The show compiles with **431 patterns and 49,918 clips**, and all 30 blast levels were verified at full intensity in the real renderer.
+- **Files:** updated `Desktop/Odaa_3Obsa_Show.aquapkg` and `Desktop/Odaa_Elder_Infinity_Design.aquapkg`. `Desktop/Odaa_3Obsa_Preview.png` now shows four simultaneous-blast frames. Package SHA-256 `fc384cc45d513243f8598ac10d12770d7ba9a5db5d59da3f4fab9fc48f0ee89f`. This was a show-data correction; no application rebuild was required.
+
+**2026-11-23: AquaFlow Studio 1.2.89 - adjustable pool water reflection**
+
+- **New setting:** **Pool water reflection** adjusts fountain reflection strength from **0–100%** in the Preview's Water section and the Easy Fountain Design toolbar. **0% disables the fountain reflection while keeping the basin water visible**; 100% restores the existing look. The value is saved in the project and defaults to 100% for older shows.
+- **Rendering:** the Studio water shader scales reflection strength and skips its mirror pass at zero. The classic renderer disables and disposes its planar reflection probe at zero, rebuilding it when reflection is restored. Both support partial strength.
+- **Verified:** four focused tests pass; full frontend **2,074 tests across 214 files** pass. Actual rendered frames at 0%, 50% and 100% were reviewed. The unpacked desktop UI passed value changes at 0%, 50%, 100% and back to 0%, then restored 100%. Evidence: `docs/evidence/2026-11-23-pool-reflection-1.2.89.png`.
+- **Installer:** `Desktop/AquaFlowSetup-1.2.89.exe` and `aquaflow/desktop/dist/AquaFlowSetup-1.2.89.exe` (172 MB; SHA-256 `cd486d17859aba1f434e61eab19be6306ad4d666c4f7b145e929be8412fce7a5`). Fresh frontend and backend engine built successfully. Packaged-engine simulation and safe stop passed. Installer is unsigned; no update feed was published.
+
 **2026-11-23: AquaFlow Studio 1.2.89 - Odaa · 3Obsa second pass: Vario mushrooms, a tall dancing circle, rainbow arcs into the centre**
 
 - **User feedback:** the Varios were wrong, the circle's 1D nozzles needed tall front/back/left/right dances, and the diagonal rainbows should flow into the centre. The patterns come from the two reference renders (`Downloads/qXsjNI.mp4`, `BgQpGF.mp4`).

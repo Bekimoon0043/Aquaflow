@@ -108,6 +108,66 @@ The client sent two Luxury Con renders of this design (`Downloads/qXsjNI.mp4`, 3
   - long arcs and bells get a larger share of drops.
 - **Size:** 1,737 patterns, 38,533 clips, 70.8 MB.
 
+
+## Third pass: Vario jets, low rainbow arcs, mixed colours, 30 cannons
+
+The client's feedback: learn the Vario from `Downloads/wNNrBx.mp4`. Make the rainbows flow diagonally into the centre, not up into the sky. Give every DMX lamp a different colour. Take more patterns for the rainbows and the 1D circle from `qXsjNI.mp4` and `BgQpGF.mp4`. Use everything on the music, and add more air blasts.
+
+**Vario jets** (wNNrBx is the OASE "Vario jets" demo):
+- **What the demo shows:** each head is one tall column whose spray opens from the base into a flame, then a wide V, then closes back into a thin column. A full cycle takes about 4.4 s, and its light sweeps blue → cyan → green → yellow → orange → red. The mushroom bells of the second pass were wrong.
+- **New fixture type:** the heads are now `nozzle_vario_jet` (8 m) with a `fan_angle` channel for the cone, in degrees: 0 is a thin column, 100 a 40° V. The Studio renderer draws the cone opening and closing.
+- **Patterns:**
+  - bloom on the bar;
+  - a bloom flowing round the ring;
+  - bloom chases that speed up;
+  - two or three blooms racing round;
+  - the caller's side snapping open on the beat in call and response;
+  - odd and even heads opening in turn;
+  - thin columns popping on the eighth notes;
+  - a wide V on the big moments.
+- **Lights:** each head is a different colour, with the rainbow turning round the ring.
+
+**Diagonal rainbows:**
+- **Aim:** a 38° launch for long, low arcs toward the portrait centre. The aim is set for the Studio renderer (`aimTiltDeg`) and the classic renderer (`aimDeg` and `aimAzimuthDeg`), so neither view throws them straight up.
+- **Patterns:**
+  - each arc *grows* from short until it lands in the centre;
+  - pairs flow inward (outer → middle → inner);
+  - the left and right sides answer each other;
+  - the caller's side reaches the centre in call and response;
+  - the arcs bounce on the beat;
+  - all six cross over the portrait.
+
+**1D circle:**
+- **Heights:**
+  - the jets rise one by one;
+  - a high half travels round the circle;
+  - two high points spin round;
+  - odd and even jets alternate;
+  - the circle pumps on two beats, then climbs.
+- **Swings:**
+  - a twisting spiral, where crown and funnel run round the circle;
+  - the crown leans front/back, then left/right;
+  - the whole crown leans across as arcs (Bulloo);
+  - crown ↔ funnel breathing;
+  - odd/even crossing;
+  - a lean toward the caller.
+
+**Mixed colours:**
+- **Water-following lamps:** each lamp has a colour slot (bands of 8 along the ∞, the ray's angle, bands of 16 along each sword, the cannon's place on its circle). Every section has a palette of 3–6 colours, so neighbouring lamps carry different colours. The ray colours also rotate on the bar in the horn drop, Geerarsa and the finale.
+- **Circle and Vario lamps:** turning rainbows, every lamp a different hue, pulsing on the beat.
+- **Arcs and cannons:** each rainbow arc and each cannon has its own colour.
+
+**Air blasts:**
+- **Cannons:** each of the three circles goes from 5 to 10. The five new cannons sit between the originals on the same circle, each with its own light, so there are 30 in all.
+- **Patterns:**
+  - all 30 together at the horn drop, the crown, Geerarsa and Bulloo;
+  - spinning blasts, where a circle fires round in order (the build, call and response, the canopy and the last climb);
+  - circle volleys;
+  - pairs on the hits.
+- **Refill rules:** 440 blasts with no refill violations (20 m cannons at least 6 s apart, 50 m at least 25 s).
+
+**Size:** 2,920 patterns, 38,824 clips, 73.5 MB. A first build at 76.7 MB crashed the headless preview, so three of the five white flashes were dropped and the face and star curves were sampled more coarsely.
+
 ## Checks
 
 - **Air cannons:** 64 blasts. No 20 m cannon fires again within 6 s, and no 50 m cannon within 25 s (0 violations).

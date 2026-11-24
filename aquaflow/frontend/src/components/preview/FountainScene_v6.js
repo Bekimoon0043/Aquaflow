@@ -1201,6 +1201,7 @@ export class FountainScene {
     this._halfResUser = !!options.halfResSpray;                   // AF-3D-008 (medium)
     this._realWorld = options.realWorld !== false;                 // realWorldLook.js (default on)
     this._advancedNozzles = options.advancedNozzles === true;
+    this._poolReflection = 1;
 
         this._signals   = {
       pump: 0,
@@ -1399,18 +1400,30 @@ export class FountainScene {
     const q = QUALITY_CONFIG[this.quality] || QUALITY_CONFIG.medium;
     this._reflection?.dispose?.();
     this._reflection = null;
-    if (!q.reflect) return;   // `low` stays on the flat-sky fallback by design
+    const strength = this.waterMat?.uniforms?.uReflectStrength;
+    if (!(this._poolReflection > 0) || !q.reflect) {
+      if (strength) strength.value = 0;
+      return;
+    }
     try {
       this._reflection = new WaterReflectionProbe(this.THREE, this.renderer, {
         resolution: q.reflect,
         interval: q.reflectEvery,
       });
+      if (strength) strength.value = this._poolReflection;
     } catch (err) {
       // A reflection is an enhancement, never a dependency. If the target cannot be
       // allocated (old GPU, no half-float support) the water keeps its flat sky term.
       console.warn("[FountainScene] planar reflection unavailable:", err?.message || err);
       this._reflection = null;
+      if (strength) strength.value = 0;
     }
+  }
+
+  setPoolReflection(value) {
+    const n = Number(value);
+    this._poolReflection = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 1;
+    this._buildReflection();
   }
 
   // ── Splash map: where the water lands ───────────────────────────────────────
@@ -2057,7 +2070,7 @@ export class FountainScene {
           u.uReflectTex.value = this._reflection.texture;
           u.uReflectMatrix.value = this._reflection.textureMatrix;
         }
-        if (rendered || u.uReflectStrength.value > 0) u.uReflectStrength.value = 1.0;
+        if (rendered || u.uReflectStrength.value > 0) u.uReflectStrength.value = this._poolReflection;
       }
     }
 

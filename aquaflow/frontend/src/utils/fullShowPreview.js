@@ -4,7 +4,7 @@ import { LASER_TYPES, isLaserFixture } from "../components/preview/laser/laserRi
 
 const WATER_TYPES = new Set(["device_intensity", "device_enable", "solenoid_open", "motion_intensity"]);
 const EFFECT_TYPES = new Set(["fire_intensity", "fog_density"]);
-const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle", "motion_roll"]);
+const MOTION_TYPES = new Set(["motion_pan", "motion_tilt", "motion_angle", "motion_roll", "fan_angle"]);
 const LIGHT_TYPES = new Set(["lighting_master", "lighting_red", "lighting_green", "lighting_blue"]);
 const PUMP_TYPES = new Set(["pump_speed"]);
 const hexColor = value => /^#[0-9a-f]{6}$/i.test(value || "") ? value : "#ffffff";
@@ -29,7 +29,8 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
       : category === "effect" && EFFECT_TYPES.has(type) ? true
       : category === "equipment" ? (/pump/i.test(fixture.type) && PUMP_TYPES.has(type)) || (/valve|solenoid/i.test(fixture.type) && WATER_TYPES.has(type))
         : WATER_TYPES.has(type) || PUMP_TYPES.has(type) // any water nozzle may be driven by its pump speed (e.g. rotating_jet)
-          || (String(fixture.type).startsWith("motion") && MOTION_TYPES.has(type));
+          || (String(fixture.type).startsWith("motion") && MOTION_TYPES.has(type))
+          || (type === "fan_angle" && /^(nozzle_fan|fan_jet|nozzle_vario_jet)/.test(fixture.type));
     if (!allowed) {
       if (skipUnsupported) { skippedClips++; continue; }
       throw new Error(`${clip.name || clip.id}: this track cannot yet be shown in the 3D design preview.`);
@@ -38,7 +39,8 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
     const fadeIn = Number(clip.fadeIn || 0), fadeOut = Number(clip.fadeOut || 0);
     if (![start, duration, value, fadeIn, fadeOut].every(Number.isFinite) || start < 0 || duration <= 0
       || fadeIn < 0 || fadeOut < 0 || fadeIn + fadeOut > duration
-      || (MOTION_TYPES.has(type) ? Math.abs(value) > 60 : value < 0 || value > 100)) {
+      || (type === "fan_angle" ? value < 0 || value > 180
+        : MOTION_TYPES.has(type) ? Math.abs(value) > 180 : value < 0 || value > 100)) {
       if (skipUnsupported) { skippedClips++; continue; }
       throw new Error(`${clip.name || clip.id}: invalid timing, value, or fade.`);
     }
@@ -51,7 +53,7 @@ export function createFullShowPreview(clips, fixtures, name = "Full fountain sho
     const keyed = Array.isArray(clip.keys) && parseKeys(clip.keys, clip.keyMode) ? { keys: clip.keys, keyMode: clip.keyMode } : {};
     visualClips.push({ id: clip.id, fixtureId: fixture.id, type, start, end: start + duration, value, fadeIn, fadeOut, ...keyed,
       curveType: normalizeCurve(clip.curveType) || "linear", color: hexColor(clip.color), pan: Number.isFinite(Number(clip.pan)) ? Number(clip.pan) : 0,
-      tilt: Number.isFinite(Number(clip.tilt)) ? Number(clip.tilt) : 0 });
+      tilt: Number.isFinite(Number(clip.tilt)) ? Number(clip.tilt) : 0, motionOffset: clip.motionOffset, motionScale: clip.motionScale });
   }
   if (!visualClips.length) throw new Error("The timeline has no channels that can be shown in the 3D preview.");
   const duration = Math.max(...visualClips.map(clip => clip.end));
@@ -76,7 +78,8 @@ export function previewPlanProject(plan, fixtures = EMPTY) {
   if (!project) {
     project = { fixtures, clips: clips.map(clip => ({ id: clip.id, fixtureId: clip.fixtureId, type: clip.type,
       start: clip.start, end: clip.end, value: clip.value, fadeIn: clip.fadeIn, fadeOut: clip.fadeOut,
-      curveType: clip.curveType, color: clip.color, pan: clip.pan, tilt: clip.tilt, keys: clip.keys, keyMode: clip.keyMode })) };
+      curveType: clip.curveType, color: clip.color, pan: clip.pan, tilt: clip.tilt, keys: clip.keys, keyMode: clip.keyMode,
+      motionOffset: clip.motionOffset, motionScale: clip.motionScale })) };
     byFixtures.set(fixtures, project);
   }
   return project;
