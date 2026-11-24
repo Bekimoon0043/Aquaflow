@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { groupFlag, snapBeat } from './showModel';
 import { deviceRows, worstLevel } from './plcLimits';
 import { CAMERA_ROW_HEIGHT, CameraLaneControls, CameraLaneRow } from '../../preview/camera/CameraLane';
+import { clipTooltip, countLabel, ownerLabel, ownershipIndex, ownerSummary, stickyOffset } from './timelineOwnership';
 
 const ROW = 42, HEADER = 32, LABEL = 205;
 function Waveform({ buffer, zoom, offset, width }) {
@@ -46,6 +47,9 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
   const end = Math.max(30, audioBuffer?.duration || 0, ...studio.recipes.map(r => r.start + r.duration), ...studio.legacyClips.map(c => c.startTime + c.duration));
   const duration = Math.ceil((end + 5) / 10) * 10;
   const groupById = useMemo(() => new Map(studio.groups.map(g => [g.id, g])), [studio.groups]);
+  // Who every row / clip belongs to (group or single item), with a stable owner colour.
+  const owners = useMemo(() => ownershipIndex(studio, items), [studio.groups, items]);
+  const rowOwner = row => row.group ? owners.group(row.id) : row.legacy && row.fixtureId !== undefined ? owners.item(row.fixtureId, row.type) : null;
   const rows = useMemo(() => {
     const result = [], visited = new Set();
     const visit = (group, depth = 0) => {
@@ -140,12 +144,15 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
           onSeek={t => onSeek(Math.min(duration, t))} selectedId={cameraKeyId} onSelectKey={setCameraKeyId} />}
         {visible.map((row, offset) => <div key={row.key} className={`sp-track ${row.group ? 'sp-track-group' : ''}`} style={{ top: rowTop + (start + offset) * ROW, height: ROW, width: LABEL + duration * zoom }}
           onDoubleClick={e => { if (!row.group || !onAddPattern || e.target.closest('.sp-clip,.sp-track-label')) return; onAddPattern(row.id, snap(timeAt(e))); }}>
-          <div className="sp-track-label" style={{ left: scroll.x, width: LABEL, paddingLeft: 8 + (row.depth || 0) * 12 }}>
+          {(() => { const owner = rowOwner(row); return <div className={`sp-track-label ${owner ? `sp-owned sp-owner-${owner.kind}` : ''}`} style={{ left: scroll.x, width: LABEL, paddingLeft: 8 + (row.depth || 0) * 12, '--owner-color': owner?.color }}>
             {row.group && <button aria-label={`Fold ${row.name}`} onClick={() => setCollapsed(old => { const s = new Set(old); s.has(row.id) ? s.delete(row.id) : s.add(row.id); return s; })}>{collapsed.has(row.id) ? '▸' : '▾'}</button>}
-            <span title={row.name}>{row.name}</span>
+            {owner && <em className="sp-owner-swatch" aria-hidden="true" />}
+            <span title={owner ? `${row.name}
+${ownerSummary(owner)}` : row.name}>{row.name}</span>
+            {owner && <em className="sp-owner-badge" title={ownerSummary(owner)} aria-label={owner.kind === 'group' ? `Group of ${countLabel(owner.count, owner.noun)}` : 'Single item'}>{owner.kind === 'group' ? `▣ ${owner.count}` : '◉'}</em>}
             {row.group && onAddPattern && <button className="sp-track-add" aria-label={`Add a pattern to ${row.name}`} title="Add a pattern for this group at the playhead (or double-click the row)" onClick={() => onAddPattern(row.id, snap(time))}>＋</button>}
             {row.group && <div className="sp-track-toggles">{[['muted', 'M'], ['solo', 'S'], ['locked', 'L']].map(([key, label]) => <button key={key} aria-label={`${key} ${row.name}`} aria-pressed={!!row[key]} onClick={() => onGroupPatch(row.id, { [key]: !row[key] })}>{label}</button>)}</div>}
-          </div>
+          </div>; })()}
           {row.group && !row.clips.length && <span className="sp-track-hint" style={{ left: Math.max(LABEL + 8, scroll.x + LABEL + 8) }}>Double-click here or press ＋ to add a pattern for this group</span>}
           {row.clips.filter(c => {
             const t = c.start ?? c.startTime, d = c.duration;
@@ -154,10 +161,13 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
             const locked = clip.locked || groupFlag(studio.groups, row.id, 'locked');
             const state = ghost?.resize && ghost.id === clip.id ? ghost : { start: (clip.start ?? clip.startTime) + (!locked && !ghost?.resize && ghost?.ids?.includes(clip.id) ? ghost.delta : 0), duration: clip.duration };
             const issues = plcIssues.get(clip.id) || [], level = worstLevel(issues);
-            const tip = [`${clip.name} · ${state.start}s · ${state.duration}s`, ...issues.map(i => `${i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : 'ℹ'} ${i.text}`),
+            const owner = row.legacy ? owners.item(clip.fixtureId, clip.type) : owners.group(clip.groupId);
+            const clipLeft = LABEL + state.start * zoom, clipWidth = Math.max(5, state.duration * zoom);
+            const compact = clipWidth < 90;
+            const tip = [clipTooltip({ owner, name: clip.name || clip.effect || 'Clip', kind: row.legacy ? clip.type : clip.effect, start: state.start, duration: state.duration, level: clip.intensity }), ...issues.map(i => `${i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : 'ℹ'} ${i.text}`),
               ...(clip.pattern && onEditPattern ? ['Double-click to edit in the pattern builder'] : [])].join('\n');
             return <button key={clip.id} className={`sp-clip ${selection.has(clip.id) ? 'selected' : ''} ${level ? `plc-${level}` : ''}`} title={tip}
-              style={{ left: LABEL + state.start * zoom, width: Math.max(5, state.duration * zoom), opacity: clip.muted || row.muted ? .35 : 1, '--clip-color': clip.color || '#65d9d0' }}
+              style={{ left: clipLeft, width: clipWidth, opacity: clip.muted || row.muted ? .35 : 1, '--clip-color': clip.color || '#65d9d0', '--owner-color': owner.color, '--sticky': `${stickyOffset(clipLeft, clipWidth, scroll.x + LABEL)}px` }}
               onClick={e => { if (e.detail === 0) onSelect(clip.id, row.legacy, e.shiftKey || e.ctrlKey || e.metaKey); }}
               onDoubleClick={e => { if (!clip.pattern || !onEditPattern) return; e.stopPropagation(); onEditPattern(clip.id); }}
               onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onSelect(clip.id, row.legacy, false); setMenu({ x: e.clientX, y: e.clientY, id: clip.id, pattern: !!clip.pattern && !row.legacy }); }}
@@ -168,7 +178,7 @@ export default function StudioTimeline({ studio, items, time, audioBuffer, selec
                 const ids = selection.has(clip.id) ? selectedIds : [clip.id];
                 const movable = [...studio.recipes, ...studio.legacyClips].filter(c => ids.includes(c.id) && !c.locked && !groupFlag(studio.groups, c.groupId, 'locked'));
                 drag.current = { id: clip.id, ids, minDelta: -Math.min(...movable.map(c => c.start ?? c.startTime)), maxDelta: 600 - Math.max(...movable.map(c => (c.start ?? c.startTime) + c.duration)), x: e.clientX, start: state.start, duration: state.duration, legacy: row.legacy, resize: e.target.dataset.resize === 'true' };
-              }}><span>{level === 'error' ? '⛔ ' : level === 'warn' ? '⚠ ' : ''}{clip.name || clip.effect || 'Clip'}</span><i data-resize="true" title="Drag to resize" /></button>;
+              }}><span className={`sp-clip-owner ${compact ? 'compact' : ''}`} aria-hidden="true" data-owner-kind={owner.kind}><em className="sp-owner-swatch" />{!compact && <b>{ownerLabel(owner)}</b>}</span><span className="sp-clip-name">{level === 'error' ? '⛔ ' : level === 'warn' ? '⚠ ' : ''}{clip.name || clip.effect || 'Clip'}</span><i data-resize="true" title="Drag to resize" /></button>;
           })}
         </div>)}
         {studio.markers.map(m => <button className={`sp-marker ${m.kind === 'section' ? 'section' : ''}`} key={m.id} style={{ left: LABEL + m.time * zoom }} title={m.name} onClick={() => onSeek(m.time)}>{m.name}</button>)}

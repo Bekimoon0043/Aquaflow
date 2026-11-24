@@ -1,6 +1,6 @@
 {
  "totals": {
-  "inline": 3669,
+  "inline": 3668,
   "hex": 920
  },
  "files": {
@@ -307,10 +307,6 @@
   "preview/editor/ui/workspaceUI.jsx": {
    "inline": 52,
    "hex": 11
-  },
-  "preview/focus/FocusPreview.jsx": {
-   "inline": 1,
-   "hex": 0
   },
   "preview/HydraulicPreviewPanel.jsx": {
    "inline": 27,

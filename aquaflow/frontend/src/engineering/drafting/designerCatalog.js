@@ -204,6 +204,7 @@ export const TOOLS = [
   { key:"rectangle", label:"Rectangle", icon:"▭" },
   { key:"circle", label:"Circle", icon:"○" },
   { key:"polyline", label:"Polyline", icon:"⌁" },
+  { key:"pen", label:"Pen", icon:"✎", shortcut:"Shift+P" },
   { key:"land", label:"Land", icon:"▰" },
 { key:"pipe", label:"Pipe", icon:"═" },
   { key:"nozzle", label:"Nozzle", icon:"⬆" },

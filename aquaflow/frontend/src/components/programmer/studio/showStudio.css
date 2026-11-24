@@ -378,3 +378,27 @@
 .sp-keyed-field .ui-icon-button[aria-pressed=true] { color:var(--accent); }
 .sp-main.sp-swap-sides { flex-direction:row-reverse; }
 @media (max-width:1500px) { .sp-transport .sp-status { display:none; } }
+
+/* Timeline ownership — every clip names the group / item it belongs to (owner chip in the
+   clip header, row-label swatch + badge, sticky labels). --owner-color comes from
+   timelineOwnership.js (group colour, or a stable colour derived from the id). */
+.sp-track-label .sp-owner-swatch { flex:none; width:4px; align-self:stretch; margin:7px 2px 7px 0; border-radius:2px; background:var(--owner-color,var(--accent)); font-style:normal; }
+.sp-track-label .sp-owner-badge { flex:none; font-style:normal; font-size:9.5px; line-height:1; padding:2px 5px; border-radius:8px; color:var(--text-secondary); background:color-mix(in srgb,var(--owner-color,var(--accent)) 18%,transparent); border:1px solid color-mix(in srgb,var(--owner-color,var(--accent)) 45%,transparent); font-variant-numeric:tabular-nums; }
+.sp-track-label.sp-owner-item .sp-owner-badge { border-radius:50%; padding:2px 3px; }
+.show-studio .sp-clip { box-shadow:inset 3px 0 0 var(--owner-color,transparent); padding:3px 9px 3px 8px; line-height:1.25; }
+.show-studio .sp-clip > .sp-clip-owner,
+.show-studio .sp-clip > .sp-clip-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; transform:translateX(var(--sticky,0px)); max-width:100%; pointer-events:none; }
+.show-studio .sp-clip > .sp-clip-owner { display:flex; align-items:center; gap:4px; font-size:9px; font-weight:600; letter-spacing:.02em; color:color-mix(in srgb,var(--owner-color,var(--accent)) 70%,var(--text-primary)); }
+.show-studio .sp-clip > .sp-clip-owner b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:inherit; }
+.show-studio .sp-clip .sp-owner-swatch { flex:none; width:8px; height:8px; border-radius:2px; background:var(--owner-color,var(--accent)); box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+.show-studio .sp-clip > .sp-clip-name { font-size:10px; }
+.show-studio .sp-clip.plc-warn { box-shadow:inset 3px 0 0 var(--owner-color,transparent), inset 0 -3px 0 var(--warn); }
+.show-studio .sp-clip.plc-error { box-shadow:inset 3px 0 0 var(--owner-color,transparent), inset 0 -3px 0 var(--error); }
+.show-studio .sp-clip.plc-info { box-shadow:inset 3px 0 0 var(--owner-color,transparent), inset 0 -2px 0 var(--info); }
+.preview-show-timeline .sp-clip { box-shadow:inset 3px 0 0 var(--owner-color,transparent), inset 0 0 0 1px rgba(255,255,255,.025); }
+.seq-block .seq-owner { display:flex; align-items:center; gap:4px; min-width:0; font-size:9.5px; font-weight:600; letter-spacing:.02em; white-space:nowrap; overflow:hidden; color:color-mix(in srgb,var(--owner-color,var(--block)) 70%,var(--text-primary)); }
+.seq-block .seq-owner b { font-size:inherit; color:inherit; overflow:hidden; text-overflow:ellipsis; }
+.seq-block .seq-owner .seq-owner-swatch { flex:none; width:8px; height:8px; border-radius:2px; background:var(--owner-color,var(--block)); box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+.seq-block.owned { box-shadow:inset 3px 0 var(--owner-color,var(--block)); }
+.seq-block > .seq-owner, .seq-block > b, .seq-block > small { transform:translateX(var(--sticky,0px)); }
+.seq-block.owned { height:44px; padding-top:2px; padding-bottom:2px; line-height:1.15; }

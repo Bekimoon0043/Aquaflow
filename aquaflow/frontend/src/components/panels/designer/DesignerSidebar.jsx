@@ -28,6 +28,12 @@ export function DraftShapeButtons({ d, target, color = "#7dd3fc" }) {
           <span style={{ fontSize:13 }}>{cmd.icon}</span><br />{cmd.label.replace("Line / ", "")}
         </button>
       ))}
+      {d.startPen && (target === "pool" || target === "land" || target === "depth") && (
+        <button type="button" className={`draft-pen-cell${d.tool === "pen" ? " is-active" : ""}`} title="Pen — draw this shape freehand; it is cleaned up when you lift (Shift+P)"
+          onMouseDown={(e) => e.preventDefault()} onClick={() => d.startPen(target)}>
+          <span className="draft-pen-icon">✎</span><br />Pen
+        </button>
+      )}
     </div>
   );
 }
@@ -234,7 +240,7 @@ export function ToolsSection({ d }) {
           <div style={{ color:"var(--text-muted)", fontSize:11, marginBottom:5 }}>TOOLS</div>
           <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
             {TOOLS.map(t => (
-              <button key={t.key} onClick={()=>d.chooseTool(t.key)} style={{
+              <button key={t.key} onClick={()=>d.chooseTool(t.key)} title={t.shortcut ? `${t.label} (${t.shortcut})` : undefined} style={{
                 padding:"4px 7px", background: tool===t.key?"var(--bg-base)":"var(--bg-base)",
                 color: tool===t.key?"var(--info)":"var(--text-muted)",
                 border:`1px solid ${tool===t.key?"#00aa4444":"#0a2030"}`,

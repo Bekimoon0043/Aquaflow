@@ -1,4 +1,4 @@
-import {useFocusPreviewStore} from './components/preview/focus/focusPreviewStore';
+import {useFocusPreviewStore, previewVisible} from './components/preview/focus/focusPreviewStore';
 import DockLayout from './ui/dock/DockLayout';
 import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { Component } from "react";
@@ -75,7 +75,7 @@ const FULL_WORKSPACE_PANELS = new Set(["geometry", "show_programmer", "easybuild
 
 function StudioApp() {
   useICANPreviewClock();
-  const focusOpen = useFocusPreviewStore(s=>s.open);
+  const focusOpen = useFocusPreviewStore(previewVisible);
   // Panel sizes are now draggable and persisted, rather than the frozen literal this
   // used to be. Defaults are unchanged (260 / 300 / 280), so a first run looks identical.
   const { layout, resize, beginDrag, endDrag, resetPanel } = useResizableLayout();

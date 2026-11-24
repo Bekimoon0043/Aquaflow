@@ -1,0 +1,3 @@
+/* Timeline ownership — the legacy device timeline names each clip's track in front of
+   the clip label (the clip colour already comes from the track). */
+.tl-clip .tl-clip-owner { font-weight:700; color:var(--text-primary); opacity:.85; margin-right:6px; padding-right:6px; border-right:1px solid currentColor; }

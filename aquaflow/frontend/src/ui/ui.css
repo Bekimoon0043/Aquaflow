@@ -72,3 +72,26 @@
 .dock-tab-menu{position:fixed;z-index:1300;display:flex;flex-direction:column;min-width:150px;padding:4px;background:var(--bg-raised);border:1px solid var(--border-mid);border-radius:3px;box-shadow:var(--shadow-panel)}
 .dock-tab-menu button{text-align:left;padding:5px 8px;border:0;background:none;color:var(--text-primary);font:12px var(--font-body);cursor:pointer;border-radius:2px;text-transform:capitalize}
 .dock-tab-menu button:hover,.dock-tab-menu button:focus-visible{background:var(--bg-active)}
+/* ── Engineering Designer: Pen (freehand) tool — PenToolPanel.jsx + PoolGeometryDesigner.jsx ── */
+.pen-drawing-surface{touch-action:none}
+.pen-overlay-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+.pen-settings{display:flex;flex-direction:column;gap:6px;margin:0 10px 8px;padding:6px;background:var(--bg-void);border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:4px;font-size:11px;color:var(--text-primary)}
+.pen-settings-title{color:var(--accent);font-weight:700}
+.pen-field{display:flex;flex-direction:column;gap:2px}
+.pen-field>span{color:var(--text-secondary)}
+.pen-field small{color:var(--text-muted);margin-left:4px}
+.pen-hint{color:var(--text-muted);line-height:1.4}
+.pen-result-bar{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:25;display:flex;flex-wrap:wrap;align-items:center;gap:4px;max-width:calc(100% - 24px);padding:5px 8px;background:var(--bg-raised);border:1px solid var(--accent);border-radius:5px;box-shadow:var(--shadow-panel);font-size:11px;color:var(--text-primary)}
+.pen-result-label{margin-right:4px;color:var(--text-secondary)}
+.pen-result-label strong{color:var(--accent)}
+.pen-result-value{min-width:22px;text-align:center;font:11px var(--font-mono);color:var(--text-muted)}
+.pen-result-bar button{padding:3px 7px;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border-mid);border-radius:3px;font-size:11px;cursor:pointer}
+.pen-result-bar button:hover:not(:disabled){border-color:var(--accent)}
+.pen-result-bar button:disabled{opacity:.45;cursor:default}
+.pen-result-bar button.is-primary{background:var(--accent);color:var(--text-on-accent);border-color:var(--accent)}
+/* Pen entry in the designer's shape grids and the bottom command bar */
+.draft-pen-cell{padding:5px 2px;cursor:crosshair;border-radius:3px;font:500 11px var(--font-body);background:var(--bg-panel);color:var(--text-primary);border:1px solid var(--border-mid)}
+.draft-pen-cell.is-active{border-color:var(--accent);font-weight:700}
+.draft-pen-icon{font-size:13px;color:var(--accent)}
+.draft-pen-button{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg-raised);color:var(--text-primary);border:1px solid var(--border-mid);border-radius:3px;font:11px var(--font-body);cursor:pointer}
+.draft-pen-key{color:var(--text-muted);font-size:11px}

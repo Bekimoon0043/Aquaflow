@@ -1,0 +1,80 @@
+# AquaFlow Studio Pro — side-by-side preview build of the professional UI (branch ui-pro-overhaul).
+#
+# Installs NEXT TO the regular "AquaFlow Studio" without touching it:
+#   • own appId        → own uninstall entry and NSIS install GUID
+#   • own productName  → own install folder, Start-menu/desktop shortcut and
+#                        user-data folder (%APPDATA%\AquaFlow Studio Pro)
+#   • no file associations → .aquashow double-click stays with the regular install
+#   • no publish feed      → no latest.yml; the bundled app-config.json for this build has a
+#                            blank updateUrl, so updater.js disables auto-update entirely
+# The engine (~/.aquaflow licence + Siemens site data) is the same unmodified 1.2.94 engine,
+# so data written there stays in the format the regular install reads.
+#
+# Build (from aquaflow/desktop):  node scripts/build-web.js && npx electron-builder --win --config electron-builder-pro.yml
+appId: com.luxurycon.aquaflow.pro
+productName: AquaFlow Studio Pro
+copyright: Copyright © 2026 LuxuryCon
+
+extraMetadata:
+  name: aquaflow-studio-pro-desktop
+  productName: AquaFlow Studio Pro
+  version: 1.3.0
+
+directories:
+  output: dist-pro
+  buildResources: build
+
+files:
+  - main.js
+  - preload.js
+  - launcher.js
+  - app-config.js
+  - menu.js
+  - updater.js
+  - ui-server.js
+  - cad-native.js
+  - project-files.js
+  - open-queue.js
+  - render-export.js
+  - crash-log.js
+  - memory-check.js
+  - splash.html
+  - "assets/**/*"
+  - "web/**/*"
+  - package.json
+  - "!**/*.map"
+
+asarUnpack:
+  - "web/**"
+
+extraResources:
+  - from: resources/engine
+    to: engine
+    filter: ["**/*"]
+  - from: resources/app-config.json
+    to: app-config.json
+
+win:
+  target:
+    - nsis
+  icon: build/AquaFlow.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  menuCategory: LuxuryCon
+  shortcutName: AquaFlow Studio Pro
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  installerIcon: build/AquaFlow.ico
+  uninstallerIcon: build/AquaFlow.ico
+  installerHeaderIcon: build/AquaFlow.ico
+  installerHeader: build/installerHeader.bmp
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/installerSidebar.bmp
+artifactName: AquaFlowStudioPro-Setup-${version}.${ext}
+
+publish: null

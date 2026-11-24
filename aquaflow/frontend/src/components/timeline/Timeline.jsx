@@ -5,6 +5,8 @@ import { useICANPreviewStore } from "../../store/icanPreviewStore";
 import { useWS } from "../../hooks/WebSocketContext";
 import AudioWaveformTrack from "./AudioWaveformTrack";
 import { buildSimulationTracks } from "./simulationTimeline";
+import { clipTooltip, stickyOffset } from "../programmer/studio/timelineOwnership";
+import "./timelineOwnership.css";
 
 const TRACK_H = 50;
 const HEADER_W = 200;
@@ -661,6 +663,7 @@ export default function Timeline({ height }) {
                 onAddClip={(event) => addClipAtCursor(track.id, event)}
                 onMoveClip={startClipDrag}
                 onStartMarquee={startMarqueeSelection}
+                scrollX={scrollX}
               />
             ))}
 
@@ -768,7 +771,7 @@ function TrackHeader({ track, index, selected, readOnly = false, canMoveUp, canM
   );
 }
 
-function TrackRow({ track, trackIndex, timelineZoom, selectedTrackId, selectedClipSet, readOnly = false, onSelectTrack, onSelectClip, onAddClip, onMoveClip, onStartMarquee, canvasWidth }) {
+function TrackRow({ track, trackIndex, timelineZoom, selectedTrackId, selectedClipSet, readOnly = false, onSelectTrack, onSelectClip, onAddClip, onMoveClip, onStartMarquee, canvasWidth, scrollX = 0 }) {
   const gridStep = timelineZoom * 4;
   const backgroundColor = selectedTrackId === track.id ? "rgba(201,162,39,0.03)" : "var(--bg-base)";
 
@@ -797,6 +800,8 @@ function TrackRow({ track, trackIndex, timelineZoom, selectedTrackId, selectedCl
           key={clip.id}
           clip={clip}
           color={track.color}
+          track={track}
+          scrollX={scrollX}
           timelineZoom={timelineZoom}
           selected={selectedClipSet.has(clip.id)}
           muted={track.muted}
@@ -810,15 +815,26 @@ function TrackRow({ track, trackIndex, timelineZoom, selectedTrackId, selectedCl
   );
 }
 
-function Clip({ clip, color, timelineZoom, selected, muted, solo, readOnly = false, onSelect, onDragStart }) {
+// Each clip names the track (device / group) it belongs to, in front of its own label,
+// and the label stays readable when the clip starts left of the visible area.
+export function trackOwner(track) {
+  return track ? { kind: "track", id: track.id, name: track.label || "Track", color: track.color, channel: track.type || null } : null;
+}
+
+function Clip({ clip, color, track = null, scrollX = 0, timelineZoom, selected, muted, solo, readOnly = false, onSelect, onDragStart }) {
   const left = clip.start * timelineZoom;
   const width = Math.max(8, (clip.end - clip.start) * timelineZoom);
   const intHeight = Math.round((clip.intensity / 100) * (TRACK_H - 10));
   const borderColor = muted ? "rgba(239,68,68,0.55)" : selected ? color : `${color}55`;
   const labelColor = muted ? "var(--red)" : color;
+  const owner = trackOwner(track);
+  const sticky = stickyOffset(left, width, scrollX, 56);
 
   return (
     <div
+      className="tl-clip"
+      data-owner={owner?.name}
+      title={clipTooltip({ owner, name: clip.label, kind: clip.effect || clip.type, start: clip.start, duration: clip.end - clip.start, level: clip.intensity })}
       onClick={(event) => { event.stopPropagation(); onSelect(event); }}
       onPointerDown={(event) => {
         if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -841,8 +857,8 @@ function Clip({ clip, color, timelineZoom, selected, muted, solo, readOnly = fal
     >
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: intHeight, background: muted ? "rgba(239,68,68,0.16)" : `${color}33`, borderTop: `1px solid ${color}44` }} />
       {width > 40 && (
-        <span style={{ position: "absolute", left: 8, right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, fontWeight: 500, fontFamily: "var(--font-mono)", color: labelColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", pointerEvents: "none" }}>
-          {clip.label}
+        <span style={{ position: "absolute", left: 8 + sticky, right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, fontWeight: 500, fontFamily: "var(--font-mono)", color: labelColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", pointerEvents: "none" }}>
+          {owner && <b className="tl-clip-owner">{owner.name}</b>}{clip.label}
         </span>
       )}
       {!readOnly && <><div onPointerDown={(event) => { if (event.button !== 0) return; onDragStart(event, "resize-start"); }} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 6, cursor: "ew-resize", background: selected ? `${color}44` : "transparent" }} />

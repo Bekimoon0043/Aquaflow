@@ -12,6 +12,7 @@ import { songAnalysis } from './deepMerge';
 import { useStems } from './stemSync';
 import { useProgrammerSong } from './musicSync';
 import { grid as beatGrid } from './beatSync';
+import { clipTooltip, ownerLabel, ownerOfBlock, ownershipIndex, ownerSummary, stickyOffset } from './timelineOwnership';
 
 /** Snap a time to the song's beats (when the music has a beat grid), else to quarter seconds. */
 export function snapToMusic(t, g) {
@@ -165,6 +166,8 @@ function RecipeInspector({ block, onPatch }) {
 
 export default function PreviewSequence({ studio, items, definitions, time, playing, showLength, onSeek, onChange, onChangeLive, onEditInBuilder, onPatternBuilder, onProgrammingView, extras = null, onExportFile = download }) {
   const blocks = useMemo(() => showBlocks(studio, definitions), [studio, definitions]);
+  // Which group / item each block plays on: shown in front of the block name.
+  const owners = useMemo(() => ownershipIndex(studio, items), [studio.groups, items]);
   const [selectedId, setSelectedId] = useState(null);
   const [zoom, setZoom] = useState(0); // 0 = fit the whole show
   const [menu, setMenu] = useState(false);
@@ -390,15 +393,18 @@ export default function PreviewSequence({ studio, items, definitions, time, play
           <PlanStrip studio={studio} items={items} analysis={music.analysis} pps={pps} onChange={onChange} />
           {showMusic && <MusicLanes lanes={music.lanes} analysis={songGrid} pps={pps} scrollLeft={scrollLeft} viewWidth={width} onSeek={seekAt} />}
           <div className="seq-lanes" onPointerDown={e => { if (e.target === e.currentTarget) { setSelectedId(null); seekAt(e); } }}>
-            {blocks.map(raw => { const b = dragged(raw); return <div key={b.id}
-              className={`seq-block ${b.type}${b.id === selectedId ? ' selected' : ''}${b.background ? ' background' : ''}${b.muted ? ' muted' : ''}`}
-              style={{ left: 12 + b.start * pps, width: Math.max(6, b.duration * pps), top: b.lane * LANE_H + 4, '--block': b.color }}
-              role="button" tabIndex={0} aria-label={b.name} aria-pressed={b.id === selectedId}
+            {blocks.map(raw => { const b = dragged(raw); const owner = ownerOfBlock(b, owners, studio.legacyClips);
+              const left = 12 + b.start * pps, w = Math.max(6, b.duration * pps), compact = w < 90;
+              return <div key={b.id}
+              className={`seq-block ${b.type}${b.id === selectedId ? ' selected' : ''}${b.background ? ' background' : ''}${b.muted ? ' muted' : ''}${owner ? ' owned' : ''}`}
+              style={{ left, width: w, top: b.lane * LANE_H + 4, '--block': b.color, '--owner-color': owner?.color, '--sticky': `${stickyOffset(left, w, scrollLeft)}px` }}
+              role="button" tabIndex={0} aria-label={b.name} aria-description={owner ? `${ownerLabel(owner)} — ${ownerSummary(owner)}` : undefined} aria-pressed={b.id === selectedId}
               onPointerDown={e => { if (e.button === 0) startDrag(e, raw, 'move'); }}
               onKeyDown={e => { if (e.key === 'Enter') setSelectedId(b.id); if (e.key === 'Delete') { onChange(s => deleteBlock(s, raw)); setSelectedId(null); } }}
               onContextMenu={e => { e.preventDefault(); setSelectedId(b.id); setContext({ id: b.id, x: e.clientX, y: e.clientY }); }}
               onDoubleClick={() => b.type === 'builder' && onEditInBuilder(b.recipeIds[0])}
-              title={`${b.name} — ${b.kindLabel} · ${fmt(b.start)}–${fmt(b.start + b.duration)}`}>
+              title={clipTooltip({ owner, name: b.name, kind: b.kindLabel, start: b.start, duration: b.duration, level: b.water?.intensity })}>
+              {owner && <span className="seq-owner" aria-hidden="true" data-owner-kind={owner.kind}><i className="seq-owner-swatch" />{!compact && <b>{ownerLabel(owner)}{owner.also ? ` + ${owner.also.name}` : ''}</b>}</span>}
               <b>{b.name}</b><small>{b.kindLabel} · {b.duration.toFixed(1)} s</small>
               {b.type !== 'recorded' && <span className="seq-handle" onPointerDown={e => startDrag(e, raw, 'resize')} title="Drag to change the length" />}
             </div>; })}

@@ -233,7 +233,7 @@ export default function PatternCreator({ studio, items, start = 0, editBlock = n
         </section>
       </div>
       <aside className="pc-side">
-        <button type="button" onClick={()=>useFocusPreviewStore.setState({open:true})}>Open real fountain Focus Preview</button>
+        <button type="button" onClick={()=>useFocusPreviewStore.getState().openWindow()}>Open real fountain pattern preview</button>
         <div className="pc-actions">
           <button className="sp-primary" onClick={add}>{editBlock ? 'Update pattern' : '+ Add to timeline'}</button>
           <button onClick={save} title="Keep this pattern type in this project and on this computer">★ Save as my pattern</button>

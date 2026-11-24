@@ -61,6 +61,9 @@ import {
   DimensionsSection, FixturePickerSection, LayersSection, PoolPropertiesSection, PoolTypeSection, ProjectHeaderSection,
   ProjectOutputSection, SiteSurfacesSection, SurfacePropertiesSection, ToolsSection,
 } from "./designer/DesignerSidebar";
+import { DEFAULT_PEN_SETTINGS, PEN_KIND_LABEL, cleanStroke } from "../../engineering/drafting/freehand";
+import { drawPenOverlay, sizePenOverlay } from "../../engineering/drafting/penOverlay";
+import { PenResultBar, PenSettingsPanel, PEN_TARGET_LABEL } from "./designer/PenToolPanel";
 import { usePanelLayout, shownSize } from "../../ui/dock/panelLayout";
 import { IconButton, Splitter } from "../../ui";
 
@@ -73,6 +76,10 @@ const ALIAS_START_KEYS = new Set(["L", "P", "R", "C", "E", "A"]);
 const TOOL_DRAFTS = { polyline: "pline", rectangle: "rect", circle: "circle" };
 const DRAFT_TARGET_LABEL = { pool: "pool outline", land: "land surface", depth: "depth zone", guide: "a line for an array" };
 const CLOSE_TOLERANCE_PX = 12;
+// Pen tool: holding still this long before lifting forces a perfect shape (QuickShape-style).
+const PEN_HOLD_MS = 600;
+const PEN_MIN_AREA = { pool: 0.5, land: 0.05, depth: 0.01 };
+const round4 = (v) => Math.round(v * 1e4) / 1e4;
 
 export default function PoolGeometryDesigner() {
   // Dockable sidebar: resize, collapse, swap side; saved per workspace, cleared by View → Reset layout.
@@ -191,6 +198,13 @@ export default function PoolGeometryDesigner() {
   const [cmdLine, setCmdLine] = useState(emptyCommandLine);
   const lastDraftCommandRef = useRef(null);
   const fixtureDragRef = useRef(null);
+  // Pen (freehand) tool: settings, the live stroke (a ref: never re-renders per move), and the
+  // last committed result with its raw stroke so it can be re-fitted until accepted.
+  const [penSettings, setPenSettings] = useState(() => ({ ...DEFAULT_PEN_SETTINGS }));
+  const [penResult, setPenResult] = useState(null);
+  const penStrokeRef = useRef(null);
+  const penOverlayRef = useRef(null);
+  const penFrameRef = useRef(0);
 
   const selectedIndices = useMemo(() => {
     const keys = new Set(selection);
@@ -718,6 +732,8 @@ export default function PoolGeometryDesigner() {
     setDraft(null);
     setDraftHover(null);
     cancelDepthZone();
+    penStrokeRef.current = null;
+    setPenResult(null);
   };
 
   const escapeAll = () => {
@@ -734,6 +750,8 @@ export default function PoolGeometryDesigner() {
     setDynamicInput(emptyDynamicInput());
     setDraft(null);
     setDraftHover(null);
+    penStrokeRef.current = null;
+    setPenResult(null);
     cancelPipeDrawing();
     setSelectedPipeId(null);
     setSelectedNode(null);
@@ -829,6 +847,7 @@ export default function PoolGeometryDesigner() {
   const draftCursorOpts = () => ({ cursor: draftHover?.point || null, cursorAngleDeg: draftHover?.angleDeg });
   const submitDraftText = (text) => {
     if (!draft) {
+      if (text.trim().toUpperCase() === "PEN") { chooseTool("pen"); logLine("PEN → freehand drawing", "input"); return; }
       const cmd = commandForAlias(text);
       if (cmd) startDraft(cmd);
       else logLine(`Unknown command "${text}" · try L, REC, C, POL, EL or A`, "error");
@@ -913,8 +932,11 @@ export default function PoolGeometryDesigner() {
     const ctrl = e.ctrlKey || e.metaKey;
     if (ctrl && key === "k") { e.preventDefault(); setPaletteOpen((open) => !open); return; }
     if (paletteOpen) return;
-    if (ctrl && !e.shiftKey && key === "z") { e.preventDefault(); handleUndo(); return; }
-    if (ctrl && (key === "y" || (e.shiftKey && key === "z"))) { e.preventDefault(); handleRedo(); return; }
+    if (ctrl && !e.shiftKey && key === "z") { e.preventDefault(); undoAny(); return; }
+    if (ctrl && (key === "y" || (e.shiftKey && key === "z"))) { e.preventDefault(); redoAny(); return; }
+    // Shift+P = Pen (plain P starts the PL / POL command aliases).
+    const designerShown = !useProjectStore.getState().workspace?.activePanel || useProjectStore.getState().workspace.activePanel === "geometry";
+    if (designerShown && !ctrl && !e.altKey && e.shiftKey && key === "p" && !draft && !cmdLine.text) { e.preventDefault(); chooseTool("pen"); return; }
     if (handleCommandLineKey(e)) return;
     if (handleDynamicKey(e)) return;
     if (e.code === "Space") { e.preventDefault(); setIsSpaceDown(true); }
@@ -1054,6 +1076,7 @@ export default function PoolGeometryDesigner() {
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
       return;
     }
+    if (tool === "pen") return; // strokes come from the pointer handlers
     if (draft) {
       if (e.button !== 0) return;
       const anchor = draftAnchor(draft.state);
@@ -1209,7 +1232,7 @@ export default function PoolGeometryDesigner() {
     setCursorWorld({ x: world.x, y: world.y });
     const { cx, cy } = toCanvas(e.clientX, e.clientY);
     setCursorScreen({ x: cx, y: cy });
-    if (draft || (tool !== "pipe" && tool !== "select")) setHoverSnap({ snap: resolved.snap, polar: resolved.polar, from: polylineFrom });
+    if (draft || (tool !== "pipe" && tool !== "select" && tool !== "pen")) setHoverSnap({ snap: resolved.snap, polar: resolved.polar, from: polylineFrom });
     else if (hoverSnap) setHoverSnap(null);
     if (draft) {
       setDraftHover({ point: world, angleDeg: resolved.polar?.angleDeg ?? (draftFrom ? angleOf(draftFrom, world) : undefined) });
@@ -1333,6 +1356,194 @@ export default function PoolGeometryDesigner() {
     setSaveStatus(`${preset.label} surface created · select it to move or edit vertices.`);
     return true;
   };
+
+  // ── Pen (freehand) tool: stroke → freehand.js clean-up → the normal pool / land /
+  // depth / guide geometry (vertex grips, undo). See engineering/drafting/freehand.js.
+  const undoAny = () => { setPenResult(null); handleUndo(); };
+  const redoAny = () => { setPenResult(null); handleRedo(); };
+
+  const penCleanOptions = (fit, target) => ({
+    mode: target === "guide" ? "line" : "area",
+    smoothing: fit.smoothing, recognise: fit.recognise, force: Boolean(fit.force), straighten: Boolean(fit.straighten),
+    keepCorners: fit.keepCorners, autoClose: fit.autoClose, closeTolerance: (Number(fit.closePx) || 30) / zoom,
+    minArea: PEN_MIN_AREA[target] ?? 0.05, minLength: 0.1,
+    snap: fit.snap && (snapToGrid || osnap) ? (p) => snapPoint(p) : null,
+  });
+
+  /** Clean `raw` with `fit` and write it to `target`; with `replaceId` the earlier pen entity is replaced. */
+  const applyPenStroke = (raw, target, fit, { replaceId = null, label = "Pen" } = {}) => {
+    if (target === "pool" && isLayerLocked("pool_outline")) { setSaveStatus("The POOL OUTLINE layer is locked."); return null; }
+    if (target === "land" && isLayerLocked("landscape")) { setSaveStatus("The LANDSCAPE layer is locked."); return null; }
+    const res = cleanStroke(raw, penCleanOptions(fit, target));
+    if (!res.ok) { setSaveStatus(`Pen: ${res.error}`); logLine(res.error, "error"); return null; }
+    const pts = res.points;
+    if (target === "depth") {
+      const basinId = activeBasin?.id || primaryBasinId;
+      const check = validateDepthZone(pts, geometry, zonesForBasin(depthZones, basinId, primaryBasinId).filter((zone) => (zone.zone || zone.key) !== depthZone));
+      if (!check.valid) { setDepthZoneError(check.errors.join(" ")); setSaveStatus(`Pen: ${check.errors.join(" ")}`); return null; }
+      pushUndo(label);
+      finishDepthZone(pts);
+      return { entityId: depthZone, res };
+    }
+    pushUndo(label);
+    if (target === "land") {
+      const points = dedupeSurfacePoints(pts);
+      if (replaceId && siteSurfaces.some((s) => s.id === replaceId)) {
+        setSiteSurfaces((current) => current.map((s) => (s.id === replaceId ? { ...s, points } : s)));
+        return { entityId: replaceId, res };
+      }
+      const preset = LAND_SURFACE_TYPES.find((entry) => entry.key === landSurfaceType) || LAND_SURFACE_TYPES[0];
+      const sameTypeCount = siteSurfaces.filter((surface) => surface.type === preset.key).length;
+      const [surface] = ensureEntityIdentities([{
+        label: `${preset.label} Area ${sameTypeCount + 1}`, type: preset.key, color: preset.color, elevation: 0.02, visible: true, points,
+      }], "site");
+      setSiteSurfaces((current) => [...current, surface]);
+      setSelectedSurfaceId(surface.id);
+      setSelectedSurfaceVertex(null);
+      setSelectedObject("surface");
+      return { entityId: surface.id, res };
+    }
+    if (target === "guide") {
+      const shape = res.kind === "rect" ? "rect" : res.kind === "circle" ? "circle" : "pline";
+      if (replaceId && guidePaths.some((g) => g.id === replaceId)) {
+        setGuidePaths((current) => current.map((g) => (g.id === replaceId ? { ...g, points: pts, closed: Boolean(res.closed), shape } : g)));
+        return { entityId: replaceId, res };
+      }
+      const [guide] = ensureEntityIdentities([{ kind: "guide", label: `Guide line ${guidePaths.length + 1}`, points: pts, closed: Boolean(res.closed), shape }], "site");
+      setGuidePaths((current) => [...current, guide]);
+      setSelectedGuideId(guide.id);
+      setArrayPipeId(guide.id);
+      return { entityId: guide.id, res };
+    }
+    // Basin outline: perfect primitives become the matching pool type, the rest a freeform outline.
+    if (res.kind === "circle") {
+      const radius = Number(res.circle.radius.toFixed(3));
+      setPoolType("circular");
+      setParams((p) => ({ ...p, radius }));
+      setGeometry({ type: "circle", center: { x: round4(res.circle.center.x), y: round4(res.circle.center.y) }, radius });
+    } else if (res.kind === "ellipse" && res.ellipse.axisAligned) {
+      const { center, rx, ry } = res.ellipse;
+      setPoolType("elliptical");
+      setParams((p) => ({ ...p, width: Number((rx * 2).toFixed(3)), length: Number((ry * 2).toFixed(3)) }));
+      setGeometry({ type: "ellipse", center: { x: round4(center.x), y: round4(center.y) }, rx: round4(rx), ry: round4(ry) });
+    } else if (res.kind === "rect" && res.rect.axisAligned) {
+      const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      setPoolType("rectangular");
+      setParams((p) => ({ ...p, width: Number((x1 - x0).toFixed(3)), length: Number((y1 - y0).toFixed(3)) }));
+      setGeometry({ type: "rectangle", points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], closed: true });
+    } else {
+      setPoolType("freeform");
+      setGeometry({ type: "freeform", points: pts, closed: true });
+    }
+    setFreeformPoints([]);
+    setSelection([]);
+    setSelectedObject("pool");
+    return { entityId: activeBasin?.id || "pool", res };
+  };
+
+  const penSummary = (target, res) => `Pen → ${PEN_TARGET_LABEL[target]}: ${PEN_KIND_LABEL[res.kind] || res.kind}, ${res.points.length} points`
+    + `${res.notes.length ? ` (${res.notes.join(", ")})` : ""} · fix it in the Pen bar or drag its grips · Ctrl+Z undoes.`;
+
+  const finishPenStroke = (raw, { held = false } = {}) => {
+    const target = penSettings.target;
+    const fit = { ...penSettings, force: held, straighten: false };
+    const out = applyPenStroke(raw, target, fit, { label: `Pen ${PEN_TARGET_LABEL[target]}` });
+    if (!out) { setPenResult(null); return null; }
+    setPenResult({ raw, target, fit, entityId: out.entityId, kind: out.res.kind, points: out.res.points, vertices: out.res.points.length, notes: out.res.notes, history: [] });
+    setSaveStatus(penSummary(target, out.res));
+    logLine(`✓ ${PEN_TARGET_LABEL[target]}: ${PEN_KIND_LABEL[out.res.kind] || out.res.kind}`, "ok");
+    return out;
+  };
+
+  const refitPen = (patch, label) => {
+    if (!penResult) return;
+    const fit = { ...penResult.fit, ...patch };
+    const preview = cleanStroke(penResult.raw, penCleanOptions(fit, penResult.target));
+    if (preview.ok && preview.kind === penResult.kind && JSON.stringify(preview.points) === JSON.stringify(penResult.points)) {
+      setPenResult({ ...penResult, fit });
+      setSaveStatus("Pen: that fix gives the same shape.");
+      return;
+    }
+    const out = applyPenStroke(penResult.raw, penResult.target, fit, { replaceId: penResult.entityId, label: `Pen refit: ${label}` });
+    if (!out) return;
+    const { raw, target, history, ...previous } = penResult;
+    setPenResult({ raw, target, fit, entityId: out.entityId, kind: out.res.kind, points: out.res.points, vertices: out.res.points.length, notes: out.res.notes, history: [...history, previous] });
+    setSaveStatus(penSummary(target, out.res));
+  };
+
+  const undoPenFix = () => {
+    // Re-applies the previous fit from the raw stroke (deterministic), as its own undo step,
+    // so edits made elsewhere since the fix are never rolled back by mistake.
+    if (!penResult?.history.length) return;
+    const previous = penResult.history.at(-1);
+    const out = applyPenStroke(penResult.raw, penResult.target, previous.fit, { replaceId: penResult.entityId, label: "Pen refit: undo fix" });
+    if (!out) return;
+    setPenResult({ ...penResult, ...previous, entityId: out.entityId, kind: out.res.kind, points: out.res.points, vertices: out.res.points.length, notes: out.res.notes, history: penResult.history.slice(0, -1) });
+    setSaveStatus(penSummary(penResult.target, out.res));
+  };
+
+  const penPointerDown = (e) => {
+    if (tool !== "pen" || penStrokeRef.current) return; // a second finger / palm during a stroke is ignored
+    if (e.button !== 0 || e.altKey || isSpaceDown) return; // panning stays with the mouse handlers
+    e.preventDefault();
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) document.activeElement.blur();
+    setPenResult(null); // starting a new stroke accepts the previous result
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* pointer already gone */ }
+    const now = performance.now();
+    penStrokeRef.current = {
+      pointerId: e.pointerId, pointerType: e.pointerType || "mouse", points: [toWorld(e.clientX, e.clientY)],
+      last: { x: e.clientX, y: e.clientY }, lastMove: now,
+    };
+    requestPenFrame();
+  };
+
+  const penPointerMove = (e) => {
+    const stroke = penStrokeRef.current;
+    if (!stroke || e.pointerId !== stroke.pointerId) return;
+    // Coalesced events carry every sample the browser merged into this move (fast strokes).
+    const coalesced = typeof e.nativeEvent?.getCoalescedEvents === "function" ? e.nativeEvent.getCoalescedEvents() : [];
+    const samples = coalesced.length ? coalesced : [e];
+    for (const ev of samples) {
+      if (Math.hypot(ev.clientX - stroke.last.x, ev.clientY - stroke.last.y) < 1) continue;
+      stroke.points.push(toWorld(ev.clientX, ev.clientY));
+      stroke.last = { x: ev.clientX, y: ev.clientY };
+      stroke.lastMove = performance.now();
+    }
+    requestPenFrame();
+  };
+
+  const penPointerEnd = (e) => {
+    const stroke = penStrokeRef.current;
+    if (!stroke || e.pointerId !== stroke.pointerId) return;
+    penStrokeRef.current = null;
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch { /* already released */ }
+    if (e.type === "pointercancel") { requestPenFrame(); return; }
+    if (Math.hypot(e.clientX - stroke.last.x, e.clientY - stroke.last.y) >= 1) stroke.points.push(toWorld(e.clientX, e.clientY));
+    const held = performance.now() - stroke.lastMove >= PEN_HOLD_MS && stroke.points.length > 2;
+    if (stroke.points.length < 2) { requestPenFrame(); return; } // a tap, not a stroke
+    finishPenStroke(stroke.points, { held });
+    requestPenFrame();
+  };
+
+  const penViewRef = useRef(null);
+  penViewRef.current = { pan, zoom, dpr: canvasViewport.dpr, ghost: penResult?.raw || null };
+  const paintPenOverlay = () => {
+    penFrameRef.current = 0;
+    const view = penViewRef.current;
+    drawPenOverlay(penOverlayRef.current, { stroke: penStrokeRef.current?.points || null, ghost: view.ghost, pan: view.pan, zoom: view.zoom, dpr: view.dpr });
+  };
+  function requestPenFrame() {
+    if (penFrameRef.current) return;
+    penFrameRef.current = requestAnimationFrame(paintPenOverlay);
+  }
+  // Repaint the overlay when the view changes (wheel zoom mid-stroke) or a result opens/closes.
+  useEffect(() => {
+    sizePenOverlay(penOverlayRef.current, canvasViewport);
+    paintPenOverlay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pan, zoom, canvasViewport, penResult, tool]);
+  useEffect(() => () => { if (penFrameRef.current && typeof cancelAnimationFrame === "function") cancelAnimationFrame(penFrameRef.current); }, []);
 
   const clearMeasurements = () => setMeasurements([]);
 
@@ -1606,10 +1817,10 @@ export default function PoolGeometryDesigner() {
   // ── AF-CAD-033: every designer command, for the Ctrl+K palette ──────────────
   const hasFixtureSelection = selection.length > 0;
   const paletteCommands = [
-    ...TOOLS.map((t) => ({ id: `tool:${t.key}`, group: "Tool", label: t.label, aliases: [t.key], run: () => chooseTool(t.key) })),
+    ...TOOLS.map((t) => ({ id: `tool:${t.key}`, group: "Tool", label: t.label, aliases: [t.key], ...(t.shortcut ? { shortcut: t.shortcut } : {}), run: () => chooseTool(t.key) })),
     ...DRAFT_COMMANDS.map((c) => ({ id: `draw:${c.key}`, group: "Draw", label: c.label, aliases: c.aliases, shortcut: c.aliases[0], run: () => startDraft(c.key) })),
-    { id: "edit:undo", group: "Edit", label: "Undo", shortcut: "Ctrl+Z", enabled: historyApi.canUndo, run: handleUndo },
-    { id: "edit:redo", group: "Edit", label: "Redo", shortcut: "Ctrl+Y", enabled: historyApi.canRedo, run: handleRedo },
+    { id: "edit:undo", group: "Edit", label: "Undo", shortcut: "Ctrl+Z", enabled: historyApi.canUndo, run: undoAny },
+    { id: "edit:redo", group: "Edit", label: "Redo", shortcut: "Ctrl+Y", enabled: historyApi.canRedo, run: redoAny },
     { id: "edit:delete", group: "Edit", label: "Delete selection", shortcut: "Del", run: deleteCurrentSelection },
     { id: "edit:duplicate", group: "Edit", label: "Duplicate selection", shortcut: "Ctrl+D", enabled: hasFixtureSelection || !!selectedSurfaceId, run: () => (selectedSurfaceId ? duplicateSelectedSurface() : duplicateSelectedFixture()) },
     { id: "select:all", group: "Select", label: "Select all fixtures", shortcut: "Ctrl+A", run: selectAllFixtures },
@@ -1641,7 +1852,10 @@ export default function PoolGeometryDesigner() {
   ];
 
   // State bag for the sidebar sections (./designer/DesignerSidebar.jsx).
+  // Pen from the shape grids / bottom bar: choose what the stroke becomes, then pick the Pen tool.
+  const startPen = (target) => { if (target) setPenSettings((prev) => ({ ...prev, target })); chooseTool("pen"); };
   const d = {
+    startPen,
     activeBasin, activeBasinIndex, applyFixtureArray, arrayCols, arrayCount, arrayInset, arrayMode, arrayRows, autoPlaceNozzles,
     basinState, basins, bomItems, cadExportBusy, cadUnderlay, cancelDepthZone, cancelDrawing, cancelPipeDrawing, changePoolType,
     chooseProjectFile, clearMeasurements, deleteSelectedSurface, depthDrawPoints, depthZone, depthZoneError, drawStart,
@@ -1692,6 +1906,12 @@ export default function PoolGeometryDesigner() {
         <PoolTypeSection d={d} />
         <DimensionsSection d={d} />
         <ToolsSection d={d} />
+        {tool === "pen" && (
+          <PenSettingsPanel
+            settings={penSettings} onChange={setPenSettings} snapAvailable={snapToGrid || osnap}
+            landTypes={LAND_SURFACE_TYPES} landSurfaceType={landSurfaceType} onLandSurfaceType={setLandSurfaceType}
+            depthZones={safeDepthZones} depthZone={depthZone} onDepthZone={setDepthZone} />
+        )}
         <FixturePickerSection d={d} />
         <PoolPropertiesSection d={d} />
         <SurfacePropertiesSection d={d} />
@@ -1751,6 +1971,11 @@ export default function PoolGeometryDesigner() {
             width:"100%", height:"100%", display:"block",
             cursor: isPanning || isDraggingGeometry || isDraggingSurface ? "grabbing" : isSpaceDown ? "grab" : tool==="select" ? "default" : "crosshair",
           }}
+          className={tool === "pen" ? "pen-drawing-surface" : undefined}
+          onPointerDown={penPointerDown}
+          onPointerMove={penPointerMove}
+          onPointerUp={penPointerEnd}
+          onPointerCancel={penPointerEnd}
           onMouseDown={onCanvasMouseDown}
           onMouseMove={onCanvasMouseMove}
           onMouseUp={onCanvasMouseUp}
@@ -1759,6 +1984,7 @@ export default function PoolGeometryDesigner() {
           onDoubleClick={(e) => {
             const w = snapPoint(toWorld(e.clientX, e.clientY));
             if (draft) { if (draft.state.command === "pline") finishDraft(); return; }
+            if (tool === "pen") return;
             if (tool === "pipe") { onPipeDoubleClick(w); setDynamicInput(emptyDynamicInput()); return; }
             if (tool === "depth") { finishDepthZone(); return; }
             if (tool === "polyline") { finishPolyline(); return; }
@@ -1767,6 +1993,15 @@ export default function PoolGeometryDesigner() {
             fitView();
           }}
         />
+        <canvas ref={penOverlayRef} className="pen-overlay-canvas" aria-hidden="true" />
+        <PenResultBar
+          result={penResult}
+          onSmooth={(delta) => refitPen({ smoothing: Math.max(0, Math.min(100, (penResult?.fit.smoothing ?? 50) + delta)), recognise: false, force: false, straighten: false }, delta > 0 ? "smooth more" : "smooth less")}
+          onPerfect={() => refitPen({ force: true, straighten: false }, "perfect shape")}
+          onStraighten={() => refitPen({ straighten: true, force: false, recognise: false }, "straighten")}
+          onAsDrawn={() => refitPen({ recognise: false, force: false, straighten: false, smoothing: 10 }, "as drawn")}
+          onUndoFix={undoPenFix}
+          onAccept={() => { setPenResult(null); setSaveStatus("Pen result kept · drag its grips to edit · Ctrl+Z undoes."); }} />
         <DynamicInputOverlay input={dynamicInput} screen={cursorScreen} polar={pipeOverlay?.polar} snap={pipeOverlay?.snap} />
         <CommandPalette open={paletteOpen} commands={paletteCommands} onClose={() => setPaletteOpen(false)} />
         {pipeContextMenu && (
@@ -1801,8 +2036,8 @@ export default function PoolGeometryDesigner() {
           <button onClick={resetView} style={overlayButton}>⌂ HOME</button>
           <button onClick={fitView} style={overlayButton}>FIT</button>
           <div style={{ width:1, height:14, background:"var(--bg-panel)" }}/>
-          <button onClick={handleUndo} disabled={!historyApi.canUndo} title={historyApi.state.undoLabel ? `Undo ${historyApi.state.undoLabel}` : "Nothing to undo"} style={{ ...overlayButton, color:historyApi.canUndo?"var(--info)":"var(--info)" }}>↶ UNDO</button>
-          <button onClick={handleRedo} disabled={!historyApi.canRedo} title={historyApi.state.redoLabel ? `Redo ${historyApi.state.redoLabel}` : "Nothing to redo"} style={{ ...overlayButton, color:historyApi.canRedo?"var(--info)":"var(--info)" }}>↷ REDO</button>
+          <button onClick={undoAny} disabled={!historyApi.canUndo} title={historyApi.state.undoLabel ? `Undo ${historyApi.state.undoLabel}` : "Nothing to undo"} style={{ ...overlayButton, color:historyApi.canUndo?"var(--info)":"var(--info)" }}>↶ UNDO</button>
+          <button onClick={redoAny} disabled={!historyApi.canRedo} title={historyApi.state.redoLabel ? `Redo ${historyApi.state.redoLabel}` : "Nothing to redo"} style={{ ...overlayButton, color:historyApi.canRedo?"var(--info)":"var(--info)" }}>↷ REDO</button>
           <div style={{ width:1, height:14, background:"var(--bg-panel)" }}/>
           <button onClick={pushFixturesToDevices} disabled={!fixtures.length} style={{ ...overlayButton, color: fixtures.length?"var(--accent)":"var(--info)" }}>⇒ PUSH TO DEVICES</button>
           <div style={{ width:1, height:14, background:"var(--bg-panel)" }}/>
@@ -1833,6 +2068,7 @@ export default function PoolGeometryDesigner() {
           {tool==="circle" && !drawStart && "Circle: click center point"}
           {tool==="circle" && drawStart && "Circle: click radius point to finish"}
           {tool==="polyline" && "Polyline: click points · Close Polyline to finish"}
+          {tool==="pen" && "Pen (Shift+P): draw freehand, lift to clean up · hold still before lifting = perfect shape · Space-drag pans"}
           {tool==="pipe" && "Pipe: click a start point · move to a direction (15° tracking, Shift locks) · type a length + Enter · Enter again finishes"}
           {tool==="land" && "Land: choose a material · click boundary points · double-click to close"}
           {tool==="measure"&& "Click two points to measure distance"}
@@ -1874,6 +2110,7 @@ export default function PoolGeometryDesigner() {
         lengthHint={draftLengthHint}
         onOption={(key) => submitDraftText(key)}
         onCommand={(key) => startDraft(key)}
+        onPen={() => startPen()}
       />
       </div>
     </div>

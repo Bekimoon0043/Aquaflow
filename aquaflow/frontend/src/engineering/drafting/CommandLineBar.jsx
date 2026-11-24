@@ -21,7 +21,7 @@ function OptionChip({ option, onOption }) {
   );
 }
 
-export default function CommandLineBar({ prompt, text = "", history = [], onOption, onCommand, lengthHint = "", visible = true }) {
+export default function CommandLineBar({ prompt, text = "", history = [], onOption, onCommand, onPen, lengthHint = "", visible = true }) {
   if (!visible) return null;
   const drawing = Boolean(prompt?.text);
   const options = prompt?.options || [];
@@ -58,6 +58,12 @@ export default function CommandLineBar({ prompt, text = "", history = [], onOpti
                 {(cmd.aliases || [])[0] && <span style={{ color: C.dim, fontSize: 10 }}>{String(cmd.aliases[0]).toUpperCase()}</span>}
               </button>
             ))}
+            {onPen && (
+              <button type="button" className="draft-pen-button" onMouseDown={(e) => { e.preventDefault(); onPen(); }}
+                title="Pen — draw freehand, cleaned up when you lift (Shift+P)">
+                <span className="draft-pen-icon">✎</span><span>Pen</span><span className="draft-pen-key">⇧P</span>
+              </button>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.dim }}>
             {text

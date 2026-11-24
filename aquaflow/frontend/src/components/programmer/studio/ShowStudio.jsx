@@ -1,4 +1,5 @@
-import {useFocusPreviewStore} from '../../preview/focus/focusPreviewStore';
+import {useFocusPreviewStore, PREVIEW_SHORTCUT} from '../../preview/focus/focusPreviewStore';
+import { patternSubject } from '../../preview/focus/patternPreview';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useEngineeringStore from '../../../store/engineeringStore';
 import useProjectStore from '../../../store/projectStore';
@@ -34,6 +35,7 @@ import { useMusicLanes } from './MusicLanes';
 import { composeContext, composeProposal, readPrompt, rememberPrompt, requestCompose } from './aiCompose';
 import { waveformEnvelope } from '../../../utils/waveformEnvelope';
 import './showStudio.css';
+import '../../preview/focus/focusPreview.css';
 
 const StudioPreview = lazy(() => import('./StudioPreview'));
 const fieldLabel = text => text.replaceAll('-', ' ').replaceAll('_', ' ');
@@ -96,7 +98,27 @@ export default function ShowStudio() {
     setClipIds(old => old.every(id => valid.has(id)) ? old : old.filter(id => valid.has(id)));
     setFocusedId(old => valid.has(old) ? old : null);
   }, [studio.recipes, studio.legacyClips]);
-  useEffect(()=>{if(active)useFocusPreviewStore.getState().select(selection);},[selection,active]);
+  // Pattern Preview window: the selection, then the selected pattern (debounced so edits recompile once).
+  useEffect(() => { if (active) useFocusPreviewStore.getState().select(selection, { source: 'studio' }); }, [selection, active]);
+  useEffect(() => { useFocusPreviewStore.getState().setStudioActive(active); }, [active]);
+  useEffect(() => () => useFocusPreviewStore.getState().setStudioActive(false), []);
+  const previewOpen = useFocusPreviewStore(s => s.open);
+  const previewedId = useRef(null);
+  useEffect(() => {
+    if (!active) return undefined;
+    const preview = useFocusPreviewStore.getState();
+    if (!selectedId) { previewedId.current = null; preview.clearPattern(); return undefined; }
+    // A newly selected (or newly added) pattern opens the window; edits of the same pattern only update it.
+    const reveal = previewedId.current !== selectedId;
+    const timer = setTimeout(() => {
+      previewedId.current = selectedId;
+      try {
+        const subject = patternSubject(studio, items, selectedId, allGroups);
+        if (subject) preview.showPattern(subject, { reveal }); else preview.clearPattern();
+      } catch { preview.clearPattern(); }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [active, selectedId, studio, items, allGroups]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const tracks = useMemo(() => items.flatMap(i => i.tracks), [items]);
   const end = Math.max(1, ...clips.map(c => c.startTime + c.duration), ...studio.recipes.map(r => r.start + r.duration));
@@ -192,6 +214,13 @@ export default function ShowStudio() {
     change(s => ({ ...s, groups: s.groups.some(x => x.id === g.id) ? s.groups : [...s.groups, g], recipes: [...s.recipes, r] }));
     setSelectedId(r.id); setGroupId(g.id); setTab('pattern');
   };
+  // A pattern the builder adds (one unit: water + matching lights) becomes the selected pattern, so the preview plays it.
+  const applyBuilder = next => {
+    const before = new Set(studio.recipes.map(r => r.id));
+    change(next);
+    const added = (next?.recipes || []).filter(r => !before.has(r.id));
+    if (added.length && new Set(added.map(r => r.pattern?.id || r.id)).size === 1) setSelectedId((added.find(r => r.pattern?.role !== 'lights') || added[0]).id);
+  };
   const patchRecipe = (id, patch) => change(s => ({ ...s, recipes: s.recipes.map(r => r.id === id && !r.locked && !groupFlag(s.groups, r.groupId, 'locked') ? { ...r, ...patch } : r) }));
   const patchLegacy = (id, patch) => change(s => ({ ...s, legacyClips: s.legacyClips.map(c => c.id === id && editableClip(s, c) ? { ...c, ...patch,
     effects: (c.effects || []).map(effect => effect.type === 'basic' ? { ...effect, duration: patch.duration ?? effect.duration, params: { ...effect.params, value: patch.value ?? effect.params?.value } } : effect) } : c) }));
@@ -230,6 +259,9 @@ export default function ShowStudio() {
     const handler = e => {
       const ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopImmediatePropagation(); setPalette(v => !v); return; }
+      if (e.altKey && !ctrl && e.code === 'KeyP') { e.preventDefault(); e.stopImmediatePropagation(); useFocusPreviewStore.getState().toggleOpen(); return; }
+      // Keys typed inside the floating Pattern Preview belong to it (Esc, Space, arrows).
+      if (!ctrl && e.target.closest?.('.focus-preview')) return;
       if (e.target.closest?.('input,textarea,select,[contenteditable="true"]')) return;
       const key = e.key.toLowerCase();
       const actions = { ' ': () => { if (time >= end) seek(0); setPlaying(v => !v); }, delete: remove, backspace: remove, f: () => setFrame(n => n + 1), escape: () => { setPalette(false); setGhost(false); }, arrowleft: () => seek(Math.max(0, time - (e.shiftKey ? 1 : .1))), arrowright: () => seek(Math.min(end, time + (e.shiftKey ? 1 : .1))) };
@@ -339,13 +371,13 @@ export default function ShowStudio() {
     window.addEventListener('aquaflow:reset-layout', reset);
     return () => window.removeEventListener('aquaflow:reset-layout', reset);
   });
-  const commands = [ ['Play / pause', () => setPlaying(v => !v), 'Space'], ['Add pattern', () => addPattern(), ''], ['Pattern builder', () => setBuilder(true), ''], ['Create group from selection', createGroup, 'Ctrl+G'], ['Save project', save, 'Ctrl+S'], ['Undo', doc.undo, 'Ctrl+Z'], ['Redo', doc.redo, 'Ctrl+Y'], ['Frame all', () => setFrame(n => n + 1), 'F'], ['Engineering design', () => navigate('geometry'), ''], ['AI assistant', () => setTab('ai'), ''], ['Compile / Siemens', () => setTab('compile'), ''] ];
+  const commands = [ ['Play / pause', () => setPlaying(v => !v), 'Space'], ['Add pattern', () => addPattern(), ''], ['Pattern builder', () => setBuilder(true), ''], ['Pattern preview window', () => useFocusPreviewStore.getState().toggleOpen(), PREVIEW_SHORTCUT], ['Create group from selection', createGroup, 'Ctrl+G'], ['Save project', save, 'Ctrl+S'], ['Undo', doc.undo, 'Ctrl+Z'], ['Redo', doc.redo, 'Ctrl+Y'], ['Frame all', () => setFrame(n => n + 1), 'F'], ['Engineering design', () => navigate('geometry'), ''], ['AI assistant', () => setTab('ai'), ''], ['Compile / Siemens', () => setTab('compile'), ''] ];
   const selectedFixtures = items.filter(i => selectedSet.has(i.id));
   const supportedAttributes = [...new Set(selectedFixtures.flatMap(i => i.tracks.map(t => t.type)))];
   return <div className={`show-studio sp-preset-${studio.layout.preset.toLowerCase()} ${studio.layout.hideExplorer ? 'sp-hide-explorer' : ''} ${studio.layout.hideInspector ? 'sp-hide-inspector' : ''}`} ref={host} style={{ '--sp-left': `${studio.layout.left}px`, '--sp-right': `${studio.layout.right}px`, '--sp-timeline': `${studio.layout.timeline}px` }}>
     <div className="sp-transport"><button className="sp-icon" onClick={doc.undo} disabled={!doc.canUndo} title="Undo · Ctrl+Z" aria-label="Undo"><Icon name="undo" /></button><button className="sp-icon" onClick={doc.redo} disabled={!doc.canRedo} title="Redo · Ctrl+Y" aria-label="Redo"><Icon name="redo" /></button><span className="sp-divider" /><button className="sp-icon" onClick={() => { setPlaying(false); seek(0); }} title="Stop preview" aria-label="Stop preview"><Icon name="stop" /></button><button className="sp-play sp-icon" onClick={() => { if (time >= end) seek(0); setPlaying(!playing); }} disabled={pending || !clips.length} title={playing ? 'Pause · Space' : 'Play preview · Space'} aria-label={playing ? 'Pause' : 'Play preview'}><Icon name={playing ? 'pause' : 'play'} /></button>
       <output>{clock(time)}</output><button className="sp-icon" aria-pressed={loop} onClick={() => setLoop(!loop)} title="Loop" aria-label="Loop"><Icon name="loop" /></button><span className="sp-divider" />
-      <button onClick={() => addPattern()} title="Add a pattern to the selected group at the playhead"><Icon name="add" size={14} />Pattern</button><button onClick={() => setBuilder(true)} title="Build a wave, chase, ripple… with live preview">✦ Pattern builder</button><button onClick={createGroup} title="Make a group from the selection · Ctrl+G"><Icon name="add" size={14} />Group</button><button onClick={() => setTab('ai')} title="Describe the show in words; ✦ Claude composes patterns">AI</button><button onClick={() => setTab('compile')} title="Compile the show and send it to Siemens / PLCSIM">Compile</button><button className={plcPlaying ? 'sp-primary' : ''} onClick={() => setTab('compile')} title="Send this show to PLCSIM or the PLC">{plcPlaying ? `PLC ▶ ${plcPlaying.elapsed.toFixed(1)}s` : '▶ Play on PLC'}</button><SiteSyncButton items={items} studio={studio} change={change} clips={clips} audio={audio} time={time} playing={playing} />
+      <button onClick={() => addPattern()} title="Add a pattern to the selected group at the playhead"><Icon name="add" size={14} />Pattern</button><button onClick={() => setBuilder(true)} title="Build a wave, chase, ripple… with live preview">✦ Pattern builder</button><button className="fp-toggle" aria-pressed={previewOpen} onClick={() => useFocusPreviewStore.getState().toggleOpen()} aria-label="Open pattern preview" title={`${previewOpen ? 'Close' : 'Open'} the floating pattern preview · ${PREVIEW_SHORTCUT}`}><Icon name="pip" size={14} />Preview</button><button onClick={createGroup} title="Make a group from the selection · Ctrl+G"><Icon name="add" size={14} />Group</button><button onClick={() => setTab('ai')} title="Describe the show in words; ✦ Claude composes patterns">AI</button><button onClick={() => setTab('compile')} title="Compile the show and send it to Siemens / PLCSIM">Compile</button><button className={plcPlaying ? 'sp-primary' : ''} onClick={() => setTab('compile')} title="Send this show to PLCSIM or the PLC">{plcPlaying ? `PLC ▶ ${plcPlaying.elapsed.toFixed(1)}s` : '▶ Play on PLC'}</button><SiteSyncButton items={items} studio={studio} change={change} clips={clips} audio={audio} time={time} playing={playing} />
       <span className="sp-grow" /><button aria-pressed={!studio.layout.hideExplorer} onClick={() => layout({ hideExplorer: !studio.layout.hideExplorer })}>Explorer</button><button aria-pressed={!studio.layout.hideInspector} onClick={() => layout({ hideInspector: !studio.layout.hideInspector })}>Inspector</button><button className="sp-icon" aria-pressed={!!studio.layout.swapSides} onClick={() => layout({ swapSides: !studio.layout.swapSides })} title="Swap Explorer and Inspector sides" aria-label="Swap Explorer and Inspector sides"><Icon name="move" /></button><label className="sp-inline" title="Layout preset"><select aria-label="Layout preset" value={studio.layout.preset} onChange={e => { layout({ preset: e.target.value }); if (e.target.value === 'AI') setTab('ai'); }}>{['Compose', 'Spatial', 'Timing', 'AI'].map(p => <option key={p}>{p}</option>)}</select></label>
     <span className="sp-divider" /><span className="sp-status">{pending ? 'Resolving…' : `${items.length} items synced`}</span><button className="sp-primary" onClick={save} disabled={pending}>Save .aqua</button><button className="sp-icon" onClick={() => setPalette(true)} title="Commands · Ctrl+K" aria-label="Commands"><Icon name="search" /></button><button onClick={() => navigate('geometry')}>Engineering ↗</button>
     </div>
@@ -373,7 +405,7 @@ export default function ShowStudio() {
       </main>
       <div className="sp-resizer" role="separator" aria-label="Resize Inspector" onPointerDown={e => resize('right', e)} />
       <aside className="sp-inspector">    {builder && <PatternBuilder key={builder.key} editRecipeId={builder.editId} studio={studio} items={items} params={params} showLength={Math.round(Math.max(30, end) * 10) / 10}
-      onChange={next => change(next)} onUndo={doc.undo} onClose={() => setBuilder(false)} />}<div className="sp-tabs">{['pattern', 'group', 'ai', 'compile', 'music'].map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t === 'ai' ? 'AI' : t}</button>)}</div>
+      onChange={applyBuilder} onUndo={doc.undo} onClose={() => setBuilder(false)} />}<div className="sp-tabs">{['pattern', 'group', 'ai', 'compile', 'music'].map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t === 'ai' ? 'AI' : t}</button>)}</div>
         <div className="sp-inspector-body">
           {tab === 'pattern' && <>{recipe ? <>
             {issueNotes}
