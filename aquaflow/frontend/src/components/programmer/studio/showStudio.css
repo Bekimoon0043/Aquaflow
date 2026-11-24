@@ -75,7 +75,7 @@
 .sp-ruler-label { position:absolute; top:0; height:32px; padding:9px; background:var(--bg-surface); z-index:6; font-size:9px; letter-spacing:1px; color:var(--text-muted); }
 .sp-tick { position:absolute; top:0; height:32px; border-left:1px solid var(--info); padding:5px; font:10px Consolas,monospace; color:var(--info); }
 .sp-track { position:absolute; border-bottom:1px solid color-mix(in srgb, var(--info) 40%, var(--border)); background:repeating-linear-gradient(90deg,transparent 0px,transparent 31px,var(--bg-panel) 32px); }
-.sp-track-label { position:sticky; height:42px; background:var(--bg-panel); border-right:1px solid var(--border-mid); display:flex; align-items:center; gap:4px; z-index:3; }
+.sp-track-label { position:absolute; top:0; height:42px; background:var(--bg-panel); border-right:1px solid var(--border-mid); display:flex; align-items:center; gap:4px; z-index:3; }
 .sp-track-label>span { overflow:hidden; text-overflow:ellipsis; flex:1; white-space:nowrap; font-size:11px; }
 .sp-track-label button { border:0; background:transparent; font-size:9px; padding:2px 4px; min-height:22px; }
 .sp-track-toggles { display:flex; margin-right:4px; }

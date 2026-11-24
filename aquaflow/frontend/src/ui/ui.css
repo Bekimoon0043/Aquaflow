@@ -95,3 +95,6 @@
 .draft-pen-icon{font-size:13px;color:var(--accent)}
 .draft-pen-button{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg-raised);color:var(--text-primary);border:1px solid var(--border-mid);border-radius:3px;font:11px var(--font-body);cursor:pointer}
 .draft-pen-key{color:var(--text-muted);font-size:11px}
+/* Pattern Editor visual group cards: names stay inside their card */
+.pb-visual-groups>button{min-width:0;overflow:hidden}
+.pb-visual-groups>button>span{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
