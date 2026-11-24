@@ -1,5 +1,22 @@
 # AquaFlow Studio — Current Status
 
+**2026-11-24 — AquaFlow Studio Pro 1.3.0 (side-by-side installer, branch ui-pro-overhaul, based on 1.2.94)**
+
+- **Installer:** `Desktop/AquaFlowStudioPro-Setup-1.3.0.exe`, built with `aquaflow/desktop/electron-builder-pro.yml`.
+  - Installs beside AquaFlow Studio 1.2.94 with its own app ID, install folder, shortcut and `%APPDATA%\AquaFlow Studio Pro` data folder.
+  - It takes no `.aquashow` association and has no auto-update (no feed; bundled app-config has a blank updateUrl).
+  - It uses the unchanged 1.2.94 engine.
+  - Smoke-launched: engine health PASSED, UI loaded, licence OK, data only in the Pro folder.
+- **Merged** main 1.2.94 (conflicts: PreviewPanel pool-reflection slider, status file).
+- **Pen tool** in the Site & basin designer (Shift+P / PEN / shape grids / bottom bar). Freehand strokes are cleaned up automatically: line, circle, ellipse, rectangle and polygon recognition, corner-preserving smoothing, auto-close, self-intersection cleanup. A Pen bar re-fits the result from the raw stroke. 46 algorithm tests and 6 designer tests.
+- **Timelines:** every clip shows the group or item it belongs to (owner line, colour stripe, sticky label, tooltip) in Show Programming, the 3D Preview sequence and the legacy timeline.
+- **Pattern Preview window** in Show Programming:
+  - Draggable, resizable and snapping, with minimize / maximize / close; maximize keeps the toolbar visible.
+  - Auto-plays a selected or newly added pattern in a loop and live-updates on edits.
+  - Alt+P or the toolbar Preview button reopens it.
+- **Verified:** 230 test files / 2,184 tests pass.
+- **Not verified:** pen strokes were not tried with a real stylus.
+
 **2026-11-23 — Professional UI overhaul (Done, on branch ui-pro-overhaul)**
 
 - **Continuation (Claude Code, after GPT Astra ran out of tokens mid-phase 6):**
